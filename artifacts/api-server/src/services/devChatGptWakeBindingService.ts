@@ -13,7 +13,7 @@ export type DevWakeBinding = {
   accountAlias: string;
   ownerChannel: string;
   targetConversationId: string;
-  workerId: typeof DEV_WAKE_DELL_WORKER;
+  workerId: DevWakeWorker;
   browserProfile: string;
   bindingFingerprint: string;
 };
@@ -56,7 +56,7 @@ function validTuple(value: Record<string, unknown>): boolean {
     /^GPT[0-9]{2,4}$/.test(value["accountAlias"]) && value["accountAlias"] !== "GPT01" &&
     typeof value["ownerChannel"] === "string" && OWNER.test(value["ownerChannel"]) &&
     typeof value["targetConversationId"] === "string" && UUID.test(value["targetConversationId"]) &&
-    value["workerId"] === DEV_WAKE_DELL_WORKER &&
+    (value["workerId"] === DEV_WAKE_DELL_WORKER || value["workerId"] === DEV_WAKE_DEFAULT_WORKER) &&
     typeof value["browserProfile"] === "string" && DEV_WAKE_BROWSER_PROFILE.test(value["browserProfile"]);
 }
 
@@ -77,8 +77,11 @@ export function parseDevWakeAccountBindings(raw: string | undefined, legacy: Dev
       config["bindings"].length > 16 || Object.keys(config).some(key => !["version", "bindings"].includes(key))) {
     throw new Error("DEV_CHATGPT_BINDING_CONFIG_INVALID");
   }
-  const seen = new Set<string>();
   const active: DevWakeBinding[] = [];
+  const byAlias = new Map<string, { ownerChannel: string; targetConversationId: string }>();
+  const ownerToAlias = new Map<string, string>();
+  const targetToAlias = new Map<string, string>();
+  const sessionKeys = new Set<string>();
   for (const row of config["bindings"]) {
     if (!record(row) || typeof row["enabled"] !== "boolean" ||
         Object.keys(row).some(key => !["accountAlias", "ownerChannel", "targetConversationId", "workerId", "browserProfile", "enabled"].includes(key)) ||
@@ -87,11 +90,29 @@ export function parseDevWakeAccountBindings(raw: string | undefined, legacy: Dev
       targetConversationId: row["targetConversationId"], workerId: row["workerId"], browserProfile: row["browserProfile"] } as Omit<DevWakeBinding, "bindingFingerprint">;
     if (legacyTargets.some(target => tuple.ownerChannel === target.ownerChannel || tuple.targetConversationId === target.targetConversationId) ||
         tuple.browserProfile.toLowerCase() === "openclaw") throw new Error("DEV_CHATGPT_BINDING_LEGACY_CONFLICT");
-    // Profile directory names on DELL are case-insensitive. Metadata remains exact.
-    const keys = ["alias:" + tuple.accountAlias, "owner:" + tuple.ownerChannel,
-      "target:" + tuple.targetConversationId, "profile:" + tuple.browserProfile.toLowerCase()];
-    if (keys.some(key => seen.has(key))) throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
-    keys.forEach(key => seen.add(key));
+
+    // Account identity is stable; worker/profile are replaceable session locations.
+    // Multiple sessions for one alias must prove the same owner + conversation.
+    const identity = byAlias.get(tuple.accountAlias);
+    if (identity && (identity.ownerChannel !== tuple.ownerChannel || identity.targetConversationId !== tuple.targetConversationId)) {
+      throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
+    }
+    byAlias.set(tuple.accountAlias, { ownerChannel: tuple.ownerChannel, targetConversationId: tuple.targetConversationId });
+
+    const ownerAlias = ownerToAlias.get(tuple.ownerChannel);
+    const targetAlias = targetToAlias.get(tuple.targetConversationId);
+    if ((ownerAlias && ownerAlias !== tuple.accountAlias) || (targetAlias && targetAlias !== tuple.accountAlias)) {
+      throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
+    }
+    ownerToAlias.set(tuple.ownerChannel, tuple.accountAlias);
+    targetToAlias.set(tuple.targetConversationId, tuple.accountAlias);
+
+    // A browser profile is local to a worker. Reusing the same worker/profile
+    // for two account identities would make account proof ambiguous.
+    const sessionKey = tuple.workerId + "|" + tuple.browserProfile.toLowerCase();
+    if (sessionKeys.has(sessionKey)) throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
+    sessionKeys.add(sessionKey);
+
     if (row["enabled"]) active.push({ ...tuple, bindingFingerprint: devWakeBindingFingerprint(tuple) });
   }
   return active;
@@ -145,16 +166,28 @@ export async function loadDevWakeRuntimeConfig(requestHost?: string): Promise<De
   };
 }
 
-export function resolveConfiguredDevWakeTarget(config: DevWakeRuntimeConfig, input: {
+export function resolveConfiguredDevWakeTargets(config: DevWakeRuntimeConfig, input: {
   ownerChannel: string; targetConversationId: string;
-}): DevWakeTarget | null {
+}): DevWakeTarget[] {
   if (!config.enabled || typeof input.ownerChannel !== "string" || input.ownerChannel.length !== 80 || !OWNER.test(input.ownerChannel) ||
-      typeof input.targetConversationId !== "string" || input.targetConversationId.length !== 36 || !UUID.test(input.targetConversationId.toLowerCase())) return null;
+      typeof input.targetConversationId !== "string" || input.targetConversationId.length !== 36 || !UUID.test(input.targetConversationId.toLowerCase())) return [];
   const target = input.targetConversationId.toLowerCase();
-  const legacy = config.legacyTargets.find(value => value.ownerChannel === input.ownerChannel && value.targetConversationId === target);
-  if (legacy) return legacy;
-  const wakeBinding = config.bindings.find(binding => binding.ownerChannel === input.ownerChannel && binding.targetConversationId === target);
-  return wakeBinding ? { ownerChannel: wakeBinding.ownerChannel, targetConversationId: target, workerId: wakeBinding.workerId, wakeBinding } : null;
+  const legacy = config.legacyTargets.filter(value => value.ownerChannel === input.ownerChannel && value.targetConversationId === target);
+  const bound = config.bindings
+    .filter(binding => binding.ownerChannel === input.ownerChannel && binding.targetConversationId === target)
+    .map(wakeBinding => ({ ownerChannel: wakeBinding.ownerChannel, targetConversationId: target,
+      workerId: wakeBinding.workerId, wakeBinding }));
+  return [...legacy, ...bound];
+}
+
+export function resolveConfiguredDevWakeTarget(config: DevWakeRuntimeConfig, input: {
+  ownerChannel: string; targetConversationId: string; bindingFingerprint?: string;
+}): DevWakeTarget | null {
+  const targets = resolveConfiguredDevWakeTargets(config, input);
+  if (input.bindingFingerprint) {
+    return targets.find(target => target.wakeBinding?.bindingFingerprint === input.bindingFingerprint) ?? null;
+  }
+  return targets.length === 1 ? targets[0]! : null;
 }
 
 export function commandMatchesDevWakeTarget(metadata: unknown, target: DevWakeTarget): boolean {
@@ -177,7 +210,7 @@ export async function allowedDevWakeOwners(requestHost?: string): Promise<string
 export function isOwnedDevWakeProgressCommand(command: { source: string; commandType: string; metadataJson: unknown }, ownerChannel: string): boolean {
   const metadata = command.metadataJson;
   if (ownerChannel.length !== 80 || !OWNER.test(ownerChannel) || command.source !== "ai-core" || command.commandType !== "EXTERNAL_AGENT_WORK" ||
-      !record(metadata) || metadata["assignedClientId"] !== DEV_WAKE_DELL_WORKER ||
+      !record(metadata) || (metadata["assignedClientId"] !== DEV_WAKE_DELL_WORKER && metadata["assignedClientId"] !== DEV_WAKE_DEFAULT_WORKER) ||
       metadata["conversationId"] !== ownerChannel || metadata["devOnly"] !== true ||
       metadata["capability"] !== "chatgpt:wake" || metadata["explicitWorkerTarget"] !== true ||
       typeof metadata["targetConversationId"] !== "string" || metadata["targetConversationId"].length !== 36 || !UUID.test(metadata["targetConversationId"]) ||

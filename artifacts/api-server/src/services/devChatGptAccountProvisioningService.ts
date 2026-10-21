@@ -3,7 +3,6 @@ import {
   DEV_WAKE_BROWSER_PROFILE,
   devWakeBindingFingerprint,
   parseDevWakeAccountBindings,
-  type DevWakeBinding,
   type DevWakeTarget,
 } from "./devChatGptWakeBindingService.js";
 
@@ -148,13 +147,9 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     workerId: DEV_WAKE_DELL_WORKER,
     browserProfile,
   };
-  const binding: DevWakeBinding = {
+  return {
     ...tuple,
     bindingFingerprint: devWakeBindingFingerprint(tuple),
-  };
-
-  return {
-    ...binding,
     enabled: false,
     registryJson: JSON.stringify(next),
     alreadyStaged: false,

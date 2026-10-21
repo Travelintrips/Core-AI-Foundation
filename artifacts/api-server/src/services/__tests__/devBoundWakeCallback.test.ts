@@ -29,6 +29,10 @@ const dispatch = async input => {
 };
 vi.mock("@workspace/db", () => ({ db: testDb, aiCodingBridgeCommandsTable: {}, aiCodingBridgePresenceTable: {}, aiCodingBridgeResponsesTable: {} }));
 vi.mock("../externalAgentDispatchService.js", () => ({ dispatchExternalAgentWork: (input: unknown) => dispatch(input) }));
+vi.mock("../externalAgentRegistryService.js", () => ({ getExternalAgentRegistrySnapshot: async () => [
+  { clientId: "openclaw-dell-chatgpt-wake-dev", eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+  { clientId: "openclaw-travelintrips-dev", eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+] }));
 vi.mock("../aiEventBusService.js", () => ({ publishSafe: () => {} }));
 vi.mock("../aiCoreMcpEventWebhookService.js", () => ({ enqueueAiCoreMcpBridgeLifecycleEvent: async () => {} }));
 vi.mock("../codingWhatsappNotificationService.js", () => ({ notifyCodingBridgeResponse: async () => ({status: "skipped"}), waitForCodingWhatsappDelivery: async () => null }));
