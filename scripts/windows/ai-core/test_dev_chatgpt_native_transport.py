@@ -53,6 +53,8 @@ class FakeTransport(NativeTransport):
         self.budget_after_requests = None
         self.visible = False
         self.duplicate = False
+        self.hide_bound_once_after_reader = False
+        self.hidden_bound_inventory_count = 0
         self.wrong_pid = False
         self.focus_ok = True
         self.drift_after_focus = False
@@ -89,7 +91,11 @@ class FakeTransport(NativeTransport):
                     "pid": 7654 if self.wrong_pid else 1234, "userDataDir": self.fake_user_data}
         if action == "tabs":
             tab = {"type": "page", "url": URL, "targetId": RAW, "tabId": "t1"}
-            tabs = [tab]
+            hide_bound = (self.hide_bound_once_after_reader and self.reader_tab is not None
+                          and self.hidden_bound_inventory_count == 0)
+            tabs = [] if hide_bound else [tab]
+            if hide_bound:
+                self.hidden_bound_inventory_count += 1
             if self.duplicate:
                 tabs.append({**tab, "targetId": "D" * 32})
             if self.reader_tab is not None:
@@ -321,6 +327,16 @@ class NativeTransportTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(RuntimeError):
                 transport.run(MESSAGE)
             self.assertEqual(transport.submissions, 0)
+
+    def test_transient_bound_tab_omission_after_reader_activation_is_retried(self):
+        self.transport.hide_bound_once_after_reader = True
+        with patch("dev_chatgpt_native_transport.time.sleep", return_value=None):
+            observed = self.transport.run(MESSAGE)
+        self.assertEqual(observed["assistantText"], FINAL)
+        self.assertEqual(self.transport.hidden_bound_inventory_count, 1)
+        self.assertEqual(self.transport.submissions, 1)
+        self.assertGreaterEqual(
+            sum(1 for action, _ in self.transport.calls if action == "tabs"), 3)
 
     def test_unknown_native_send_is_not_replayed(self):
         self.transport.send_fails = True
