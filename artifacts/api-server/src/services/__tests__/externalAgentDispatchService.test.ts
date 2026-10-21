@@ -15,6 +15,13 @@ describe("Issue #980: explicit external-agent routing", () => {
       .toBe("openclaw-dell-chatgpt-wake-dev");
   });
 
+  it("routes the portable GPT02 session worker by account identity", () => {
+    expect(detectExplicitExternalAgentClientId("gunakan gpt02 session worker untuk wake DEV"))
+      .toBe("openclaw-gpt02-session-dev");
+    expect(detectExplicitExternalAgentClientId("gunakan openclaw-gpt02-session-dev untuk wake DEV"))
+      .toBe("openclaw-gpt02-session-dev");
+  });
+
   it("requires explicit delegation before selecting dedicated Dell agents", () => {
     expect(detectExplicitExternalAgentClientId("dell-browser belum online")).toBeNull();
   });

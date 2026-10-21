@@ -18,7 +18,7 @@ import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
-import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
+import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_GPT02_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
@@ -951,7 +951,9 @@ export async function completeCodingBridgeCommand(input: {
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
   }
-  const wakeConfig = (input.clientId === DEV_WAKE_DELL_WORKER || input.clientId === DEV_WAKE_DEFAULT_WORKER)
+  const wakeConfig = (input.clientId === DEV_WAKE_DELL_WORKER ||
+      input.clientId === DEV_WAKE_DEFAULT_WORKER ||
+      input.clientId === DEV_WAKE_GPT02_WORKER)
     ? await loadDevWakeRuntimeConfig(input.requestHost).catch(() => null) : null;
 
   // Command terminal status and durable response must commit together.
@@ -985,7 +987,8 @@ export async function completeCodingBridgeCommand(input: {
     if (input.status === "COMPLETED") {
       const metadata = row["metadata_json"];
       const wakeBinding = isRecord(metadata) ? readDevWakeBinding(metadata["wakeBinding"]) : null;
-      const mustVerifyWake = input.clientId === DEV_WAKE_DELL_WORKER || wakeBinding !== null;
+      const mustVerifyWake = input.clientId === DEV_WAKE_DELL_WORKER ||
+        input.clientId === DEV_WAKE_GPT02_WORKER || wakeBinding !== null;
       if (mustVerifyWake) {
         const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
         const owner = isRecord(metadata) ? metadata["conversationId"] : null;

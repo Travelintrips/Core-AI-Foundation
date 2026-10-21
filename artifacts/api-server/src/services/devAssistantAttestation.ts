@@ -6,9 +6,12 @@ export const DEV_BOUND_ASSISTANT_ATTESTATION_VERSION = 2 as const;
 export const DEV_ASSISTANT_ATTESTATION_ALGORITHM = "Ed25519" as const;
 export const DEV_ASSISTANT_ATTESTATION_KEY_ID = "openclaw-travelintrips-dev-ed25519-v1" as const;
 export const DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID = "openclaw-dell-chatgpt-wake-dev-ed25519-v1" as const;
-export type DevAttestationWorker = "openclaw-travelintrips-dev" | "openclaw-dell-chatgpt-wake-dev";
+export const DEV_GPT02_ASSISTANT_ATTESTATION_KEY_ID = "openclaw-gpt02-session-dev-ed25519-v1" as const;
+export type DevAttestationWorker = "openclaw-travelintrips-dev" | "openclaw-dell-chatgpt-wake-dev" | "openclaw-gpt02-session-dev";
 export function devAttestationKeyId(workerId: DevAttestationWorker) {
-  return workerId === "openclaw-travelintrips-dev" ? DEV_ASSISTANT_ATTESTATION_KEY_ID : DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID;
+  if (workerId === "openclaw-travelintrips-dev") return DEV_ASSISTANT_ATTESTATION_KEY_ID;
+  if (workerId === "openclaw-dell-chatgpt-wake-dev") return DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID;
+  return DEV_GPT02_ASSISTANT_ATTESTATION_KEY_ID;
 }
 
 /** Fail closed: public keys are selected only from the authenticated DEV worker identity. */
@@ -18,6 +21,9 @@ export function devAssistantPublicKeyForWorker(workerId: string): string | undef
   }
   if (workerId === "openclaw-dell-chatgpt-wake-dev") {
     return process.env["AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64"];
+  }
+  if (workerId === "openclaw-gpt02-session-dev") {
+    return process.env["AI_CORE_DEV_GPT02_SESSION_ATTESTATION_PUBLIC_KEY_DER_B64"];
   }
   return undefined;
 }
@@ -41,7 +47,7 @@ type ChallengeInput = {
 export type DevAssistantAttestation = {
   version: 1 | 2;
   algorithm: "Ed25519";
-  keyId: typeof DEV_ASSISTANT_ATTESTATION_KEY_ID | typeof DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID;
+  keyId: typeof DEV_ASSISTANT_ATTESTATION_KEY_ID | typeof DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID | typeof DEV_GPT02_ASSISTANT_ATTESTATION_KEY_ID;
   workerId: DevAttestationWorker;
   conversationId: string;
   eventId: string;
@@ -119,7 +125,8 @@ export function verifyDevAssistantAttestation(input: {
   if (!validChallengeInput(input.expected)) return { verified: false, reason: "ATTESTATION_CONTEXT_INVALID" };
   const bound = input.expected.bindingFingerprint !== undefined;
   if (bound && input.expected.workerId !== "openclaw-dell-chatgpt-wake-dev" &&
-      input.expected.workerId !== "openclaw-travelintrips-dev") {
+      input.expected.workerId !== "openclaw-travelintrips-dev" &&
+      input.expected.workerId !== "openclaw-gpt02-session-dev") {
     return { verified: false, reason: "ATTESTATION_BOUND_WORKER_INVALID" };
   }
   const challenge = deriveDevAssistantChallenge(input.expected);

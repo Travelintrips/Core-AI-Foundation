@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stageDevChatGptAccountBinding } from "../devChatGptAccountProvisioningService.js";
-import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER } from "../devChatGptWakeBindingService.js";
+import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_GPT02_WORKER } from "../devChatGptWakeBindingService.js";
 
 const legacy = [{
   ownerChannel: "ai-engine-oauth:" + "1".repeat(64),
@@ -79,6 +79,20 @@ describe("devChatGptAccountProvisioningService", () => {
     expect(second.workerId).toBe(DEV_WAKE_DEFAULT_WORKER);
     expect(second.accountAlias).toBe("GPT02");
     expect(JSON.parse(second.registryJson).bindings).toHaveLength(2);
+  });
+
+  it("accepts the account-portable GPT02 session worker without changing account identity", () => {
+    const result = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02",
+      ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
+      targetConversationId: "22222222-2222-2222-2222-222222222222",
+      workerId: DEV_WAKE_GPT02_WORKER,
+      browserProfile: "gpt02-session",
+    }, undefined, legacy);
+
+    expect(result.workerId).toBe(DEV_WAKE_GPT02_WORKER);
+    expect(result.accountAlias).toBe("GPT02");
+    expect(result.enabled).toBe(false);
   });
 
   it("rejects attempts to reuse the legacy GPT01 conversation", () => {

@@ -8,12 +8,15 @@ import { isDeepStrictEqual } from "node:util";
 
 const DELL_WORKER_ID = "openclaw-dell-chatgpt-wake-dev";
 const TRAVELINTRIPS_WORKER_ID = "openclaw-travelintrips-dev";
-const SUPPORTED_WORKERS = new Set([DELL_WORKER_ID, TRAVELINTRIPS_WORKER_ID]);
+const GPT02_WORKER_ID = "openclaw-gpt02-session-dev";
+const SUPPORTED_WORKERS = new Set([DELL_WORKER_ID, TRAVELINTRIPS_WORKER_ID, GPT02_WORKER_ID]);
 export const workerId = process.env.AI_CORE_DEV_WAKE_WORKER_ID?.trim() || DELL_WORKER_ID;
 if (!SUPPORTED_WORKERS.has(workerId)) throw new Error("Unsupported bound DEV wake worker");
 const keyId = workerId === DELL_WORKER_ID
   ? "openclaw-dell-chatgpt-wake-dev-ed25519-v1"
-  : "openclaw-travelintrips-dev-ed25519-v1";
+  : workerId === GPT02_WORKER_ID
+    ? "openclaw-gpt02-session-dev-ed25519-v1"
+    : "openclaw-travelintrips-dev-ed25519-v1";
 const allowlistFileName = process.env.AI_CORE_DEV_WAKE_ALLOWLIST_FILE?.trim() ||
   (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-allowlist.json" : "chatgpt-wake-dev-allowlist.json");
 const privateKeyFileName = process.env.AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE?.trim() ||

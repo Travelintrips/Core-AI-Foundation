@@ -3,9 +3,11 @@ import { readDevWakeBinding, type DevWakeBinding } from "./devChatGptWakeBinding
 import { devWakeAttestationExpected } from "./devChatGptWakeEvidenceService.js";
 export const DEV_CONTINUITY_WORKER = "openclaw-travelintrips-dev" as const;
 export const DEV_DELL_CONTINUITY_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
-export type DevContinuityWakeWorker = typeof DEV_CONTINUITY_WORKER | typeof DEV_DELL_CONTINUITY_WORKER;
+export const DEV_GPT02_CONTINUITY_WORKER = "openclaw-gpt02-session-dev" as const;
+export type DevContinuityWakeWorker = typeof DEV_CONTINUITY_WORKER | typeof DEV_DELL_CONTINUITY_WORKER | typeof DEV_GPT02_CONTINUITY_WORKER;
 export function isDevContinuityWakeWorker(value: unknown): value is DevContinuityWakeWorker {
-  return value === DEV_CONTINUITY_WORKER || value === DEV_DELL_CONTINUITY_WORKER;
+  return value === DEV_CONTINUITY_WORKER || value === DEV_DELL_CONTINUITY_WORKER ||
+    value === DEV_GPT02_CONTINUITY_WORKER;
 }
 
 export interface DevContinuityWakeResult {
@@ -46,8 +48,10 @@ export function devContinuityResultFromCommittedCommand(input: {
   if (input.source !== "ai-core" || input.commandType !== "EXTERNAL_AGENT_WORK" ||
       !isDevContinuityWakeWorker(input.authenticatedWorkerId) || !record(input.metadata)) return null;
   const metadata = input.metadata;
-  if (input.authenticatedWorkerId === DEV_DELL_CONTINUITY_WORKER && !devWakeAttestationExpected(metadata)) return null;
   const wakeBinding = readDevWakeBinding(metadata["wakeBinding"]);
+  if ((input.authenticatedWorkerId === DEV_DELL_CONTINUITY_WORKER ||
+       input.authenticatedWorkerId === DEV_GPT02_CONTINUITY_WORKER ||
+       metadata["wakeBinding"] !== undefined) && !devWakeAttestationExpected(metadata)) return null;
   if (metadata["wakeBinding"] !== undefined && (!wakeBinding ||
       wakeBinding.ownerChannel !== metadata["conversationId"] ||
       wakeBinding.targetConversationId !== metadata["targetConversationId"] ||

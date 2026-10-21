@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 ALLOWED_WORKERS = {
     "openclaw-dell-chatgpt-wake-dev": "openclaw-dell-chatgpt-wake-dev-ed25519-v1",
     "openclaw-travelintrips-dev": "openclaw-travelintrips-dev-ed25519-v1",
+    "openclaw-gpt02-session-dev": "openclaw-gpt02-session-dev-ed25519-v1",
 }
 UUID = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", re.I)
 OWNER = re.compile(r"ai-engine-oauth:[a-f0-9]{64}")
@@ -26,16 +27,27 @@ PROFILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 def env(name):
     value = os.environ.get(name, "").strip()
-    if not value:
-        raise RuntimeError("Missing " + name)
-    return value
+    if value:
+        return value
+    env_file = os.environ.get("AI_CORE_DEV_WAKE_ENV_FILE", "").strip()
+    if env_file and Path(env_file).is_file():
+        for raw in Path(env_file).read_text(encoding="utf-8").splitlines():
+            if raw.startswith(name + "="):
+                value = raw.split("=", 1)[1].strip().strip("'\"")
+                if value:
+                    return value
+    raise RuntimeError("Missing " + name)
 
 
 def post(base, path, body):
     request = urllib.request.Request(
         base.rstrip("/") + path,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": "Bearer " + env("AI_CORE_SCOPED_AGENT_TOKEN"),
+        },
         method="POST",
     )
     try:

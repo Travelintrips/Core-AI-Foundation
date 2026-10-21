@@ -4,6 +4,7 @@ import { db, aiSettingsTable } from "@workspace/db";
 import {
   DEV_WAKE_DELL_WORKER,
   DEV_WAKE_DEFAULT_WORKER,
+  DEV_WAKE_GPT02_WORKER,
   isDevWakeRuntime,
   loadDevWakeRuntimeConfig,
 } from "../services/devChatGptWakeBindingService.js";
@@ -14,12 +15,13 @@ import {
   sessionRegistrationReceiptFingerprint,
   verifyAndConsumeDevChatGptSessionChallenge,
 } from "../services/devChatGptSessionActivationService.js";
+import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logAudit } from "../services/aiAuditService.js";
 
 const router = Router();
 const REGISTRY_KEY = "dev.chatgpt_wake.account_bindings";
 
-router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> => {
+router.post("/ai/core-chat/dev/accounts/stage", requireAgentServiceScope("agent:work"), async (req, res): Promise<void> => {
   if (!isDevWakeRuntime(req.hostname)) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -38,8 +40,14 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
 
   try {
     const workerId = body["workerId"];
-    if (workerId !== undefined && workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER) {
+    if (workerId !== undefined && workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER &&
+        workerId !== DEV_WAKE_GPT02_WORKER) {
       res.status(400).json({ error: "DEV_CHATGPT_PROVISIONING_WORKER_INVALID" });
+      return;
+    }
+    const authenticatedWorker = (res.locals["aiAgentService"] as { name?: unknown } | undefined)?.name;
+    if (typeof workerId !== "string" || authenticatedWorker !== workerId) {
+      res.status(403).json({ error: "Worker credential does not match requested session worker" });
       return;
     }
     const runtime = await loadDevWakeRuntimeConfig(req.hostname);
@@ -52,7 +60,8 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
       targetConversationId: body["targetConversationId"],
       ...(typeof body["accountAlias"] === "string" ? { accountAlias: body["accountAlias"] } : {}),
       ...(typeof body["browserProfile"] === "string" ? { browserProfile: body["browserProfile"] } : {}),
-      ...(workerId === DEV_WAKE_DELL_WORKER || workerId === DEV_WAKE_DEFAULT_WORKER ? { workerId } : {}),
+      ...(workerId === DEV_WAKE_DELL_WORKER || workerId === DEV_WAKE_DEFAULT_WORKER ||
+        workerId === DEV_WAKE_GPT02_WORKER ? { workerId } : {}),
     }, existing?.value, runtime.legacyTargets);
 
     if (!staged.alreadyStaged) {
@@ -98,7 +107,7 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
   }
 });
 
-router.post("/ai/core-chat/dev/accounts/session/challenge", async (req, res): Promise<void> => {
+router.post("/ai/core-chat/dev/accounts/session/challenge", requireAgentServiceScope("agent:work"), async (req, res): Promise<void> => {
   if (!isDevWakeRuntime(req.hostname)) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -117,6 +126,11 @@ router.post("/ai/core-chat/dev/accounts/session/challenge", async (req, res): Pr
       bindingFingerprint: body["bindingFingerprint"],
       legacyTargets: runtime.legacyTargets,
     });
+    const authenticatedWorker = (res.locals["aiAgentService"] as { name?: unknown } | undefined)?.name;
+    if (authenticatedWorker !== challenge.workerId) {
+      res.status(403).json({ error: "Worker credential does not match challenged session worker" });
+      return;
+    }
     res.status(201).json({
       challengeId: challenge.challengeId,
       nonce: challenge.nonce,
@@ -134,7 +148,7 @@ router.post("/ai/core-chat/dev/accounts/session/challenge", async (req, res): Pr
   }
 });
 
-router.post("/ai/core-chat/dev/accounts/session/activate", async (req, res): Promise<void> => {
+router.post("/ai/core-chat/dev/accounts/session/activate", requireAgentServiceScope("agent:work"), async (req, res): Promise<void> => {
   if (!isDevWakeRuntime(req.hostname)) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -156,6 +170,11 @@ router.post("/ai/core-chat/dev/accounts/session/activate", async (req, res): Pro
       signature: body["signature"],
       keyId: body["keyId"],
     });
+    const authenticatedWorker = (res.locals["aiAgentService"] as { name?: unknown } | undefined)?.name;
+    if (authenticatedWorker !== verified.workerId) {
+      res.status(403).json({ error: "Worker credential does not match activated session worker" });
+      return;
+    }
     const runtime = await loadDevWakeRuntimeConfig(req.hostname);
     const [existing] = await db.select().from(aiSettingsTable)
       .where(eq(aiSettingsTable.key, REGISTRY_KEY)).limit(1);

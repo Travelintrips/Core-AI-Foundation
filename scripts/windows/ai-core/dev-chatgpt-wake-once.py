@@ -27,7 +27,8 @@ ALLOWLIST_FILE = os.environ.get("AI_CORE_DEV_WAKE_ALLOWLIST_FILE", "chatgpt-wake
 PRIVATE_KEY_FILE = os.environ.get("AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE", "dev-assistant-attestation-ed25519.pem")
 DELL_WORKER = "openclaw-dell-chatgpt-wake-dev"
 TRAVELINTRIPS_WORKER = "openclaw-travelintrips-dev"
-BOUND_WORKERS = {DELL_WORKER, TRAVELINTRIPS_WORKER}
+GPT02_WORKER = "openclaw-gpt02-session-dev"
+BOUND_WORKERS = {DELL_WORKER, TRAVELINTRIPS_WORKER, GPT02_WORKER}
 UUID = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}")
 DIGEST = re.compile(r"[a-f0-9]{64}")
 OWNER = re.compile(r"ai-engine-oauth:[a-f0-9]{64}")
@@ -252,7 +253,7 @@ def _private_key(root):
 def _assistant_probe(tab, expected_url, marker, challenge):
     # Legacy implementation only. Bound accounts must never inherit this page
     # script probe, even if a caller reaches this helper directly by mistake.
-    if WORKER == DELL_WORKER and BROWSER_PROFILE != "openclaw":
+    if WORKER in {DELL_WORKER, GPT02_WORKER} and BROWSER_PROFILE != "openclaw":
         raise RuntimeError("Legacy assistant probe is not permitted for this DELL profile")
     ack = "AI_CORE_ATTEST_ACK:" + challenge
     snapshot = browser("snapshot", "--target-id", tab, timeout=55)
@@ -452,7 +453,7 @@ def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=No
             raise RuntimeError("Bound account session is not active")
         return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
                                           lease_guard=lease_guard)
-    if WORKER == DELL_WORKER:
+    if WORKER in {DELL_WORKER, GPT02_WORKER}:
         binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
     else:
         # Preserve GPT01's original allowlist path. Bound additional accounts

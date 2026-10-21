@@ -31,6 +31,7 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
   "openclaw-dell-chatgpt-wake-dev": "tools:bounded",
+  "openclaw-gpt02-session-dev": "tools:bounded",
   "openclaw-dell-admcst001-dev": "tools:bounded",
   "openclaw-pc-worker-dell-browser": "tools:bounded",
   "openclaw-pc-worker-dell-recovery": "tools:bounded",
@@ -45,6 +46,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
 }> = [
   // Host-specific requests must take precedence over the generic OpenClaw alias.
   { clientId: "openclaw-dell-chatgpt-wake-dev", agent: /\bopenclaw-dell-chatgpt-wake-dev\b/i },
+  { clientId: "openclaw-gpt02-session-dev", agent: /\bopenclaw-gpt02-session-dev\b|\bgpt02[ -]session[ -]worker\b/i },
   { clientId: "openclaw-dell-admcst001-dev", agent: /\bopenclaw-dell-admcst001-dev\b/i },
   { clientId: OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, agent: /openclaw-travelintrips-dev|openclaw[\s-]*travelintrips[\s-]*dev|travelintrips[\s-]*dev/i },
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
@@ -222,7 +224,8 @@ export async function dispatchExternalAgentWork(input: {
   const isDevChatGptWake = isDevChatGptWakeInstruction(input.instruction);
   const isDedicatedDevWakeWorker =
     resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
-    resolvedClientId === "openclaw-dell-chatgpt-wake-dev";
+    resolvedClientId === "openclaw-dell-chatgpt-wake-dev" ||
+    resolvedClientId === "openclaw-gpt02-session-dev";
   if (isDedicatedDevWakeWorker &&
       (!isDevChatGptWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||

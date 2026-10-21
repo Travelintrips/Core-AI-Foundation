@@ -4,7 +4,9 @@ import {
   DEV_ASSISTANT_ATTESTATION_ALGORITHM,
   DEV_ASSISTANT_ATTESTATION_KEY_ID,
   DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID,
+  DEV_GPT02_ASSISTANT_ATTESTATION_KEY_ID,
   DEV_ASSISTANT_ATTESTATION_VERSION,
+  DEV_BOUND_ASSISTANT_ATTESTATION_VERSION,
   deriveDevAssistantChallenge,
   devAssistantAttestationPayload,
   verifyDevAssistantAttestation,
@@ -68,6 +70,45 @@ describe("DELL DEV assistant attestation isolation", () => {
     expect(verifyDevAssistantAttestation({ ...args, expected }).verified).toBe(false);
     expect(verifyDevAssistantAttestation({ ...args, expected: { ...dell, eventId: "d".repeat(64) } }).verified).toBe(false);
     expect(verifyDevAssistantAttestation({ ...args, details: { attestation: { ...attestation, keyId: DEV_ASSISTANT_ATTESTATION_KEY_ID } } }).verified).toBe(false);
+  });
+
+  it("accepts a bound GPT02 portable-worker receipt only with its own key identity", () => {
+    const portable = {
+      ...expected,
+      workerId: "openclaw-gpt02-session-dev" as const,
+      bindingFingerprint: "d".repeat(64),
+      browserProfile: "gpt02-portable-dev",
+    };
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const unsigned = {
+      version: DEV_BOUND_ASSISTANT_ATTESTATION_VERSION,
+      algorithm: DEV_ASSISTANT_ATTESTATION_ALGORITHM,
+      keyId: DEV_GPT02_ASSISTANT_ATTESTATION_KEY_ID,
+      workerId: portable.workerId,
+      conversationId: portable.targetConversationId,
+      eventId: portable.eventId,
+      challenge: deriveDevAssistantChallenge(portable),
+      assistantMessageId: "55555555-5555-4555-8555-555555555555",
+      assistantResponseHash: "e".repeat(64),
+      observedAt,
+      bindingFingerprint: portable.bindingFingerprint,
+      browserProfile: portable.browserProfile,
+    } as const;
+    const attestation = {
+      ...unsigned,
+      signature: sign(null, Buffer.from(devAssistantAttestationPayload(unsigned), "utf8"), privateKey).toString("base64"),
+    };
+    const publicKeyDerBase64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    const args = {
+      details: { attestation }, expected: portable,
+      notBefore: "2026-10-18T12:00:00.000Z", receivedAt: "2026-10-18T12:00:40.000Z",
+      publicKeyDerBase64,
+    };
+    expect(verifyDevAssistantAttestation(args).verified).toBe(true);
+    expect(verifyDevAssistantAttestation({
+      ...args,
+      details: { attestation: { ...attestation, keyId: DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID } },
+    }).verified).toBe(false);
   });
 });
 

@@ -282,6 +282,16 @@ export function adminAuthWithExceptions(req: Request, res: Response, next: NextF
     next();
     return;
   }
+  // DEV ChatGPT session onboarding uses its own scoped agent-service bearer
+  // middleware at the route. Bypass only the global admin-key gate for these
+  // exact POST paths; no other /ai/core-chat/dev route is exempted.
+  if (process.env["APP_ENV"] === "development" && req.method === "POST" &&
+      ["/ai/core-chat/dev/accounts/stage",
+       "/ai/core-chat/dev/accounts/session/challenge",
+       "/ai/core-chat/dev/accounts/session/activate"].includes(req.path)) {
+    next();
+    return;
+  }
   // Fast-path: all /public/* routes bypass admin key (they use their own token-based auth).
   // Explicit check avoids any array-iteration ordering issue in the loop below.
   if (req.path === "/public" || req.path.startsWith("/public/")) {

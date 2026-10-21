@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 
 export const DEV_WAKE_DEFAULT_WORKER = "openclaw-travelintrips-dev" as const;
 export const DEV_WAKE_DELL_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
-export type DevWakeWorker = typeof DEV_WAKE_DEFAULT_WORKER | typeof DEV_WAKE_DELL_WORKER;
+export const DEV_WAKE_GPT02_WORKER = "openclaw-gpt02-session-dev" as const;
+export type DevWakeWorker = typeof DEV_WAKE_DEFAULT_WORKER | typeof DEV_WAKE_DELL_WORKER | typeof DEV_WAKE_GPT02_WORKER;
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -56,7 +57,8 @@ function validTuple(value: Record<string, unknown>): boolean {
     /^GPT[0-9]{2,4}$/.test(value["accountAlias"]) && value["accountAlias"] !== "GPT01" &&
     typeof value["ownerChannel"] === "string" && OWNER.test(value["ownerChannel"]) &&
     typeof value["targetConversationId"] === "string" && UUID.test(value["targetConversationId"]) &&
-    (value["workerId"] === DEV_WAKE_DELL_WORKER || value["workerId"] === DEV_WAKE_DEFAULT_WORKER) &&
+    (value["workerId"] === DEV_WAKE_DELL_WORKER || value["workerId"] === DEV_WAKE_DEFAULT_WORKER ||
+      value["workerId"] === DEV_WAKE_GPT02_WORKER) &&
     typeof value["browserProfile"] === "string" && DEV_WAKE_BROWSER_PROFILE.test(value["browserProfile"]);
 }
 
@@ -146,7 +148,8 @@ export async function loadDevWakeRuntimeConfig(requestHost?: string): Promise<De
   const channels = [...new Set(setting("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", "dev.chatgpt_wake.owner_channel").split(",").map(x => x.trim()).filter(Boolean))];
   const conversations = setting("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", "dev.chatgpt_wake.gpt01_conversation_id").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   const configuredWorker = setting("AI_CORE_DEV_BROWSER_WAKE_WORKER_ID", "dev.chatgpt_wake.worker_id") || DEV_WAKE_DEFAULT_WORKER;
-  if (configuredWorker !== DEV_WAKE_DEFAULT_WORKER && configuredWorker !== DEV_WAKE_DELL_WORKER) throw new Error("DEV_CHATGPT_WAKE_WORKER_INVALID");
+  if (configuredWorker !== DEV_WAKE_DEFAULT_WORKER && configuredWorker !== DEV_WAKE_DELL_WORKER &&
+      configuredWorker !== DEV_WAKE_GPT02_WORKER) throw new Error("DEV_CHATGPT_WAKE_WORKER_INVALID");
   const aliasTarget = process.env["AI_CORE_DEV_CHATGPT_ALIAS_GPT01_CONVERSATION_ID"]?.trim().toLowerCase();
   // Existing owners may share GPT01. Preserve each exact owner, but never expand multiple targets.
   const legacyTargets: DevWakeTarget[] = channels.length > 0 && conversations.length === 1 &&
@@ -210,7 +213,9 @@ export async function allowedDevWakeOwners(requestHost?: string): Promise<string
 export function isOwnedDevWakeProgressCommand(command: { source: string; commandType: string; metadataJson: unknown }, ownerChannel: string): boolean {
   const metadata = command.metadataJson;
   if (ownerChannel.length !== 80 || !OWNER.test(ownerChannel) || command.source !== "ai-core" || command.commandType !== "EXTERNAL_AGENT_WORK" ||
-      !record(metadata) || (metadata["assignedClientId"] !== DEV_WAKE_DELL_WORKER && metadata["assignedClientId"] !== DEV_WAKE_DEFAULT_WORKER) ||
+      !record(metadata) || (metadata["assignedClientId"] !== DEV_WAKE_DELL_WORKER &&
+        metadata["assignedClientId"] !== DEV_WAKE_DEFAULT_WORKER &&
+        metadata["assignedClientId"] !== DEV_WAKE_GPT02_WORKER) ||
       metadata["conversationId"] !== ownerChannel || metadata["devOnly"] !== true ||
       metadata["capability"] !== "chatgpt:wake" || metadata["explicitWorkerTarget"] !== true ||
       typeof metadata["targetConversationId"] !== "string" || metadata["targetConversationId"].length !== 36 || !UUID.test(metadata["targetConversationId"]) ||
