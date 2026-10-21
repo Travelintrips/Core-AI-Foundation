@@ -71,8 +71,8 @@ export const EXTERNAL_AGENT_RULES = {
   },
   "openclaw-pc-worker-2": {
     source: "openclaw",
-    role: "bounded_orchestration_agent",
-    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname", "chatgpt:wake"],
     permissions: {
       codingWorkspaceWrite: false,
       gitCommit: false,
