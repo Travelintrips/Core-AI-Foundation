@@ -1,0 +1,69 @@
+name: DEV BizPortal Recovery Diagnostic
+
+on:
+  push:
+    branches:
+      - infra/hostinger-runtime-cleanup-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Classify DEV BizPortal runtime failure safely
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://developers.hostinger.com/api"
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          root="$base/hosting/v1/accounts/u684045296/websites/dev-bizportal.cstlogistic.co.id/nodejs"
+
+          for path in server/status builds/settings; do
+            code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o "/tmp/${path//\//_}.json" -w "%{http_code}" "$root/$path") || code=000
+            echo "endpoint=$path http=$code"
+            if [ "$code" = "200" ] && [ "$path" = "builds/settings" ]; then
+              jq -c '{node_version,app_type,root_directory,output_directory,build_script,entry_file,package_manager}' "/tmp/${path//\//_}.json"
+            fi
+            if [ "$code" = "200" ] && [ "$path" = "server/status" ]; then
+              jq -c 'if type=="object" then with_entries(select(.key | test("token|secret|key|password|auth|env";"i") | not)) else {type:type} end' "/tmp/${path//\//_}.json"
+            fi
+          done
+
+          code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o /tmp/logs.json -w "%{http_code}" "$root/runtime-logs?period=1h&limit=200") || code=000
+          echo "runtime_logs_http=$code"
+          [ "$code" = "200" ] || exit 0
+
+          python3 - <<'PY'
+          import json,re
+          obj=json.load(open('/tmp/logs.json'))
+          items=obj.get('data',obj if isinstance(obj,list) else [])
+          if not isinstance(items,list): items=[]
+          texts=[]
+          levels={}
+          for x in items:
+              if not isinstance(x,dict): continue
+              lv=str(x.get('level') or x.get('severity') or 'unknown').lower()
+              levels[lv]=levels.get(lv,0)+1
+              s=' '.join(str(x.get(k) or '') for k in ('message','msg','error','stack')).lower()
+              texts.append(s)
+          alltext='\n'.join(texts)
+          patterns={
+            'database':r'database|postgres|supabase|connection',
+            'auth_secret':r'secret|credential|password|authentication',
+            'invalid_env':r'invalid.*env|environment.*invalid|missing.*env|required.*env',
+            'port_listen':r'port|listen|eaddrinuse|eacces',
+            'module':r'module_not_found|cannot find module|err_module_not_found',
+            'syntax':r'syntaxerror|invalid syntax',
+            'timeout':r'timeout|timed out',
+            'startup':r'start|bootstrap|initializ',
+          }
+          print('log_count='+str(len(items)))
+          print('levels='+','.join(f'{k}:{v}' for k,v in sorted(levels.items())))
+          for name,pat in patterns.items():
+              print(name+'_matches='+str(len(re.findall(pat,alltext))))
+          PY
