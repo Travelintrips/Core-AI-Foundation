@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stageDevChatGptAccountBinding } from "../devChatGptAccountProvisioningService.js";
-import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PC2_WORKER } from "../devChatGptWakeBindingService.js";
+import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER } from "../devChatGptWakeBindingService.js";
 
 const legacy = [{
   ownerChannel: "ai-engine-oauth:" + "1".repeat(64),
@@ -85,10 +85,25 @@ describe("devChatGptAccountProvisioningService", () => {
       ownerChannel: first.ownerChannel,
       targetConversationId: first.targetConversationId,
       workerId: DEV_WAKE_PC2_WORKER,
-      browserProfile: "gpt02-vmsc",
+      browserProfile: "gpt02-pc2",
     }, second.registryJson, legacy);
     expect(third.workerId).toBe(DEV_WAKE_PC2_WORKER);
     expect(JSON.parse(third.registryJson).bindings).toHaveLength(3);
+  });
+
+  it("allows GPT02 to stage an isolated VMSC session", () => {
+    const first = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
+      targetConversationId: "22222222-2222-2222-2222-222222222222",
+      workerId: DEV_WAKE_DELL_WORKER, browserProfile: "travelincars-dev",
+    }, undefined, legacy);
+    const vmsc = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02", ownerChannel: first.ownerChannel,
+      targetConversationId: first.targetConversationId, workerId: DEV_WAKE_VMSC_WORKER,
+      browserProfile: "gpt02-vmsc",
+    }, first.registryJson, legacy);
+    expect(vmsc.workerId).toBe(DEV_WAKE_VMSC_WORKER);
+    expect(JSON.parse(vmsc.registryJson).bindings).toHaveLength(2);
   });
 
   it("rejects attempts to reuse the legacy GPT01 conversation", () => {
