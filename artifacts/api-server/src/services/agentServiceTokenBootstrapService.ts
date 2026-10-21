@@ -5,8 +5,19 @@ import { logger } from "../lib/logger.js";
 const DEFAULT_WORKER_TOKEN_HASH =
   "f55a77cc62cffba99c3f24cee68fd69e8dc78a88d52b8e945755ca7bf8ce18c5";
 const WORKER_TOKEN_NAME = "gcp-ai-workers-primary";
+const DEV_PC2_TOKEN_NAME = "openclaw-pc-worker-2";
 
 let ensurePromise: Promise<void> | null = null;
+
+function devPc2TokenHash(): string | null {
+  if (process.env["NODE_ENV"] === "production") return null;
+  const configured = process.env["AI_CORE_DEV_PC2_AGENT_TOKEN_HASH"]?.trim().toLowerCase();
+  if (!configured) return null;
+  if (!/^[a-f0-9]{64}$/.test(configured)) {
+    throw new Error("AI_CORE_DEV_PC2_AGENT_TOKEN_HASH must be a SHA-256 hex digest");
+  }
+  return configured;
+}
 
 function workerTokenHash(): string {
   const configured = (
@@ -96,6 +107,36 @@ async function ensureInternal(): Promise<void> {
             ai_agent_service_tokens.metadata || EXCLUDED.metadata,
           updated_at = NOW()
   `);
+
+  const pc2TokenHash = devPc2TokenHash();
+  if (pc2TokenHash) {
+    // DEV-only PC2 bootstrap uses a pre-provisioned token hash. The plaintext
+    // token remains only on PC2. A hash collision with another named service
+    // fails at the unique token_hash constraint rather than reassigning identity.
+    await db.execute(sql`
+      INSERT INTO ai_platform.ai_agent_service_tokens (
+        name, token_hash, scopes, is_active, expires_at, metadata, created_at, updated_at
+      )
+      VALUES (
+        ${DEV_PC2_TOKEN_NAME},
+        ${pc2TokenHash},
+        ARRAY['agent:presence','agent:work']::text[],
+        TRUE,
+        NULL,
+        '{"source":"dev-pc2-hash-bootstrap"}'::jsonb,
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (name) DO UPDATE
+        SET token_hash = EXCLUDED.token_hash,
+            scopes = EXCLUDED.scopes,
+            is_active = TRUE,
+            expires_at = NULL,
+            metadata = ai_agent_service_tokens.metadata || EXCLUDED.metadata,
+            updated_at = NOW()
+    `);
+    logger.info({ name: DEV_PC2_TOKEN_NAME }, "[agent-runtime] DEV PC2 token hash bootstrap ensured");
+  }
 
   logger.info({ name: WORKER_TOKEN_NAME }, "[agent-runtime] worker token bootstrap ensured");
 }
