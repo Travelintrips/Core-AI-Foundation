@@ -1328,8 +1328,18 @@ async function openAiFirstReadOnlyIntent(
     }
     return { kind: "answer", route: "OPENAI_INTENT_FIRST", ...meta, ...answer };
   } catch (error) {
+    const providerFailure = safeProviderFailure(error) || "Intent gate failure.";
+    // Coding and critical-action intent already have deterministic downstream
+    // routing plus their own execution/approval gates. A transient OpenAI
+    // classifier failure (including PROVIDER_RATE_LIMIT) must not become a
+    // single point of failure for those commands, and must never fall through
+    // to unrelated database routing. Returning null here continues only to the
+    // deterministic command router below; it does NOT authorize mutation.
+    if (workload.workload === "CODING" || workload.workload === "CRITICAL_ACTION") {
+      return null;
+    }
     return unavailableAskReply("OpenAI intent gate failed; no unrelated database query executed.",
-      safeProviderFailure(error) || "Intent gate failure.", meta);
+      providerFailure, meta);
   }
 }
 
