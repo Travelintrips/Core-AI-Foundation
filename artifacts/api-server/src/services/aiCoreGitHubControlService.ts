@@ -46,7 +46,7 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
     /\bmain\b/i.test(text) &&
     !explicitWorkflowFile &&
-    !/\b(?:openclaw|openhands|n8n|external\s+agent|agent\s+eksternal|coding\s+orchestrator|docker|compose|container|ubah\s+kode|edit\s+kode|patch\s+kode|fix\s+kode|perbaiki\s+kode)\b/i.test(text);
+    !/\b(?:openclaw|openhands|n8n|external\s+agent|agent\s+eksternal|coding\s+orchestrator|docker|compose|container|ubah\s+kode|edit\s+kode|patch\s+kode|fix\s+kode|perbaiki)\bki\s+kode)\b/i.test(text);
 
   const codingDomainRecovery =
     /\b(?:coding\.cstlogistic\.co\.id|aicoding\.travelintrips\.co\.id)\b/i.test(text) &&
