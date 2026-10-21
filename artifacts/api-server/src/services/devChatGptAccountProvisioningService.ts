@@ -1,9 +1,11 @@
 import {
   DEV_WAKE_DELL_WORKER,
+  DEV_WAKE_DEFAULT_WORKER,
   DEV_WAKE_BROWSER_PROFILE,
   devWakeBindingFingerprint,
   parseDevWakeAccountBindings,
   type DevWakeTarget,
+  type DevWakeWorker,
 } from "./devChatGptWakeBindingService.js";
 
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
@@ -13,7 +15,7 @@ type StoredBindingRow = {
   accountAlias: string;
   ownerChannel: string;
   targetConversationId: string;
-  workerId: typeof DEV_WAKE_DELL_WORKER;
+  workerId: DevWakeWorker;
   browserProfile: string;
   enabled: boolean;
 };
@@ -63,13 +65,14 @@ export type StageDevChatGptAccountInput = {
   ownerChannel: string;
   targetConversationId: string;
   browserProfile?: string;
+  workerId?: DevWakeWorker;
 };
 
 export type StageDevChatGptAccountResult = {
   accountAlias: string;
   ownerChannel: string;
   targetConversationId: string;
-  workerId: typeof DEV_WAKE_DELL_WORKER;
+  workerId: DevWakeWorker;
   browserProfile: string;
   bindingFingerprint: string;
   enabled: false;
@@ -89,6 +92,10 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
 
   const existingByOwner = registry.bindings.find((row) => row.ownerChannel === ownerChannel);
   const accountAlias = normalizeAlias(input.accountAlias ?? existingByOwner?.accountAlias, registry);
+  const workerId = input.workerId ?? existingByOwner?.workerId ?? DEV_WAKE_DELL_WORKER;
+  if (workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER) {
+    throw new Error("DEV_CHATGPT_PROVISIONING_WORKER_INVALID");
+  }
   const browserProfile = (input.browserProfile?.trim() || existingByOwner?.browserProfile || ("openclaw-" + accountAlias.toLowerCase()));
   if (!DEV_WAKE_BROWSER_PROFILE.test(browserProfile) || browserProfile.toLowerCase() === "openclaw") {
     throw new Error("DEV_CHATGPT_PROVISIONING_PROFILE_INVALID");
@@ -98,7 +105,7 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     row.accountAlias === accountAlias &&
     row.ownerChannel === ownerChannel &&
     row.targetConversationId === targetConversationId &&
-    row.workerId === DEV_WAKE_DELL_WORKER &&
+    row.workerId === workerId &&
     row.browserProfile === browserProfile
   );
 
@@ -108,7 +115,7 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
       accountAlias,
       ownerChannel,
       targetConversationId,
-      workerId: DEV_WAKE_DELL_WORKER,
+      workerId,
       browserProfile,
     };
     return {
@@ -128,7 +135,7 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
         accountAlias,
         ownerChannel,
         targetConversationId,
-        workerId: DEV_WAKE_DELL_WORKER,
+        workerId,
         browserProfile,
         enabled: false,
       },
@@ -144,7 +151,7 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     accountAlias,
     ownerChannel,
     targetConversationId,
-    workerId: DEV_WAKE_DELL_WORKER,
+    workerId,
     browserProfile,
   };
   return {
