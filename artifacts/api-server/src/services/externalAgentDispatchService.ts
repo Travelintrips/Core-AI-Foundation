@@ -19,6 +19,7 @@ export const OPENCLAW_PC_DEV_CLIENT_ID = "openclaw-pc-worker-dev" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
 export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
 export const OPENCLAW_PC3_CLIENT_ID = "openclaw-pc-worker-3" as const;
+export const OPENCLAW_VMSC_CHATGPT_CLIENT_ID = "openclaw-vmsc-chatgpt-wake-dev" as const;
 export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
 export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
 
@@ -30,6 +31,7 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_VMSC_CHATGPT_CLIENT_ID]: "tools:bounded",
   "openclaw-dell-chatgpt-wake-dev": "tools:bounded",
   "openclaw-dell-admcst001-dev": "tools:bounded",
   "openclaw-pc-worker-dell-browser": "tools:bounded",
@@ -47,6 +49,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   { clientId: "openclaw-dell-chatgpt-wake-dev", agent: /\bopenclaw-dell-chatgpt-wake-dev\b/i },
   { clientId: "openclaw-dell-admcst001-dev", agent: /\bopenclaw-dell-admcst001-dev\b/i },
   { clientId: OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, agent: /openclaw-travelintrips-dev|openclaw[\s-]*travelintrips[\s-]*dev|travelintrips[\s-]*dev/i },
+  { clientId: OPENCLAW_VMSC_CHATGPT_CLIENT_ID, agent: /openclaw-vmsc-chatgpt-wake-dev|vmsc[\s-]*chatgpt/i },
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
   { clientId: "openclaw-pc-worker-dell-recovery", agent: /\b(?:openclaw-pc-worker-dell-recovery|dell-recovery)\b/i },
   { clientId: "openclaw-pc-worker-dell-verifier", agent: /\b(?:openclaw-pc-worker-dell-verifier|dell-verifier)\b/i },
@@ -223,7 +226,8 @@ export async function dispatchExternalAgentWork(input: {
   const isDedicatedDevWakeWorker =
     resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
     resolvedClientId === "openclaw-dell-chatgpt-wake-dev" ||
-    resolvedClientId === OPENCLAW_PC2_CLIENT_ID;
+    resolvedClientId === OPENCLAW_PC2_CLIENT_ID ||
+    resolvedClientId === OPENCLAW_VMSC_CHATGPT_CLIENT_ID;
   if (isDedicatedDevWakeWorker &&
       (!isDevChatGptWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||

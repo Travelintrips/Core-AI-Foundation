@@ -47,6 +47,12 @@ export const EXTERNAL_AGENT_RULES = {
     capabilities: ["tools:bounded", "device:hostname", "chatgpt:wake"],
     permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
   },
+  "openclaw-vmsc-chatgpt-wake-dev": {
+    source: "openclaw",
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname", "chatgpt:wake"],
+    permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
+  },
   "openclaw-pc-worker-dev": {
     source: "openclaw",
     role: "bounded_device_executor",
@@ -71,8 +77,8 @@ export const EXTERNAL_AGENT_RULES = {
   },
   "openclaw-pc-worker-2": {
     source: "openclaw",
-    role: "bounded_orchestration_agent",
-    capabilities: ["model:chat", "tools:bounded", "task:coordinate", "chatgpt:wake"],
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname", "chatgpt:wake"],
     permissions: {
       codingWorkspaceWrite: false,
       gitCommit: false,

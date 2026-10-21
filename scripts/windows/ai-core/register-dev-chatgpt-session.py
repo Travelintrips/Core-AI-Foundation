@@ -18,6 +18,7 @@ ALLOWED_WORKERS = {
     "openclaw-dell-chatgpt-wake-dev": "openclaw-dell-chatgpt-wake-dev-ed25519-v1",
     "openclaw-travelintrips-dev": "openclaw-travelintrips-dev-ed25519-v1",
     "openclaw-pc-worker-2": "openclaw-pc-worker-2-ed25519-v1",
+    "openclaw-vmsc-chatgpt-wake-dev": "openclaw-vmsc-chatgpt-wake-dev-ed25519-v1",
 }
 UUID = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", re.I)
 OWNER = re.compile(r"ai-engine-oauth:[a-f0-9]{64}")

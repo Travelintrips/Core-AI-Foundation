@@ -27,6 +27,15 @@ describe("external agent registry policy", () => {
     }
   });
 
+  it("grants PC2 only bounded DEV ChatGPT wake capability and no production permissions", () => {
+    expect(getExternalAgentRule("openclaw-pc-worker-2")).toMatchObject({
+      source: "openclaw",
+      role: "bounded_device_executor",
+      capabilities: expect.arrayContaining(["tools:bounded", "device:hostname", "chatgpt:wake"]),
+      permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
+    });
+  });
+
   it("fails closed for unknown agents", () => {
     expect(getExternalAgentRule("untrusted-agent")).toBeNull();
   });

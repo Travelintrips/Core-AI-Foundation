@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory=$true)][string]$AccountAlias,
   [Parameter(Mandatory=$true)][string]$OwnerChannel,
   [Parameter(Mandatory=$true)][string]$ConversationId,
-  [Parameter(Mandatory=$true)][ValidateSet('openclaw-dell-chatgpt-wake-dev','openclaw-travelintrips-dev','openclaw-pc-worker-2')][string]$WorkerId,
+  [Parameter(Mandatory=$true)][ValidateSet('openclaw-dell-chatgpt-wake-dev','openclaw-travelintrips-dev','openclaw-pc-worker-2','openclaw-vmsc-chatgpt-wake-dev')][string]$WorkerId,
   [Parameter(Mandatory=$true)][string]$BrowserProfile,
   [Parameter(Mandatory=$true)][string]$PrivateKeyFile,
   [Parameter(Mandatory=$true)][string]$WorkerEnvFile,

@@ -2,6 +2,7 @@ import {
   DEV_WAKE_DELL_WORKER,
   DEV_WAKE_DEFAULT_WORKER,
   DEV_WAKE_PC2_WORKER,
+  DEV_WAKE_VMSC_WORKER,
   DEV_WAKE_BROWSER_PROFILE,
   devWakeBindingFingerprint,
   parseDevWakeAccountBindings,
@@ -94,7 +95,7 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
   const existingByOwner = registry.bindings.find((row) => row.ownerChannel === ownerChannel);
   const accountAlias = normalizeAlias(input.accountAlias ?? existingByOwner?.accountAlias, registry);
   const workerId = input.workerId ?? existingByOwner?.workerId ?? DEV_WAKE_DELL_WORKER;
-  if (workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER && workerId !== DEV_WAKE_PC2_WORKER) {
+  if (workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER && workerId !== DEV_WAKE_PC2_WORKER && workerId !== DEV_WAKE_VMSC_WORKER) {
     throw new Error("DEV_CHATGPT_PROVISIONING_WORKER_INVALID");
   }
   const browserProfile = (input.browserProfile?.trim() || existingByOwner?.browserProfile || ("openclaw-" + accountAlias.toLowerCase()));

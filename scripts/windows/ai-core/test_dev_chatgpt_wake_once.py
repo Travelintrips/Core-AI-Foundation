@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 MODULE_PATH = Path(__file__).with_name("dev-chatgpt-wake-once.py")
 WORKER = "openclaw-travelintrips-dev"
 DELL = "openclaw-dell-chatgpt-wake-dev"
+PC2 = "openclaw-pc-worker-2"
 OWNER = "ai-engine-oauth:" + "a" * 64
 OWNER_TWO = "ai-engine-oauth:" + "d" * 64
 CHAT = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649"
@@ -269,6 +270,36 @@ class BrowserWakeTests(WakeTestCase):
             with self.assertRaises(RuntimeError):
                 wake.browser("tabs", "--json")
             self.assertEqual(process.call_count, 3)
+
+
+class PortablePc2BindingTests(WakeTestCase):
+    def test_pc2_accepts_only_its_exact_bound_session_tuple(self):
+        module = load_wake(PC2, "gpt02-vmsc")
+        binding = {
+            "version": 1, "accountAlias": "GPT02", "ownerChannel": OWNER_TWO,
+            "targetConversationId": CHAT_TWO, "workerId": PC2,
+            "browserProfile": "gpt02-vmsc",
+        }
+        binding["bindingFingerprint"] = module.binding_fingerprint(binding)
+        config = {"enabled": True, "allowedConversationIds": [CHAT],
+                  "bindings": [{**binding, "enabled": True}]}
+        metadata = {
+            "assignedClientId": PC2, "conversationId": OWNER_TWO,
+            "targetConversationId": CHAT_TWO, "eventId": EVENT,
+            "capability": "chatgpt:wake", "source": "authorized-dev-browser-wake",
+            "explicitWorkerTarget": True, "devOnly": True, "wakeBinding": dict(binding),
+        }
+        metadata["assistantAttestationChallenge"] = module.assistant_challenge(
+            metadata, binding["bindingFingerprint"])
+        selected = module.resolve_dell_binding(
+            metadata, config, CHAT_TWO, EVENT, metadata["assistantAttestationChallenge"])
+        self.assertEqual(selected, binding)
+        self.assertIn(PC2, module.BOUND_WORKERS)
+        changed = copy.deepcopy(metadata)
+        changed["wakeBinding"]["workerId"] = DELL
+        with self.assertRaises(RuntimeError):
+            module.resolve_dell_binding(
+                changed, config, CHAT_TWO, EVENT, changed["assistantAttestationChallenge"])
 
 
 class DellBindingTests(WakeTestCase):
