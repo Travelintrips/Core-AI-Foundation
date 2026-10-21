@@ -37,7 +37,7 @@ def load_worker_env_file():
     path = os.environ.get("AI_CORE_DEV_WORKER_ENV_FILE", "").strip()
     if not path:
         return
-    allowed = {"AI_CORE_SCOPED_AGENT_TOKEN", "AI_CORE_OPENCLAW_CLIENT_ID", "AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"}
+    allowed = {"AI_CORE_SCOPED_AGENT_TOKEN", "AI_CORE_OPENCLAW_CLIENT_ID"}
     for raw in Path(path).read_text(encoding="utf-8").splitlines():
         match = re.fullmatch(r"\s*([A-Z][A-Z0-9_]*)=(.*)\s*", raw)
         if not match or match.group(1) not in allowed:
@@ -48,14 +48,14 @@ def load_worker_env_file():
 
 
 def post(base, path, body):
-    registration_token = env("AI_CORE_DEV_SESSION_REGISTRATION_TOKEN")
+    scoped_token = env("AI_CORE_SCOPED_AGENT_TOKEN")
     request = urllib.request.Request(
         base.rstrip("/") + path,
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "X-AI-Core-DEV-Session-Registration-Key": registration_token,
+            "Authorization": "Bearer " + scoped_token,
         },
         method="POST",
     )

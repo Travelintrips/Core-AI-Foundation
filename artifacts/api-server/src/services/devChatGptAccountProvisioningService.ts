@@ -129,23 +129,26 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     };
   }
 
-  const next: BindingRegistry = {
-    version: 1,
-    bindings: [
-      ...registry.bindings,
-      {
-        accountAlias,
-        ownerChannel,
-        targetConversationId,
-        workerId,
-        browserProfile,
-        enabled: false,
-      },
-    ],
+  const replacement = {
+    accountAlias,
+    ownerChannel,
+    targetConversationId,
+    workerId,
+    browserProfile,
+    enabled: false,
   };
+  const existingIdentityIndex = registry.bindings.findIndex((row) =>
+    row.accountAlias === accountAlias ||
+    row.ownerChannel === ownerChannel ||
+    row.targetConversationId === targetConversationId
+  );
+  const nextBindings = [...registry.bindings];
+  if (existingIdentityIndex >= 0) nextBindings[existingIdentityIndex] = replacement;
+  else nextBindings.push(replacement);
+  const next: BindingRegistry = { version: 1, bindings: nextBindings };
 
-  // Reuse the canonical validator so aliases, owners, conversations and Windows
-  // profile names cannot collide with GPT01 or another staged/active account.
+  // Reuse the canonical validator. Re-registering the same account replaces
+  // only its runtime worker/profile and requires a fresh activation proof.
   parseDevWakeAccountBindings(JSON.stringify(next), legacyTargets);
 
   const tuple = {
