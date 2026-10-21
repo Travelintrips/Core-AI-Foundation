@@ -27,6 +27,8 @@ function normalize(message: string): string {
 }
 
 export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
+  console.log('DEBUG: detectAiCoreGitHubOperation called with:', message);
+
   const text = normalize(message);
   if (!text) return null;
 
