@@ -1,0 +1,62 @@
+name: DEV Bridge Fanout Replay
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/services/devBridgeFanoutReplayStore.ts'
+      - 'artifacts/api-server/src/services/__tests__/devBridgeFanoutReplay*'
+      - 'artifacts/api-server/src/scripts/devBridgeFanoutReplayWorker.ts'
+      - 'deploy/ai-workers/docker-compose.dev-bridge-fanout-replay.yml'
+      - '.github/workflows/dev-bridge-fanout-replay.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dev-bridge-replay-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  postgres-crash-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: replay-ci-only
+          POSTGRES_DB: dev_bridge_replay_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DEV_BRIDGE_REPLAY_TEST_DATABASE_URL: postgresql://postgres:replay-ci-only@127.0.0.1:5432/dev_bridge_replay_test
+      APP_ENV: development
+      NODE_ENV: test
+      SUPABASE_URL_DEV: https://ci-replay.supabase.co
+      SUPABASE_DATABASE_URL_DEV: postgresql://postgres:replay-ci-only@db.ci-replay.supabase.co:5432/dev_bridge_replay_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Real PostgreSQL crash and replay verification
+        run: pnpm --filter @workspace/api-server exec vitest run src/services/__tests__/devBridgeFanoutReplay.test.ts src/services/__tests__/devBridgeFanoutReplay.postgres.test.ts
+      - name: Validate bounded DEV deployment configuration
+        env:
+          AI_CORE_DEV_IMAGE: core-ai-dev:vps-ci-fixture
+        run: |
+          sudo mkdir -p /opt/core-ai-dev
+          sudo touch /opt/core-ai-dev/.env.dev
+          docker compose -f deploy/ai-workers/docker-compose.dev-bridge-fanout-replay.yml config --quiet
+      - name: Record exact verification scope
+        run: |
+          echo 'POSTGRES_CRASH_RECOVERY_TESTS=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Live DEV rollout, browser binding, DC failover, and WA exactly-once are separate acceptance checks.' >> "$GITHUB_STEP_SUMMARY"
