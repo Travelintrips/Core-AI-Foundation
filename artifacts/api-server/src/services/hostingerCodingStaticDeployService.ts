@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+console.debug("HostingerStaticDeployService loaded");
 
 const HOSTINGER_API_BASE = "https://developers.hostinger.com/api";
 const GITHUB_API_BASE = "https://api.github.com";
