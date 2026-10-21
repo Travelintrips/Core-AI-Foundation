@@ -39,6 +39,17 @@ READER_AFTER_GUARD_SECONDS = (4 * CLI_SECONDS + 2 * NATIVE_SECONDS +
 POST_READINESS_SECONDS = 3 * CLI_SECONDS + READER_AFTER_GUARD_SECONDS
 
 
+def openclaw_runtime_paths(local):
+    node_override = os.environ.get("AI_CORE_OPENCLAW_NODE", "").strip()
+    entry_override = os.environ.get("AI_CORE_OPENCLAW_ENTRY", "").strip()
+    if bool(node_override) != bool(entry_override):
+        raise RuntimeError("OpenClaw runtime override must provide node and entry together")
+    if node_override:
+        return Path(node_override), Path(entry_override)
+    portable = Path(local) / "OpenClaw" / "deps" / "portable-node"
+    return portable / "node.exe", portable / "node_modules" / "openclaw" / "openclaw.mjs"
+
+
 def native_submit_seconds(message):
     # Policy allowance from actual 38s/1126-character native input, with a
     # 1.51x per-character margin plus 30s for setup/guards. It is an upper
@@ -197,12 +208,12 @@ class NativeTransport:
         system = os.environ.get("SystemRoot")
         if not local or not user or not system:
             raise RuntimeError("Native Windows paths are unavailable")
-        portable = Path(local) / "OpenClaw" / "deps" / "portable-node"
-        self.node = portable / "node.exe"
-        self.entry = portable / "node_modules" / "openclaw" / "openclaw.mjs"
+        self.node, self.entry = openclaw_runtime_paths(local)
         self.powershell = Path(system) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
         self.bridge = Path(__file__).with_name("dev-chatgpt-native-bridge.ps1")
-        self.expected_user_data = str(PureWindowsPath(user) / ".openclaw" / "browser" / self.binding["browserProfile"] / "user-data")
+        expected_user_data = os.environ.get("AI_CORE_OPENCLAW_EXPECTED_USER_DATA_DIR", "").strip()
+        self.expected_user_data = expected_user_data or str(
+            PureWindowsPath(user) / ".openclaw" / "browser" / self.binding["browserProfile"] / "user-data")
         if not all(path.is_file() for path in (self.node, self.entry, self.powershell, self.bridge,
                                                self.bridge.with_name("dev-chatgpt-native-composer.psm1"))):
             raise RuntimeError("Reviewed native transport files are unavailable")
