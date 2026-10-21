@@ -75,6 +75,8 @@ def local_bindings(data):
             raise RuntimeError("Invalid additional DEV wake binding")
         entries.append({**value, "legacy": False})
     legacy_rows = [entry for entry in entries if entry["legacy"]]
+    if len({entry["ownerChannel"] for entry in legacy_rows}) != len(legacy_rows):
+        raise RuntimeError("Conflicting DEV wake bindings")
     additional = [entry for entry in entries if not entry["legacy"]]
     by_alias = {}
     owner_to_alias = {}
@@ -83,7 +85,7 @@ def local_bindings(data):
     for entry in additional:
         if any(entry["ownerChannel"] == legacy["ownerChannel"] or
                entry["targetConversationId"] == legacy["targetConversationId"] for legacy in legacy_rows):
-            raise RuntimeError("Additional binding conflicts with GPT01")
+            raise RuntimeError("Conflicting DEV wake bindings with GPT01")
         if entry["browserProfile"].lower() == "openclaw":
             raise RuntimeError("Additional binding cannot use legacy profile")
 

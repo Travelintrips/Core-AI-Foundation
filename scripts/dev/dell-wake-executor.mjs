@@ -88,6 +88,9 @@ export function localBindings(config) {
     entries.push({ ...value, legacy: false });
   }
   const legacyRows = entries.filter(entry => entry.legacy);
+  if (new Set(legacyRows.map(entry => entry.ownerChannel)).size !== legacyRows.length) {
+    throw new Error("Conflicting DEV wake bindings");
+  }
   const additional = entries.filter(entry => !entry.legacy);
   const byAlias = new Map();
   const ownerToAlias = new Map();
@@ -96,7 +99,7 @@ export function localBindings(config) {
   for (const entry of additional) {
     if (legacyRows.some(legacy => entry.ownerChannel === legacy.ownerChannel ||
         entry.targetConversationId === legacy.targetConversationId)) {
-      throw new Error("Additional binding conflicts with GPT01");
+      throw new Error("Conflicting DEV wake bindings with GPT01");
     }
     if (entry.browserProfile.toLowerCase() === "openclaw") {
       throw new Error("Additional binding cannot use legacy profile");

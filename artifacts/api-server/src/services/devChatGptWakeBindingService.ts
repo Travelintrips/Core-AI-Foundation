@@ -95,7 +95,7 @@ export function parseDevWakeAccountBindings(raw: string | undefined, legacy: Dev
     // Multiple sessions for one alias must prove the same owner + conversation.
     const identity = byAlias.get(tuple.accountAlias);
     if (identity && (identity.ownerChannel !== tuple.ownerChannel || identity.targetConversationId !== tuple.targetConversationId)) {
-      throw new Error("DEV_CHATGPT_BINDING_IDENTITY_CONFLICT");
+      throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
     }
     byAlias.set(tuple.accountAlias, { ownerChannel: tuple.ownerChannel, targetConversationId: tuple.targetConversationId });
 
@@ -110,7 +110,7 @@ export function parseDevWakeAccountBindings(raw: string | undefined, legacy: Dev
     // A browser profile is local to a worker. Reusing the same worker/profile
     // for two account identities would make account proof ambiguous.
     const sessionKey = tuple.workerId + "|" + tuple.browserProfile.toLowerCase();
-    if (sessionKeys.has(sessionKey)) throw new Error("DEV_CHATGPT_BINDING_SESSION_CONFLICT");
+    if (sessionKeys.has(sessionKey)) throw new Error("DEV_CHATGPT_BINDING_CONFLICT");
     sessionKeys.add(sessionKey);
 
     if (row["enabled"]) active.push({ ...tuple, bindingFingerprint: devWakeBindingFingerprint(tuple) });

@@ -6,7 +6,7 @@ import { devWakeAttestationExpected } from "./devChatGptWakeEvidenceService.js";
 import { getVerifiedMcpHandshakeEvidenceForConversation } from "./localCodingControlBridgeService.js";
 import {
   DEV_WAKE_DELL_WORKER, isDevWakeRuntime, loadDevWakeRuntimeConfig, readDevWakeBinding,
-  resolveConfiguredDevWakeTarget, resolveConfiguredDevWakeTargets, type DevWakeBinding, type DevWakeTarget, type DevWakeWorker,
+  resolveConfiguredDevWakeTargets, type DevWakeBinding, type DevWakeTarget, type DevWakeWorker,
 } from "./devChatGptWakeBindingService.js";
 export type { DevWakeTarget } from "./devChatGptWakeBindingService.js";
 
@@ -187,11 +187,16 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   created: boolean;
 }> {
   const config = await loadDevWakeRuntimeConfig(input.requestHost);
-  const target = resolveConfiguredDevWakeTarget(config, {
+  const candidates = resolveConfiguredDevWakeTargets(config, {
     ownerChannel: input.ownerChannel,
     targetConversationId: input.targetConversationId,
-    ...(input.expectedBindingFingerprint ? { bindingFingerprint: input.expectedBindingFingerprint } : {}),
   });
+  const target = input.expectedBindingFingerprint
+    ? candidates.find(value => value.wakeBinding?.bindingFingerprint === input.expectedBindingFingerprint) ?? null
+    : candidates.length === 1 ? candidates[0]! : null;
+  if (!target && input.expectedBindingFingerprint && candidates.length > 0) {
+    throw new Error("DEV_CHATGPT_WAKE_BINDING_CHANGED");
+  }
   if (!target || typeof input.eventId !== "string" ||
       input.eventId.length !== 64 || !/^[a-f0-9]{64}$/i.test(input.eventId)) {
     throw new Error("DEV_CHATGPT_WAKE_DENIED");
