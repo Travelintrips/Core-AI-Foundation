@@ -11,6 +11,13 @@ import {
   withTransientDatabaseRetry,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+function safeExecute<T>(fn: () => Promise<T>, safeResponse: T): Promise<T> {
+  return fn().catch((error) => {
+    logger.error("Error in localCodingAutonomousRepairService:", error);
+    return safeResponse;
+  });
+}
+
 import { logAudit } from "./aiAuditService.js";
 import { appendCodingBridgeResponse, getCodingBridgeAvailability } from "./localCodingControlBridgeService.js";
 import {
