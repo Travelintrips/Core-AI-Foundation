@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
+  commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
   parseDevWakeAccountBindings, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeRuntimeConfig,
 } from "../devChatGptWakeBindingService.js";
 
