@@ -9,21 +9,26 @@ import { isDeepStrictEqual } from "node:util";
 const DELL_WORKER_ID = "openclaw-dell-chatgpt-wake-dev";
 const TRAVELINTRIPS_WORKER_ID = "openclaw-travelintrips-dev";
 const PC2_WORKER_ID = "openclaw-pc-worker-2";
-const SUPPORTED_WORKERS = new Set([DELL_WORKER_ID, TRAVELINTRIPS_WORKER_ID, PC2_WORKER_ID]);
+const VMSC_WORKER_ID = "openclaw-vmsc-chatgpt-wake-dev";
+const SUPPORTED_WORKERS = new Set([DELL_WORKER_ID, TRAVELINTRIPS_WORKER_ID, PC2_WORKER_ID, VMSC_WORKER_ID]);
 export const workerId = process.env.AI_CORE_DEV_WAKE_WORKER_ID?.trim() || DELL_WORKER_ID;
 if (!SUPPORTED_WORKERS.has(workerId)) throw new Error("Unsupported bound DEV wake worker");
 const keyId = workerId === DELL_WORKER_ID
   ? "openclaw-dell-chatgpt-wake-dev-ed25519-v1"
   : workerId === PC2_WORKER_ID
     ? "openclaw-pc-worker-2-ed25519-v1"
-    : "openclaw-travelintrips-dev-ed25519-v1";
+    : workerId === VMSC_WORKER_ID
+      ? "openclaw-vmsc-chatgpt-wake-dev-ed25519-v1"
+      : "openclaw-travelintrips-dev-ed25519-v1";
 const allowlistFileName = process.env.AI_CORE_DEV_WAKE_ALLOWLIST_FILE?.trim() ||
   (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-allowlist.json"
     : workerId === PC2_WORKER_ID ? "pc2-chatgpt-wake-allowlist.json"
+    : workerId === VMSC_WORKER_ID ? "vmsc-chatgpt-wake-allowlist.json"
     : "chatgpt-wake-dev-allowlist.json");
 const privateKeyFileName = process.env.AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE?.trim() ||
   (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-attestation-ed25519.pem"
     : workerId === PC2_WORKER_ID ? "pc2-chatgpt-wake-attestation-ed25519.pem"
+    : workerId === VMSC_WORKER_ID ? "vmsc-chatgpt-wake-attestation-ed25519.pem"
     : "dev-assistant-attestation-ed25519.pem");
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
