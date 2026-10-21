@@ -62,34 +62,12 @@ function hasValidAiCoreConnectorKey(req: Request): boolean {
   return isAllowedLocalMcpServiceToken(supplied);
 }
 
-const DEV_CHATGPT_SESSION_REGISTRATION_ROUTES = new Set([
-  "/ai/core-chat/dev/accounts/stage",
-  "/ai/core-chat/dev/accounts/session/challenge",
-  "/ai/core-chat/dev/accounts/session/activate",
-]);
-
 function normalizedApiPath(req: Request): string {
   const originalUrl = typeof req.originalUrl === "string" && req.originalUrl.length
     ? req.originalUrl
     : req.path;
   const originalPath = originalUrl.split("?", 1)[0] ?? originalUrl;
   return originalPath.startsWith("/api/") ? originalPath.slice(4) : originalPath;
-}
-
-function isDevChatGptSessionRegistrationRoute(req: Request): boolean {
-  if (req.method !== "POST") return false;
-  return DEV_CHATGPT_SESSION_REGISTRATION_ROUTES.has(req.path) ||
-    DEV_CHATGPT_SESSION_REGISTRATION_ROUTES.has(normalizedApiPath(req));
-}
-
-function hasValidDevChatGptSessionRegistrationKey(req: Request): boolean {
-  if (process.env["APP_ENV"] !== "development" || !isDevChatGptSessionRegistrationRoute(req)) {
-    return false;
-  }
-  const configured = process.env["AI_CORE_DEV_SESSION_REGISTRATION_TOKEN"]?.trim();
-  const supplied = String(req.headers["x-ai-core-dev-session-registration-key"] ?? "").trim();
-  if (!configured || !supplied) return false;
-  return safeEqualSecret(supplied, configured);
 }
 
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -122,14 +100,6 @@ export async function adminAuth(req: Request, res: Response, next: NextFunction)
 
   // ── Dedicated machine-to-machine bridge identity (method + path scoped) ──
   if (hasValidAiTaskBridgeKey(req)) {
-    next();
-    return;
-  }
-
-  // ── DEV-only ChatGPT session registration identity ───────────────────────
-  // This credential can authorize only stage/challenge/activate and only when
-  // APP_ENV=development. It never grants general admin API access.
-  if (hasValidDevChatGptSessionRegistrationKey(req)) {
     next();
     return;
   }
@@ -312,13 +282,18 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
-  // This exact DEV-only route authenticates OAuth and enforces owner/allowlist
-  // inside its handler. Never let the global admin API-key gate consume its
-  // Bearer OAuth token; do not relax any other admin-protected endpoint.
+  // DEV-only worker routes own their authentication at route level.
+  // The ChatGPT session registration routes require a DB-backed scoped agent
+  // token with agent:work and bind that credential to the exact workerId.
+  // Skip only the global admin-key guard so it does not consume the worker
+  // Bearer token before requireAgentServiceScope() can validate it.
   const mountedPath = req.path;
   const normalizedPath = normalizedApiPath(req);
   const devScopedWorkerRoutes = new Set([
     "/ai/dev/chatgpt-wake/jobs",
+    "/ai/core-chat/dev/accounts/stage",
+    "/ai/core-chat/dev/accounts/session/challenge",
+    "/ai/core-chat/dev/accounts/session/activate",
   ]);
   if (process.env["APP_ENV"] === "development" && req.method === "POST" &&
       (devScopedWorkerRoutes.has(mountedPath) || devScopedWorkerRoutes.has(normalizedPath))) {
