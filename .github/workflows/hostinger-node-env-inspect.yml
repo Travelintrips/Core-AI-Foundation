@@ -1,0 +1,40 @@
+name: Hostinger Node Env Safe Inspect
+
+on:
+  push:
+    branches:
+      - infra/hostinger-runtime-cleanup-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect DEV Node env schema without values
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://developers.hostinger.com/api"
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          url="$base/hosting/v1/accounts/u684045296/websites/dev-bizportal.cstlogistic.co.id/nodejs/builds/settings/env"
+          curl -fsS --connect-timeout 8 --max-time 25 -H "$auth" "$url" -o /tmp/env.json
+          echo "top_type=$(jq -r type /tmp/env.json)"
+          echo "top_keys=$(jq -r 'if type=="object" then keys|join(",") else "-" end' /tmp/env.json)"
+          if jq -e 'type=="array"' /tmp/env.json >/dev/null; then
+            echo "count=$(jq length /tmp/env.json)"
+            jq -r '.[] | (.key // .name // "<unknown>")' /tmp/env.json | sort
+          elif jq -e '.data? | type=="array"' /tmp/env.json >/dev/null; then
+            echo "count=$(jq '.data|length' /tmp/env.json)"
+            jq -r '.data[] | (.key // .name // "<unknown>")' /tmp/env.json | sort
+          elif jq -e '.env_vars? | type=="array"' /tmp/env.json >/dev/null; then
+            echo "count=$(jq '.env_vars|length' /tmp/env.json)"
+            jq -r '.env_vars[] | (.key // .name // "<unknown>")' /tmp/env.json | sort
+          else
+            echo "UNSUPPORTED_SCHEMA"
+            exit 3
+          fi
