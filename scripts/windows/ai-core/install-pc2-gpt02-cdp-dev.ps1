@@ -120,6 +120,7 @@ foreach ($task in @(
 }
 
 Stop-ScheduledTask -TaskName "AI Core OpenClaw PC2 DEV" -ErrorAction SilentlyContinue
+Disable-ScheduledTask -TaskName "AI Core OpenClaw PC2 DEV" -ErrorAction SilentlyContinue | Out-Null
 Start-ScheduledTask -TaskName "AI Core GPT02 Browser PC2 DEV"
 Start-ScheduledTask -TaskName "AI Core OpenClaw Gateway PC2 DEV"
 Start-Sleep -Seconds 4
