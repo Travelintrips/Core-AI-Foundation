@@ -111,8 +111,25 @@ async function ensureInternal(): Promise<void> {
   const pc2TokenHash = devPc2TokenHash();
   if (pc2TokenHash) {
     // DEV-only PC2 bootstrap uses a pre-provisioned token hash. The plaintext
-    // token remains only on PC2. A hash collision with another named service
-    // fails at the unique token_hash constraint rather than reassigning identity.
+    // token remains only on PC2. Preserve token_hash as the stable identity and
+    // refuse to steal a hash already owned by another named service.
+    await db.execute(sql`
+      UPDATE ai_platform.ai_agent_service_tokens AS token
+      SET token_hash = ${pc2TokenHash},
+          scopes = ARRAY['agent:presence','agent:work']::text[],
+          is_active = TRUE,
+          expires_at = NULL,
+          metadata = token.metadata || '{"source":"dev-pc2-hash-bootstrap"}'::jsonb,
+          updated_at = NOW()
+      WHERE token.name = ${DEV_PC2_TOKEN_NAME}
+        AND token.token_hash <> ${pc2TokenHash}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ai_platform.ai_agent_service_tokens AS existing
+          WHERE existing.token_hash = ${pc2TokenHash}
+        )
+    `);
+
     await db.execute(sql`
       INSERT INTO ai_platform.ai_agent_service_tokens (
         name, token_hash, scopes, is_active, expires_at, metadata, created_at, updated_at
@@ -127,9 +144,8 @@ async function ensureInternal(): Promise<void> {
         NOW(),
         NOW()
       )
-      ON CONFLICT (name) DO UPDATE
-        SET token_hash = EXCLUDED.token_hash,
-            scopes = EXCLUDED.scopes,
+      ON CONFLICT (token_hash) DO UPDATE
+        SET scopes = EXCLUDED.scopes,
             is_active = TRUE,
             expires_at = NULL,
             metadata = ai_agent_service_tokens.metadata || EXCLUDED.metadata,
