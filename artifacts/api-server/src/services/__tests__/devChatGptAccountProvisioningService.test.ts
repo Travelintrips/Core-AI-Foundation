@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stageDevChatGptAccountBinding } from "../devChatGptAccountProvisioningService.js";
-import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER } from "../devChatGptWakeBindingService.js";
+import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PC2_WORKER } from "../devChatGptWakeBindingService.js";
 
 const legacy = [{
   ownerChannel: "ai-engine-oauth:" + "1".repeat(64),
@@ -79,6 +79,16 @@ describe("devChatGptAccountProvisioningService", () => {
     expect(second.workerId).toBe(DEV_WAKE_DEFAULT_WORKER);
     expect(second.accountAlias).toBe("GPT02");
     expect(JSON.parse(second.registryJson).bindings).toHaveLength(2);
+
+    const third = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02",
+      ownerChannel: first.ownerChannel,
+      targetConversationId: first.targetConversationId,
+      workerId: DEV_WAKE_PC2_WORKER,
+      browserProfile: "gpt02-vmsc",
+    }, second.registryJson, legacy);
+    expect(third.workerId).toBe(DEV_WAKE_PC2_WORKER);
+    expect(JSON.parse(third.registryJson).bindings).toHaveLength(3);
   });
 
   it("rejects attempts to reuse the legacy GPT01 conversation", () => {

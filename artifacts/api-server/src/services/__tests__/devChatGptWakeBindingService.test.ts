@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
+  commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PC2_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
   parseDevWakeAccountBindings, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeRuntimeConfig,
 } from "../devChatGptWakeBindingService.js";
 
@@ -51,10 +51,11 @@ describe("exact DEV account binding", () => {
 
   it("allows multiple verified session locations for the same account identity", () => {
     const backup = { ...entry, workerId: DEV_WAKE_DEFAULT_WORKER, browserProfile: "gpt02-travelintrips" };
-    const bindings = parseDevWakeAccountBindings(raw([entry, backup]), legacy);
-    expect(bindings).toHaveLength(2);
+    const pc2 = { ...entry, workerId: DEV_WAKE_PC2_WORKER, browserProfile: "gpt02-vmsc" };
+    const bindings = parseDevWakeAccountBindings(raw([entry, backup, pc2]), legacy);
+    expect(bindings).toHaveLength(3);
     expect(new Set(bindings.map(binding => binding.accountAlias))).toEqual(new Set(["GPT02"]));
-    expect(new Set(bindings.map(binding => binding.workerId))).toEqual(new Set([DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER]));
+    expect(new Set(bindings.map(binding => binding.workerId))).toEqual(new Set([DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PC2_WORKER]));
     const config: DevWakeRuntimeConfig = { enabled: true, legacyTargets: [legacy], bindings, bindingConfigInvalid: false };
     expect(resolveConfiguredDevWakeTarget(config, entry)).toBeNull();
     expect(resolveConfiguredDevWakeTarget(config, { ...entry, bindingFingerprint: bindings[1]!.bindingFingerprint })?.workerId)
