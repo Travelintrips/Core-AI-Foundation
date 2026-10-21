@@ -329,8 +329,8 @@ describe("new account dispatch uses the shared exact binding", () => {
     const first = await queueDevBrowserWake(newInput);
     const request = mocks.dispatch.mock.calls[0]![0];
     expect(request.metadata.wakeBinding).toMatchObject({ accountAlias: "GPT02", browserProfile: "travelincars-dev",
-      bindingFingerprint: "4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1" });
-    expect(request.metadata.assistantAttestationChallenge).toBe("2a4c9bcdf77cb321930750a835f29cd065d70c1ea8b20f8a4c302853b6267a2a");
+      bindingFingerprint: "2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3" });
+    expect(request.metadata.assistantAttestationChallenge).toBe("668e37e7ea50f4a3fdc13b73def177651bb3b8ca12364eeb48b41a1c8e190438");
     const command = { id: first.commandId, source: request.source, commandType: "EXTERNAL_AGENT_WORK", instruction: request.instruction,
       metadataJson: { ...request.metadata, assignedClientId: request.clientId } };
     mocks.dispatch.mockResolvedValueOnce({ clientId: account.workerId, created: false, command });
@@ -339,14 +339,13 @@ describe("new account dispatch uses the shared exact binding", () => {
       command: { ...command, metadataJson: { ...command.metadataJson, wakeBinding: undefined } } });
     await expect(queueDevBrowserWake(newInput)).rejects.toThrow("DEV_CHATGPT_WAKE_RECONCILIATION_UNVERIFIED");
   });
-  it("fails over the account alias to another healthy verified session without changing account identity", async () => {
+  it("routes the stable account identity through its newly registered runtime location", async () => {
     const backup = { ...account, workerId: "openclaw-travelintrips-dev", browserProfile: "gpt02-travelintrips" };
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({
       version: 1,
-      bindings: [account, backup],
+      bindings: [backup],
     }));
     mocks.registry.mockResolvedValue([
-      { clientId: account.workerId, eligible: false, reportedHealth: "healthy", availableSlots: 0, activeJobs: 0 },
       { clientId: backup.workerId, eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
     ]);
     mocks.dispatch.mockImplementation(async request => ({ clientId: request.clientId, created: true,
@@ -358,7 +357,11 @@ describe("new account dispatch uses the shared exact binding", () => {
       ownerChannel: account.ownerChannel,
       targetConversationId: account.targetConversationId,
       workerId: backup.workerId,
-      wakeBinding: expect.objectContaining({ accountAlias: "GPT02", browserProfile: backup.browserProfile }),
+      wakeBinding: expect.objectContaining({
+        accountAlias: "GPT02",
+        browserProfile: backup.browserProfile,
+        bindingFingerprint: "2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3",
+      }),
     });
     const queued = await queueDevBrowserWake({ ...newInput,
       expectedWorkerId: target.workerId,
