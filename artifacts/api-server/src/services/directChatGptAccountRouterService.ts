@@ -159,41 +159,41 @@ export async function dispatchDirectChatGptAccountWork(input: {
 
   const registry = await getExternalAgentRegistrySnapshot();
   const counts = await activeJobCounts();
-  const travelincars = DIRECT_CHATGPT_ACCOUNT_BINDINGS.travelincars;
-  const travelincarsWorker = registry.find((item) => item.clientId === travelincars.workerId);
-  const travelincarsEligible =
-    travelincarsWorker?.eligible === true && travelincarsWorker.reportedHealth === "healthy";
+  const personal = DIRECT_CHATGPT_ACCOUNT_BINDINGS.personal;
+  const personalWorker = registry.find((item) => item.clientId === personal.workerId);
+  const personalEligible =
+    personalWorker?.eligible === true && personalWorker.reportedHealth === "healthy";
 
-  let personalTarget: DevWakeTarget | null = null;
+  let gpt02Target: DevWakeTarget | null = null;
   try {
-    personalTarget = await resolveVerifiedDevWakeTarget(
+    gpt02Target = await resolveVerifiedDevWakeTarget(
       "GPT02",
       input.requestHost,
       input.expectedOwnerChannel,
     );
   } catch (error) {
-    if (input.target === "personal" || input.target === "both") throw error;
+    if (input.target === "travelincars" || input.target === "both") throw error;
   }
 
-  const personalBinding = personalTarget?.wakeBinding ?? null;
+  const gpt02Binding = gpt02Target?.wakeBinding ?? null;
   const candidates = [
-    ...(travelincarsEligible
+    ...(gpt02Target && gpt02Binding
       ? [{
           account: "travelincars" as const,
-          kind: "direct" as const,
-          workerId: travelincars.workerId,
-          browserProfile: travelincars.browserProfile,
-          conversationId: travelincars.conversationId,
+          kind: "wake" as const,
+          workerId: gpt02Target.workerId,
+          browserProfile: gpt02Binding.browserProfile,
+          conversationId: gpt02Target.targetConversationId,
+          wakeTarget: gpt02Target,
         }]
       : []),
-    ...(personalTarget && personalBinding
+    ...(personalEligible
       ? [{
           account: "personal" as const,
-          kind: "wake" as const,
-          workerId: personalTarget.workerId,
-          browserProfile: personalBinding.browserProfile,
-          conversationId: personalTarget.targetConversationId,
-          wakeTarget: personalTarget,
+          kind: "direct" as const,
+          workerId: personal.workerId,
+          browserProfile: personal.browserProfile,
+          conversationId: personal.conversationId,
         }]
       : []),
   ];
@@ -229,9 +229,9 @@ export async function dispatchDirectChatGptAccountWork(input: {
     if (!picked) {
       throw new ExternalAgentDispatchError(
         "AGENT_UNAVAILABLE",
-        input.target === "personal"
+        input.target === "travelincars"
           ? "GPT02 has no healthy verified DEV session."
-          : `Bound DEV ChatGPT worker ${travelincars.workerId} is unavailable.`,
+          : `Bound DEV ChatGPT worker ${personal.workerId} is unavailable.`,
       );
     }
     selected = [picked];
@@ -269,7 +269,7 @@ export async function dispatchDirectChatGptAccountWork(input: {
       continue;
     }
 
-    const encoded = buildEncodedInstruction(travelincars, input.instruction);
+    const encoded = buildEncodedInstruction(personal, input.instruction);
     const result = await dispatchExternalAgentWork({
       clientId: candidate.workerId,
       instruction: encoded.encodedInstruction,
