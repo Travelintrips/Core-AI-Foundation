@@ -1,0 +1,64 @@
+name: Hostinger Node Threadpool Canary
+
+on:
+  push:
+    branches:
+      - infra/hostinger-runtime-cleanup-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Set UV threadpool 2 on DEV BizPortal with rollback
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://developers.hostinger.com/api"
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          username="u684045296"
+          domain="dev-bizportal.cstlogistic.co.id"
+          env_url="$base/hosting/v1/accounts/$username/websites/$domain/nodejs/builds/settings/env"
+          restart_url="$base/hosting/v1/accounts/$username/websites/$domain/nodejs/server/restart"
+
+          curl -fsS --connect-timeout 8 --max-time 25 -H "$auth" "$env_url" -o /tmp/env-before.json
+          jq -e 'type=="array" and all(.[]; (.key|type=="string") and (.value|type=="string"))' /tmp/env-before.json >/dev/null
+          before_count=$(jq length /tmp/env-before.json)
+          echo "env_count_before=$before_count"
+
+          jq '{env_vars:(map(select(.key!="UV_THREADPOOL_SIZE")) + [{key:"UV_THREADPOOL_SIZE",value:"2"}])}'             /tmp/env-before.json > /tmp/env-new.json
+          rollback() {
+            echo "ROLLBACK_START"
+            jq '{env_vars:.}' /tmp/env-before.json > /tmp/env-rollback.json
+            curl -sS --connect-timeout 8 --max-time 25 -X PUT -H "$auth" -H "Content-Type: application/json"               --data-binary @/tmp/env-rollback.json "$env_url" -o /tmp/rollback-put.json -w "rollback_put_http=%{http_code}\n" || true
+            curl -sS --connect-timeout 8 --max-time 25 -X POST -H "$auth" "$restart_url"               -o /tmp/rollback-restart.json -w "rollback_restart_http=%{http_code}\n" || true
+            sleep 15
+            curl -k -sS -o /dev/null -w "rollback_health=%{http_code}\n" --max-time 15 "https://$domain/" || true
+          }
+          trap 'rc=$?; rollback; exit $rc' ERR
+
+          pcode=$(curl -sS --connect-timeout 8 --max-time 25 -X PUT -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/env-new.json "$env_url" -o /tmp/put.json -w "%{http_code}")
+          echo "put_http=$pcode"
+          [ "$pcode" = "200" ] || [ "$pcode" = "202" ] || [ "$pcode" = "204" ]
+
+          rcode=$(curl -sS --connect-timeout 8 --max-time 25 -X POST -H "$auth"             -o /tmp/restart.json -w "%{http_code}" "$restart_url")
+          echo "restart_http=$rcode"
+          [ "$rcode" = "200" ] || [ "$rcode" = "202" ] || [ "$rcode" = "204" ]
+
+          sleep 20
+          curl -fsS --connect-timeout 8 --max-time 25 -H "$auth" "$env_url" -o /tmp/env-after.json
+          echo "env_count_after=$(jq length /tmp/env-after.json)"
+          jq -e '.[] | select(.key=="UV_THREADPOOL_SIZE" and .value=="2")' /tmp/env-after.json >/dev/null
+          echo "uv_threadpool=2"
+
+          health=$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 15 "https://$domain/")
+          echo "canonical_health=$health"
+          [ "$health" = "200" ]
+
+          trap - ERR
+          echo "CANARY_PASS"
