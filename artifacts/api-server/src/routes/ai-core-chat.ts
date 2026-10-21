@@ -4050,6 +4050,12 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     };
 
     const rawInput = { ...parsed.data, message: safeMessage, context: safeContext };
+    const directAccountMessage = rawInput.message.trim().startsWith("@")
+      ? rawInput.message.trim().slice(1).trim()
+      : rawInput.message;
+    const directAccountRequest = !parsed.data.image
+      ? parseDirectChatGptAccountRequest(directAccountMessage)
+      : null;
     const rawDispatch = classifyAiCoreChatDispatch(rawInput.message);
     const directConversationEvent =
       !parsed.data.image
@@ -4063,6 +4069,11 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       simpleWakeCommand
         ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
           parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined)
+        : directAccountRequest
+        ? await startDirectChatGptAccountWork(
+            { ...effectiveInput, message: directAccountMessage },
+            directAccountRequest,
+          )
         : directOpenClawPcCommand
         ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)
         : directConversationEvent
