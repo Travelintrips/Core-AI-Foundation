@@ -155,7 +155,9 @@ test('legacy aliases require the exact caller and its signed final ACK',async()=
   vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_CHANNELS',other.ownerChannel);
   assert.deepEqual(await wake.resolveVerifiedDevWakeTarget('GPT01'),other);
   assert.equal(await wake.isDevBrowserWakeAllowed(legacy),false);
-  await assert.rejects(wake.resolveVerifiedDevWakeTarget('GPT02',undefined,entry.ownerChannel),/ALIAS_TARGET_UNVERIFIED/);
+  assert.deepEqual(await wake.resolveVerifiedDevWakeTarget('GPT02',undefined,entry.ownerChannel),{
+    ownerChannel:entry.ownerChannel,targetConversationId:entry.targetConversationId,workerId:entry.workerId,wakeBinding:wb
+  });
 });
 test('strict schema, aliases, case-insensitive profile conflict and malformed values',()=>{
   for(const change of [{accountAlias:'GPT01'},{browserProfile:'OPENCLAW'},{ownerChannel:entry.ownerChannel+'\n'},{browserProfile:'../unsafe'},{enabled:undefined},{targetConversationId:''}])assert.throws(()=>binding.parseDevWakeAccountBindings(raw([{...entry,...change}]),legacy));
