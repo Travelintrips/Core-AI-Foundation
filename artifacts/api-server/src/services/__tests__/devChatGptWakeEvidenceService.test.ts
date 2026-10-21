@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { deriveDevAssistantChallenge, devAssistantAttestationPayload, DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID, type DevAssistantAttestation } from "../devAssistantAttestation.js";
-import { DEV_WAKE_DELL_WORKER, devWakeBindingFingerprint, type DevWakeBinding } from "../devChatGptWakeBindingService.js";
+import { DEV_WAKE_DELL_WORKER, DEV_WAKE_PC2_WORKER, devWakeBindingFingerprint, type DevWakeBinding } from "../devChatGptWakeBindingService.js";
 import { devWakeAttestationExpected, verifyDevWakeCommandReceipt } from "../devChatGptWakeEvidenceService.js";
 
 const tuple = { version: 1, accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "d".repeat(64),
@@ -37,6 +37,31 @@ describe("profile-bound receipt contract", () => {
       .toBe("79960f0819bca525e9f2930fc13b4c94b538c06fc0860686b4d051f84d53feec");
     expect(devWakeAttestationExpected(metadata)).toEqual(expected);
     expect(verifyDevWakeCommandReceipt(proof()).verified).toBe(true);
+  });
+
+  it("builds the same bound attestation expectation for PC2 session failover", () => {
+    const pc2Tuple = { ...tuple, workerId: DEV_WAKE_PC2_WORKER, browserProfile: "admcst001-dev" } as const;
+    const pc2Binding: DevWakeBinding = { ...pc2Tuple, bindingFingerprint: devWakeBindingFingerprint(pc2Tuple) };
+    const pc2Expected = {
+      ownerChannel: pc2Tuple.ownerChannel,
+      targetConversationId: pc2Tuple.targetConversationId,
+      workerId: pc2Tuple.workerId,
+      eventId: "e".repeat(64),
+      bindingFingerprint: pc2Binding.bindingFingerprint,
+      browserProfile: pc2Tuple.browserProfile,
+    };
+    const pc2Metadata = {
+      assignedClientId: pc2Tuple.workerId,
+      conversationId: pc2Tuple.ownerChannel,
+      targetConversationId: pc2Tuple.targetConversationId,
+      eventId: pc2Expected.eventId,
+      assistantAttestationChallenge: deriveDevAssistantChallenge(pc2Expected),
+      capability: "chatgpt:wake",
+      explicitWorkerTarget: true,
+      devOnly: true,
+      wakeBinding: pc2Binding,
+    };
+    expect(devWakeAttestationExpected(pc2Metadata)).toEqual(pc2Expected);
   });
 
   it("rejects cross-account/profile replay, stripped binding and signed-field tampering", () => {

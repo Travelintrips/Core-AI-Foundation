@@ -8,7 +8,8 @@ const record = (value: unknown): value is Record<string, unknown> =>
 export function devWakeAttestationExpected(metadata: unknown): Parameters<typeof verifyDevAssistantAttestation>[0]["expected"] | null {
   if (!record(metadata)) return null;
   const worker = metadata["assignedClientId"];
-  if (worker !== "openclaw-travelintrips-dev" && worker !== "openclaw-dell-chatgpt-wake-dev") return null;
+  if (worker !== "openclaw-travelintrips-dev" && worker !== "openclaw-dell-chatgpt-wake-dev" &&
+      worker !== "openclaw-pc-worker-2") return null;
   const ownerChannel = metadata["conversationId"];
   const targetConversationId = metadata["targetConversationId"];
   const eventId = metadata["eventId"];
