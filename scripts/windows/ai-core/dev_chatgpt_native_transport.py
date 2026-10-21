@@ -279,8 +279,44 @@ class NativeTransport:
                 raise RuntimeError("Owned blank reader is not uniquely identifiable")
         # The exclusion exists only after this invocation creates and durably
         # records its exact new raw ID. Old sidecars never grant an exclusion.
-        matching = [tab for tab in tabs if tab.get("type") == "page" and tab.get("url") == self.page_url
+        def bound_candidates(rows):
+            return [tab for tab in rows if tab.get("type") == "page" and tab.get("url") == self.page_url
                     and tab["targetId"] != self.reader_id]
+
+        matching = bound_candidates(tabs)
+
+        # After a newly owned reader is activated, OpenClaw can transiently
+        # omit the original bound ChatGPT page from one managed tab inventory
+        # refresh even though the profile, PID and reader ownership remain
+        # unchanged. Retry only the zero-candidate case. Ambiguity (>1) remains
+        # fail-closed and no alternate target is ever substituted.
+        if self.reader_id is not None and len(matching) == 0:
+            for _ in range(3):
+                time.sleep(1)
+                retry_envelope = self._cli("tabs")
+                retry_tabs = retry_envelope.get("tabs")
+                if not isinstance(retry_tabs, list) or not 1 <= len(retry_tabs) <= 128:
+                    continue
+                retry_ids = [tab.get("targetId") if isinstance(tab, dict) else None for tab in retry_tabs]
+                if (any(not isinstance(value, str) or not RAW_TARGET.fullmatch(value) for value in retry_ids) or
+                        len({value.lower() for value in retry_ids}) != len(retry_ids)):
+                    raise RuntimeError("OpenClaw raw tab inventory is ambiguous")
+                owned = [tab for tab in retry_tabs if tab["targetId"] == self.reader_id]
+                if (reader_url not in ("about:blank", self.page_url) or len(owned) != 1 or
+                        owned[0].get("type") != "page" or owned[0].get("url") != reader_url):
+                    raise RuntimeError("Owned reader changed; preserve it for reconciliation")
+                if reader_url == "about:blank" and sum(
+                        tab.get("type") == "page" and tab.get("url") == "about:blank" for tab in retry_tabs) != 1:
+                    raise RuntimeError("Owned blank reader is not uniquely identifiable")
+                retry_matching = bound_candidates(retry_tabs)
+                if len(retry_matching) > 1:
+                    raise RuntimeError("Expected exactly one native bound ChatGPT tab")
+                if len(retry_matching) == 1:
+                    tabs = retry_tabs
+                    matching = retry_matching
+                    tabs_observed_at = time.time()
+                    break
+
         if len(matching) != 1 or not isinstance(matching[0].get("targetId"), str) or not RAW_TARGET.fullmatch(matching[0]["targetId"]):
             raise RuntimeError("Expected exactly one native bound ChatGPT tab")
         self.last_tabs = tabs
