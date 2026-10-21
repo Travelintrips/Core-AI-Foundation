@@ -86,7 +86,10 @@ import {
 } from "../services/externalAgentDispatchService.js";
 import {
   dispatchDirectChatGptAccountWork,
+  isDirectChatGptAccountReset,
   parseDirectChatGptAccountRequest,
+  parseDirectChatGptAccountTarget,
+  resolveDirectChatGptAccountTargetFromContext,
 } from "../services/directChatGptAccountRouterService.js";
 import {
   buildAdminDbUnresolvedAnswer,
@@ -4066,6 +4069,19 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
     const directAccountRequest = !parsed.data.image
       ? parseDirectChatGptAccountRequest(directAccountMessage)
       : null;
+    const directAccountTarget = !parsed.data.image
+      ? parseDirectChatGptAccountTarget(directAccountMessage)
+      : null;
+    const directAccountReset = !parsed.data.image
+      ? isDirectChatGptAccountReset(rawInput.message)
+      : false;
+    const inheritedDirectAccountTarget = !parsed.data.image && !directAccountTarget && !directAccountReset
+      ? resolveDirectChatGptAccountTargetFromContext(rawInput.context)
+      : null;
+    const inheritedDirectAccountRequest =
+      inheritedDirectAccountTarget && rawInput.message.trim().startsWith("@") && directAccountMessage.length > 0
+        ? { target: inheritedDirectAccountTarget, instruction: directAccountMessage }
+        : null;
     const rawDispatch = classifyAiCoreChatDispatch(rawInput.message);
     const directConversationEvent =
       !parsed.data.image
@@ -4079,10 +4095,38 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       simpleWakeCommand
         ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
           parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined)
+        : directAccountReset
+        ? {
+            kind: "external_agent_binding",
+            route: "DIRECT_CHATGPT_ACCOUNT_BINDING",
+            provider: "openclaw",
+            model: null,
+            usage: null,
+            estimatedCostUsd: 0,
+            status: "UNBOUND",
+            reply: "Binding akun ChatGPT untuk percakapan ini dilepas. Perintah berikutnya tidak akan mewarisi target akun sebelumnya.",
+          }
         : directAccountRequest
         ? await startDirectChatGptAccountWork(
             { ...effectiveInput, message: directAccountMessage },
             directAccountRequest,
+          )
+        : directAccountTarget
+        ? {
+            kind: "external_agent_binding",
+            route: "DIRECT_CHATGPT_ACCOUNT_BINDING",
+            provider: "openclaw",
+            model: null,
+            usage: null,
+            estimatedCostUsd: 0,
+            status: "BOUND",
+            target: directAccountTarget,
+            reply: `Akun ChatGPT DEV ${directAccountTarget} dipilih untuk percakapan ini. Pesan lanjutan cukup diawali @ tanpa mengulang nama akun.`,
+          }
+        : inheritedDirectAccountRequest
+        ? await startDirectChatGptAccountWork(
+            { ...effectiveInput, message: directAccountMessage },
+            inheritedDirectAccountRequest,
           )
         : directOpenClawPcCommand
         ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)

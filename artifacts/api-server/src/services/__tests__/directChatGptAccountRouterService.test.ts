@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   dispatchDirectChatGptAccountWork,
+  isDirectChatGptAccountReset,
   parseDirectChatGptAccountRequest,
+  parseDirectChatGptAccountTarget,
+  resolveDirectChatGptAccountTargetFromContext,
 } from "../directChatGptAccountRouterService.js";
 
 afterEach(() => {
@@ -49,6 +52,27 @@ describe("directChatGptAccountRouterService", () => {
     expect(parseDirectChatGptAccountRequest(
       "jelaskan perbedaan akun personal dan travelincars",
     )).toBeNull();
+  });
+
+  it("accepts travelincar typo as the travelincars target", () => {
+    expect(parseDirectChatGptAccountTarget("@pakai akun travelincar,ya")).toBe("travelincars");
+    expect(parseDirectChatGptAccountRequest("@pakai akun travelincar,ya")).toBeNull();
+  });
+
+  it("inherits the latest bound account from conversation context", () => {
+    expect(resolveDirectChatGptAccountTargetFromContext([
+      { role: "user", text: "@pakai akun travelincar,ya" },
+      { role: "assistant", text: "Akun ChatGPT DEV travelincars dipilih." },
+    ])).toBe("travelincars");
+  });
+
+  it("stops inheriting after an explicit account reset", () => {
+    expect(isDirectChatGptAccountReset("@lepas akun")).toBe(true);
+    expect(resolveDirectChatGptAccountTargetFromContext([
+      { role: "user", text: "@pakai akun travelincars" },
+      { role: "assistant", text: "Akun dipilih." },
+      { role: "user", text: "@lepas akun" },
+    ])).toBeNull();
   });
 
   it("fails closed in production before any dispatch", async () => {

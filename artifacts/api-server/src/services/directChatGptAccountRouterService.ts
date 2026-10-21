@@ -30,36 +30,65 @@ export type DirectChatGptAccountRequest = {
   instruction: string;
 };
 
+export type DirectChatContextMessage = {
+  role: "user" | "assistant";
+  text: string;
+};
+
 function stripRoutingPrefix(message: string): string {
   return message
     .replace(/^\s*(?:pakai|gunakan|gunakanlah|kirim(?:kan)?|delegasikan|route|rutekan|kerjakan|jalankan|bagi)\s+/i, "")
     .replace(/^\s*(?:ke|dengan|melalui|via)\s+/i, "")
     .replace(/^\s*(?:dua|kedua|2)\s+akun(?:\s+chatgpt)?\s*[:,-]?\s*/i, "")
     .replace(/^\s*(?:akun\s+)?(?:personal|admcst001)(?:-dev)?(?:\s+chatgpt)?\s*[:,-]?\s*/i, "")
-    .replace(/^\s*(?:akun\s+)?(?:travelincars|percobaan)(?:-dev)?(?:\s+chatgpt)?\s*[:,-]?\s*/i, "")
+    .replace(/^\s*(?:akun\s+)?(?:travelincars?|percobaan)(?:-dev)?(?:\s+chatgpt)?\s*[:,-]?\s*/i, "")
     .replace(/^\s*(?:chatgpt|akun\s+otomatis|salah\s+satu\s+akun)(?:\s+dev)?\s*[:,-]?\s*/i, "")
     .replace(/^\s*(?:untuk|agar|supaya)\s+/i, "")
     .trim();
 }
 
+export function parseDirectChatGptAccountTarget(message: string): DirectChatGptTarget | null {
+  const text = message.trim().replace(/^@\s*/, "");
+  if (!text) return null;
+  if (/\b(?:dua|kedua|2)\s+akun(?:\s+chatgpt)?\b/i.test(text)) return "both";
+  if (/\b(?:akun\s+)?(?:personal|admcst001)(?:-dev)?\b/i.test(text)) return "personal";
+  if (/\b(?:akun\s+)?(?:travelincars?|percobaan)(?:-dev)?\b/i.test(text)) return "travelincars";
+  if (/\b(?:chatgpt|akun\s+otomatis|salah\s+satu\s+akun)\b/i.test(text)) return "auto";
+  return null;
+}
+
+export function isDirectChatGptAccountReset(message: string): boolean {
+  return /^@?\s*(?:lepas|reset|hapus|putus)(?:kan)?\s+(?:binding\s+)?akun(?:\s+chatgpt)?\s*[.!]?\s*$/i.test(message.trim());
+}
+
+export function resolveDirectChatGptAccountTargetFromContext(
+  context: DirectChatContextMessage[] | undefined,
+): DirectChatGptTarget | null {
+  if (!context?.length) return null;
+  for (let index = context.length - 1; index >= 0; index -= 1) {
+    const item = context[index];
+    if (!item || item.role !== "user") continue;
+    if (isDirectChatGptAccountReset(item.text)) return null;
+    const target = parseDirectChatGptAccountTarget(item.text);
+    if (target) return target;
+  }
+  return null;
+}
+
 export function parseDirectChatGptAccountRequest(
   message: string,
 ): DirectChatGptAccountRequest | null {
-  const text = message.trim();
+  const text = message.trim().replace(/^@\s*/, "");
   if (!text) return null;
 
   const hasAction = /\b(?:pakai|gunakan|kirim(?:kan)?|delegasikan|route|rutekan|kerjakan|jalankan|bagi)\b/i.test(text);
-  const explicitPrefix = /^\s*(?:chatgpt|akun\s+(?:personal|travelincars|percobaan|otomatis)|(?:dua|kedua|2)\s+akun)\s*:/i.test(text);
+  const explicitPrefix = /^\s*(?:chatgpt|akun\s+(?:personal|travelincars?|percobaan|otomatis)|(?:dua|kedua|2)\s+akun)\s*:/i.test(text);
   if (!hasAction && !explicitPrefix) return null;
 
-  let target: DirectChatGptTarget | null = null;
-  if (/\b(?:dua|kedua|2)\s+akun(?:\s+chatgpt)?\b/i.test(text)) target = "both";
-  else if (/\b(?:akun\s+)?(?:personal|admcst001)(?:-dev)?\b/i.test(text)) target = "personal";
-  else if (/\b(?:akun\s+)?(?:travelincars|percobaan)(?:-dev)?\b/i.test(text)) target = "travelincars";
-  else if (/\b(?:chatgpt|akun\s+otomatis|salah\s+satu\s+akun)\b/i.test(text)) target = "auto";
+  const target = parseDirectChatGptAccountTarget(text);
   if (!target) return null;
 
-  const instruction = stripRoutingPrefix(text);
+  const instruction = stripRoutingPrefix(text).replace(/^\s*(?:ya|iya|yes|ok|oke)\s*[,.!?-]*\s*/i, "").trim();
   if (instruction.length < 3) return null;
   return { target, instruction };
 }
