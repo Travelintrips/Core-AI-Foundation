@@ -333,17 +333,13 @@ describe("new account dispatch uses the shared exact binding", () => {
       command: { ...command, metadataJson: { ...command.metadataJson, wakeBinding: undefined } } });
     await expect(queueDevBrowserWake(newInput)).rejects.toThrow("DEV_CHATGPT_WAKE_RECONCILIATION_UNVERIFIED");
   });
-  it("requires account-specific verified evidence for aliases and rejects another OAuth owner", async () => {
+  it("uses the exact account binding directly and rejects another OAuth owner without MCP evidence", async () => {
     configure();
     await queueDevBrowserWake(newInput);
     const wakeBinding = mocks.dispatch.mock.calls[0]![0].metadata.wakeBinding;
-    mocks.handshakeEvidence.mockResolvedValue({ ownerChannel: account.ownerChannel, targetConversationId: account.targetConversationId,
-      workerId: account.workerId, wakeBinding });
     await expect(resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel)).resolves.toMatchObject({ wakeBinding });
+    expect(mocks.handshakeEvidence).not.toHaveBeenCalled();
     await expect(resolveVerifiedDevWakeTarget("GPT02", undefined, ownerChannel)).rejects.toThrow("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
-    mocks.handshakeEvidence.mockResolvedValue({ ownerChannel: account.ownerChannel, targetConversationId: account.targetConversationId,
-      workerId: account.workerId });
-    await expect(resolveVerifiedDevWakeTarget("GPT02")).rejects.toThrow("DEV_CHATGPT_ALIAS_BINDING_UNVERIFIED");
     await expect(queueDevBrowserWake({ ...newInput, expectedBindingFingerprint: "f".repeat(64) })).rejects.toThrow("DEV_CHATGPT_WAKE_BINDING_CHANGED");
   });
   it("uses the same central setting for preflight and queue, and lets explicit false revoke it", async () => {
