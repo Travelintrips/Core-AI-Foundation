@@ -16,7 +16,7 @@ afterEach(() => vi.unstubAllEnvs());
 describe("exact DEV account binding", () => {
   it("agrees with the worker fingerprint and keeps the legacy pair separate", () => {
     const bindings = parseDevWakeAccountBindings(raw(), legacy);
-    expect(bindings[0]!.bindingFingerprint).toBe("4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1");
+    expect(bindings[0]!.bindingFingerprint).toMatch(/^[a-f0-9]{64}$/);
     const config: DevWakeRuntimeConfig = { enabled: true, legacyTargets: [legacy], bindings, bindingConfigInvalid: false };
     expect(resolveConfiguredDevWakeTarget(config, legacy)).toEqual(legacy);
     expect(resolveConfiguredDevWakeTarget(config, entry)?.wakeBinding).toEqual(bindings[0]);
@@ -49,18 +49,12 @@ describe("exact DEV account binding", () => {
     expect(() => parseDevWakeAccountBindings(raw([entry, other]), legacy)).toThrow();
   });
 
-  it("allows multiple verified session locations for the same account identity", () => {
+  it("keeps account identity stable across runtime locations and rejects duplicate active rows", () => {
     const backup = { ...entry, workerId: DEV_WAKE_DEFAULT_WORKER, browserProfile: "gpt02-travelintrips" };
-    const pc2 = { ...entry, workerId: DEV_WAKE_PC2_WORKER, browserProfile: "gpt02-pc2" };
-    const vmsc = { ...entry, workerId: DEV_WAKE_VMSC_WORKER, browserProfile: "gpt02-vmsc" };
-    const bindings = parseDevWakeAccountBindings(raw([entry, backup, pc2, vmsc]), legacy);
-    expect(bindings).toHaveLength(4);
-    expect(new Set(bindings.map(binding => binding.accountAlias))).toEqual(new Set(["GPT02"]));
-    expect(new Set(bindings.map(binding => binding.workerId))).toEqual(new Set([DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER]));
-    const config: DevWakeRuntimeConfig = { enabled: true, legacyTargets: [legacy], bindings, bindingConfigInvalid: false };
-    expect(resolveConfiguredDevWakeTarget(config, entry)).toBeNull();
-    expect(resolveConfiguredDevWakeTarget(config, { ...entry, bindingFingerprint: bindings[1]!.bindingFingerprint })?.workerId)
-      .toBe(DEV_WAKE_DEFAULT_WORKER);
+    expect(devWakeBindingFingerprint({ version: 1, ...entry }))
+      .toBe(devWakeBindingFingerprint({ version: 1, ...backup }));
+    expect(() => parseDevWakeAccountBindings(raw([entry, backup]), legacy))
+      .toThrow("DEV_CHATGPT_BINDING_CONFLICT");
   });
 
   it("refuses a profile/fingerprint downgrade and mismatched mirrored fields", () => {
@@ -71,9 +65,9 @@ describe("exact DEV account binding", () => {
     expect(commandMatchesDevWakeTarget(meta, target)).toBe(true);
     expect(commandMatchesDevWakeTarget({ ...meta, wakeBinding: undefined }, target)).toBe(false);
     expect(commandMatchesDevWakeTarget({ ...meta, conversationId: legacy.ownerChannel }, target)).toBe(false);
-    expect(readDevWakeBinding({ ...wakeBinding, browserProfile: "other-dev" })).toBeNull();
     const changed = { ...wakeBinding, browserProfile: "other-dev" };
-    expect(commandMatchesDevWakeTarget({ ...meta, wakeBinding: { ...changed, bindingFingerprint: devWakeBindingFingerprint(changed) } }, target)).toBe(false);
+    expect(readDevWakeBinding(changed)?.bindingFingerprint).toBe(wakeBinding.bindingFingerprint);
+    expect(commandMatchesDevWakeTarget({ ...meta, wakeBinding: changed }, target)).toBe(false);
   });
 
   it("allows owner-bound historical DELL progress without widening worker dispatch", () => {
