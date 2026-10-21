@@ -18,7 +18,7 @@ import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
-import { commandMatchesDevWakeTarget, DEV_WAKE_DELL_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
+import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
@@ -951,7 +951,7 @@ export async function completeCodingBridgeCommand(input: {
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
   }
-  const wakeConfig = input.clientId === DEV_WAKE_DELL_WORKER
+  const wakeConfig = (input.clientId === DEV_WAKE_DELL_WORKER || input.clientId === DEV_WAKE_DEFAULT_WORKER)
     ? await loadDevWakeRuntimeConfig(input.requestHost).catch(() => null) : null;
 
   // Command terminal status and durable response must commit together.
@@ -982,18 +982,31 @@ export async function completeCodingBridgeCommand(input: {
     if (!row) return null;
     // The terminal UPDATE holds the claim row lock. Reject a forged or downgraded
     // browser receipt inside this transaction, before either completion can commit.
-    if (input.clientId === DEV_WAKE_DELL_WORKER && input.status === "COMPLETED") {
+    if (input.status === "COMPLETED") {
       const metadata = row["metadata_json"];
-      const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
-      const owner = isRecord(metadata) ? metadata["conversationId"] : null;
-      const target = wakeConfig && typeof targetId === "string" && typeof owner === "string"
-        ? resolveConfiguredDevWakeTarget(wakeConfig, { ownerChannel: owner, targetConversationId: targetId }) : null;
-      if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
-          !target || !commandMatchesDevWakeTarget(metadata, target)) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_BINDING_INVALID");
-      const receivedAt = row["received_at"] instanceof Date ? row["received_at"].toISOString() : String(row["received_at"] ?? "");
-      const receipt = verifyDevWakeCommandReceipt({ metadata, details, notBefore: receivedAt,
-        receivedAt: new Date().toISOString(), publicKeyDerBase64: wakeConfig?.attestationPublicKeyDerB64 });
-      if (!receipt.verified) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_ATTESTATION_INVALID");
+      const wakeBinding = isRecord(metadata) ? readDevWakeBinding(metadata["wakeBinding"]) : null;
+      const mustVerifyWake = input.clientId === DEV_WAKE_DELL_WORKER || wakeBinding !== null;
+      if (mustVerifyWake) {
+        const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
+        const owner = isRecord(metadata) ? metadata["conversationId"] : null;
+        const target = wakeConfig && typeof targetId === "string" && typeof owner === "string"
+          ? resolveConfiguredDevWakeTarget(wakeConfig, {
+              ownerChannel: owner,
+              targetConversationId: targetId,
+              ...(wakeBinding ? { bindingFingerprint: wakeBinding.bindingFingerprint } : {}),
+            })
+          : null;
+        if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
+            !target || !commandMatchesDevWakeTarget(metadata, target)) {
+          throw new Error("DEV_CHATGPT_WAKE_CALLBACK_BINDING_INVALID");
+        }
+        const receivedAt = row["received_at"] instanceof Date ? row["received_at"].toISOString() : String(row["received_at"] ?? "");
+        const publicKeyDerBase64 = devAssistantPublicKeyForWorker(input.clientId) ||
+          (input.clientId === DEV_WAKE_DELL_WORKER ? wakeConfig?.attestationPublicKeyDerB64 : undefined);
+        const receipt = verifyDevWakeCommandReceipt({ metadata, details, notBefore: receivedAt,
+          receivedAt: new Date().toISOString(), publicKeyDerBase64 });
+        if (!receipt.verified) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_ATTESTATION_INVALID");
+      }
     }
     const taskId=row["task_id"] ? String(row["task_id"]) : null;
     const [response]=await tx.insert(aiCodingBridgeResponsesTable).values({

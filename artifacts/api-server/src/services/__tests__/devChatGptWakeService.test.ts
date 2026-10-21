@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), transaction: vi.fn(), execute: vi.fn(), rows: vi.fn(), handshakeEvidence: vi.fn() }));
+const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), transaction: vi.fn(), execute: vi.fn(), rows: vi.fn(), handshakeEvidence: vi.fn(), registry: vi.fn() }));
 vi.mock("../externalAgentDispatchService.js", () => ({ dispatchExternalAgentWork: mocks.dispatch }));
+vi.mock("../externalAgentRegistryService.js", () => ({ getExternalAgentRegistrySnapshot: mocks.registry }));
 vi.mock("../localCodingControlBridgeService.js", () => ({ getVerifiedMcpHandshakeEvidenceForConversation: mocks.handshakeEvidence }));
 vi.mock("@workspace/db", () => ({
   db: { transaction: mocks.transaction, execute: mocks.execute },
@@ -38,8 +39,13 @@ beforeEach(() => {
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel);
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", targetConversationId);
   vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
+  vi.stubEnv("AI_CORE_DEV_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
   mocks.dispatch.mockResolvedValue({ clientId: worker, command: existingCommand(), created: true });
   mocks.handshakeEvidence.mockResolvedValue(null);
+  mocks.registry.mockResolvedValue([
+    { clientId: "openclaw-dell-chatgpt-wake-dev", eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+    { clientId: "openclaw-travelintrips-dev", eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+  ]);
   mocks.execute.mockResolvedValue({ rows: [] });
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", "");
   mocks.rows.mockResolvedValue([existingCommand()]);
@@ -333,6 +339,37 @@ describe("new account dispatch uses the shared exact binding", () => {
       command: { ...command, metadataJson: { ...command.metadataJson, wakeBinding: undefined } } });
     await expect(queueDevBrowserWake(newInput)).rejects.toThrow("DEV_CHATGPT_WAKE_RECONCILIATION_UNVERIFIED");
   });
+  it("fails over the account alias to another healthy verified session without changing account identity", async () => {
+    const backup = { ...account, workerId: "openclaw-travelintrips-dev", browserProfile: "gpt02-travelintrips" };
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({
+      version: 1,
+      bindings: [account, backup],
+    }));
+    mocks.registry.mockResolvedValue([
+      { clientId: account.workerId, eligible: false, reportedHealth: "healthy", availableSlots: 0, activeJobs: 0 },
+      { clientId: backup.workerId, eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+    ]);
+    mocks.dispatch.mockImplementation(async request => ({ clientId: request.clientId, created: true,
+      command: { id: childId, source: request.source, commandType: "EXTERNAL_AGENT_WORK", instruction: request.instruction,
+        metadataJson: { ...request.metadata, assignedClientId: request.clientId } } }));
+
+    const target = await resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel);
+    expect(target).toMatchObject({
+      ownerChannel: account.ownerChannel,
+      targetConversationId: account.targetConversationId,
+      workerId: backup.workerId,
+      wakeBinding: expect.objectContaining({ accountAlias: "GPT02", browserProfile: backup.browserProfile }),
+    });
+    const queued = await queueDevBrowserWake({ ...newInput,
+      expectedWorkerId: target.workerId,
+      expectedBindingFingerprint: target.wakeBinding!.bindingFingerprint,
+    });
+    expect(queued.clientId).toBe(backup.workerId);
+    expect(mocks.dispatch.mock.calls[0]![0].metadata.wakeBinding).toMatchObject({
+      accountAlias: "GPT02", workerId: backup.workerId, browserProfile: backup.browserProfile,
+    });
+  });
+
   it("uses the exact account binding directly and rejects another OAuth owner without MCP evidence", async () => {
     configure();
     await queueDevBrowserWake(newInput);

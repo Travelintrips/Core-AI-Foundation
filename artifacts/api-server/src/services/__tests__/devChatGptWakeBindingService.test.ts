@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  commandMatchesDevWakeTarget, DEV_WAKE_DELL_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
+  commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
   parseDevWakeAccountBindings, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeRuntimeConfig,
 } from "../devChatGptWakeBindingService.js";
 
@@ -46,7 +46,19 @@ describe("exact DEV account binding", () => {
     const other = { ...entry, accountAlias: "GPT03", ownerChannel: "ai-engine-oauth:" + "e".repeat(64),
       targetConversationId: "33333333-3333-4333-8333-333333333333", browserProfile: "other-dev", enabled: false,
       [key]: key === "browserProfile" ? entry.browserProfile.toUpperCase() : entry[key] };
-    expect(() => parseDevWakeAccountBindings(raw([entry, other]), legacy)).toThrow("DEV_CHATGPT_BINDING_CONFLICT");
+    expect(() => parseDevWakeAccountBindings(raw([entry, other]), legacy)).toThrow();
+  });
+
+  it("allows multiple verified session locations for the same account identity", () => {
+    const backup = { ...entry, workerId: DEV_WAKE_DEFAULT_WORKER, browserProfile: "gpt02-travelintrips" };
+    const bindings = parseDevWakeAccountBindings(raw([entry, backup]), legacy);
+    expect(bindings).toHaveLength(2);
+    expect(new Set(bindings.map(binding => binding.accountAlias))).toEqual(new Set(["GPT02"]));
+    expect(new Set(bindings.map(binding => binding.workerId))).toEqual(new Set([DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER]));
+    const config: DevWakeRuntimeConfig = { enabled: true, legacyTargets: [legacy], bindings, bindingConfigInvalid: false };
+    expect(resolveConfiguredDevWakeTarget(config, entry)).toBeNull();
+    expect(resolveConfiguredDevWakeTarget(config, { ...entry, bindingFingerprint: bindings[1]!.bindingFingerprint })?.workerId)
+      .toBe(DEV_WAKE_DEFAULT_WORKER);
   });
 
   it("refuses a profile/fingerprint downgrade and mismatched mirrored fields", () => {

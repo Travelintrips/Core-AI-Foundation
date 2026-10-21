@@ -6,8 +6,18 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
-export const workerId = "openclaw-dell-chatgpt-wake-dev";
-const keyId = "openclaw-dell-chatgpt-wake-dev-ed25519-v1";
+const DELL_WORKER_ID = "openclaw-dell-chatgpt-wake-dev";
+const TRAVELINTRIPS_WORKER_ID = "openclaw-travelintrips-dev";
+const SUPPORTED_WORKERS = new Set([DELL_WORKER_ID, TRAVELINTRIPS_WORKER_ID]);
+export const workerId = process.env.AI_CORE_DEV_WAKE_WORKER_ID?.trim() || DELL_WORKER_ID;
+if (!SUPPORTED_WORKERS.has(workerId)) throw new Error("Unsupported bound DEV wake worker");
+const keyId = workerId === DELL_WORKER_ID
+  ? "openclaw-dell-chatgpt-wake-dev-ed25519-v1"
+  : "openclaw-travelintrips-dev-ed25519-v1";
+const allowlistFileName = process.env.AI_CORE_DEV_WAKE_ALLOWLIST_FILE?.trim() ||
+  (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-allowlist.json" : "chatgpt-wake-dev-allowlist.json");
+const privateKeyFileName = process.env.AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE?.trim() ||
+  (workerId === DELL_WORKER_ID ? "dell-chatgpt-wake-attestation-ed25519.pem" : "dev-assistant-attestation-ed25519.pem");
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
@@ -43,7 +53,7 @@ export function bindingFingerprint(binding) {
 function validBinding(value) {
   return record(value) && value.version === 1 &&
     matches(ALIAS, value.accountAlias) && matches(OWNER, value.ownerChannel) &&
-    matches(UUID, value.targetConversationId) && value.workerId === workerId && matches(PROFILE, value.browserProfile) &&
+    matches(UUID, value.targetConversationId) && SUPPORTED_WORKERS.has(value.workerId) && matches(PROFILE, value.browserProfile) &&
     (value.bindingFingerprint === undefined || value.bindingFingerprint === bindingFingerprint(value));
 }
 
@@ -77,14 +87,37 @@ export function localBindings(config) {
     }
     entries.push({ ...value, legacy: false });
   }
-  // Several already-authorized owners may share the single legacy GPT01
-  // destination. Only that group can repeat alias/target/profile; owners never
-  // repeat, and an additional binding cannot collide with any legacy owner.
-  const destinations = [...entries.filter(entry => entry.legacy).slice(0, 1), ...entries.filter(entry => !entry.legacy)];
-  for (const field of ["accountAlias", "ownerChannel", "targetConversationId", "browserProfile"]) {
-    const values = (field === "ownerChannel" ? entries : destinations)
-      .map(entry => field === "browserProfile" ? entry[field].toLowerCase() : entry[field]);
-    if (new Set(values).size !== values.length) throw new Error("Conflicting DEV wake bindings");
+  const legacyRows = entries.filter(entry => entry.legacy);
+  const additional = entries.filter(entry => !entry.legacy);
+  const byAlias = new Map();
+  const ownerToAlias = new Map();
+  const targetToAlias = new Map();
+  const sessionKeys = new Set();
+  for (const entry of additional) {
+    if (legacyRows.some(legacy => entry.ownerChannel === legacy.ownerChannel ||
+        entry.targetConversationId === legacy.targetConversationId)) {
+      throw new Error("Additional binding conflicts with GPT01");
+    }
+    if (entry.browserProfile.toLowerCase() === "openclaw") {
+      throw new Error("Additional binding cannot use legacy profile");
+    }
+    const identity = entry.ownerChannel + "|" + entry.targetConversationId;
+    const previous = byAlias.get(entry.accountAlias);
+    if (previous !== undefined && previous !== identity) throw new Error("Account identity conflict");
+    byAlias.set(entry.accountAlias, identity);
+
+    const ownerAlias = ownerToAlias.get(entry.ownerChannel);
+    const targetAlias = targetToAlias.get(entry.targetConversationId);
+    if ((ownerAlias !== undefined && ownerAlias !== entry.accountAlias) ||
+        (targetAlias !== undefined && targetAlias !== entry.accountAlias)) {
+      throw new Error("Conflicting DEV wake bindings");
+    }
+    ownerToAlias.set(entry.ownerChannel, entry.accountAlias);
+    targetToAlias.set(entry.targetConversationId, entry.accountAlias);
+
+    const sessionKey = entry.workerId + "|" + entry.browserProfile.toLowerCase();
+    if (sessionKeys.has(sessionKey)) throw new Error("Duplicate DEV wake session");
+    sessionKeys.add(sessionKey);
   }
   return entries;
 }
@@ -135,7 +168,8 @@ export function resolveWorkBinding(work, config) {
   if (bound) {
     wakeBinding = metadata.wakeBinding;
     if (!validBinding(wakeBinding) || !matches(DIGEST, wakeBinding.bindingFingerprint) ||
-        wakeBinding.accountAlias === "GPT01" || wakeBinding.ownerChannel !== metadata.conversationId ||
+        wakeBinding.accountAlias === "GPT01" || wakeBinding.workerId !== workerId ||
+        wakeBinding.ownerChannel !== metadata.conversationId ||
         wakeBinding.targetConversationId !== conversationId) {
       throw new Error("Invalid command wake binding");
     }
@@ -143,7 +177,7 @@ export function resolveWorkBinding(work, config) {
       ["accountAlias", "ownerChannel", "targetConversationId", "workerId", "browserProfile"]
         .every(field => entry[field] === wakeBinding[field]));
   } else {
-    selected = entries.find(entry => entry.legacy && entry.enabled &&
+    selected = entries.find(entry => entry.legacy && entry.enabled && entry.workerId === workerId &&
       entry.ownerChannel === metadata.conversationId && entry.targetConversationId === conversationId);
   }
   if (!selected) throw new Error("Exact local DEV wake binding not enabled");
@@ -157,7 +191,9 @@ export function resolveWorkBinding(work, config) {
 
 function loadRuntime() {
   const root = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "AI-Core");
-  const envFile = path.join(root, "dell-chatgpt-wake-dev.env");
+  const envFile = process.env.AI_CORE_DEV_WAKE_ENV_FILE?.trim() ||
+    (workerId === DELL_WORKER_ID ? path.join(root, "dell-chatgpt-wake-dev.env") : "");
+  if (!envFile) throw new Error("AI_CORE_DEV_WAKE_ENV_FILE is required for the Travelintrips bound worker");
   const helper = path.join(root, "dev-chatgpt-wake-once.py");
   const settings = Object.fromEntries(fs.readFileSync(envFile, "utf8").split(/\r?\n/)
     .filter(line => line.trim() && !line.trim().startsWith("#"))
@@ -204,8 +240,8 @@ function helperEnvironment(root, browserProfile) {
     ...process.env,
     AI_CORE_DEV_WAKE_WORKER_ID: workerId,
     AI_CORE_DEV_WAKE_KEY_ID: keyId,
-    AI_CORE_DEV_WAKE_ALLOWLIST_FILE: "dell-chatgpt-wake-allowlist.json",
-    AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE: "dell-chatgpt-wake-attestation-ed25519.pem",
+    AI_CORE_DEV_WAKE_ALLOWLIST_FILE: allowlistFileName,
+    AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE: privateKeyFileName,
     AI_CORE_OPENCLAW_CMD: path.join(process.env.LOCALAPPDATA || path.dirname(root), "OpenClaw", "deps", "portable-node", "openclaw.cmd"),
     AI_CORE_DEV_WAKE_BROWSER_PROFILE: browserProfile,
   };
@@ -213,7 +249,7 @@ function helperEnvironment(root, browserProfile) {
 
 export function execute(work, runtime) {
   const { root, helper, python } = runtime;
-  const readPairings = runtime.readPairings || (() => JSON.parse(fs.readFileSync(path.join(root, "dell-chatgpt-wake-allowlist.json"), "utf8")));
+  const readPairings = runtime.readPairings || (() => JSON.parse(fs.readFileSync(path.join(root, allowlistFileName), "utf8")));
   let context;
   try { context = resolveWorkBinding(work, readPairings()); }
   catch (error) {

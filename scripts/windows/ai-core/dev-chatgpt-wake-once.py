@@ -26,6 +26,8 @@ KEY_ID = os.environ.get("AI_CORE_DEV_WAKE_KEY_ID", "openclaw-travelintrips-dev-e
 ALLOWLIST_FILE = os.environ.get("AI_CORE_DEV_WAKE_ALLOWLIST_FILE", "chatgpt-wake-dev-allowlist.json")
 PRIVATE_KEY_FILE = os.environ.get("AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE", "dev-assistant-attestation-ed25519.pem")
 DELL_WORKER = "openclaw-dell-chatgpt-wake-dev"
+TRAVELINTRIPS_WORKER = "openclaw-travelintrips-dev"
+BOUND_WORKERS = {DELL_WORKER, TRAVELINTRIPS_WORKER}
 UUID = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}")
 DIGEST = re.compile(r"[a-f0-9]{64}")
 OWNER = re.compile(r"ai-engine-oauth:[a-f0-9]{64}")
@@ -48,7 +50,7 @@ def _valid_binding(value):
     return (isinstance(value, dict) and value.get("version") == 1 and
             type(value.get("version")) is int and _matches(ALIAS, value.get("accountAlias")) and
             _matches(OWNER, value.get("ownerChannel")) and _matches(UUID, value.get("targetConversationId")) and
-            value.get("workerId") == DELL_WORKER and _matches(PROFILE, value.get("browserProfile")) and
+            value.get("workerId") in BOUND_WORKERS and _matches(PROFILE, value.get("browserProfile")) and
             ("bindingFingerprint" not in value or value["bindingFingerprint"] == binding_fingerprint(value)))
 
 
@@ -72,14 +74,37 @@ def local_bindings(data):
         if not _valid_binding(value) or type(value.get("enabled")) is not bool or value["accountAlias"] == "GPT01":
             raise RuntimeError("Invalid additional DEV wake binding")
         entries.append({**value, "legacy": False})
-    # Multiple explicit owners can share only the single legacy destination.
-    # Additional accounts remain distinct from every legacy owner and profile.
-    destinations = [entry for entry in entries if entry["legacy"]][:1] + [entry for entry in entries if not entry["legacy"]]
-    for field in ("accountAlias", "ownerChannel", "targetConversationId", "browserProfile"):
-        checked = entries if field == "ownerChannel" else destinations
-        values = [entry[field].lower() if field == "browserProfile" else entry[field] for entry in checked]
-        if len(set(values)) != len(values):
+    legacy_rows = [entry for entry in entries if entry["legacy"]]
+    additional = [entry for entry in entries if not entry["legacy"]]
+    by_alias = {}
+    owner_to_alias = {}
+    target_to_alias = {}
+    session_keys = set()
+    for entry in additional:
+        if any(entry["ownerChannel"] == legacy["ownerChannel"] or
+               entry["targetConversationId"] == legacy["targetConversationId"] for legacy in legacy_rows):
+            raise RuntimeError("Additional binding conflicts with GPT01")
+        if entry["browserProfile"].lower() == "openclaw":
+            raise RuntimeError("Additional binding cannot use legacy profile")
+
+        identity = (entry["ownerChannel"], entry["targetConversationId"])
+        previous = by_alias.get(entry["accountAlias"])
+        if previous is not None and previous != identity:
+            raise RuntimeError("Account identity conflict")
+        by_alias[entry["accountAlias"]] = identity
+
+        owner_alias = owner_to_alias.get(entry["ownerChannel"])
+        target_alias = target_to_alias.get(entry["targetConversationId"])
+        if ((owner_alias is not None and owner_alias != entry["accountAlias"]) or
+                (target_alias is not None and target_alias != entry["accountAlias"])):
             raise RuntimeError("Conflicting DEV wake bindings")
+        owner_to_alias[entry["ownerChannel"]] = entry["accountAlias"]
+        target_to_alias[entry["targetConversationId"]] = entry["accountAlias"]
+
+        session_key = entry["workerId"] + "|" + entry["browserProfile"].lower()
+        if session_key in session_keys:
+            raise RuntimeError("Duplicate DEV wake session")
+        session_keys.add(session_key)
     return entries
 
 
@@ -103,7 +128,7 @@ def assistant_challenge(metadata, fingerprint=None):
 
 
 def resolve_dell_binding(metadata, data, conversation, event, challenge):
-    if (not isinstance(metadata, dict) or metadata.get("assignedClientId") != DELL_WORKER or
+    if (not isinstance(metadata, dict) or metadata.get("assignedClientId") != WORKER or
             metadata.get("targetConversationId") != conversation or metadata.get("eventId") != event or
             metadata.get("assistantAttestationChallenge") != challenge or metadata.get("capability") != "chatgpt:wake" or
             metadata.get("explicitWorkerTarget") is not True or metadata.get("devOnly") is not True or
@@ -114,7 +139,8 @@ def resolve_dell_binding(metadata, data, conversation, event, challenge):
     binding = metadata.get("wakeBinding")
     if bound:
         if (not _valid_binding(binding) or not _matches(DIGEST, binding.get("bindingFingerprint")) or
-                binding["accountAlias"] == "GPT01" or binding["ownerChannel"] != metadata["conversationId"] or
+                binding["accountAlias"] == "GPT01" or binding["workerId"] != WORKER or
+                binding["ownerChannel"] != metadata["conversationId"] or
                 binding["targetConversationId"] != conversation):
             raise RuntimeError("Invalid command wake binding")
         selected = next((entry for entry in entries if not entry["legacy"] and entry["enabled"] and
@@ -122,7 +148,8 @@ def resolve_dell_binding(metadata, data, conversation, event, challenge):
                              ("accountAlias", "ownerChannel", "targetConversationId", "workerId", "browserProfile"))), None)
     else:
         selected = next((entry for entry in entries if entry["legacy"] and entry["enabled"] and
-                         entry["ownerChannel"] == metadata["conversationId"] and entry["targetConversationId"] == conversation), None)
+                         entry["workerId"] == WORKER and entry["ownerChannel"] == metadata["conversationId"] and
+                         entry["targetConversationId"] == conversation), None)
     if selected is None:
         raise RuntimeError("Exact local DEV wake binding not enabled")
     if selected["browserProfile"] != BROWSER_PROFILE:
@@ -417,13 +444,17 @@ def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=No
     conversation, event, challenge = (match.group(1).lower(), match.group(2).lower(), match.group(3).lower())
     root, data = config(base)
     binding = None
+    if isinstance(metadata, dict) and "wakeBinding" in metadata:
+        binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
+        if binding is None:
+            raise RuntimeError("Bound account session is not active")
+        return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
+                                          lease_guard=lease_guard)
     if WORKER == DELL_WORKER:
         binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
-        if binding is not None:
-            return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
-                                              lease_guard=lease_guard)
     else:
-        # Preserve the original Travelintrips-only helper; DELL never falls back to this list.
+        # Preserve GPT01's original allowlist path. Bound additional accounts
+        # must use the signed wakeBinding path above.
         allowed = data.get("allowedConversationIds")
         if metadata is not None or not isinstance(allowed, list) or not all(
                 isinstance(value, str) and re.fullmatch(r"[0-9a-f-]{36}", value, re.I) for value in allowed):

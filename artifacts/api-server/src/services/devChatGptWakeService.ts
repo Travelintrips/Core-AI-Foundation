@@ -6,7 +6,7 @@ import { devWakeAttestationExpected } from "./devChatGptWakeEvidenceService.js";
 import { getVerifiedMcpHandshakeEvidenceForConversation } from "./localCodingControlBridgeService.js";
 import {
   DEV_WAKE_DELL_WORKER, isDevWakeRuntime, loadDevWakeRuntimeConfig, readDevWakeBinding,
-  resolveConfiguredDevWakeTarget, type DevWakeBinding, type DevWakeTarget, type DevWakeWorker,
+  resolveConfiguredDevWakeTarget, resolveConfiguredDevWakeTargets, type DevWakeBinding, type DevWakeTarget, type DevWakeWorker,
 } from "./devChatGptWakeBindingService.js";
 export type { DevWakeTarget } from "./devChatGptWakeBindingService.js";
 
@@ -115,7 +115,7 @@ export async function isDevBrowserWakeAllowed(input: {
   ownerChannel: string; targetConversationId: string; requestHost?: string;
 }): Promise<boolean> {
   try {
-    return !!resolveConfiguredDevWakeTarget(await loadDevWakeRuntimeConfig(input.requestHost), input);
+    return resolveConfiguredDevWakeTargets(await loadDevWakeRuntimeConfig(input.requestHost), input).length > 0;
   } catch { return false; }
 }
 
