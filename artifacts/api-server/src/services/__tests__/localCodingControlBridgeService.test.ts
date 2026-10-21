@@ -150,6 +150,25 @@ describe("browser status code normalization", () => {
       statusCode: "JOB_COMPLETED", deliveryCode: "DELIVERY_CONFIRMED", e2eCode: "E2E_VERIFIED",
     });
   });
+  it("classifies a direct OpenClaw ChatGPT receipt as verified without MCP fields", async () => {
+    const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
+    const directReceipt = {
+      runtime: "openclaw-pc2-browser",
+      eventId: "174da253-63d1-4d18-ad20-c71398126a22",
+      conversationId: "6ad866a0-47ec-83ec-9604-c81b2618a5f4",
+      chatgptSubmitted: true,
+      verifiedAssistantReply: true,
+      evidenceFingerprint: "8f5b1e84fc715f6c5decb3e23fda6784aefe0be36e44d70034f1c5e378a109d9",
+      verifiedAt: "2026-10-21T07:22:36.242Z",
+      exitCode: 0,
+    };
+    expect(classifyBridgeCompletion({ status: "COMPLETED", details: directReceipt })).toEqual({
+      statusCode: "JOB_COMPLETED",
+      deliveryCode: "DELIVERY_CONFIRMED",
+      e2eCode: "E2E_VERIFIED",
+    });
+  });
+
   it("does not infer delivery from a worker exit or partial claimed receipt", async () => {
     const { classifyBridgeCompletion } = await import("../localCodingControlBridgeService.js");
     for (const details of [
