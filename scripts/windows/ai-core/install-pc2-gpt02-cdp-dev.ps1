@@ -21,11 +21,13 @@ if ($CdpPort -lt 1024 -or $CdpPort -gt 65535) { throw "Invalid CDP port." }
 $chrome = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 $openclaw = (Get-Command openclaw.cmd -ErrorAction Stop).Source
 $node = (Get-Command node.exe -ErrorAction Stop).Source
+$npmRoot = (& npm.cmd root -g).Trim()
+$openclawEntry = Join-Path $npmRoot "openclaw\openclaw.mjs"
 $python = (Get-Command python.exe -ErrorAction Stop).Source
 $executor = Join-Path $AiCoreDir "dell-wake-executor.mjs"
 $registrationInstaller = Join-Path $AiCoreDir "install-dev-chatgpt-session-auto-register.ps1"
 $required = @(
-  $chrome, $openclaw, $node, $python, $executor, $registrationInstaller, $WorkerEnvFile, $PrivateKeyFile,
+  $chrome, $openclaw, $node, $openclawEntry, $python, $executor, $registrationInstaller, $WorkerEnvFile, $PrivateKeyFile,
   (Join-Path $AiCoreDir "register-dev-chatgpt-session.py"),
   (Join-Path $AiCoreDir "dev-chatgpt-wake-once.py"),
   (Join-Path $AiCoreDir "dev_chatgpt_native_lease.py"),
@@ -89,6 +91,12 @@ $allowlist = @{
     browserProfile = $BrowserProfile
     bindingFingerprint = $fingerprint
     enabled = $true
+    nativeTransport = @{
+      version = 1
+      enabled = $true
+      composerName = "Ask ChatGPT"
+      allowProviderLf = $false
+    }
   })
 } | ConvertTo-Json -Depth 6
 $allowlistPath = Join-Path $AiCoreDir "pc2-chatgpt-wake-allowlist.json"
@@ -102,6 +110,9 @@ $executorRunner = Join-Path $AiCoreDir "run-pc2-bound-wake-executor.ps1"
   '$env:AI_CORE_DEV_WAKE_ALLOWLIST_FILE = "pc2-chatgpt-wake-allowlist.json"',
   '$env:AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE = "' + [IO.Path]::GetFileName($PrivateKeyFile) + '"',
   '$env:AI_CORE_OPENCLAW_CMD = "' + $openclaw + '"',
+  '$env:AI_CORE_OPENCLAW_NODE = "' + $node + '"',
+  '$env:AI_CORE_OPENCLAW_ENTRY = "' + $openclawEntry + '"',
+  '$env:AI_CORE_OPENCLAW_EXPECTED_USER_DATA_DIR = "' + $profileDir + '"',
   '& "' + $node + '" "' + $executor + '" *>> "' + (Join-Path $AiCoreDir "pc2-bound-wake-executor.log") + '"',
   'exit $LASTEXITCODE'
 ) | Set-Content -Path $executorRunner -Encoding UTF8
