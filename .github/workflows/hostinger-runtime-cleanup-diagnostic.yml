@@ -1,0 +1,56 @@
+name: Hostinger Runtime Cleanup Diagnostic
+
+on:
+  push:
+    branches:
+      - infra/hostinger-runtime-cleanup-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Inspect Hostinger mappings read-only
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${HOSTINGER_API_TOKEN:-}" || { echo "HOSTINGER_API_TOKEN missing"; exit 2; }
+          base="https://developers.hostinger.com/api"
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          curl -fsS --connect-timeout 8 --max-time 25 -H "$auth" "$base/hosting/v1/websites?per_page=100" -o /tmp/websites.json
+          echo "=== TARGET WEBSITES ==="
+          for domain in cstlogistic.co.id aicore.cstlogistic.co.id bizportal.cstlogistic.co.id fleet.cstlogistic.co.id dev-bizportal.cstlogistic.co.id dev-aicore.cstlogistic.co.id; do
+            row=$(jq -c --arg d "$domain" '.data[] | select(.domain==$d) | {domain,username,website_type,vhost_type,is_enabled,parent_domain,root_directory}' /tmp/websites.json | head -1)
+            echo "${row:-{\"domain\":\"$domain\",\"found\":false}}"
+            username=$(jq -r --arg d "$domain" '.data[] | select(.domain==$d) | .username // empty' /tmp/websites.json | head -1)
+            [ -n "$username" ] || continue
+            for kind in parked-domains subdomains; do
+              code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o "/tmp/$kind.json" -w "%{http_code}" "$base/hosting/v1/accounts/$username/websites/$domain/$kind") || code=000
+              echo "domain=$domain kind=$kind http=$code"
+              if [ "$code" = "200" ]; then
+                jq -c 'if type=="array" then . else (.data // .) end' "/tmp/$kind.json"
+              fi
+            done
+          done
+
+          for zone in cstlogistic.co.id travelintrips.co.id; do
+            code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o /tmp/dns.json -w "%{http_code}" "$base/dns/v1/zones/$zone") || code=000
+            echo "zone=$zone dns_http=$code"
+            if [ "$code" = "200" ]; then
+              jq -c '[.[]? | select((.name // "") | test("^(www|www\\.|aicore|bizportal|fleet|dev-bizportal|dev-aicore|tenant|sc)(\\.|$)")) | {name,type,ttl,records}]' /tmp/dns.json
+            fi
+          done
+
+          echo "=== FORWARDING PROBES ==="
+          for host in www.cstlogistic.co.id www.aicore.cstlogistic.co.id www.bizportal.cstlogistic.co.id www.fleet.cstlogistic.co.id www.dev-bizportal.cstlogistic.co.id; do
+            code=$(curl -sS --connect-timeout 8 --max-time 25 -H "$auth" -o /tmp/fwd.json -w "%{http_code}" "$base/domains/v1/forwarding/$host") || code=000
+            echo "host=$host forwarding_http=$code"
+            if [ "$code" = "200" ]; then
+              jq -c 'if type=="object" then with_entries(select(.key|test("token|secret|key|password|auth";"i")|not)) else . end' /tmp/fwd.json
+            fi
+          done
