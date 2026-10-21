@@ -27,11 +27,7 @@ $escapedKey = $PrivateKeyFile.Replace("'","''")
 $escapedWorkerEnv = $WorkerEnvFile.Replace("'","''")
 $lines = @(
   '$ErrorActionPreference = "Stop"',
-  '$workerEnv = @{}',
-  'Get-Content ''' + $escapedWorkerEnv + ''' | ForEach-Object { if ($_ -match ''^\s*([A-Z][A-Z0-9_]*)=(.*)$'') { $workerEnv[$matches[1]] = $matches[2].Trim().Trim(''"'').Trim('''''') } }',
-  'if (-not $workerEnv.ContainsKey("AI_CORE_SCOPED_AGENT_TOKEN")) { throw "Worker token missing" }',
-  'if (-not $workerEnv.ContainsKey("AI_CORE_OPENCLAW_CLIENT_ID") -or $workerEnv["AI_CORE_OPENCLAW_CLIENT_ID"] -ne "' + $WorkerId + '") { throw "Worker env identity mismatch" }',
-  '$env:AI_CORE_SCOPED_AGENT_TOKEN = $workerEnv["AI_CORE_SCOPED_AGENT_TOKEN"]',
+  '$env:AI_CORE_DEV_WORKER_ENV_FILE = ''' + $escapedWorkerEnv + '''',
   '$env:AI_CORE_BASE_URL = "https://dev.cstlogistic.co.id/api"',
   '$env:AI_CORE_DEV_CHATGPT_ACCOUNT_ALIAS = "' + $AccountAlias + '"',
   '$env:AI_CORE_DEV_CHATGPT_OWNER_CHANNEL = "' + $OwnerChannel + '"',
