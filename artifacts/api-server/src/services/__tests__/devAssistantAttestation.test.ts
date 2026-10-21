@@ -4,6 +4,7 @@ import {
   DEV_ASSISTANT_ATTESTATION_ALGORITHM,
   DEV_ASSISTANT_ATTESTATION_KEY_ID,
   DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID,
+  DEV_PC2_ASSISTANT_ATTESTATION_KEY_ID,
   DEV_ASSISTANT_ATTESTATION_VERSION,
   deriveDevAssistantChallenge,
   devAssistantAttestationPayload,
@@ -68,6 +69,32 @@ describe("DELL DEV assistant attestation isolation", () => {
     expect(verifyDevAssistantAttestation({ ...args, expected }).verified).toBe(false);
     expect(verifyDevAssistantAttestation({ ...args, expected: { ...dell, eventId: "d".repeat(64) } }).verified).toBe(false);
     expect(verifyDevAssistantAttestation({ ...args, details: { attestation: { ...attestation, keyId: DEV_ASSISTANT_ATTESTATION_KEY_ID } } }).verified).toBe(false);
+  });
+});
+
+
+describe("PC2 DEV assistant attestation isolation", () => {
+  it("accepts PC2 own key and rejects DELL key id substitution", () => {
+    const pc2 = { ...expected, workerId: "openclaw-pc-worker-2" as const };
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const unsigned = {
+      version: DEV_ASSISTANT_ATTESTATION_VERSION,
+      algorithm: DEV_ASSISTANT_ATTESTATION_ALGORITHM,
+      keyId: DEV_PC2_ASSISTANT_ATTESTATION_KEY_ID,
+      workerId: pc2.workerId,
+      conversationId: pc2.targetConversationId,
+      eventId: pc2.eventId,
+      challenge: deriveDevAssistantChallenge(pc2),
+      assistantMessageId: "55555555-5555-4555-8555-555555555555",
+      assistantResponseHash: "f".repeat(64),
+      observedAt,
+    } as const;
+    const attestation = { ...unsigned, signature: sign(null, Buffer.from(devAssistantAttestationPayload(unsigned), "utf8"), privateKey).toString("base64") };
+    const publicKeyDerBase64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    const args = { details: { attestation }, expected: pc2,
+      notBefore: "2026-10-18T12:00:00.000Z", receivedAt: "2026-10-18T12:00:40.000Z", publicKeyDerBase64 };
+    expect(verifyDevAssistantAttestation(args).verified).toBe(true);
+    expect(verifyDevAssistantAttestation({ ...args, details: { attestation: { ...attestation, keyId: DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID } } }).verified).toBe(false);
   });
 });
 
