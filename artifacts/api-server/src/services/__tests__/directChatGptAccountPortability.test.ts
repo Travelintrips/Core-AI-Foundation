@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const execute = vi.fn(async () => ({ rows: [] }));
-const dispatchExternalAgentWork = vi.fn();
-const getExternalAgentRegistrySnapshot = vi.fn(async () => []);
-const resolveVerifiedDevWakeTarget = vi.fn();
-const queueDevBrowserWake = vi.fn();
+const mocks = vi.hoisted(() => ({
+  execute: vi.fn(async () => ({ rows: [] })),
+  dispatchExternalAgentWork: vi.fn(),
+  getExternalAgentRegistrySnapshot: vi.fn(async () => []),
+  resolveVerifiedDevWakeTarget: vi.fn(),
+  queueDevBrowserWake: vi.fn(),
+}));
 
 vi.mock("@workspace/db", () => ({
-  db: { execute },
+  db: { execute: mocks.execute },
 }));
 
 vi.mock("../externalAgentDispatchService.js", () => ({
@@ -16,16 +18,16 @@ vi.mock("../externalAgentDispatchService.js", () => ({
       super(message);
     }
   },
-  dispatchExternalAgentWork,
+  dispatchExternalAgentWork: mocks.dispatchExternalAgentWork,
 }));
 
 vi.mock("../externalAgentRegistryService.js", () => ({
-  getExternalAgentRegistrySnapshot,
+  getExternalAgentRegistrySnapshot: mocks.getExternalAgentRegistrySnapshot,
 }));
 
 vi.mock("../devChatGptWakeService.js", () => ({
-  resolveVerifiedDevWakeTarget,
-  queueDevBrowserWake,
+  resolveVerifiedDevWakeTarget: mocks.resolveVerifiedDevWakeTarget,
+  queueDevBrowserWake: mocks.queueDevBrowserWake,
 }));
 
 import { dispatchDirectChatGptAccountWork } from "../directChatGptAccountRouterService.js";
@@ -39,7 +41,7 @@ describe("direct GPT02 portable account routing", () => {
   it("routes travelincars/GPT02 to the healthy verified session location instead of a fixed PC2 worker", async () => {
     vi.stubEnv("NODE_ENV", "development");
 
-    getExternalAgentRegistrySnapshot.mockResolvedValue([
+    mocks.getExternalAgentRegistrySnapshot.mockResolvedValue([
       {
         clientId: "openclaw-pc-worker-dev",
         eligible: false,
@@ -52,7 +54,7 @@ describe("direct GPT02 portable account routing", () => {
       },
     ]);
 
-    resolveVerifiedDevWakeTarget.mockResolvedValue({
+    mocks.resolveVerifiedDevWakeTarget.mockResolvedValue({
       ownerChannel: "ai-engine-oauth:" + "a".repeat(64),
       targetConversationId: "6ad87510-6dd8-83ec-a064-14e4a3438d46",
       workerId: "openclaw-vmsc-chatgpt-wake-dev",
@@ -67,7 +69,7 @@ describe("direct GPT02 portable account routing", () => {
       },
     });
 
-    queueDevBrowserWake.mockResolvedValue({
+    mocks.queueDevBrowserWake.mockResolvedValue({
       commandId: "wake-command-1",
       clientId: "openclaw-vmsc-chatgpt-wake-dev",
       created: true,
@@ -79,18 +81,18 @@ describe("direct GPT02 portable account routing", () => {
       requestHost: "dev-aicore.cstlogistic.co.id",
     });
 
-    expect(resolveVerifiedDevWakeTarget).toHaveBeenCalledWith(
+    expect(mocks.resolveVerifiedDevWakeTarget).toHaveBeenCalledWith(
       "GPT02",
       "dev-aicore.cstlogistic.co.id",
       undefined,
     );
-    expect(queueDevBrowserWake).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.queueDevBrowserWake).toHaveBeenCalledWith(expect.objectContaining({
       targetConversationId: "6ad87510-6dd8-83ec-a064-14e4a3438d46",
       expectedWorkerId: "openclaw-vmsc-chatgpt-wake-dev",
       expectedBindingFingerprint: "b".repeat(64),
       instruction: "lanjutkan job GPT02",
     }));
-    expect(dispatchExternalAgentWork).not.toHaveBeenCalled();
+    expect(mocks.dispatchExternalAgentWork).not.toHaveBeenCalled();
     expect(result.dispatched[0]).toMatchObject({
       account: "travelincars",
       workerId: "openclaw-vmsc-chatgpt-wake-dev",
