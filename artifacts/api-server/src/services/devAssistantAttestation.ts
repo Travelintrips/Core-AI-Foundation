@@ -118,7 +118,8 @@ export function verifyDevAssistantAttestation(input: {
 
   if (!validChallengeInput(input.expected)) return { verified: false, reason: "ATTESTATION_CONTEXT_INVALID" };
   const bound = input.expected.bindingFingerprint !== undefined;
-  if (bound && input.expected.workerId !== "openclaw-dell-chatgpt-wake-dev") {
+  if (bound && input.expected.workerId !== "openclaw-dell-chatgpt-wake-dev" &&
+      input.expected.workerId !== "openclaw-travelintrips-dev") {
     return { verified: false, reason: "ATTESTATION_BOUND_WORKER_INVALID" };
   }
   const challenge = deriveDevAssistantChallenge(input.expected);
