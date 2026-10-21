@@ -86,9 +86,9 @@ router.post("/ai/core-chat/dev/accounts/stage", async (req, res): Promise<void> 
       enabled: false,
       next: [
         "Login the target ChatGPT account in the dedicated browser profile.",
-        "Complete its own OAuth/MCP pairing.",
-        "Run one correlated DEV E2E verification.",
-        "Enable only after assistant attestation, callback, and final ACK are verified.",
+        "Run the trusted worker session-registration helper.",
+        "The helper verifies the exact ChatGPT conversation and signs a one-time DEV challenge.",
+        "The session becomes eligible only after Ed25519 verification succeeds.",
       ],
     });
   } catch (error) {
