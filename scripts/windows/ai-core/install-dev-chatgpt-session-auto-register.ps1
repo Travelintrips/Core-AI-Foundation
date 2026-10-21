@@ -5,6 +5,7 @@ param(
   [Parameter(Mandatory=$true)][ValidateSet('openclaw-dell-chatgpt-wake-dev','openclaw-travelintrips-dev')][string]$WorkerId,
   [Parameter(Mandatory=$true)][string]$BrowserProfile,
   [Parameter(Mandatory=$true)][string]$PrivateKeyFile,
+  [Parameter(Mandatory=$true)][string]$WorkerEnvFile,
   [string]$AiCoreDir = "$env:LOCALAPPDATA\AI-Core",
   [string]$PythonExe = "python",
   [string]$TaskName = "AI Core ChatGPT Session Auto Register DEV"
@@ -14,6 +15,7 @@ $ErrorActionPreference = "Stop"
 $helper = Join-Path $AiCoreDir "register-dev-chatgpt-session.py"
 if (-not (Test-Path $helper)) { throw "Missing helper: $helper" }
 if (-not (Test-Path $PrivateKeyFile)) { throw "Missing Ed25519 private key: $PrivateKeyFile" }
+if (-not (Test-Path $WorkerEnvFile)) { throw "Missing worker env file: $WorkerEnvFile" }
 if ($AccountAlias -notmatch '^GPT[0-9]{2,4}$' -or $AccountAlias -eq 'GPT01') { throw "Invalid account alias" }
 if ($OwnerChannel -notmatch '^ai-engine-oauth:[a-f0-9]{64}$') { throw "Invalid owner channel" }
 if ($ConversationId -notmatch '^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$') { throw "Invalid conversation ID" }
@@ -22,8 +24,14 @@ if ($BrowserProfile -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') { throw "Inval
 $runner = Join-Path $AiCoreDir "chatgpt-session-auto-register-dev.ps1"
 $escapedHelper = $helper.Replace("'","''")
 $escapedKey = $PrivateKeyFile.Replace("'","''")
+$escapedWorkerEnv = $WorkerEnvFile.Replace("'","''")
 $lines = @(
   '$ErrorActionPreference = "Stop"',
+  '$workerEnv = @{}',
+  'Get-Content ''' + $escapedWorkerEnv + ''' | ForEach-Object { if ($_ -match ''^\s*([A-Z][A-Z0-9_]*)=(.*)$'') { $workerEnv[$matches[1]] = $matches[2].Trim().Trim(''"'').Trim('''''') } }',
+  'if (-not $workerEnv.ContainsKey("AI_CORE_SCOPED_AGENT_TOKEN")) { throw "Worker token missing" }',
+  'if (-not $workerEnv.ContainsKey("AI_CORE_OPENCLAW_CLIENT_ID") -or $workerEnv["AI_CORE_OPENCLAW_CLIENT_ID"] -ne "' + $WorkerId + '") { throw "Worker env identity mismatch" }',
+  '$env:AI_CORE_SCOPED_AGENT_TOKEN = $workerEnv["AI_CORE_SCOPED_AGENT_TOKEN"]',
   '$env:AI_CORE_BASE_URL = "https://dev.cstlogistic.co.id/api"',
   '$env:AI_CORE_DEV_CHATGPT_ACCOUNT_ALIAS = "' + $AccountAlias + '"',
   '$env:AI_CORE_DEV_CHATGPT_OWNER_CHANNEL = "' + $OwnerChannel + '"',

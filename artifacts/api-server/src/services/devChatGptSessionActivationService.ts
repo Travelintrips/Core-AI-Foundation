@@ -89,6 +89,7 @@ export function issueDevChatGptSessionChallenge(input: {
   rawRegistry: string | undefined;
   bindingFingerprint: string;
   legacyTargets: DevWakeTarget[];
+  expectedWorkerId?: string;
   now?: number;
 }): SessionChallenge {
   const registry = parseRegistry(input.rawRegistry);
@@ -99,6 +100,9 @@ export function issueDevChatGptSessionChallenge(input: {
   if (!/^GPT[0-9]{2,4}$/.test(row.accountAlias) || row.accountAlias === "GPT01" ||
       !OWNER.test(row.ownerChannel) || !UUID.test(row.targetConversationId) || !PROFILE.test(row.browserProfile)) {
     throw new Error("DEV_CHATGPT_SESSION_BINDING_INVALID");
+  }
+  if (input.expectedWorkerId !== undefined && input.expectedWorkerId !== row.workerId) {
+    throw new Error("DEV_CHATGPT_SESSION_WORKER_MISMATCH");
   }
   if (!devAssistantPublicKeyForWorker(row.workerId)) {
     throw new Error("DEV_CHATGPT_SESSION_WORKER_UNTRUSTED");
@@ -125,10 +129,14 @@ export function verifyAndConsumeDevChatGptSessionChallenge(input: {
   observedAt: string;
   signature: string;
   keyId: string;
+  expectedWorkerId?: string;
   now?: number;
 }): SessionChallenge {
   const challenge = challenges.get(input.challengeId);
   if (!challenge || challenge.consumed) throw new Error("DEV_CHATGPT_SESSION_CHALLENGE_INVALID");
+  if (input.expectedWorkerId !== undefined && input.expectedWorkerId !== challenge.workerId) {
+    throw new Error("DEV_CHATGPT_SESSION_WORKER_MISMATCH");
+  }
   const now = input.now ?? Date.now();
   if (challenge.expiresAt <= now || input.nonce !== challenge.nonce) {
     challenges.delete(input.challengeId);

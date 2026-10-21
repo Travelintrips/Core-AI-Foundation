@@ -31,11 +31,30 @@ def env(name):
     return value
 
 
+def load_worker_env_file():
+    path = os.environ.get("AI_CORE_DEV_WORKER_ENV_FILE", "").strip()
+    if not path:
+        return
+    allowed = {"AI_CORE_SCOPED_AGENT_TOKEN", "AI_CORE_OPENCLAW_CLIENT_ID"}
+    for raw in Path(path).read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"\s*([A-Z][A-Z0-9_]*)=(.*)\s*", raw)
+        if not match or match.group(1) not in allowed:
+            continue
+        value = match.group(2).strip().strip('"').strip("'")
+        if value and not os.environ.get(match.group(1)):
+            os.environ[match.group(1)] = value
+
+
 def post(base, path, body):
+    token = env("AI_CORE_SCOPED_AGENT_TOKEN")
     request = urllib.request.Request(
         base.rstrip("/") + path,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": "Bearer " + token,
+        },
         method="POST",
     )
     try:
