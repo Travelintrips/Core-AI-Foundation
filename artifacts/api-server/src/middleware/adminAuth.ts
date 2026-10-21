@@ -62,6 +62,14 @@ function hasValidAiCoreConnectorKey(req: Request): boolean {
   return isAllowedLocalMcpServiceToken(supplied);
 }
 
+function normalizedApiPath(req: Request): string {
+  const originalUrl = typeof req.originalUrl === "string" && req.originalUrl.length
+    ? req.originalUrl
+    : req.path;
+  const originalPath = originalUrl.split("?", 1)[0] ?? originalUrl;
+  return originalPath.startsWith("/api/") ? originalPath.slice(4) : originalPath;
+}
+
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   // Short-circuit: already authenticated (e.g. by optionalSessionAuth upstream)
   if ((req as unknown as Record<string, unknown>).internalUser) {
