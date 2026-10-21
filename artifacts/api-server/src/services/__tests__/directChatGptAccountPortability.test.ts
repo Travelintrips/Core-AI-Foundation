@@ -36,7 +36,7 @@ afterEach(() => {
 });
 
 describe("direct GPT02 portable account routing", () => {
-  it("routes personal/GPT02 to the healthy verified session location instead of a fixed PC2 worker", async () => {
+  it("routes travelincars/GPT02 to the healthy verified session location instead of a fixed PC2 worker", async () => {
     vi.stubEnv("NODE_ENV", "development");
 
     getExternalAgentRegistrySnapshot.mockResolvedValue([
@@ -74,7 +74,7 @@ describe("direct GPT02 portable account routing", () => {
     });
 
     const result = await dispatchDirectChatGptAccountWork({
-      target: "personal",
+      target: "travelincars",
       instruction: "lanjutkan job GPT02",
       requestHost: "dev-aicore.cstlogistic.co.id",
     });
@@ -92,7 +92,7 @@ describe("direct GPT02 portable account routing", () => {
     }));
     expect(dispatchExternalAgentWork).not.toHaveBeenCalled();
     expect(result.dispatched[0]).toMatchObject({
-      account: "personal",
+      account: "travelincars",
       workerId: "openclaw-vmsc-chatgpt-wake-dev",
       browserProfile: "gpt02-vmsc",
       portableAccountBinding: true,
