@@ -59,7 +59,7 @@ describe("devChatGptAccountProvisioningService", () => {
     expect(result.browserProfile).toBe("openclaw-gpt03");
   });
 
-  it("allows the same account identity to stage a second trusted worker session", () => {
+  it("moves the same account identity to a new trusted worker session", () => {
     const first = stageDevChatGptAccountBinding({
       accountAlias: "GPT02",
       ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
@@ -78,7 +78,9 @@ describe("devChatGptAccountProvisioningService", () => {
 
     expect(second.workerId).toBe(DEV_WAKE_DEFAULT_WORKER);
     expect(second.accountAlias).toBe("GPT02");
-    expect(JSON.parse(second.registryJson).bindings).toHaveLength(2);
+    expect(JSON.parse(second.registryJson).bindings).toHaveLength(1);
+    expect(JSON.parse(second.registryJson).bindings[0].enabled).toBe(false);
+    expect(second.bindingFingerprint).toBe(first.bindingFingerprint);
 
     const third = stageDevChatGptAccountBinding({
       accountAlias: "GPT02",
@@ -88,10 +90,11 @@ describe("devChatGptAccountProvisioningService", () => {
       browserProfile: "gpt02-pc2",
     }, second.registryJson, legacy);
     expect(third.workerId).toBe(DEV_WAKE_PC2_WORKER);
-    expect(JSON.parse(third.registryJson).bindings).toHaveLength(3);
+    expect(JSON.parse(third.registryJson).bindings).toHaveLength(1);
+    expect(third.bindingFingerprint).toBe(first.bindingFingerprint);
   });
 
-  it("allows GPT02 to stage an isolated VMSC session", () => {
+  it("moves GPT02 to an isolated VMSC runtime without changing account identity", () => {
     const first = stageDevChatGptAccountBinding({
       accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
       targetConversationId: "22222222-2222-2222-2222-222222222222",
@@ -103,7 +106,9 @@ describe("devChatGptAccountProvisioningService", () => {
       browserProfile: "gpt02-vmsc",
     }, first.registryJson, legacy);
     expect(vmsc.workerId).toBe(DEV_WAKE_VMSC_WORKER);
-    expect(JSON.parse(vmsc.registryJson).bindings).toHaveLength(2);
+    expect(JSON.parse(vmsc.registryJson).bindings).toHaveLength(1);
+    expect(vmsc.bindingFingerprint).toBe(first.bindingFingerprint);
+    expect(JSON.parse(vmsc.registryJson).bindings[0].browserProfile).toBe("gpt02-vmsc");
   });
 
   it("rejects attempts to reuse the legacy GPT01 conversation", () => {
