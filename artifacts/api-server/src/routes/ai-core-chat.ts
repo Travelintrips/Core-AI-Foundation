@@ -85,6 +85,10 @@ import {
   OPENHANDS_AGENT_CLIENT_ID,
 } from "../services/externalAgentDispatchService.js";
 import {
+  dispatchDirectChatGptAccountWork,
+  parseDirectChatGptAccountRequest,
+} from "../services/directChatGptAccountRouterService.js";
+import {
   buildAdminDbUnresolvedAnswer,
   executeAdminMutationSql,
   executeAdminMcpEventStatusQuery,
@@ -2645,6 +2649,39 @@ async function startExternalAgentWork(
   };
 }
 
+async function startDirectChatGptAccountWork(
+  input: z.infer<typeof ChatRequest>,
+  request: NonNullable<ReturnType<typeof parseDirectChatGptAccountRequest>>,
+): Promise<Record<string, unknown>> {
+  const routed = await dispatchDirectChatGptAccountWork({
+    target: request.target,
+    instruction: request.instruction,
+    source: "ai-core-chat",
+    projectName: input.projectName,
+    repository: input.repository,
+    branch: input.branch,
+  });
+
+  return {
+    kind: "external_agent",
+    route: "DIRECT_CHATGPT_ACCOUNT",
+    provider: "openclaw",
+    model: null,
+    usage: null,
+    estimatedCostUsd: null,
+    executionLane: "TARGETED",
+    reply:
+      routed.dispatched.length === 2
+        ? "Pekerjaan diteruskan ke dua akun ChatGPT DEV yang terikat. Hasil masing-masing akan kembali melalui work queue AI Core."
+        : `Pekerjaan diteruskan ke akun ChatGPT DEV ${routed.dispatched[0]?.account ?? request.target}.`,
+    target: routed.target,
+    instruction: routed.instruction,
+    commands: routed.dispatched,
+    commandId: routed.dispatched[0]?.commandId ?? null,
+    status: routed.dispatched.every((item) => item.status === "RECEIVED") ? "RECEIVED" : routed.dispatched[0]?.status ?? null,
+  };
+}
+
 async function runAdminDbMutationOperation(
   message: string,
 ): Promise<Record<string, unknown> | null> {
@@ -2850,6 +2887,14 @@ async function runAutoMode(
     input.context ?? [],
   );
 
+  const directAccountRequest = parseDirectChatGptAccountRequest(contextualCommand);
+  if (directAccountRequest) {
+    return await startDirectChatGptAccountWork(
+      { ...executionInput, message: contextualCommand },
+      directAccountRequest,
+    );
+  }
+
   // The @ prefix authorizes entering the agent gateway, not choosing a tool.
   // Let OpenAI interpret single natural-language requests before keyword SQL
   // shortcuts. Actual coding and critical actions continue through existing
@@ -2890,6 +2935,11 @@ async function runAutoMode(
 
     for (const command of parsedConversation.commands) {
       const childInput = { ...executionInput, message: command };
+      const directAccountRequest = parseDirectChatGptAccountRequest(command);
+      if (directAccountRequest) {
+        results.push(await startDirectChatGptAccountWork(childInput, directAccountRequest));
+        continue;
+      }
       const decision = classifyAiCoreChatDispatch(command);
 
       if (decision.kind === "INFRA_OPERATION") {

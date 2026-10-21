@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import {
   dispatchExternalAgentWork,
   ExternalAgentDispatchError,
@@ -76,7 +77,7 @@ async function activeJobCounts(): Promise<Map<string, number>> {
   const result = await db.execute<{
     client_id: string;
     active_jobs: number | string;
-  }>(`
+  }>(sql`
     SELECT
       metadata_json ->> 'assignedClientId' AS client_id,
       COUNT(*)::int AS active_jobs

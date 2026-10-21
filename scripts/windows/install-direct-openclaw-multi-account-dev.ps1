@@ -8,7 +8,8 @@ param(
 $ErrorActionPreference = "Stop"
 $consumer = Join-Path $AiCoreDir "openclaw-direct-chatgpt-consumer.mjs"
 $helper = Join-Path $AiCoreDir "chatgpt-e2e-helper.mjs"
-foreach ($required in @($NodeExe,$consumer,$helper,$Worker1Env,$Worker2Env)) {
+$targetedHelper = Join-Path $AiCoreDir "chatgpt-targeted-continue-profiled.mjs"
+foreach ($required in @($NodeExe,$consumer,$helper,$targetedHelper,$Worker1Env,$Worker2Env)) {
   if (-not (Test-Path $required)) { throw "Required file missing: $required" }
 }
 
