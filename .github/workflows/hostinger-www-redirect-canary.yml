@@ -28,11 +28,19 @@ jobs:
           before=$(curl -fsS --connect-timeout 8 --max-time 25 -H "$auth" "$base/domains/v1/forwarding/$host")
           echo "before=$(echo "$before" | jq -c '{domain,redirect_type,redirect_url}')"
 
-          body=$(jq -nc --arg t "$target" '{redirect_type:"301",redirect_url:$t}')
-          curl -fsS --connect-timeout 8 --max-time 25             -X PUT -H "$auth" -H "Content-Type: application/json"             --data-binary "$body" "$base/domains/v1/forwarding/$host"             -o /tmp/forwarding.json
+          if echo "$before" | jq -e --arg t "$target" '.redirect_type=="301" and .redirect_url==$t' >/dev/null; then
+            echo "already_configured=true"
+          else
+            body=$(jq -nc --arg h "$host" --arg t "$target" '{domain:$h,redirect_type:"301",redirect_url:$t}')
+            code=$(curl -sS --connect-timeout 8 --max-time 25               -X POST -H "$auth" -H "Content-Type: application/json"               --data-binary "$body" -o /tmp/forwarding.json -w "%{http_code}"               "$base/domains/v1/forwarding") || code=000
+            echo "create_http=$code"
+            cat /tmp/forwarding.json | jq -c 'if type=="object" then with_entries(select(.key|test("token|secret|key|password|auth";"i")|not)) else . end'
+            [ "$code" = "200" ] || [ "$code" = "201" ]
+          fi
 
-          echo "after_api=$(jq -c '{domain,redirect_type,redirect_url}' /tmp/forwarding.json)"
           sleep 20
+          after=$(curl -fsS --connect-timeout 8 --max-time 25 -H "$auth" "$base/domains/v1/forwarding/$host")
+          echo "after=$(echo "$after" | jq -c '{domain,redirect_type,redirect_url}')"
 
           code=$(curl -k -sS -o /dev/null -D /tmp/headers.txt -w "%{http_code}" --max-time 12 "https://$host/")
           loc=$(awk 'BEGIN{IGNORECASE=1}/^location:/{sub(/^[^:]+:[ ]*/,"");sub(/\r$/,"");print;exit}' /tmp/headers.txt)
