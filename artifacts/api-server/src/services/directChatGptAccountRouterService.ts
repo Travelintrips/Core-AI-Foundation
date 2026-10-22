@@ -27,6 +27,21 @@ export const DIRECT_CHATGPT_ACCOUNT_BINDINGS = {
   },
 } as const;
 
+// Helper to select primary or default GPT account
+function getPrimaryChatGptAccountKey(): DirectChatGptAccountKey {
+  const entries = Object.entries(DIRECT_CHATGPT_ACCOUNT_BINDINGS) as [DirectChatGptAccountKey, typeof DIRECT_CHATGPT_ACCOUNT_BINDINGS[DirectChatGptAccountKey]][];
+  // select account with primary flag
+  const primaryEntry = entries.find(([_, binding]) => (binding as any).primary === true);
+  if (primaryEntry) {
+    return primaryEntry[0];
+  }
+  // fallback to first account
+  return entries[0][0];
+}
+
+export { getPrimaryChatGptAccountKey };
+
+
 type DirectChatGptAccountKey = keyof typeof DIRECT_CHATGPT_ACCOUNT_BINDINGS;
 export type DirectChatGptTarget = DirectChatGptAccountKey | "auto" | "both";
 
