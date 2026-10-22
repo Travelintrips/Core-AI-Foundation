@@ -54,6 +54,49 @@ router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  if(!timeline){res.status(404).json({error:"COMMAND_NOT_FOUND"});return;}
  res.json(timeline);
 });
+/**
+ * DEV-only HTTP handshake entry point. Uses the durable coding bridge and
+ * OpenClaw worker queue directly; no MCP tool, OAuth pairing, or browser claim.
+ * Protected by the app's adminAuthWithExceptions middleware.
+ */
+router.post("/ai/coding/bridge/sop-handshake-test",async(req,res):Promise<void>=>{
+ const host=req.hostname.toLowerCase();
+ if(host!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY_HANDSHAKE_TEST"});return;
+ }
+ const parsed=z.object({
+  correlationId:z.string().uuid(),
+  instruction:z.literal("HANDSHAKE_CONTINUE"),
+  jobId:z.string().trim().min(1).max(160),
+  nextStep:z.string().trim().min(1).max(4000),
+ }).strict().safeParse(req.body);
+ if(!parsed.success){res.status(400).json({error:"INVALID_HANDSHAKE_REQUEST"});return;}
+ const externalCommandId="handshake-continue:"+parsed.data.correlationId;
+ try{
+  const result=await submitCodingBridgeCommand({
+   externalCommandId,
+   instruction:"HANDSHAKE_CONTINUE jobId="+parsed.data.jobId+" correlationId="+parsed.data.correlationId+"; NEXT_STEP: "+parsed.data.nextStep+"; SOP Resource-First, Human-Last: Do not stop after one failed command. Diagnose root cause. Use all authorized recovery paths. Coordinate with AI Core and OpenClaw on authorized PCs/VPS. Do not repeat identical commands without a technical reason. Retest after each fix. Never claim PASS without verification evidence. Preserve job identity and action log for resumption. Report completion or critical blockers. Return actual results and evidence through the existing authenticated HTTP bridge.",
+   source:"handshake-http",
+   commandType:"HANDSHAKE_CONTINUE",
+   assignedClientId:OPENCLAW_AGENT_CLIENT_ID,
+   metadata:{correlationId:parsed.data.correlationId,jobId:parsed.data.jobId,environment:"DEV",transport:"HTTP"},
+  });
+  res.status(result.created?202:200).json({
+   commandId:result.command.id,
+   externalCommandId,
+   jobId:parsed.data.jobId,
+   correlationId:parsed.data.correlationId,
+   status:result.created?"QUEUED":"ALREADY_QUEUED",
+   transport:"HTTP",
+   workerDispatched:false,
+   callbackVerified:false,
+   e2eVerified:false,
+   verificationStatus:"UNKNOWN_UNVERIFIED",
+  });
+ }catch{
+  res.status(503).json({error:"HANDSHAKE_QUEUE_UNAVAILABLE",correlationId:parsed.data.correlationId,e2eVerified:false});
+ }
+});
 router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{
  const p=codingBridgeCommandSchema.safeParse(req.body);
  if(!p.success){res.status(400).json({error:"INVALID_BRIDGE_COMMAND",details:p.error.flatten()});return;}
