@@ -1,3 +1,11 @@
+// Workflow_run Cancellation Analysis:
+// Reproduction steps:
+// 1. Trigger account binding logic with invalid credentials in production pipeline.
+// 2. Observe cancellation of workflow_run event during CI stage.
+// Environment conditions:
+// - Node.js version 16 or higher
+// - DATABASE_URL set to account binding test database
+// - CI runner with default timeout settings
 import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
