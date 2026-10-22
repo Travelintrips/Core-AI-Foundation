@@ -18,3 +18,8 @@ export const logger = pino({
         },
       }),
 });
+// Log unhandled promise rejections
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled promise rejection');
+});
+
