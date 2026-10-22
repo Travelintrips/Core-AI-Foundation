@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+// TODO: adjust expected outputs to match updated functionality
+
 import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
