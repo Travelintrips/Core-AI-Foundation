@@ -1,3 +1,4 @@
+// Flaky test isolation: run `jest artifacts/api-server/src/services/__tests__/localCodingGitHubPublisherService.test.ts --verbose --runInBand` to isolate this test file
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCodingBranchName,
