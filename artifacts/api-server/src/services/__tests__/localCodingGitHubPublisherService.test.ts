@@ -5,7 +5,7 @@ import {
   parseGitHubRepository,
   publishVerifiedPatchToGitHub,
   type GitHubApiClient,
-} from "../localCodingGitHubPublisherService.js";
+} from "../localCodingGitHubPublisherService.ts";
 
 const baseSha = "a".repeat(40);
 const movedSha = "b".repeat(40);
