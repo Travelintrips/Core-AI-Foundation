@@ -27,6 +27,11 @@ function normalize(message: string): string {
 }
 
 export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
+  if (text.includes("workflow_run") && text.includes("cancelled")) {
+    logAudit("info", "Detected cancelled GitHub workflow_run event");
+    return "GITHUB_WORKFLOW_CANCEL";
+  }
+
   const text = normalize(message);
   if (!text) return null;
 
