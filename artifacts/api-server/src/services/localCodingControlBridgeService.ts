@@ -176,7 +176,10 @@ export async function submitCodingBridgeCommand(input: {
   authority?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }) {
+  let stage = "SCHEMA_CHECK_FAILED";
+  try {
   await ensureCodingControlBridgeTables();
+  stage = "COMMAND_LOOKUP_FAILED";
   const source = input.source ?? "chatgpt";
   const [existing] = await db
     .select()
@@ -189,6 +192,7 @@ export async function submitCodingBridgeCommand(input: {
     )
     .limit(1);
   if (existing) {
+    stage = "EXISTING_COMMAND_NOTIFICATION_FAILED";
     if (input.assignedClientId) await notifyExternalAgentWork(input.assignedClientId, existing.id);
     return { command: existing, created: false };
   }
@@ -200,6 +204,7 @@ export async function submitCodingBridgeCommand(input: {
       : {}),
   };
 
+  stage = "COMMAND_INSERT_FAILED";
   const [command] = await db
     .insert(aiCodingBridgeCommandsTable)
     .values({
@@ -214,6 +219,7 @@ export async function submitCodingBridgeCommand(input: {
     .returning();
   if (!command) throw new Error("Failed to persist bridge command");
 
+  stage = "ACK_INSERT_FAILED";
   await db.insert(aiCodingBridgeResponsesTable).values({
     commandId: command.id,
     taskId: command.taskId,
@@ -224,6 +230,7 @@ export async function submitCodingBridgeCommand(input: {
     checkpointJson: { status: command.status },
   });
 
+  stage = "EVENT_PUBLISH_FAILED";
   publishSafe({
     eventType: "coding.bridge.command.received",
     sourceModule: "coding-control-bridge",
@@ -237,6 +244,7 @@ export async function submitCodingBridgeCommand(input: {
     },
   });
 
+  stage = "WORKER_DISPATCH_FAILED";
   if (input.assignedClientId) {
     // Notification is an optimization: a persisted command must remain claimable
     // even when the external event transport is temporarily unavailable.
@@ -252,6 +260,12 @@ export async function submitCodingBridgeCommand(input: {
   }
 
   return { command, created: true };
+  } catch (error) {
+    console.error("[coding-bridge] submission stage failed", { stage, error: error instanceof Error ? error.message : String(error) });
+    const wrapped = new Error("Coding bridge submission failed at " + stage);
+    Object.assign(wrapped, { bridgeStage: stage });
+    throw wrapped;
+  }
 }
 
 async function deliverCodingBridgeWhatsappNotification(input: {
