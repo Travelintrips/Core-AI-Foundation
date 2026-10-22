@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 
-const HOSTINGER_API_BASE = "https://developers.hostinger.com/api";
+const HOSTINGER_API_BASE = "https://api.hostinger.com";
 const GITHUB_API_BASE = "https://api.github.com";
 const CODING_DOMAIN = "coding.cstlogistic.co.id";
 const SOURCE_DOMAIN = "aicore.cstlogistic.co.id";
