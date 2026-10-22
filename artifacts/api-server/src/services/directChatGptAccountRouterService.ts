@@ -10,7 +10,7 @@ import {
   queueDevBrowserWake,
   resolveVerifiedDevWakeTarget,
   type DevWakeTarget,
-} from "./devChatGptWakeService.js";
+} from "./devChatGptWakeService.js";import { logger } from "../lib/logger.js";
 
 export const DIRECT_CHATGPT_ACCOUNT_BINDINGS = {
   travelincars: {
