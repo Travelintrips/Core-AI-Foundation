@@ -26,7 +26,8 @@ function normalize(message: string): string {
   return message.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
+export function detectAiCoreGitHubOperation(message?: string): AiCoreGitHubOperation | null {  if (!message) return null;
+
   const text = normalize(message);
   if (!text) return null;
 
