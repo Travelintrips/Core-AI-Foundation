@@ -68,7 +68,8 @@ router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{
    externalCommandId:p.data.externalCommandId,
    error:error instanceof Error?error.message:String(error),
   });
-  res.status(500).json({error:"BRIDGE_COMMAND_SUBMISSION_FAILED",requestId});
+  const stage = error instanceof Error && "bridgeStage" in error && typeof error.bridgeStage === "string" ? error.bridgeStage : "UNKNOWN_STAGE";
+  res.status(500).json({error:"BRIDGE_COMMAND_SUBMISSION_FAILED",stage,requestId});
  }
 });
 
