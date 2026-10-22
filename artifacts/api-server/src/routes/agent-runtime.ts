@@ -4,6 +4,7 @@ import { aiAgentServiceTokensTable, db } from "@workspace/db";
 import { requireAuth, requireInternalRole } from "../middleware/internalAuth.js";
 import { hashAgentServiceToken } from "../middleware/agentServiceAuth.js";
 import { Router } from "express";
+import { persistVerifiedDevAttestation } from "../services/devChatgptAttestationVerifier.js";
 import { z } from "zod";
 import { getProviderApiKey } from "../services/aiSecretService.js";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
@@ -527,6 +528,38 @@ router.get(
       authority: "ai-core",
       agents,
     });
+  },
+);
+
+
+const DevAttestationCallbackRequest = z.object({
+  commandId: z.string().uuid(), eventId: z.string().regex(/^[0-9a-f]{64}$/),
+  challenge: z.string().regex(/^[0-9a-f]{64}$/), conversationId: z.string().uuid(),
+  workerId: z.literal("openclaw-travelintrips-dev"),
+  keyId: z.literal("openclaw-travelintrips-dev-ed25519-v1"),
+  assistantMessageId: z.string().uuid(),
+  assistantResponseHash: z.string().regex(/^[0-9a-f]{64}$/),
+  observedAt: z.string().datetime({ offset: true }), signature: z.string().max(256),
+}).strict();
+
+// DEV-only, signed attestation: never trust a client-provided verified flag.
+router.post(
+  "/ai/agent-runtime/dev/chatgpt-attestation/final",
+  requireAgentServiceScope("agent:work"),
+  async (req, res): Promise<void> => {
+    if (process.env.APP_ENV !== "development") {
+      res.status(404).json({error:"Not found"});
+      return;
+    }
+    const parsed = DevAttestationCallbackRequest.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({error:"Invalid attestation payload"});
+      return;
+    }
+    const result = await persistVerifiedDevAttestation(parsed.data);
+    res.status(result.status).json(result.status === 201
+      ? {status:"CALLBACK_VERIFIED",eventId:result.eventId,callbackId:result.callbackId}
+      : {error:result.status === 409 ? "Callback already recorded" : "Attestation not accepted"});
   },
 );
 
