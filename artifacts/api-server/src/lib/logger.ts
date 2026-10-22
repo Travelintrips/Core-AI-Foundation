@@ -18,3 +18,16 @@ export const logger = pino({
         },
       }),
 });
+
+// Capture CI cancellation events in production
+if (isProduction) {
+  const captureCiCancellation = (): void => {
+    const timestamp = new Date().toISOString();
+    const signal = process.env.CI_CANCELLATION_SIGNAL || 'SIGTERM';
+    logger.info({ event: 'ci_cancellation', timestamp, signal }, 'CI cancellation event detected');
+  };
+
+  process.on('SIGTERM', captureCiCancellation);
+  process.on('SIGINT', captureCiCancellation);
+}
+
