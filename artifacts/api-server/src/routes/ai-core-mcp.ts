@@ -597,6 +597,13 @@ const tools = [
     },
   },
   {
+    name: "SOP_HANDSHAKE_TEST",
+    description: "DEV-only authenticated read-only SOP handshake probe. Returns correlated server ACK and existing independently verified evidence if any; never dispatches a worker or claims ChatGPT delivery.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    securitySchemes: [{ type: "oauth2", scopes: ["ai_core.progress"] }],
+    annotations: { title: "DEV SOP Handshake Test", readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  {
     name: "handshake_ai_core",
     description: "Discover authenticated AI Core capabilities and protocol limitations. Does not claim to know the current ChatGPT conversation URL or register a browser session.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -1127,7 +1134,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
   }
 
   const requiredScope =
-    (params.name === "query_ai_core" || params.name === "handshake_ai_core")
+    (params.name === "query_ai_core" || params.name === "handshake_ai_core" || params.name === "SOP_HANDSHAKE_TEST")
       ? "ai_core.progress"
       : params.name === "send_ai_core_command"
         ? "ai_core.command"
@@ -1161,7 +1168,11 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
   }
   try {
     let payload: unknown;
-    if (params.name === "handshake_ai_core") {
+    if (params.name === "handshake_ai_core" || params.name === "SOP_HANDSHAKE_TEST") {
+      if (params.name === "SOP_HANDSHAKE_TEST" && process.env["APP_ENV"] !== "development") {
+        res.status(403).json(rpcError(body.id ?? null, -32603, "DEV_ONLY_HANDSHAKE_TEST"));
+        return;
+      }
       const handshakeId = randomUUID();
       const ownerChannel = oauthEventChannel(identity);
       const verifiedEvidence = ownerChannel
@@ -1172,6 +1183,16 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         operationalSop: AI_CORE_BLOCKER_SOP,
         authenticated: true,
         handshakeId,
+        ...(params.name === "SOP_HANDSHAKE_TEST" ? {
+          testCommand: "SOP_HANDSHAKE_TEST",
+          executionEnvironment: "DEV",
+          statusCode: "CMD_ACK",
+          correlationId: handshakeId,
+          workerDispatched: false,
+          callbackReceived: false,
+          e2eVerified: false,
+          verificationStatus: "UNKNOWN_UNVERIFIED",
+        } : {}),
         handshakeAck: { received: true, handshakeId, source: "ai_core_mcp_server" },
         chatSessionId: verifiedEvidence?.targetConversationId ?? null,
         chatSessionIdVerified: Boolean(verifiedEvidence),
