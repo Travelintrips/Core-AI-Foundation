@@ -2,7 +2,7 @@ import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
-import { and, desc, eq, sql } from "drizzle-orm";
+
 import { z } from "zod";
 import {
   aiCodingRunsTable,
