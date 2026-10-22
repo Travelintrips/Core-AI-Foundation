@@ -56,6 +56,17 @@ jobs:
         run: |
           echo "event=$EVENT_NAME issue=$ISSUE_NUMBER label=$LABEL_NAME run=$RUN_ID"
           echo "Protected dispatch remains separately gated by environment: production."
+      - name: Probe AI Core public health from GitHub runner (no secrets)
+        shell: bash
+        run: |
+          set +e
+          getent ahosts aicore.cstlogistic.co.id | head -8
+          for family in 4 6; do
+            curl -$family --silent --show-error --connect-timeout 7 --max-time 12 \
+              -o /dev/null -w "ip$family http=%{http_code} remote=%{remote_ip} connect=%{time_connect} tls=%{time_appconnect}\\n" \
+              https://aicore.cstlogistic.co.id/api/healthz
+          done
+          exit 0
   dispatch:
     if: >-
       github.repository == 'Travelintrips/Core-AI-Foundation' &&
