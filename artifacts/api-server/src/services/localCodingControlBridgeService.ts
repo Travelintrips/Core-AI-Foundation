@@ -238,7 +238,16 @@ export async function submitCodingBridgeCommand(input: {
   });
 
   if (input.assignedClientId) {
-    await notifyExternalAgentWork(input.assignedClientId, command.id);
+    // Notification is an optimization: a persisted command must remain claimable
+    // even when the external event transport is temporarily unavailable.
+    try {
+      await notifyExternalAgentWork(input.assignedClientId, command.id);
+    } catch (error) {
+      console.error("[coding-bridge] work notification failed after persistence", {
+        commandId: command.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     void ensureGcpCodingWorkerStarted().catch(() => undefined);
   }
 
