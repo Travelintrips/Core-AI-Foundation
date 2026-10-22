@@ -11,6 +11,12 @@ import {
 export type { DevWakeTarget } from "./devChatGptWakeBindingService.js";
 
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+// Guard against uninitialized session pool
+if (!global.sessionPool) {
+  console.error('Session pool is uninitialized');
+  return;
+}
+
 function normalizeDevWakeAccountAlias(accountAlias: string): string {
   const normalized = accountAlias.trim().toUpperCase();
   const match = /^(GPT[0-9]{2,4})(?:\s+JOB\s*[0-9]{1,12})?$/.exec(normalized) ??
