@@ -28,6 +28,12 @@ import { generateAndPersistCodingMultiTaskPlan } from "./localCodingAutomatedMul
 import { reportCodingTaskTerminalTransition } from "./codingTaskTerminalReportingService.js";
 import { notifyAiTaskLedgerSourceState } from "./aiTaskLedgerBridgeService.js";
 import { isRepositoryAnalyzerVerificationOnlyInstruction, repositoryAnalyzerVerificationAck } from "./repositoryAnalyzerVerificationOnlyService.js";
+// Ensure errors from devChatGptWakeService are properly handled and propagated
+function propagateDevChatGptWakeError(error: unknown): never {
+  logger.error('devChatGptWakeService error:', error);
+  throw error;
+}
+
 
 type CodingStageId =
   | "repository_analyzer"
