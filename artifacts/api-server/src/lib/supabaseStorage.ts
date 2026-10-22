@@ -12,7 +12,7 @@
  */
 
 import sharp from "sharp";
-import { logger } from "./logger.js";
+import { logger } from "./logger";
 
 export const SUPABASE_STORAGE_BUCKET = "ai-assets";
 
