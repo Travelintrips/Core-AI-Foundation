@@ -80,7 +80,7 @@ router.post("/ai/coding/bridge/sop-handshake-test",async(req,res):Promise<void>=
    metadata:{correlationId:parsed.data.correlationId,environment:"DEV",transport:"HTTP"},
   });
   res.status(result.created?202:200).json({
-   commandId:result.commandId,
+   commandId:result.command.id,
    externalCommandId,
    correlationId:parsed.data.correlationId,
    status:result.created?"QUEUED":"ALREADY_QUEUED",
