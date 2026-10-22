@@ -233,6 +233,62 @@ function ProviderAlertSettings() {
 }
 
 
+function DevPingTestPanel() {
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState("");
+  const isDev = typeof window !== "undefined" && window.location.hostname === "dev-aicore.cstlogistic.co.id";
+
+  async function sendPing() {
+    if (!isDev || pending) return;
+    if (!window.confirm("Send one read-only PING to openclaw-pc-worker on AI Core DEV?")) return;
+    setPending(true);
+    setResult("");
+    try {
+      const externalCommandId = "dev-pchp-ping-" + crypto.randomUUID();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (ADMIN_KEY) headers["x-admin-api-key"] = ADMIN_KEY;
+      const response = await fetch("/api/ai/coding/bridge/commands", {
+        method: "POST",
+        credentials: "same-origin",
+        headers,
+        body: JSON.stringify({
+          externalCommandId,
+          instruction: "PING",
+          source: "chatgpt-dev-test",
+          commandType: "EXTERNAL_AGENT_WORK",
+          assignedClientId: "openclaw-pc-worker",
+          metadata: { diagnostic: true, environment: "DEV", noProd: true },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setResult("HTTP " + response.status + ": " + (payload.error ?? "Request rejected"));
+        return;
+      }
+      const commandId = payload.command?.id ?? payload.commandId;
+      setResult("Queued: " + (commandId ?? externalCommandId) + ". Check PC HP bridge for callback_persisted.");
+    } catch (error) {
+      setResult("Request failed: " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (!isDev) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>DEV PC Worker PING Test</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">Submit one PING to openclaw-pc-worker. DEV only; does not run shell commands or modify PROD.</p>
+        <Button disabled={pending} onClick={() => void sendPing()}>
+          {pending ? "Sending..." : "Test PING DEV"}
+        </Button>
+        {result && <p role="status" className="text-sm font-mono break-all">{result}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AgentCredentialsPanel() {
   const [items, setItems] = useState<Array<{ id: string; name: string; scopes: string[]; isActive: boolean }>>([]);
   const [issued, setIssued] = useState("");
@@ -323,6 +379,7 @@ export default function Settings() {
 
       {/* Provider Health Alert config */}
       <AgentCredentialsPanel />
+      <DevPingTestPanel />
       <ProviderAlertSettings />
 
       <div className="space-y-8">
