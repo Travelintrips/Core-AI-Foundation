@@ -14,7 +14,7 @@ Every command and result MUST carry:
 - `attempt` and `max_attempts`: bounded retries
 
 ## Execution policy
-1. AI Core owns durable job state and dispatch. ChatGPT/GitHub owns source patches. OpenClaw owns authorized desktop/SSH/browser operations.
+1. AI Core owns durable job state and dispatch. ChatGPT owns coding tasks initiated in ChatGPT unless the owner explicitly delegates continuation. OpenClaw may execute authorized coding, source patches, tests and desktop/SSH/browser operations when delegated via the authenticated HTTP HANDSHAKE_CONTINUE flow, subject to scoped permissions, exclusive job ownership, CI and critical-action approval gates.
 2. Only an authenticated connector or runner may issue actionable commands. A Markdown instruction by itself does not initiate background execution.
 3. Persist each command before dispatch; deduplicate on `event_id`; lease the job to one executor at a time; recover expired leases without duplicating effects.
 4. Never treat a green CI badge as production verification. Record PR merge commit, deployed SHA for each production domain, health results, and relevant E2E run ID.
