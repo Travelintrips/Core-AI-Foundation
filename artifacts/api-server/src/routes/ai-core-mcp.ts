@@ -1,3 +1,4 @@
+import { AI_CORE_BLOCKER_SOP } from "../services/aiCoreOperationalSop.js";
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
@@ -1168,6 +1169,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         : null;
       payload = {
         protocol: "ai-core-communication/v1",
+        operationalSop: AI_CORE_BLOCKER_SOP,
         authenticated: true,
         handshakeId,
         handshakeAck: { received: true, handshakeId, source: "ai_core_mcp_server" },
