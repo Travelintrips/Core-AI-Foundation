@@ -1,3 +1,4 @@
+// TODO: Document root cause of cancelled workflow run (compile errors, test failures, or long-running steps) with specific error messages and affected files
 import { logAudit } from "./aiAuditService.js";
 import {
   createGitHubApiClient,
