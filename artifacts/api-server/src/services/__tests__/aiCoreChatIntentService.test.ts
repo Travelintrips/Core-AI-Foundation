@@ -1,3 +1,4 @@
+// WS-002: Add missing test cases for new chat dispatch scenarios
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
