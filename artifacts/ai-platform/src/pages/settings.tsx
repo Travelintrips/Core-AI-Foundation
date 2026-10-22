@@ -236,7 +236,7 @@ function ProviderAlertSettings() {
 function DevPingTestPanel() {
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState("");
-  const isDev = typeof window !== "undefined" && window.location.hostname === "dev-aicore.cstlogistic.co.id";
+  const isDev = typeof window !== "undefined" && window.location.hostname === "dev.cstlogistic.co.id";
 
   async function sendPing() {
     if (!isDev || pending) return;
