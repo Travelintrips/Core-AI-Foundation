@@ -1,3 +1,4 @@
+// AUTO-REPAIR: review workflow failure root cause
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
