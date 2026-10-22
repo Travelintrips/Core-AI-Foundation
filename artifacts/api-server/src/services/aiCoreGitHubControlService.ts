@@ -1,4 +1,9 @@
 import { logAudit } from "./aiAuditService.js";
+// TODO: CI Failure Report:
+// - Document CI failure symptoms here (type errors, test failures, build issues).
+// - Affected files and initial hypotheses go below.
+//   * 
+
 import {
   createGitHubApiClient,
   parseGitHubRepository,
