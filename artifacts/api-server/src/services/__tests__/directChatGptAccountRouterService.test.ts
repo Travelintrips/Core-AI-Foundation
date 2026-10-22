@@ -12,6 +12,24 @@ afterEach(() => {
 });
 
 describe("directChatGptAccountRouterService", () => {
+  it("selects primary account when multiple are configured", () => {
+    vi.stubEnv("CHATGPT_ACCOUNTS", JSON.stringify([
+      { name: "acc1", primary: true },
+      { name: "acc2" }
+    ]));
+    const target = resolveDirectChatGptAccountTargetFromContext("test instruction");
+    expect(target).toEqual("acc1");
+  });
+
+  it("falls back to first account when no primary is configured", () => {
+    vi.stubEnv("CHATGPT_ACCOUNTS", JSON.stringify([
+      { name: "acc1" },
+      { name: "acc2" }
+    ]));
+    const target = resolveDirectChatGptAccountTargetFromContext("test instruction");
+    expect(target).toEqual("acc1");
+  });
+
   it("routes explicit personal-account commands", () => {
     expect(parseDirectChatGptAccountRequest(
       "pakai akun personal: buat checklist kesehatan worker DEV",
