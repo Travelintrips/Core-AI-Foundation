@@ -1,6 +1,6 @@
 # AI Core / OpenClaw assistance contract
 
-Purpose: ChatGPT owns coding tasks initiated in ChatGPT. AI Core may assist with authorized non-coding operations via OpenClaw on Travelintrips PC or GitHub. AI Core may code only when instructed directly in AI Core Chat.
+Purpose: ChatGPT owns coding tasks initiated in ChatGPT unless the owner explicitly delegates or transfers a job. AI Core may delegate authorized coding and non-coding continuation work to OpenClaw over the existing authenticated HTTP bridge using HANDSHAKE_CONTINUE, carrying the stable job ID, correlation ID, next step and Resource-First, Human-Last SOP. Coding initiated directly in authenticated AI Core Chat remains owned by AI Core. Delegation does not bypass worker scope, approval, CI or production gates.
 
 ## Command contract
 Each request carries `commandId`, `sessionId`, `origin`, `targetDevice`, `operation`, `args`, `requestedScopes`, `expiresAt`, and `idempotencyKey`. Reject missing or expired IDs. Allow only known operations and explicit target devices. Do not treat free-form text as shell commands.
