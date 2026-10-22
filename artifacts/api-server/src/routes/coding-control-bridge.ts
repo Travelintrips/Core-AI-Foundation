@@ -54,7 +54,23 @@ router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  if(!timeline){res.status(404).json({error:"COMMAND_NOT_FOUND"});return;}
  res.json(timeline);
 });
-router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{const p=codingBridgeCommandSchema.safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await submitCodingBridgeCommand(p.data);res.status(x.created?201:200).json(x);});
+router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{
+ const p=codingBridgeCommandSchema.safeParse(req.body);
+ if(!p.success){res.status(400).json({error:"INVALID_BRIDGE_COMMAND",details:p.error.flatten()});return;}
+ try {
+  const x=await submitCodingBridgeCommand(p.data);
+  res.status(x.created?201:200).json(x);
+ } catch(error) {
+  const requestId=String(req.headers["x-request-id"]??res.getHeader("X-Request-Id")??"unknown");
+  console.error("[coding-bridge] command submission failed",{
+   requestId,
+   source:p.data.source??"chatgpt",
+   externalCommandId:p.data.externalCommandId,
+   error:error instanceof Error?error.message:String(error),
+  });
+  res.status(500).json({error:"BRIDGE_COMMAND_SUBMISSION_FAILED",requestId});
+ }
+});
 
 router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<void>=>{
  const p=z.object({
