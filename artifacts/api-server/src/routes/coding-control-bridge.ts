@@ -24,6 +24,7 @@ import {
   dispatchExternalAgentWork,
   ExternalAgentDispatchError,
   OPENCLAW_AGENT_CLIENT_ID,
+  OPENCLAW_VPS_CLIENT_ID,
 } from "../services/externalAgentDispatchService.js";
 import { queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../services/devChatGptWakeService.js";
 const router=Router(); const Uuid=z.string().uuid();
@@ -59,6 +60,35 @@ router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  * OpenClaw worker queue directly; no MCP tool, OAuth pairing, or browser claim.
  * Protected by the app's adminAuthWithExceptions middleware.
  */
+/** DEV-only read-only handshake status. Pull/DB evidence never proves ChatGPT delivery. */
+router.get("/ai/coding/bridge/sop-handshake-test/:correlationId",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){res.status(403).json({error:"DEV_ONLY_HANDSHAKE_TEST"});return;}
+ const correlationId=Uuid.safeParse(req.params["correlationId"]);
+ if(!correlationId.success){res.status(400).json({error:"INVALID_CORRELATION_ID"});return;}
+ try{
+  const {db}=await import("@workspace/db");
+  const {sql}=await import("drizzle-orm");
+  const result=await db.execute(sql`
+    SELECT c.id AS command_id,c.status,c.metadata_json->>'jobId' AS job_id,
+      r.id AS response_id,r.kind,r.message,r.created_at,r.acknowledged_at
+    FROM ai_platform.ai_coding_bridge_commands c
+    LEFT JOIN ai_platform.ai_coding_bridge_responses r ON r.command_id=c.id
+    WHERE c.source='handshake-http' AND c.command_type='HANDSHAKE_CONTINUE'
+      AND c.external_command_id=${"handshake-continue:"+correlationId.data}
+      AND c.metadata_json->>'environment'='DEV'
+    ORDER BY r.created_at ASC LIMIT 30
+  `);
+  const rows=(result.rows??[]) as Array<Record<string,unknown>>;
+  if(!rows.length){res.status(404).json({error:"HANDSHAKE_NOT_FOUND"});return;}
+  const first=rows[0];
+  res.json({correlationId:correlationId.data,jobId:first?.["job_id"],
+    commandId:first?.["command_id"],status:first?.["status"],
+    callbackStored:rows.some(r=>r["kind"]==="COMPLETED"||r["kind"]==="FAILED"),
+    chatGptDeliveryVerified:false,
+    deliveryMode:"PULL_ONLY_UNTIL_VERIFIED_CONVERSATION_BINDING",
+    responses:rows.filter(r=>r["response_id"]!=null).map(r=>({id:r["response_id"],kind:r["kind"],message:r["message"],createdAt:r["created_at"],acknowledgedAt:r["acknowledged_at"]}))});
+ }catch{res.status(503).json({error:"HANDSHAKE_STATUS_UNAVAILABLE"});}
+});
 router.post("/ai/coding/bridge/sop-handshake-test",async(req,res):Promise<void>=>{
  const host=req.hostname.toLowerCase();
  if(host!=="dev.cstlogistic.co.id"){
@@ -78,7 +108,7 @@ router.post("/ai/coding/bridge/sop-handshake-test",async(req,res):Promise<void>=
    instruction:"HANDSHAKE_CONTINUE jobId="+parsed.data.jobId+" correlationId="+parsed.data.correlationId+"; NEXT_STEP: "+parsed.data.nextStep+"; SOP Resource-First, Human-Last: Do not stop after one failed command. Diagnose root cause. Use all authorized recovery paths. Coordinate with AI Core and OpenClaw on authorized PCs/VPS. Do not repeat identical commands without a technical reason. Retest after each fix. Never claim PASS without verification evidence. Preserve job identity and action log for resumption. Report completion or critical blockers. Return actual results and evidence through the existing authenticated HTTP bridge.",
    source:"handshake-http",
    commandType:"HANDSHAKE_CONTINUE",
-   assignedClientId:OPENCLAW_AGENT_CLIENT_ID,
+   assignedClientId:OPENCLAW_VPS_CLIENT_ID,
    metadata:{correlationId:parsed.data.correlationId,jobId:parsed.data.jobId,environment:"DEV",transport:"HTTP"},
   });
   res.status(result.created?202:200).json({
