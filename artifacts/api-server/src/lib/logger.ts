@@ -9,6 +9,7 @@ export const logger = pino({
     "req.headers.cookie",
     "res.headers['set-cookie']",
   ],
+  base: process.env.CI ? { jobId: process.env.CI_JOB_ID || process.env.GITHUB_RUN_ID, commitSha: process.env.GITHUB_SHA } : {},
   ...(isProduction
     ? {}
     : {
