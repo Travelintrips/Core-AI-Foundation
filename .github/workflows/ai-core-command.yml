@@ -75,6 +75,26 @@ jobs:
           node-version: 22
       - name: Verify trigger safety tests
         run: node --test scripts/ai-core-command.test.mjs
+      - name: Diagnose AI Core endpoint reachability (no credentials)
+        shell: bash
+        run: |
+          set +e
+          echo "::group::DNS resolution"
+          getent ahosts aicore.cstlogistic.co.id | head -12
+          echo "::endgroup::"
+          echo "::group::TLS and HTTP IPv4 probe"
+          curl --ipv4 --silent --show-error --location --max-time 15 \
+            --connect-timeout 7 --output /dev/null \
+            --write-out 'ipv4_http=%{http_code} remote_ip=%{remote_ip} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\\n' \
+            https://aicore.cstlogistic.co.id/api/healthz
+          echo "::endgroup::"
+          echo "::group::TLS and HTTP IPv6 probe"
+          curl --ipv6 --silent --show-error --location --max-time 10 \
+            --connect-timeout 5 --output /dev/null \
+            --write-out 'ipv6_http=%{http_code} remote_ip=%{remote_ip} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\\n' \
+            https://aicore.cstlogistic.co.id/api/healthz
+          echo "::endgroup::"
+          exit 0
       - name: Audit or dispatch to AI Core
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
