@@ -14,6 +14,15 @@ export function oauthNavigationCors(apiCors: RequestHandler): RequestHandler {
       next();
       return;
     }
+    // Allow only same-origin opaque navigation to the anonymous, rate-limited
+    // magic-link form. Do not grant cross-origin response access.
+    if (req.path === "/api/internal/auth/request-magic-link" &&
+        req.method === "POST" && req.headers.origin === "null" &&
+        req.headers["sec-fetch-site"] === "same-origin" &&
+        req.headers["sec-fetch-mode"] === "navigate") {
+      next();
+      return;
+    }
     apiCors(req, res, next);
   };
 }

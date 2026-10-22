@@ -222,15 +222,24 @@ router.post("/api/ai/core-chat/oauth/register", (req, res): void => {
 // MCP is hosted on a dedicated subdomain, without the normal app /login UI.
 // Reuse the existing rate-limited internal authentication endpoint on this origin;
 // its host-only session cookie is then visible to OAuth pairing approval.
-router.get("/api/ai/core-chat/oauth/login", (_req, res): void => {
+router.get("/api/ai/core-chat/oauth/login", async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  const user = await resolveSessionUser(req);
+  if (user) {
+    res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif. Kembali ke tab pairing ChatGPT, lalu buka kembali halaman persetujuan pairing. Jangan login ulang.</p><p><a href="/api/ai/core-chat/oauth/pair/enter">Buka halaman pairing</a></p></body></html>`);
+    return;
+  }
   res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Core MCP</title>
 <style>body{font:16px system-ui;max-width:460px;margin:56px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:5px}input{padding:10px}button{padding:12px;font-weight:bold}.muted{color:#555}</style></head><body>
 <h1>Login AI Core MCP</h1><p>Masuk dengan akun internal AI Core untuk menyetujui koneksi ChatGPT.</p>
-<form method="post" action="/api/internal/auth/login" autocomplete="on">
+<form method="post" action="/api/internal/auth/login" autocomplete="on" id="mcp-login-form">
 <label>Email<input type="email" name="email" autocomplete="username" required></label>
 <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
-<button type="submit">Masuk</button></form>
-<h2>Login melalui email</h2><form method="post" action="/api/internal/auth/request-magic-link"><label>Email akun AI Core<input type="email" name="email" autocomplete="email" required></label><button type="submit">Kirim tautan login ke email</button></form><p class="muted">Tautan berlaku 10 menit. Setelah membukanya di browser yang sama, kembali ke halaman persetujuan OAuth dan muat ulang.</p>
+<button type="submit">Masuk</button><p id="login-status" role="status"></p></form>
+<script>document.getElementById("mcp-login-form").addEventListener("submit",async function(event){event.preventDefault();const form=event.currentTarget;const status=document.getElementById("login-status");status.textContent="Memeriksa login...";try{const response=await fetch(form.action,{method:"POST",body:new URLSearchParams(new FormData(form)),credentials:"same-origin"});if(!response.ok){status.textContent="Login gagal. Periksa email dan password.";return;}status.textContent="Login berhasil. Kembali ke halaman approval dan muat ulang.";}catch{status.textContent="Koneksi gagal. Coba lagi.";}});</script>
+<h2>Login melalui email</h2><form method="post" action="/api/internal/auth/request-magic-link" id="mcp-magic-form"><label>Email akun AI Core<input type="email" name="email" autocomplete="email" required></label><button type="submit">Kirim tautan login ke email</button><p id="magic-status" role="status"></p></form><script>document.getElementById("mcp-magic-form").addEventListener("submit",async function(event){event.preventDefault();const form=event.currentTarget;const status=document.getElementById("magic-status");status.textContent="Memproses permintaan...";try{const response=await fetch(form.action,{method:"POST",body:new URLSearchParams(new FormData(form)),credentials:"same-origin",headers:{"Accept":"application/json"}});status.textContent=response.ok?"Jika akun aktif terdaftar, link login akan dikirim ke email.":"Pengiriman belum berhasil. Coba lagi atau gunakan login password.";}catch{status.textContent="Koneksi gagal. Coba lagi.";}});</script><p class="muted">Tautan berlaku 10 menit. Setelah membukanya di browser yang sama, kembali ke halaman persetujuan OAuth dan muat ulang.</p>
 </body></html>`);
 });
 
@@ -370,6 +379,16 @@ router.get("/api/ai/core-chat/oauth/pair/wait", async (req, res): Promise<void> 
   if (pairing.state) url.searchParams.set("state", pairing.state);
   url.searchParams.set("iss", oauthIssuer());
   res.redirect(302, url.toString());
+});
+
+router.get("/api/ai/core-chat/oauth/pair/enter", async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await resolveSessionUser(req);
+  if (!user) {
+    res.redirect(302, "/api/ai/core-chat/oauth/login");
+    return;
+  }
+  res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pairing AI Engine</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Hubungkan ChatGPT ke AI Engine</h1><p>Masukkan kode 8 digit dari halaman pairing ChatGPT.</p><form method="get" action="/api/ai/core-chat/oauth/pair/approve"><label>Kode pairing <input name="code" required minlength="8" maxlength="8" pattern="[0-9]{8}" inputmode="numeric" autocomplete="one-time-code"></label><button type="submit">Lanjut ke Persetujuan</button></form><p>Kode tersedia di halaman pairing ChatGPT; jangan gunakan kode yang sudah kedaluwarsa.</p></body></html>`);
 });
 
 router.get("/api/ai/core-chat/oauth/pair/approve", async (req, res): Promise<void> => {
