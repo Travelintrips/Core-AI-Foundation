@@ -1,3 +1,4 @@
+// TODO: reproduce CI workflow failure logs and capture diagnostic details below
 import { logAudit } from "./aiAuditService.js";
 import {
   createGitHubApiClient,
