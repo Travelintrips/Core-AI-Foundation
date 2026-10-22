@@ -9,6 +9,8 @@ import {
   parseDirectOpenClawPcCommand,
   parseOpenClawPcCodingRequest,
 } from "../aiCoreChatIntentService.js";
+import { codingOrchestratorService } from "../codingOrchestratorService.js";
+import { devChatGptWakeService } from "../devChatGptWakeService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
@@ -21,6 +23,11 @@ describe("AI Core Chat automatic dispatch", () => {
   });
 
   it("does not allow semantic read-only intent to intercept explicit external-agent commands", () => {
+  it("handles missing ChatGPT session fallback", async () => {
+    vi.mocked(devChatGptWakeService).mockResolvedValue(null);
+    const result = await codingOrchestratorService.handleMessage("test message");
+    expect(result.success).toBe(true);
+  });
     const routeSource = readFileSync(new URL("../../routes/ai-core-chat.ts", import.meta.url), "utf8");
     expect(routeSource).toContain('preflightDispatch.kind === "ANSWER"');
     expect(classifyAiCoreChatDispatch("OpenClaw kirim pesan teks ke sesi ChatGPT via UI")).toMatchObject({
