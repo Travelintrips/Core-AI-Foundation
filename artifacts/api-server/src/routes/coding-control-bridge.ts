@@ -66,22 +66,25 @@ router.post("/ai/coding/bridge/sop-handshake-test",async(req,res):Promise<void>=
  }
  const parsed=z.object({
   correlationId:z.string().uuid(),
-  instruction:z.literal("SOP_HANDSHAKE_TEST"),
+  instruction:z.literal("HANDSHAKE_CONTINUE"),
+  jobId:z.string().trim().min(1).max(160),
+  nextStep:z.string().trim().min(1).max(4000),
  }).strict().safeParse(req.body);
  if(!parsed.success){res.status(400).json({error:"INVALID_HANDSHAKE_REQUEST"});return;}
- const externalCommandId="sop-handshake-test:"+parsed.data.correlationId;
+ const externalCommandId="handshake-continue:"+parsed.data.correlationId;
  try{
   const result=await submitCodingBridgeCommand({
    externalCommandId,
-   instruction:"SOP_HANDSHAKE_TEST correlationId="+parsed.data.correlationId+"; return execution evidence via the existing authenticated HTTP coding bridge",
+   instruction:"HANDSHAKE_CONTINUE jobId="+parsed.data.jobId+" correlationId="+parsed.data.correlationId+"; NEXT_STEP: "+parsed.data.nextStep+"; SOP Resource-First, Human-Last: Do not stop after one failed command. Diagnose root cause. Use all authorized recovery paths. Coordinate with AI Core and OpenClaw on authorized PCs/VPS. Do not repeat identical commands without a technical reason. Retest after each fix. Never claim PASS without verification evidence. Preserve job identity and action log for resumption. Report completion or critical blockers. Return actual results and evidence through the existing authenticated HTTP bridge.",
    source:"handshake-http",
-   commandType:"SOP_HANDSHAKE_TEST",
+   commandType:"HANDSHAKE_CONTINUE",
    assignedClientId:OPENCLAW_AGENT_CLIENT_ID,
-   metadata:{correlationId:parsed.data.correlationId,environment:"DEV",transport:"HTTP"},
+   metadata:{correlationId:parsed.data.correlationId,jobId:parsed.data.jobId,environment:"DEV",transport:"HTTP"},
   });
   res.status(result.created?202:200).json({
    commandId:result.command.id,
    externalCommandId,
+   jobId:parsed.data.jobId,
    correlationId:parsed.data.correlationId,
    status:result.created?"QUEUED":"ALREADY_QUEUED",
    transport:"HTTP",
