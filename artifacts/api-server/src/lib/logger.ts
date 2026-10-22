@@ -18,3 +18,7 @@ export const logger = pino({
         },
       }),
 });
+export function logMissingSessionPool(context: { sessionId?: string; userId?: string }) {
+  logger.error({ event: 'MissingSessionPool', ...context }, 'Missing session pool case');
+}
+
