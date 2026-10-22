@@ -1,3 +1,4 @@
+import { CancellationError } from "@workspace/ai-core";
 import {
   GitHubPublisherError,
   parseGitHubRepository,
@@ -22,6 +23,16 @@ export interface PullRequestVerificationInput {
   expectedFiles: string[];
 }
 
+  try {
+    const result = await this.client.request<T>(method, path, body);
+    return result;
+  } catch (error) {
+    if (error instanceof CancellationError) {
+      logger.info("GitHub API call cancelled");
+      return null;
+    }
+    throw error;
+  }
 export interface PullRequestVerificationResult {
   status: "PASSED" | "PENDING" | "FAILED" | "STALE";
   reason: string;

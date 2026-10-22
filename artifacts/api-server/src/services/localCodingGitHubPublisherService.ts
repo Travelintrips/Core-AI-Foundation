@@ -2,6 +2,8 @@ const GITHUB_API_ORIGIN = "https://api.github.com";
 const MAX_PUBLISH_FILES = 40;
 const MAX_TOTAL_CONTENT_BYTES = 1_500_000;
 
+import { CancellationError } from "@workspace/ai-core";
+
 export class GitHubPublisherError extends Error {
   constructor(
     message: string,
@@ -55,6 +57,16 @@ export interface GitHubPublishResult {
   pullRequestUrl: string;
 }
 
+  try {
+    const result = await this.client.request<T>(method, path, body);
+    return result;
+  } catch (error) {
+    if (error instanceof CancellationError) {
+      logger.info("GitHub API call cancelled");
+      return null;
+    }
+    throw error;
+  }
 export interface GitHubApiClient {
   request<T = Record<string, unknown>>(
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
