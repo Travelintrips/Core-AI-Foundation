@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { AI_CORE_BLOCKER_SOP } from "./aiCoreOperationalSop.js";
 import { OPENCLAW_PC_CLIENT_IDS, selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
 import { chooseActivePc } from "./openClawPcLeaderService.js";
 import {
@@ -274,6 +275,13 @@ export async function dispatchExternalAgentWork(input: {
     },
     metadata: {
       ...(input.metadata ?? {}),
+      // Server-owned DEV SOP accompanies the direct OpenClaw command; never trust
+      // a caller-supplied SOP, and never treat it as additional authorization.
+      ...(resolvedClientId.startsWith("openclaw-") &&
+          (input.metadata?.["environment"] === "development" ||
+           resolvedClientId.endsWith("-dev"))
+        ? { operationalSop: AI_CORE_BLOCKER_SOP, operationalSopSource: "ai-core-server" }
+        : {}),
       requestedAt: new Date().toISOString(),
       executionBoundary: "role-scoped",
       requiredCapability,
