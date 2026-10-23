@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { replaceFirstProposalMarker } from "../localCodingDeterministicRecoveryService.js";
 import {
   planDeterministicLocalRecovery,
 } from "../localCodingDeterministicRecoveryService.js";
@@ -57,6 +58,16 @@ function failure(
 }
 
 describe("Deterministic Local Recovery Planner", () => {
+  it("replaces only the first occurrence of proposal marker", () => {
+    const content = "code /*proposal*/ first /*proposal*/ second";
+    const result = replaceFirstProposalMarker(content, "REPL");
+    expect(result).toBe("code REPL first /*proposal*/ second");
+  });
+
+  it("throws an error when no proposal marker is present", () => {
+    const content = "code without marker";
+    expect(() => replaceFirstProposalMarker(content, "REPL")).toThrowError("No proposal marker found");
+  });
   it("uses compiler Did-you-mean suggestions only at the diagnostic position", () => {
     const plan = planDeterministicLocalRecovery(
       [failure("TS2552", "Cannot find name 'totla'. Did you mean 'total'?")],
