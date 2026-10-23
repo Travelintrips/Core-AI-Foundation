@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";import { retry } from "vitest";
+
 import {
   classifyAiCoreChatDispatch,
   DEFAULT_AI_CORE_CHAT_MODE,
