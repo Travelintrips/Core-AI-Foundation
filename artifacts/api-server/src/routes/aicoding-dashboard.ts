@@ -16,11 +16,12 @@ import { isDevWakeRuntime, loadDevWakeRuntimeConfig } from "../services/devChatG
 import { describeDevGptReadiness, type DevGptReadiness } from "../services/devChatGptPoolReadinessService.js";
 
 const router = Router();
-const REFRESH_MS = 5_000;
+const REFRESH_MS = 15_000;
 const EXTERNAL_CACHE_MS = 30_000;
 
 type Probe = { ok: boolean; latencyMs: number | null; detail?: string; data?: unknown };
 let externalCache: { expiresAt: number; hostinger: Probe; github: Probe } | null = null;
+let externalProbeInFlight: Promise<{ hostinger: Probe; github: Probe }> | null = null;
 let waCache: { expiresAt: number; rows: Array<Record<string, unknown>>; error: string | null } | null = null;
 let devAccountCache: { expiresAt: number; config: Awaited<ReturnType<typeof loadDevWakeRuntimeConfig>> | null } | null = null;
 
@@ -155,9 +156,15 @@ async function externalProbes(): Promise<{ hostinger: Probe; github: Probe }> {
   if (externalCache && externalCache.expiresAt > Date.now()) {
     return { hostinger: externalCache.hostinger, github: externalCache.github };
   }
-  const [hostinger, github] = await Promise.all([probeHostinger(), probeGithub()]);
-  externalCache = { expiresAt: Date.now() + EXTERNAL_CACHE_MS, hostinger, github };
-  return { hostinger, github };
+  if (!externalProbeInFlight) {
+    externalProbeInFlight = Promise.all([probeHostinger(), probeGithub()])
+      .then(([hostinger, github]) => {
+        externalCache = { expiresAt: Date.now() + EXTERNAL_CACHE_MS, hostinger, github };
+        return { hostinger, github };
+      })
+      .finally(() => { externalProbeInFlight = null; });
+  }
+  return externalProbeInFlight;
 }
 
 function findPercent(data: unknown, matcher: RegExp): number | null {
