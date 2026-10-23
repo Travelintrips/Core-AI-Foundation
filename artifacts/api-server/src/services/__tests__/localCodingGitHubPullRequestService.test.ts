@@ -5,6 +5,14 @@ import {
 } from "../localCodingGitHubPullRequestService.js";
 import type { GitHubApiClient } from "../localCodingGitHubPublisherService.js";
 
+describe("CI cancellation behavior", () => {
+  it("throws error when CI checks are cancelled", async () => {
+    const client = passingClient({ checks: [{ name: "ci", status: "completed", conclusion: null }] });
+    await expect(verifyPublishedPullRequest(client, input())).rejects.toThrow("CI checks not completed");
+  });
+});
+
+
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
 
