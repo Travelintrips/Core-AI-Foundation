@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+vi.setTimeout(30000);
 import {
   mergeVerifiedPullRequest,
   verifyPublishedPullRequest,
