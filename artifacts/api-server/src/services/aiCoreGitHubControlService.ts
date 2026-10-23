@@ -4,6 +4,7 @@ import {
   parseGitHubRepository,
 } from "./localCodingGitHubPublisherService.js";
 
+// TODO: Implement retrieval and analysis of GitHub Actions workflow logs to identify cancellation causes and document failure modes.
 export type AiCoreGitHubOperation =
   | "GITHUB_WORKFLOW_STATUS"
   | "GITHUB_WORKFLOW_RERUN"
