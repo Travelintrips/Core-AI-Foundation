@@ -44,7 +44,11 @@ describe("Local Coding GitHub publisher", () => {
       .toThrow(/github\.com/i);
   });
 
-  it("creates blobs, a commit, a task branch, and a pull request without touching base branch", async () => {
+    it.skip("should handle GitHub API cancellation and transient errors with retries", async () => {
+    // TODO: simulate GitHub API cancellation and transient errors, verify retry logic, logging, and exception
+  });
+
+it("creates blobs, a commit, a task branch, and a pull request without touching base branch", async () => {
     const calls: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
     const client: GitHubApiClient = {
       request: vi.fn(async (method, path, body) => {
