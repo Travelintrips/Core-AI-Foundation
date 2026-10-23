@@ -37,7 +37,37 @@ import {
   retryFailedCodingWorkstream,
 } from "./localCodingMultiWorkerOrchestratorService.js";
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
+async function withExponentialBackoff(fn, maxRetries = MAX_RETRIES, initialDelay = INITIAL_DELAY_MS) {
+  let retryCount = 0;
+  let delay = initialDelay;
+
+  while (retryCount < maxRetries) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.message.includes('cancellation') || error.message.includes('timeout')) {
+        logger.info(`Retry attempt ${retryCount + 1} for cancellation/timeout error: ${error.message}`);
+        retryCount++;
+        if (retryCount < maxRetries) {
+          await setTimeout(delay);
+          delay *= 2;
+        }
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  logger.error(`Max retries (${maxRetries}) reached for cancellation/timeout error`);
+  throw new Error(`Max retries (${maxRetries}) reached for cancellation/timeout error`);
+}
+
+const MAX_RETRIES = 3;
+const INITIAL_DELAY_MS = 1000;
+
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
+import { setTimeout } from 'timers/promises';
+
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
 import {
   approveAiHandoff,
