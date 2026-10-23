@@ -5,7 +5,7 @@ import {
 } from "./localCodingGitHubPublisherService.js";
 
 const MAX_PR_FILES = 100;
-const MAX_CHECK_RUNS = 100;
+const MAX_CHECK_RUNS = 200;
 
 export interface PullRequestCheckSummary {
   name: string;
