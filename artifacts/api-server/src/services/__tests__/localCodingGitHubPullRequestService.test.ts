@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+  it.todo("should handle mismatched base SHA");
 import {
   mergeVerifiedPullRequest,
   verifyPublishedPullRequest,
