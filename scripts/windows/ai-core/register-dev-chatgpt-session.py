@@ -77,10 +77,17 @@ def browser(profile, *args, timeout=45):
 
 
 def verify_exact_session(profile, conversation_id):
-    expected_url = "https://chatgpt.com/c/" + conversation_id
+    # Accept direct and Project conversation URLs, but never a different conversation.
+    direct = "https://chatgpt.com/c/" + conversation_id
+    project_pattern = re.compile(
+        r"^https://chatgpt\.com/g/g-p-[A-Za-z0-9_-]+/c/" + re.escape(conversation_id) + r"/?$"
+    )
     tabs = json.loads(browser(profile, "tabs", "--json"))
     matching = [tab for tab in tabs.get("tabs", [])
-                if tab.get("type") == "page" and tab.get("url") == expected_url]
+                if tab.get("type") == "page" and (
+                    tab.get("url") == direct or
+                    bool(project_pattern.fullmatch(tab.get("url", "")))
+                )]
     if len(matching) != 1:
         raise RuntimeError("Expected exactly one authenticated ChatGPT conversation tab")
     target = matching[0].get("suggestedTargetId") or matching[0].get("tabId")
@@ -89,7 +96,7 @@ def verify_exact_session(profile, conversation_id):
     snapshot = browser(profile, "snapshot", "--target-id", str(target))
     if not re.search(r'^\s*- textbox "(?:Ask ChatGPT|Tanya ChatGPT)"', snapshot, re.M):
         raise RuntimeError("Authenticated ChatGPT composer is unavailable")
-    return expected_url
+    return matching[0]["url"]
 
 
 def private_key(path):
