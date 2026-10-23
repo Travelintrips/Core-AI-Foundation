@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+// TODO: Add tests to cover the repaired logic in localCodingAutonomousRepairService
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
