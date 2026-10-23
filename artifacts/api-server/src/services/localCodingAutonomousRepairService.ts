@@ -1,4 +1,8 @@
 import { isRepositoryAnalyzerVerificationOnlyInstruction } from "./repositoryAnalyzerVerificationOnlyService.js";
+export const MAX_CDP_BOOTSTRAP_RETRIES: number = process.env.MAX_CDP_BOOTSTRAP_RETRIES
+  ? parseInt(process.env.MAX_CDP_BOOTSTRAP_RETRIES, 10)
+  : 3;
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
