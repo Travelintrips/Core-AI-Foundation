@@ -63,6 +63,36 @@ export interface GitHubApiClient {
   ): Promise<T>;
 }
 
+
+/**
+ * Retry wrapper for GitHubApiClient.request with exponential backoff
+ */
+async function requestWithRetry<T>(
+  client: GitHubApiClient,
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: Record<string, unknown>,
+  retries: number = 3,
+  backoffMs: number = 500,
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      const result = await client.request<T>(method, path, body);
+      return result;
+    } catch (error: any) {
+      const status = error.status;
+      // Token expired or unauthorized: propagate for refresh
+      if (status === 401 || status === 403) {
+        throw error;
+      }
+      // Transient errors: retry
+      attempt++;
+      if (attempt > retries) throw error;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs * attempt));
+    }
+  }
+}
 type FetchLike = (
   input: string,
   init?: {
