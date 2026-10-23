@@ -39,6 +39,19 @@ import {
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
+// Cancellation detection helper
+function isWorkflowCancelled(error: unknown): boolean {
+// Listen for unhandled rejections and handle cancellations gracefully
+process.on('unhandledRejection', (reason) => {
+  if (isWorkflowCancelled(reason)) {
+    logger.warn('Workflow cancellation detected:', reason);
+    // Perform any cleanup or safe exit here
+  }
+});
+
+  return error instanceof Error && /cancelled/i.test(error.message);
+}
+
 import {
   approveAiHandoff,
   assertApprovedAiHandoffFresh,
