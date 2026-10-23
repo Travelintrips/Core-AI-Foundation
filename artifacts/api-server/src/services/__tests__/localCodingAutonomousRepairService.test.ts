@@ -1,3 +1,4 @@
+// TODO: Add unit tests for CDP bootstrap retry logic to simulate transient failures and verify retry attempts
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
