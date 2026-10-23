@@ -2,6 +2,9 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { promisify } from "node:util";
+// Default timeout for all gate service executions (in milliseconds)
+const DEFAULT_GATE_SERVICE_TIMEOUT_MS = 300_000; // 5 minutes
+
 import { and, desc, eq } from "drizzle-orm";
 import {
   aiCodingRunsTable,
