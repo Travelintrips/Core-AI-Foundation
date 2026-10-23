@@ -1,3 +1,4 @@
+// Auto-repair placeholder - trigger rebuild
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
