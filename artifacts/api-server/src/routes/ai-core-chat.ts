@@ -2548,6 +2548,31 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
   };
 }
 
+// DEV-only deterministic /job lane; never uses cloud intent classification.
+function parseInternalDevJob(message: string): ChatGptWakeCommand | null {
+  if (!/^\/job(?:\s|$)/i.test(message.trim())) return null;
+  if (!isDevInternalOnly()) return null;
+  const lines = message.trim().split(/\r?\n/);
+  if (lines[0]?.trim().toLowerCase() !== "/job") return null;
+  const fields = new Map<string, string>();
+  const allowed = new Set(["environment", "target", "mode"]);
+  let index = 1;
+  for (; index < lines.length; index++) {
+    const line = lines[index]!.trim();
+    if (!line) continue;
+    const match = /^(Environment|Target|Mode):\s*(.+)$/i.exec(line);
+    if (!match) break;
+    const key = match[1]!.toLowerCase();
+    if (!allowed.has(key) || fields.has(key)) return null;
+    fields.set(key, match[2]!.trim().toUpperCase());
+  }
+  if (fields.size !== 3 || fields.get("environment") !== "DEV" ||
+      fields.get("mode") !== "TEST_ONLY" || !/^GPT[0-9]{2,4}$/.test(fields.get("target") ?? "")) return null;
+  const instruction = lines.slice(index).join("\n").trim();
+  if (!instruction || instruction.length > 2000 || /[\u0000-\u0008\u000b-\u001f\u007f]/.test(instruction)) return null;
+  return { accountAlias: fields.get("target")!, jobAlias: null, instruction };
+}
+
 async function startSimpleChatGptWake(
   command: ChatGptWakeCommand,
   requestHost?: string,
@@ -3821,6 +3846,10 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
     return;
   }
 
+  if (/^\/job(?:\s|$)/i.test(parsed.data.message.trim()) && !parseInternalDevJob(parsed.data.message)) {
+    res.status(400).json({ error: "INVALID_DEV_JOB_COMMAND" });
+    return;
+  }
   if (parsed.data.mode === "agent") {
     res.status(400).json({
       error: "Streaming endpoint supports Ask/Auto only; Agent Mode uses the control-plane endpoint.",
@@ -3841,7 +3870,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
 
   try {
     const simpleWakeCommand = !parsed.data.image
-      ? parseChatGptWakeCommand(parsed.data.message)
+      ? (parseInternalDevJob(parsed.data.message) ?? parseChatGptWakeCommand(parsed.data.message))
       : null;
     if (simpleWakeCommand) {
       writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
@@ -3980,9 +4009,13 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   }
 
   const simpleWakeCommand = !parsed.data.image
-    ? parseChatGptWakeCommand(parsed.data.message)
+    ? (parseInternalDevJob(parsed.data.message) ?? parseChatGptWakeCommand(parsed.data.message))
     : null;
 
+  if (/^\/job(?:\s|$)/i.test(parsed.data.message.trim()) && !simpleWakeCommand) {
+    res.status(400).json({ error: "INVALID_DEV_JOB_COMMAND" });
+    return;
+  }
   // Refuse source-changing coding at the chat boundary in every mode,
   // rather than returning the ambiguous internal NO_WORKER routing lane.
 
