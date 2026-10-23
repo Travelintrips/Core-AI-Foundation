@@ -12,6 +12,8 @@ export type ChatStreamUsage = {
   totalTokens: number;
 };
 
+import { logger } from "../lib/logger.js";
+
 export interface CloudChatStreamInput {
   providerSlug: string;
   modelId: string;
@@ -54,8 +56,10 @@ function safeDetail(value: string): string {
     .slice(0, 700);
 }
 
-async function assertOk(response: Response, provider: string): Promise<void> {
-  if (response.ok) return;
+async function assertOk(response: Response, provider: string): Promise<void> {  logger.info(`Starting streaming for provider: ${provider}`);
+
+  if (response.ok) return;  logger.error(`Streaming failed for provider: ${provider}`);
+
   const detail = safeDetail(await response.text().catch(() => ""));
   if (response.status === 401 || response.status === 403) {
     throw new Error(`${provider} streaming authentication failed.`);
