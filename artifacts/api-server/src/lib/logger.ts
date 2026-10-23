@@ -1,3 +1,11 @@
+/*
+Reproduction steps:
+1. pnpm typecheck
+2. pnpm build
+3. pnpm --filter @workspace/api-server test
+4. pnpm --filter @workspace/api-server typecheck
+Review the logs for the specific error or timeout causing the cancellation.
+*/
 import pino from "pino";
 
 const isProduction = process.env.NODE_ENV === "production";
