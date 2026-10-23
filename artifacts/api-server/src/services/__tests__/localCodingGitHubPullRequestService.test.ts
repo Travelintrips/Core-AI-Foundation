@@ -5,8 +5,8 @@ import {
 } from "../localCodingGitHubPullRequestService.js";
 import type { GitHubApiClient } from "../localCodingGitHubPublisherService.js";
 
-const baseSha = "a".repeat(40);
-const headSha = "b".repeat(40);
+const baseSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const headSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 function input() {
   return {
