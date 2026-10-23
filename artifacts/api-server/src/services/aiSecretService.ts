@@ -19,6 +19,7 @@ const PROVIDER_ENV_VARS: Record<string, string> = {
  * Returns the API key for a provider, or null if not configured.
  * Reads from the environment — never hardcoded.
  */
+// WARNING: secrets should not be logged or exposed in any logs
 export function getProviderApiKey(providerSlug: string): string | null {
   const envVarName = PROVIDER_ENV_VARS[providerSlug.toLowerCase()];
   if (!envVarName) return null;
