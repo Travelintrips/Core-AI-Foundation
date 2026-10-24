@@ -44,7 +44,27 @@ describe("Local Coding GitHub publisher", () => {
       .toThrow(/github\.com/i);
   });
 
-  it("creates blobs, a commit, a task branch, and a pull request without touching base branch", async () => {
+  it("creates blobs, a commit, a task branch, and a pull request without touching base branch", async () => {  it("throws GitHubPublisherError when the base SHA does not match", async () => {
+    const client: GitHubApiClient = {
+      request: vi.fn(async (method, path, body) => {
+        if (method === "GET" && path === "/repos/Travelintrips/Core-AI-Foundation/git/ref/heads/main") {
+          return {
+            data: {
+              object: {
+                sha: movedSha
+              }
+            }
+          };
+        }
+        throw new Error("Unexpected request");
+      })
+    };
+    await expect(publishVerifiedPatchToGitHub(client, input()))
+      .rejects
+      .toThrow(GitHubPublisherError);
+  });
+
+
     const calls: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
     const client: GitHubApiClient = {
       request: vi.fn(async (method, path, body) => {
