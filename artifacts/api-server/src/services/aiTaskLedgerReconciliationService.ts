@@ -23,6 +23,7 @@ const MAX_PARALLEL = 2;
 const LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 15 * 60 * 1000;
 const RECONCILABLE_WORKSTREAM_STATUSES = ["COMPLETED", "FAILED", "REVIEW_REQUIRED"] as const;
+const OBSERVABLE_BRIDGE_COMMAND_STATUSES = ["RECEIVED", "PROCESSING", "COMPLETED", "FAILED"] as const;
 
 type TerminalLedgerSourceKind = "coding-task" | "coding-workstream" | "bridge-command";
 
@@ -112,7 +113,7 @@ async function loadTerminalBridgeCommands(
   })
     .from(aiCodingBridgeCommandsTable)
     .where(and(
-      inArray(aiCodingBridgeCommandsTable.status, ["COMPLETED", "FAILED"]),
+      inArray(aiCodingBridgeCommandsTable.status, [...OBSERVABLE_BRIDGE_COMMAND_STATUSES]),
       gte(aiCodingBridgeCommandsTable.createdAt, since),
     ))
     .orderBy(desc(aiCodingBridgeCommandsTable.createdAt), desc(aiCodingBridgeCommandsTable.id))
@@ -183,8 +184,12 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
       let acknowledged = 0;
       let pending = 0;
       const eligible = rows.filter((row) => {
-        const allowed = row.sourceKind === "coding-workstream"
-          ? RECONCILABLE_WORKSTREAM_STATUSES.includes(
+        const allowed = row.sourceKind === "bridge-command"
+          ? OBSERVABLE_BRIDGE_COMMAND_STATUSES.includes(
+            row.status as (typeof OBSERVABLE_BRIDGE_COMMAND_STATUSES)[number],
+          )
+          : row.sourceKind === "coding-workstream"
+            ? RECONCILABLE_WORKSTREAM_STATUSES.includes(
             row.status as (typeof RECONCILABLE_WORKSTREAM_STATUSES)[number],
           )
           : row.status === "COMPLETED" || row.status === "FAILED";
@@ -223,7 +228,7 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
             });
             const terminal = row.status === "COMPLETED" || row.status === "FAILED";
             const settled = receipt.acknowledged === true ||
-              (!terminal && receipt.synced && receipt.observedStatus === row.status);
+              (!terminal && receipt.synced && (sourceKind === "bridge-command" || receipt.observedStatus === row.status));
             if (settled) {
               if (receipt.acknowledged === true) acknowledged += 1;
               attempts.set(key, {
