@@ -4,6 +4,7 @@ import { createAiTaskLedgerReconciler } from "../aiTaskLedgerReconciliationServi
 vi.mock("@workspace/db", () => ({
   aiCodingTasksTable: {},
   aiCodingWorkstreamsTable: {},
+  aiCodingBridgeCommandsTable: {},
   db: {},
 }));
 
@@ -83,6 +84,7 @@ describe("AI Task terminal reconciliation", () => {
       enabled: () => true,
       loadTasks,
       loadWorkstreams,
+      loadBridgeCommands: async () => [],
       publish,
     });
 
@@ -98,6 +100,36 @@ describe("AI Task terminal reconciliation", () => {
       status: "COMPLETED",
       version: "terminal",
     });
+  });
+
+  it("mirrors received and completed bridge commands without duplicate dispatch", async () => {
+    let clock = Date.parse("2026-10-24T17:00:00Z");
+    const bridgeCommand = {
+      ...task,
+      sourceKind: "bridge-command" as const,
+      taskNumber: "550e8400",
+      status: "RECEIVED",
+    };
+    const loadBridgeCommands = vi.fn(async () => [bridgeCommand]);
+    const publish = vi.fn(async () => ({ synced: true, acknowledged: false }));
+    const reconciler = createAiTaskLedgerReconciler({
+      enabled: () => true,
+      now: () => clock,
+      loadTasks: async () => [],
+      loadWorkstreams: async () => [],
+      loadBridgeCommands,
+      publish,
+    });
+    expect(await reconciler.tick()).toMatchObject({ scanned: 1, attempted: 1, pending: 0 });
+    expect(publish).toHaveBeenCalledWith({
+      externalId: "bridge-command:" + bridgeCommand.id,
+      title: "AI Core bridge command 550e8400",
+      status: "RECEIVED",
+      version: "terminal",
+    });
+    clock += 60_001;
+    expect(await reconciler.tick()).toMatchObject({ attempted: 0 });
+    expect(publish).toHaveBeenCalledTimes(1);
   });
 
   it("reconciles REVIEW_REQUIRED without inventing a terminal ACK", async () => {
@@ -117,6 +149,7 @@ describe("AI Task terminal reconciliation", () => {
       now: () => clock,
       loadTasks: async () => [],
       loadWorkstreams: async () => [reviewRequired],
+      loadBridgeCommands: async () => [],
       publish,
     });
 
