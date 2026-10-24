@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 
 export const DEV_WAKE_DEFAULT_WORKER = "openclaw-travelintrips-dev" as const;
 export const DEV_WAKE_DELL_WORKER = "openclaw-dell-chatgpt-wake-dev" as const;
+export const DEV_WAKE_PCHP_WORKER = "openclaw-pchp-dev" as const;
 export const DEV_WAKE_PC2_WORKER = "openclaw-pc-worker-2" as const;
 export const DEV_WAKE_VMSC_WORKER = "openclaw-vmsc-chatgpt-wake-dev" as const;
-export type DevWakeWorker = typeof DEV_WAKE_DEFAULT_WORKER | typeof DEV_WAKE_DELL_WORKER | typeof DEV_WAKE_PC2_WORKER | typeof DEV_WAKE_VMSC_WORKER;
+export type DevWakeWorker = typeof DEV_WAKE_DEFAULT_WORKER | typeof DEV_WAKE_DELL_WORKER | typeof DEV_WAKE_PCHP_WORKER | typeof DEV_WAKE_PC2_WORKER | typeof DEV_WAKE_VMSC_WORKER;
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -61,7 +62,7 @@ function validTuple(value: Record<string, unknown>): boolean {
     /^GPT[0-9]{2,4}$/.test(value["accountAlias"]) && value["accountAlias"] !== "GPT01" &&
     typeof value["ownerChannel"] === "string" && OWNER.test(value["ownerChannel"]) &&
     typeof value["targetConversationId"] === "string" && UUID.test(value["targetConversationId"]) &&
-    (value["workerId"] === DEV_WAKE_DELL_WORKER || value["workerId"] === DEV_WAKE_DEFAULT_WORKER || value["workerId"] === DEV_WAKE_PC2_WORKER || value["workerId"] === DEV_WAKE_VMSC_WORKER) &&
+    (value["workerId"] === DEV_WAKE_DELL_WORKER || value["workerId"] === DEV_WAKE_DEFAULT_WORKER || value["workerId"] === DEV_WAKE_PCHP_WORKER || value["workerId"] === DEV_WAKE_PC2_WORKER || value["workerId"] === DEV_WAKE_VMSC_WORKER) &&
     typeof value["browserProfile"] === "string" && DEV_WAKE_BROWSER_PROFILE.test(value["browserProfile"]);
 }
 
