@@ -4,6 +4,7 @@ import { createAiTaskLedgerReconciler } from "../aiTaskLedgerReconciliationServi
 vi.mock("@workspace/db", () => ({
   aiCodingTasksTable: {},
   aiCodingWorkstreamsTable: {},
+  aiCodingBridgeCommandsTable: {},
   db: {},
 }));
 
@@ -83,6 +84,7 @@ describe("AI Task terminal reconciliation", () => {
       enabled: () => true,
       loadTasks,
       loadWorkstreams,
+      loadBridgeCommands: async () => [],
       publish,
     });
 
@@ -117,6 +119,7 @@ describe("AI Task terminal reconciliation", () => {
       now: () => clock,
       loadTasks: async () => [],
       loadWorkstreams: async () => [reviewRequired],
+      loadBridgeCommands: async () => [],
       publish,
     });
 
