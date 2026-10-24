@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
@@ -42,7 +43,21 @@ const MAX_PATCH_BYTES = 160_000;
 const MAX_CHANGED_FILES = 40;
 const GIT_TIMEOUT_MS = 30_000;
 
+import { logAudit } from "./aiAuditService.js";
+
 export class LocalDeterministicRecoveryError extends Error {
+  static async checkFileExists(filePath: string): Promise<boolean> {
+    return existsSync(filePath);
+  }
+
+  static async createFileIfNotExists(filePath: string, content: string): Promise<void> {
+    if (await this.checkFileExists(filePath)) {
+      logAudit("info", `File ${filePath} already exists, skipping creation`);
+      return;
+    }
+    await writeFile(filePath, content);
+  }
+
   constructor(
     message: string,
     readonly kind:
