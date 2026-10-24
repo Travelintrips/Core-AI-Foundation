@@ -4,6 +4,7 @@ import { db, aiSettingsTable } from "@workspace/db";
 import {
   DEV_WAKE_DELL_WORKER,
   DEV_WAKE_DEFAULT_WORKER,
+  DEV_WAKE_PCHP_WORKER,
   DEV_WAKE_PC2_WORKER,
   DEV_WAKE_VMSC_WORKER,
   isDevWakeRuntime,
@@ -49,7 +50,7 @@ router.post("/ai/core-chat/dev/accounts/stage", requireDevRuntime, requireAgentS
 
   try {
     const workerId = body["workerId"];
-    if (workerId !== undefined && workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER && workerId !== DEV_WAKE_PC2_WORKER && workerId !== DEV_WAKE_VMSC_WORKER) {
+    if (workerId !== undefined && workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER && workerId !== DEV_WAKE_PCHP_WORKER && workerId !== DEV_WAKE_PC2_WORKER && workerId !== DEV_WAKE_VMSC_WORKER) {
       res.status(400).json({ error: "DEV_CHATGPT_PROVISIONING_WORKER_INVALID" });
       return;
     }
@@ -68,7 +69,7 @@ router.post("/ai/core-chat/dev/accounts/stage", requireDevRuntime, requireAgentS
       targetConversationId: body["targetConversationId"],
       ...(typeof body["accountAlias"] === "string" ? { accountAlias: body["accountAlias"] } : {}),
       ...(typeof body["browserProfile"] === "string" ? { browserProfile: body["browserProfile"] } : {}),
-      ...(workerId === DEV_WAKE_DELL_WORKER || workerId === DEV_WAKE_DEFAULT_WORKER || workerId === DEV_WAKE_PC2_WORKER || workerId === DEV_WAKE_VMSC_WORKER ? { workerId } : {}),
+      ...(workerId === DEV_WAKE_DELL_WORKER || workerId === DEV_WAKE_DEFAULT_WORKER || workerId === DEV_WAKE_PCHP_WORKER || workerId === DEV_WAKE_PC2_WORKER || workerId === DEV_WAKE_VMSC_WORKER ? { workerId } : {}),
     }, existing?.value, runtime.legacyTargets);
 
     if (!staged.alreadyStaged) {
