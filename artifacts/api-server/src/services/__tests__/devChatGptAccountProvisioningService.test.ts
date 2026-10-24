@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { stageDevChatGptAccountBinding } from "../devChatGptAccountProvisioningService.js";
-import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER } from "../devChatGptWakeBindingService.js";
+import { activateDevChatGptSessionBinding } from "../devChatGptSessionActivationService.js";
+import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, parseDevWakeAccountBindings } from "../devChatGptWakeBindingService.js";
 
 const legacy = [{
   ownerChannel: "ai-engine-oauth:" + "1".repeat(64),
@@ -110,6 +111,49 @@ describe("devChatGptAccountProvisioningService", () => {
     expect(moved.bindingFingerprint).toBe(first.bindingFingerprint);
     expect(moved.enabled).toBe(false);
     expect(JSON.parse(moved.registryJson).bindings).toHaveLength(1);
+  });
+
+  it("preserves the active DELL session while activating the PCHP session for the same GPT02 account", () => {
+    const dell = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
+      targetConversationId: "22222222-2222-2222-2222-222222222222",
+      workerId: DEV_WAKE_DELL_WORKER, browserProfile: "travelincars-dev",
+    }, undefined, legacy);
+    const dellActive = activateDevChatGptSessionBinding({
+      rawRegistry: dell.registryJson, bindingFingerprint: dell.bindingFingerprint, legacyTargets: legacy,
+    });
+    const pchp = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02", ownerChannel: dell.ownerChannel,
+      targetConversationId: "33333333-3333-3333-3333-333333333333",
+      workerId: DEV_WAKE_PCHP_WORKER, browserProfile: "openclaw",
+    }, dellActive.registryJson, legacy);
+    expect(pchp.bindingFingerprint).not.toBe(dell.bindingFingerprint);
+    const staged = JSON.parse(pchp.registryJson).bindings;
+    expect(staged).toHaveLength(2);
+    expect(staged[0].enabled).toBe(true);
+    expect(staged[1].enabled).toBe(false);
+    expect(staged[0].workerId).toBe(DEV_WAKE_DELL_WORKER);
+    const both = activateDevChatGptSessionBinding({
+      rawRegistry: pchp.registryJson, bindingFingerprint: pchp.bindingFingerprint, legacyTargets: legacy,
+    });
+    const enabled = JSON.parse(both.registryJson).bindings;
+    expect(enabled).toHaveLength(2);
+    expect(enabled.every((row: { enabled: boolean }) => row.enabled)).toBe(true);
+    const resolved = parseDevWakeAccountBindings(both.registryJson, legacy);
+    expect(resolved.map((row) => row.workerId)).toEqual([DEV_WAKE_DELL_WORKER, DEV_WAKE_PCHP_WORKER]);
+  });
+
+  it("rejects a second account alias for the existing GPT02 owner", () => {
+    const dell = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
+      targetConversationId: "22222222-2222-2222-2222-222222222222",
+      workerId: DEV_WAKE_DELL_WORKER, browserProfile: "travelincars-dev",
+    }, undefined, legacy);
+    expect(() => stageDevChatGptAccountBinding({
+      accountAlias: "GPT03", ownerChannel: dell.ownerChannel,
+      targetConversationId: "33333333-3333-3333-3333-333333333333",
+      workerId: DEV_WAKE_PCHP_WORKER, browserProfile: "openclaw",
+    }, dell.registryJson, legacy)).toThrow("DEV_CHATGPT_BINDING_CONFLICT");
   });
 
   it("moves GPT02 to an isolated VMSC runtime without changing account identity", () => {
