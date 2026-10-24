@@ -54,7 +54,25 @@ describe("directChatGptAccountRouterService", () => {
     )).toBeNull();
   });
 
-  it("accepts travelincar typo as the travelincars target", () => {
+  it("accepts travelincar typo as the travelincars target", () => {  it("handles existing target file scenario", () => {
+    const mockFs = {
+      existsSync: vi.fn().mockReturnValue(true),
+      writeFileSync: vi.fn(),
+    };
+    vi.stubGlobal("fs", mockFs);
+
+    const targetPath = "/path/to/existing/file";
+    const instruction = "test instruction";
+
+    expect(() => {
+      dispatchDirectChatGptAccountWork(targetPath, instruction);
+    }).not.toThrow();
+
+    expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+    expect(mockFs.existsSync).toHaveBeenCalledWith(targetPath);
+  });
+
+
     expect(parseDirectChatGptAccountTarget("@pakai akun travelincar,ya")).toBe("travelincars");
     expect(parseDirectChatGptAccountRequest("@pakai akun travelincar,ya")).toBeNull();
   });
