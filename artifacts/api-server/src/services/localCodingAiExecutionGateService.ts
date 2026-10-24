@@ -48,7 +48,7 @@ import {
   validateAiProposalPolicy,
 } from "./localCodingAiProposalPolicyService.js";
 import {
-  applyAiProposalPatch,
+  applyAiProposalPatch, // Fixed exact replacement
   type AiPatchApplyResult,
 } from "./localCodingAiPatchApplierService.js";
 import {
