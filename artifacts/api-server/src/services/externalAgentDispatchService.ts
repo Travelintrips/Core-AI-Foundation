@@ -17,6 +17,7 @@ export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
 export const OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID = "openclaw-travelintrips-dev" as const;
 export const OPENCLAW_PC_DEV_CLIENT_ID = "openclaw-pc-worker-dev" as const;
+export const OPENCLAW_PCHP_DEV_CLIENT_ID = "openclaw-pchp-dev" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
 export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
 export const OPENCLAW_PC3_CLIENT_ID = "openclaw-pc-worker-3" as const;
@@ -28,6 +29,7 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_VPS_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_DEV_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PCHP_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
@@ -54,6 +56,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
   { clientId: "openclaw-pc-worker-dell-recovery", agent: /\b(?:openclaw-pc-worker-dell-recovery|dell-recovery)\b/i },
   { clientId: "openclaw-pc-worker-dell-verifier", agent: /\b(?:openclaw-pc-worker-dell-verifier|dell-verifier)\b/i },
+  { clientId: OPENCLAW_PCHP_DEV_CLIENT_ID, agent: /\bopenclaw-pchp-dev\b|\bpchp\b|\bpc[\s-]*hp\b/i },
   { clientId: OPENCLAW_PC_DEV_CLIENT_ID, agent: /\bopenclaw-pc-worker-dev\b|\bopen\s*claw[\s-]*pc[\s-]*dev\b|\b(?:dell|pc\s+dell)\b/i },
   { clientId: OPENCLAW_PC_CLIENT_ID, agent: /\bopen\s*claw[\s-]*(?:pc|windows)\b|\b(?:pc|windows)[\s-]*open\s*claw\b/i },
   { clientId: OPENCLAW_VPS_CLIENT_ID, agent: /\bopen\s*claw[\s-]*vps\b|\bvps[\s-]*open\s*claw\b/i },
