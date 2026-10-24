@@ -31,7 +31,7 @@ function requireSameOrigin(req: import("express").Request, res: import("express"
 }
 const credentialAdmin = [requireAuth, requireInternalRole("owner", "admin")];
 const CredentialCreate = z.object({
-  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-travelintrips-dev|openclaw-pc-worker-dell-(?:browser|recovery|verifier)|openclaw-vps-dev-consumer|openclaw-dell-chatgpt-wake-dev|openclaw-vmsc-chatgpt-wake-dev)$/).max(100),
+  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-travelintrips-dev|openclaw-pc-worker-dell-(?:browser|recovery|verifier)|openclaw-vps-dev-consumer|openclaw-dell-chatgpt-wake-dev|openclaw-vmsc-chatgpt-wake-dev|openclaw-pchp-dev)$/).max(100),
   scopes: z.array(z.enum(["agent:presence", "agent:work", "model:chat"])).min(1).max(3),
 }).strict();
 
@@ -45,7 +45,7 @@ router.get("/ai/agent-runtime/credentials", ...credentialAdmin, async (_req, res
     lastUsedAt: aiAgentServiceTokensTable.lastUsedAt,
   }).from(aiAgentServiceTokensTable).orderBy(desc(aiAgentServiceTokensTable.createdAt));
   res.setHeader("Cache-Control", "no-store");
-  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-") || row.name === "openclaw-vps-dev-consumer" || row.name === "openclaw-dell-chatgpt-wake-dev" || row.name === "openclaw-vmsc-chatgpt-wake-dev") });
+  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-") || row.name === "openclaw-vps-dev-consumer" || row.name === "openclaw-dell-chatgpt-wake-dev" || row.name === "openclaw-vmsc-chatgpt-wake-dev" || row.name === "openclaw-pchp-dev") });
 });
 
 router.post("/ai/agent-runtime/credentials", ...credentialAdmin, requireSameOrigin, async (req, res): Promise<void> => {
@@ -83,7 +83,7 @@ router.post("/ai/agent-runtime/credentials/:id/revoke", ...credentialAdmin, requ
   const id = z.string().uuid().safeParse(req.params["id"]);
   if (!id.success) { res.status(400).json({ error: "Invalid credential ID" }); return; }
   const [candidate] = await db.select({ name: aiAgentServiceTokensTable.name }).from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.id, id.data)).limit(1);
-  if (!(candidate?.name.startsWith("openclaw-pc-worker-") || candidate?.name === "openclaw-vps-dev-consumer" || candidate?.name === "openclaw-dell-chatgpt-wake-dev" || candidate?.name === "openclaw-vmsc-chatgpt-wake-dev")) { res.status(404).json({ error: "Worker credential not found" }); return; }
+  if (!(candidate?.name.startsWith("openclaw-pc-worker-") || candidate?.name === "openclaw-vps-dev-consumer" || candidate?.name === "openclaw-dell-chatgpt-wake-dev" || candidate?.name === "openclaw-vmsc-chatgpt-wake-dev" || candidate?.name === "openclaw-pchp-dev")) { res.status(404).json({ error: "Worker credential not found" }); return; }
   const [row] = await db.update(aiAgentServiceTokensTable)
     .set({ isActive: false, updatedAt: new Date() })
     .where(and(eq(aiAgentServiceTokensTable.id, id.data), eq(aiAgentServiceTokensTable.isActive, true)))

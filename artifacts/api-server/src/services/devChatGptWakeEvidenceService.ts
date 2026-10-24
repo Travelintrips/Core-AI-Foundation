@@ -9,7 +9,7 @@ export function devWakeAttestationExpected(metadata: unknown): Parameters<typeof
   if (!record(metadata)) return null;
   const worker = metadata["assignedClientId"];
   if (worker !== "openclaw-travelintrips-dev" && worker !== "openclaw-dell-chatgpt-wake-dev" &&
-      worker !== "openclaw-pc-worker-2" && worker !== "openclaw-vmsc-chatgpt-wake-dev") return null;
+      worker !== "openclaw-pchp-dev" && worker !== "openclaw-pc-worker-2" && worker !== "openclaw-vmsc-chatgpt-wake-dev") return null;
   const ownerChannel = metadata["conversationId"];
   const targetConversationId = metadata["targetConversationId"];
   const eventId = metadata["eventId"];

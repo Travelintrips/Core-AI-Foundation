@@ -67,7 +67,7 @@ export const EXTERNAL_AGENT_RULES = {
   "openclaw-pchp-dev": {
     source: "openclaw",
     role: "bounded_device_executor",
-    capabilities: ["tools:bounded", "device:hostname"],
+    capabilities: ["tools:bounded", "device:hostname", "chatgpt:wake"],
     permissions: {
       codingWorkspaceWrite: false,
       gitCommit: false,

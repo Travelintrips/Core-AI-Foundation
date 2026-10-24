@@ -1,6 +1,7 @@
 import {
   DEV_WAKE_DELL_WORKER,
   DEV_WAKE_DEFAULT_WORKER,
+  DEV_WAKE_PCHP_WORKER,
   DEV_WAKE_PC2_WORKER,
   DEV_WAKE_VMSC_WORKER,
   DEV_WAKE_BROWSER_PROFILE,
@@ -95,11 +96,11 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
   const existingByOwner = registry.bindings.find((row) => row.ownerChannel === ownerChannel);
   const accountAlias = normalizeAlias(input.accountAlias ?? existingByOwner?.accountAlias, registry);
   const workerId = input.workerId ?? existingByOwner?.workerId ?? DEV_WAKE_DELL_WORKER;
-  if (workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER && workerId !== DEV_WAKE_PC2_WORKER && workerId !== DEV_WAKE_VMSC_WORKER) {
+  if (workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER && workerId !== DEV_WAKE_PCHP_WORKER && workerId !== DEV_WAKE_PC2_WORKER && workerId !== DEV_WAKE_VMSC_WORKER) {
     throw new Error("DEV_CHATGPT_PROVISIONING_WORKER_INVALID");
   }
   const browserProfile = (input.browserProfile?.trim() || existingByOwner?.browserProfile || ("openclaw-" + accountAlias.toLowerCase()));
-  if (!DEV_WAKE_BROWSER_PROFILE.test(browserProfile) || browserProfile.toLowerCase() === "openclaw") {
+  if (!DEV_WAKE_BROWSER_PROFILE.test(browserProfile) || (browserProfile.toLowerCase() === "openclaw" && workerId !== DEV_WAKE_PCHP_WORKER)) {
     throw new Error("DEV_CHATGPT_PROVISIONING_PROFILE_INVALID");
   }
 
@@ -137,18 +138,21 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     browserProfile,
     enabled: false,
   };
+  // Re-provisioning the same target moves that session, preserving migration
+  // semantics. A different target gets its own disabled session without
+  // disabling the existing DELL account binding.
   const existingIdentityIndex = registry.bindings.findIndex((row) =>
-    row.accountAlias === accountAlias ||
-    row.ownerChannel === ownerChannel ||
-    row.targetConversationId === targetConversationId
+    row.targetConversationId === targetConversationId ||
+    (row.accountAlias === accountAlias && row.ownerChannel === ownerChannel &&
+      row.workerId === workerId && row.browserProfile === browserProfile)
   );
   const nextBindings = [...registry.bindings];
   if (existingIdentityIndex >= 0) nextBindings[existingIdentityIndex] = replacement;
   else nextBindings.push(replacement);
   const next: BindingRegistry = { version: 1, bindings: nextBindings };
 
-  // Reuse the canonical validator. Re-registering the same account replaces
-  // only its runtime worker/profile and requires a fresh activation proof.
+  // Every session is independently revalidated; a new target does not
+  // replace an already activated session for the same account.
   parseDevWakeAccountBindings(JSON.stringify(next), legacyTargets);
 
   const tuple = {
