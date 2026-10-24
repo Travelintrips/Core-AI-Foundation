@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stageDevChatGptAccountBinding } from "../devChatGptAccountProvisioningService.js";
-import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER } from "../devChatGptWakeBindingService.js";
+import { DEV_WAKE_DELL_WORKER, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER } from "../devChatGptWakeBindingService.js";
 
 const legacy = [{
   ownerChannel: "ai-engine-oauth:" + "1".repeat(64),
@@ -92,6 +92,24 @@ describe("devChatGptAccountProvisioningService", () => {
     expect(third.workerId).toBe(DEV_WAKE_PC2_WORKER);
     expect(JSON.parse(third.registryJson).bindings).toHaveLength(1);
     expect(third.bindingFingerprint).toBe(first.bindingFingerprint);
+  });
+
+  it("stages PCHP as a distinct worker with a dedicated browser profile without duplicating GPT02", () => {
+    const first = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "2".repeat(64),
+      targetConversationId: "22222222-2222-2222-2222-222222222222",
+      workerId: DEV_WAKE_DELL_WORKER, browserProfile: "travelincars-dev",
+    }, undefined, legacy);
+    const moved = stageDevChatGptAccountBinding({
+      accountAlias: "GPT02", ownerChannel: first.ownerChannel,
+      targetConversationId: first.targetConversationId,
+      workerId: DEV_WAKE_PCHP_WORKER, browserProfile: "pchp-dev-isolated",
+    }, first.registryJson, legacy);
+    expect(moved.workerId).toBe(DEV_WAKE_PCHP_WORKER);
+    expect(moved.browserProfile).toBe("pchp-dev-isolated");
+    expect(moved.bindingFingerprint).toBe(first.bindingFingerprint);
+    expect(moved.enabled).toBe(false);
+    expect(JSON.parse(moved.registryJson).bindings).toHaveLength(1);
   });
 
   it("moves GPT02 to an isolated VMSC runtime without changing account identity", () => {
