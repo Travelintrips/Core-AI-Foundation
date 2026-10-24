@@ -142,7 +142,9 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
   // semantics. A different target gets its own disabled session without
   // disabling the existing DELL account binding.
   const existingIdentityIndex = registry.bindings.findIndex((row) =>
-    row.targetConversationId === targetConversationId
+    row.targetConversationId === targetConversationId ||
+    (row.accountAlias === accountAlias && row.ownerChannel === ownerChannel &&
+      row.workerId === workerId && row.browserProfile === browserProfile)
   );
   const nextBindings = [...registry.bindings];
   if (existingIdentityIndex >= 0) nextBindings[existingIdentityIndex] = replacement;
