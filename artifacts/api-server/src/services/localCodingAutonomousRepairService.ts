@@ -37,6 +37,7 @@ import {
   retryFailedCodingWorkstream,
 } from "./localCodingMultiWorkerOrchestratorService.js";
 import { approveAndValidateLocalPatch } from "./localCodingPatchApprovalService.js";
+import { logError } from "./errorLoggingService.js";
 import { startSandboxVerification } from "./localCodingSandboxGateService.js";
 import { startDeterministicLocalRecovery } from "./localCodingDeterministicRecoveryService.js";
 import {

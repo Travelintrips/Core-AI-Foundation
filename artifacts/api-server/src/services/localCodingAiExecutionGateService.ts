@@ -43,6 +43,7 @@ import {
   type LocalCodingAiProposalV1,
 } from "./localCodingAiProposalContractService.js";
 import { localCodingAiProposalV1JsonSchema } from "./localCodingAiProposalJsonSchema.js";
+import { logError } from "./errorLoggingService.js";
 import {
   computeAiProposalRepositoryHash,
   validateAiProposalPolicy,
