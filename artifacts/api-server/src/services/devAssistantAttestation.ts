@@ -136,6 +136,7 @@ export function verifyDevAssistantAttestation(input: {
   const bound = input.expected.bindingFingerprint !== undefined;
   if (bound && input.expected.workerId !== "openclaw-dell-chatgpt-wake-dev" &&
       input.expected.workerId !== "openclaw-travelintrips-dev" &&
+      input.expected.workerId !== "openclaw-pchp-dev" &&
       input.expected.workerId !== "openclaw-pc-worker-2" &&
       input.expected.workerId !== "openclaw-vmsc-chatgpt-wake-dev") {
     return { verified: false, reason: "ATTESTATION_BOUND_WORKER_INVALID" };
