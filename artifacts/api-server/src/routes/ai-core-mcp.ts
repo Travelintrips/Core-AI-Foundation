@@ -1695,7 +1695,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
       const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
-      const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId);
+      const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
+        state: "UNAVAILABLE" as const,
+        renewalRequired: false,
+        expiresAt: null,
+        pendingCount: null,
+      }));
       let devEvents: unknown[] = [];
       if (identity.kind === "oauth" && devRelayEnabled()) {
         try {
