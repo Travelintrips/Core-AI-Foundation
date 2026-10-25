@@ -121,11 +121,35 @@ async function loadTerminalBridgeCommands(
     .orderBy(desc(aiCodingBridgeCommandsTable.createdAt), desc(aiCodingBridgeCommandsTable.id))
     .limit(PAGE_SIZE)
     .offset(offset);
-  return rows.map((row) => ({
-    ...row,
-    taskNumber: row.id.slice(0, 8),
-    sourceKind: "bridge-command" as const,
-  }));
+  return rows.map((row) => {
+    const metadata = row.metadataJson && typeof row.metadataJson === "object" &&
+      !Array.isArray(row.metadataJson)
+      ? row.metadataJson as Record<string, unknown> : {};
+    const value = metadata["operationalSop"];
+    const sop = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown> : {};
+    const sopSnapshot = typeof sop["version"] === "string" &&
+      typeof sop["title"] === "string" && Array.isArray(sop["steps"])
+      ? {
+          version: sop["version"].slice(0, 120),
+          title: sop["title"].slice(0, 300),
+          steps: sop["steps"].filter((s): s is string =>
+            typeof s === "string" && s.length <= 1500).slice(0, 5),
+        }
+      : undefined;
+    return {
+      id: row.id, status: row.status, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      taskNumber: row.id.slice(0, 8),
+      sourceKind: "bridge-command" as const,
+      timeline: {
+        commandId: row.id,
+        ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
+        ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),
+        ...(typeof metadata["assignedClientId"] === "string" ? { workerId: metadata["assignedClientId"].slice(0, 200) } : {}),
+        ...(sopSnapshot ? { sopSnapshot } : {}),
+      },
+    };
+  });
 }
 
 type RetryState = {
