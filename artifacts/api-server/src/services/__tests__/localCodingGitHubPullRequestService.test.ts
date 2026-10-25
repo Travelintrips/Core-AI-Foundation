@@ -34,6 +34,14 @@ function passingClient(options: {
     request: vi.fn(async (method, path, body) => {
       if (method === "GET" && path.includes("/branches/")) {
         return { commit: { sha: options.baseSha ?? baseSha } };
+      }      if (method === "GET" && path.includes("/branches/")) {
+        return { commit: { sha: options.baseSha ?? baseSha } };
+      }
+      if (method === "GET" && path.includes("/pulls/77/files")) {
+        return options.files ?? [
+          { filename: "src/a.ts", status: "added" },
+          { filename: "src/b.ts", status: "added" },
+        ];
       }
       if (method === "GET" && /\/pulls\/77$/.test(path)) {
         return {
