@@ -9,6 +9,7 @@ import {
   aiCodingTasksTable,
   aiCodingWorkstreamsTable,
   aiCodingBridgeCommandsTable,
+  aiCodingBridgeResponsesTable,
   db,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
