@@ -37,6 +37,19 @@ describe("coding control bridge lifecycle idempotency", () => {
   });
 });
 
+describe("claim lease fencing", () => {
+  it("rejects renewal and completion after a claim lease expires", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(new URL("../localCodingControlBridgeService.ts", import.meta.url), "utf8");
+    const renewal = source.slice(source.indexOf("export async function renewCodingBridgeCommandClaim"), source.indexOf("export function hasUnverifiedExternalBrowserCompletion"));
+    const completion = source.slice(source.indexOf("export async function completeCodingBridgeCommand"));
+    const expiryPredicate = "NULLIF(metadata_json ->> 'claimLeaseExpiresAt', '')::timestamptz > NOW()";
+    expect(renewal).toContain(expiryPredicate);
+    expect(completion).toContain(expiryPredicate);
+    expect(completion).toContain("metadata_json ->> 'claimToken' = ${input.claimToken}::text");
+  });
+});
+
 describe("coding control bridge contract", () => {
   it("exports durable command and response primitives", async () => {
     const bridge = await import("../localCodingControlBridgeService.js");
