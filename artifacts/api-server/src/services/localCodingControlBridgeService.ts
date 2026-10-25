@@ -662,6 +662,7 @@ export async function renewCodingBridgeCommandClaim(input: {
       AND status = 'PROCESSING'
       AND metadata_json ->> 'assignedClientId' = ${input.clientId}::text
       AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
+      AND NULLIF(metadata_json ->> 'claimLeaseExpiresAt', '')::timestamptz > NOW()
     RETURNING id
   `);
 
@@ -780,6 +781,7 @@ export async function completeCodingBridgeCommand(input: {
       AND status = 'PROCESSING'
       AND metadata_json ->> 'assignedClientId' = ${input.clientId}::text
       AND metadata_json ->> 'claimToken' = ${input.claimToken}::text
+      AND NULLIF(metadata_json ->> 'claimLeaseExpiresAt', '')::timestamptz > NOW()
     RETURNING id, task_id
   `);
 
