@@ -14,6 +14,13 @@ export interface AiTaskLedgerJobInput {
   externalId: string;
   title: string;
   sessionId?: string | null;
+  timeline?: {
+    jobId?: string;
+    commandId?: string;
+    correlationId?: string;
+    workerId?: string;
+    sopSnapshot?: { version: string; title: string; steps: string[] };
+  };
 }
 
 export interface AiTaskLedgerResult {
