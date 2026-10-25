@@ -100,6 +100,7 @@ export async function registerAiTaskLedgerJob(
         idempotencyKey: input.externalId,
         title: input.title,
         ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+        ...(input.timeline ? { metadata: input.timeline } : {}),
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
