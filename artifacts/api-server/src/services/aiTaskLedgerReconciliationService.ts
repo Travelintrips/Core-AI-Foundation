@@ -198,6 +198,11 @@ async function loadTerminalBridgeCommands(
           mcpReceiptPersisted: true,
           mcpAckAt: linked?.acknowledgedAt?.toISOString(),
         } : {}),
+        ...(verifiedFinalHandshake && linked?.acknowledgedAt instanceof Date ? {
+          finalE2eVerified: true as const,
+          finalE2eVerifiedAt: linked.acknowledgedAt.toISOString(),
+          finalE2eMethod: "AI_CORE_VERIFIED_MCP_HANDSHAKE_V1" as const,
+        } : {}),
         ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
         ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),
         ...(typeof metadata["assignedClientId"] === "string" ? { workerId: metadata["assignedClientId"].slice(0, 200) } : {}),
