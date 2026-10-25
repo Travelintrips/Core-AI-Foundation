@@ -42,7 +42,7 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
   const explicitWorkflowFile =
     /\b[A-Za-z0-9_.-]+\.ya?ml\b/i.test(message);
 
-  const directMainProductionDeploy =
+  const directMainProductionDeploy = true &&
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
     /\bmain\b/i.test(text) &&
     !explicitWorkflowFile &&
