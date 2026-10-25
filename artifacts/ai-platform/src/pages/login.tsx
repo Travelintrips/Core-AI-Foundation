@@ -129,7 +129,7 @@ export default function Login() {
               onClick={handlePasswordLogin} data-testid="button-password-login">
               {passwordSubmitting ? "Masuk..." : "Login dengan password"}
             </Button>
-            <p className="text-center text-xs text-muted-foreground">Link berlaku 10 menit. Password tidak diperlukan.</p>
+            <p className="text-center text-xs text-muted-foreground">Link berlaku 30 menit. Password tidak diperlukan.</p>
           </form>
         </CardContent>
       </Card>
