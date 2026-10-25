@@ -7,6 +7,7 @@ import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
+import { readCodingBridgeSubscriptionHealth } from "../services/codingBridgeSubscriptionDiagnostics.js";
 import {
   classifyAiCoreChatDispatch,
   isSafeDirectOpenClawPcCommand,
