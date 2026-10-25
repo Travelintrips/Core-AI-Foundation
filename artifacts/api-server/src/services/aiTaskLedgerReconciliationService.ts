@@ -13,6 +13,7 @@ import {
   db,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { verifyMcpHandshakeEvidenceRow } from "./localCodingControlBridgeService.js";
 import {
   ledgerBridgeEnabled,
   mirrorAiTaskLedgerSourceState,
@@ -110,6 +111,9 @@ async function loadTerminalBridgeCommands(
   const rows = await db.select({
     id: aiCodingBridgeCommandsTable.id,
     status: aiCodingBridgeCommandsTable.status,
+    source: aiCodingBridgeCommandsTable.source,
+    commandType: aiCodingBridgeCommandsTable.commandType,
+    receivedAt: aiCodingBridgeCommandsTable.receivedAt,
     metadataJson: aiCodingBridgeCommandsTable.metadataJson,
     createdAt: aiCodingBridgeCommandsTable.createdAt,
     updatedAt: aiCodingBridgeCommandsTable.updatedAt,
@@ -127,6 +131,8 @@ async function loadTerminalBridgeCommands(
     commandId: aiCodingBridgeResponsesTable.commandId,
     kind: aiCodingBridgeResponsesTable.kind,
     acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
+    metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    createdAt: aiCodingBridgeResponsesTable.createdAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
     .limit(400) : [];
@@ -152,6 +158,22 @@ async function loadTerminalBridgeCommands(
       metadata["deliveryCode"] === "DELIVERY_CONFIRMED" &&
       typeof metadata["conversationId"] === "string" &&
       metadata["conversationId"] === metadata["mcpAckConversationId"];
+    const verifiedFinalHandshake = Boolean(
+      mcpReceiptPersisted &&
+      row.source === "ai-core" &&
+      row.commandType === "EXTERNAL_AGENT_WORK" &&
+      typeof metadata["conversationId"] === "string" &&
+      linked &&
+      verifyMcpHandshakeEvidenceRow(metadata["conversationId"] as string, {
+        commandId: row.id,
+        commandReceivedAt: row.receivedAt,
+        commandMetadata: metadata,
+        responseId: linked.id,
+        responseMetadata: linked.metadataJson,
+        responseCreatedAt: linked.createdAt,
+        acknowledgedAt: linked.acknowledgedAt,
+      })
+    );
     const value = metadata["operationalSop"];
     const sop = value && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown> : {};
@@ -175,6 +197,11 @@ async function loadTerminalBridgeCommands(
         ...(mcpReceiptPersisted ? {
           mcpReceiptPersisted: true,
           mcpAckAt: linked?.acknowledgedAt?.toISOString(),
+        } : {}),
+        ...(verifiedFinalHandshake && linked?.acknowledgedAt instanceof Date ? {
+          finalE2eVerified: true as const,
+          finalE2eVerifiedAt: linked.acknowledgedAt.toISOString(),
+          finalE2eMethod: "AI_CORE_VERIFIED_MCP_HANDSHAKE_V1" as const,
         } : {}),
         ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
         ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),

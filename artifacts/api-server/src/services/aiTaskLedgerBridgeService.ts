@@ -24,6 +24,10 @@ export interface AiTaskLedgerJobInput {
     /** Verified only from a matching, acknowledged source response; not browser E2E. */
     mcpReceiptPersisted?: boolean;
     mcpAckAt?: string;
+    /** Set only after AI Core's original Ed25519 browser/MCP handshake verifier passes. */
+    finalE2eVerified?: true;
+    finalE2eVerifiedAt?: string;
+    finalE2eMethod?: "AI_CORE_VERIFIED_MCP_HANDSHAKE_V1";
     sopSnapshot?: { version: string; title: string; steps: string[] };
   };
 }
