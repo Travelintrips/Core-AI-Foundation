@@ -47,10 +47,13 @@ export async function resolveVerifiedDevWakeTarget(
       (expectedOwnerChannel === undefined || value.ownerChannel === expectedOwnerChannel) &&
       (expectedWorkerId === undefined || value.workerId === expectedWorkerId));
     if (!candidates.length) {
-      if (expectedOwnerChannel !== undefined && config.bindings.some(value => value.accountAlias === alias)) {
+      if (expectedOwnerChannel !== undefined && !config.bindings.some(value =>
+        value.accountAlias === alias && value.ownerChannel === expectedOwnerChannel)) {
         throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
       }
-      if (expectedWorkerId !== undefined && config.bindings.some(value => value.accountAlias === alias)) {
+      if (expectedWorkerId !== undefined && config.bindings.some(value =>
+        value.accountAlias === alias &&
+        (expectedOwnerChannel === undefined || value.ownerChannel === expectedOwnerChannel))) {
         throw new Error("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
       }
       throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
