@@ -141,6 +141,17 @@ async function loadTerminalBridgeCommands(
     const metadata = row.metadataJson && typeof row.metadataJson === "object" &&
       !Array.isArray(row.metadataJson)
       ? row.metadataJson as Record<string, unknown> : {};
+    // This is an MCP delivery receipt only. It does not verify browser or E2E success.
+    // Require the exact response ID, durable acknowledgement, owner channel and
+    // a completed command before exposing this evidence to AI Task.
+    const linked = typeof metadata["mcpAckResponseId"] === "string"
+      ? responsesById.get(metadata["mcpAckResponseId"]) : undefined;
+    const mcpReceiptPersisted = row.status === "COMPLETED" &&
+      linked?.commandId === row.id && linked.acknowledgedAt instanceof Date &&
+      metadata["e2eCode"] === "MCP_ACK_VERIFIED" &&
+      metadata["deliveryCode"] === "DELIVERY_CONFIRMED" &&
+      typeof metadata["conversationId"] === "string" &&
+      metadata["conversationId"] === metadata["mcpAckConversationId"];
     const value = metadata["operationalSop"];
     const sop = value && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown> : {};
