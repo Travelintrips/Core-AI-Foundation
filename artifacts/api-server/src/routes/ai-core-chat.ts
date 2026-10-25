@@ -1,4 +1,5 @@
 import { renderAiCoreBlockerSop } from "../services/aiCoreOperationalSop.js";
+import { readHandshakeSopSettings } from "../services/handshakeSopSettingsService.js";
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
@@ -1305,11 +1306,12 @@ async function openAiFirstReadOnlyIntent(
   // An explicitly requested blocker-recovery SOP is deterministic operational guidance,
   // not an LLM classification. Never use this shortcut for arbitrary prompts.
   if (/^\/sop[ \t]+blocker(?:[ \t]+(?:resource-first|human-last))?[.!?]?[ \t]*$/i.test(trimmed)) {
+    const configured = await readHandshakeSopSettings();
     return {
       kind: "answer", route: "DETERMINISTIC_BLOCKER_SOP", provider: null, model: null,
       workload: "REVIEW", costClass: "ZERO",
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, estimatedCostUsd: 0,
-      reply: renderAiCoreBlockerSop(),
+      reply: renderAiCoreBlockerSop(configured.operationalSop),
     };
   }
   if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;

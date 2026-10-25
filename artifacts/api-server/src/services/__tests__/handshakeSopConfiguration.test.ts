@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { renderAiCoreBlockerSop } from "../aiCoreOperationalSop.js";
 import {
   DEFAULT_SOP, parseEditableSop, parseRecoveryPolicy, parseReplyTemplates,
   renderReplyTemplate, parseSettingJson,
@@ -42,6 +43,14 @@ describe("Handshake SOP dashboard configuration", () => {
     expect(parseRecoveryPolicy({ ...policy, maxRetries: 11 })).toBeNull();
     expect(parseRecoveryPolicy({ ...policy, heartbeatGraceMinutes: 0 })).toBeNull();
     expect(parseRecoveryPolicy({ ...policy, requireAcknowledgement: "false" })).toBeNull();
+  });
+  it("renders dashboard-edited SOP in AI Core Chat without changing constraints", () => {
+    const edited = parseEditableSop({ title: "SOP terkonfigurasi", steps: [...DEFAULT_SOP.steps] });
+    expect(edited).not.toBeNull();
+    const output = renderAiCoreBlockerSop(edited!);
+    expect(output).toContain("SOP terkonfigurasi:");
+    expect(output).toContain("1. Catat blocker, correlation ID");
+    expect(output).toContain("SOP ini hanya respons baca-saja");
   });
   it("fails closed for broken setting JSON", () => {
     expect(parseSettingJson("{broken")).toBeNull();
