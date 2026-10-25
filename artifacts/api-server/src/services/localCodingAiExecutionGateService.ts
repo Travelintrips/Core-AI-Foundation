@@ -49,7 +49,7 @@ import {
 } from "./localCodingAiProposalPolicyService.js";
 import {
   applyAiProposalPatch,
-  type AiPatchApplyResult,
+  type AiPatchApplication,yResult,
 } from "./localCodingAiPatchApplierService.js";
 import {
   buildLocalCodingAiPrompt,
