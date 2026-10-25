@@ -122,6 +122,18 @@ async function loadTerminalBridgeCommands(
     .orderBy(desc(aiCodingBridgeCommandsTable.createdAt), desc(aiCodingBridgeCommandsTable.id))
     .limit(PAGE_SIZE)
     .offset(offset);
+  const responses = rows.length ? await db.select({
+    commandId: aiCodingBridgeResponsesTable.commandId,
+    kind: aiCodingBridgeResponsesTable.kind,
+  }).from(aiCodingBridgeResponsesTable)
+    .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
+    .limit(400) : [];
+  const observed = new Map<string, Set<string>>();
+  for (const response of responses) {
+    const kinds = observed.get(response.commandId) ?? new Set<string>();
+    kinds.add(response.kind);
+    observed.set(response.commandId, kinds);
+  }
   return rows.map((row) => {
     const metadata = row.metadataJson && typeof row.metadataJson === "object" &&
       !Array.isArray(row.metadataJson)
