@@ -158,6 +158,22 @@ async function loadTerminalBridgeCommands(
       metadata["deliveryCode"] === "DELIVERY_CONFIRMED" &&
       typeof metadata["conversationId"] === "string" &&
       metadata["conversationId"] === metadata["mcpAckConversationId"];
+    const verifiedFinalHandshake = Boolean(
+      mcpReceiptPersisted &&
+      row.source === "ai-core" &&
+      row.commandType === "EXTERNAL_AGENT_WORK" &&
+      typeof metadata["conversationId"] === "string" &&
+      linked &&
+      verifyMcpHandshakeEvidenceRow(metadata["conversationId"] as string, {
+        commandId: row.id,
+        commandReceivedAt: row.receivedAt,
+        commandMetadata: metadata,
+        responseId: linked.id,
+        responseMetadata: linked.metadataJson,
+        responseCreatedAt: linked.createdAt,
+        acknowledgedAt: linked.acknowledgedAt,
+      })
+    );
     const value = metadata["operationalSop"];
     const sop = value && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown> : {};
