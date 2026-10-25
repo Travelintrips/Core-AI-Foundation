@@ -179,7 +179,7 @@ export async function mirrorAiTaskLedgerSourceState(input: AiTaskLedgerJobInput 
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ eventId, status: input.status }),
+      body: JSON.stringify({ eventId, status: input.status, ...(input.timeline ? { metadata: input.timeline } : {}) }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (response.status !== 200 && response.status !== 202) {
