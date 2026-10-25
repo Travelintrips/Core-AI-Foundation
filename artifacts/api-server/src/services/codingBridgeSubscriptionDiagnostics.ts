@@ -16,13 +16,13 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
   const { lease, backlog } = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${conversationId}, true)`);
     const [lease, backlog] = await Promise.all([
-    db.execute(sql`
+    tx.execute(sql`
       SELECT lease_expires_at, metadata_json ->> 'unsubscribedAt' AS unsubscribed_at
       FROM ai_platform.ai_coding_bridge_presence
       WHERE client_id = ${"chatgpt:" + conversationId}::text
       LIMIT 1
     `),
-    db.execute(sql`
+    tx.execute(sql`
       SELECT count(*)::integer AS pending
       FROM ai_platform.ai_coding_bridge_responses response
       JOIN ai_platform.ai_coding_bridge_commands command ON command.id = response.command_id
