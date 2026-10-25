@@ -9,6 +9,7 @@ import {
   aiCodingTasksTable,
   aiCodingWorkstreamsTable,
   aiCodingBridgeCommandsTable,
+  aiCodingBridgeResponsesTable,
   db,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
@@ -35,6 +36,7 @@ export interface TerminalLedgerSourceRow {
   createdAt: Date;
   updatedAt: Date;
   sourceKind?: TerminalLedgerSourceKind;
+  timeline?: import("./aiTaskLedgerBridgeService.js").AiTaskLedgerJobInput["timeline"];
   sessionId?: string | null;
 }
 
@@ -108,6 +110,7 @@ async function loadTerminalBridgeCommands(
   const rows = await db.select({
     id: aiCodingBridgeCommandsTable.id,
     status: aiCodingBridgeCommandsTable.status,
+    metadataJson: aiCodingBridgeCommandsTable.metadataJson,
     createdAt: aiCodingBridgeCommandsTable.createdAt,
     updatedAt: aiCodingBridgeCommandsTable.updatedAt,
   })
@@ -119,11 +122,49 @@ async function loadTerminalBridgeCommands(
     .orderBy(desc(aiCodingBridgeCommandsTable.createdAt), desc(aiCodingBridgeCommandsTable.id))
     .limit(PAGE_SIZE)
     .offset(offset);
-  return rows.map((row) => ({
-    ...row,
-    taskNumber: row.id.slice(0, 8),
-    sourceKind: "bridge-command" as const,
-  }));
+  const responses = rows.length ? await db.select({
+    commandId: aiCodingBridgeResponsesTable.commandId,
+    kind: aiCodingBridgeResponsesTable.kind,
+  }).from(aiCodingBridgeResponsesTable)
+    .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
+    .limit(400) : [];
+  const observed = new Map<string, Set<string>>();
+  for (const response of responses) {
+    const kinds = observed.get(response.commandId) ?? new Set<string>();
+    kinds.add(response.kind);
+    observed.set(response.commandId, kinds);
+  }
+  return rows.map((row) => {
+    const metadata = row.metadataJson && typeof row.metadataJson === "object" &&
+      !Array.isArray(row.metadataJson)
+      ? row.metadataJson as Record<string, unknown> : {};
+    const value = metadata["operationalSop"];
+    const sop = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown> : {};
+    const sopSnapshot = typeof sop["version"] === "string" &&
+      typeof sop["title"] === "string" && Array.isArray(sop["steps"])
+      ? {
+          version: sop["version"].slice(0, 120),
+          title: sop["title"].slice(0, 300),
+          steps: sop["steps"].filter((s): s is string =>
+            typeof s === "string" && s.length <= 1500).slice(0, 5),
+        }
+      : undefined;
+    return {
+      id: row.id, status: row.status, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      taskNumber: row.id.slice(0, 8),
+      sourceKind: "bridge-command" as const,
+      timeline: {
+        commandId: row.id,
+        ackReceived: observed.get(row.id)?.has("ACK") === true,
+        callbackObserved: observed.get(row.id)?.has("COMPLETED") === true || observed.get(row.id)?.has("FAILED") === true,
+        ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
+        ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),
+        ...(typeof metadata["assignedClientId"] === "string" ? { workerId: metadata["assignedClientId"].slice(0, 200) } : {}),
+        ...(sopSnapshot ? { sopSnapshot } : {}),
+      },
+    };
+  });
 }
 
 type RetryState = {
@@ -222,6 +263,7 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
                 ? { sessionId: row.sessionId }
                 : {}),
               status: row.status,
+              ...(row.timeline ? { timeline: row.timeline } : {}),
               // Stable across retries and restarts; the receiver verifies
               // the canonical record before accepting any state transition.
               version: row.status === "REVIEW_REQUIRED" ? "review-required" : "terminal",
