@@ -156,6 +156,8 @@ async function loadTerminalBridgeCommands(
       sourceKind: "bridge-command" as const,
       timeline: {
         commandId: row.id,
+        ackReceived: observed.get(row.id)?.has("ACK") === true,
+        callbackObserved: observed.get(row.id)?.has("COMPLETED") === true || observed.get(row.id)?.has("FAILED") === true,
         ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
         ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),
         ...(typeof metadata["assignedClientId"] === "string" ? { workerId: metadata["assignedClientId"].slice(0, 200) } : {}),
