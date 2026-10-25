@@ -352,14 +352,14 @@ function AgentCredentialsPanel() {
     <Card>
       <CardHeader><CardTitle>Agent Credentials</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">Issue a scoped credential for PC Worker DEV, Travelintrips DEV, PC Worker 3, the isolated VPS DEV consumer, or the DELL ChatGPT wake worker. Secrets are displayed only once; store in approved secret management.</p>
-        <div className="flex flex-wrap gap-2">
+        <p className="text-sm text-muted-foreground">Issue a scoped credential for PCHP DEV, PC Worker DEV, Travelintrips DEV, PC Worker 3, the isolated VPS DEV consumer, or the DELL ChatGPT wake worker. Secrets are displayed only once; store in approved secret management.</p>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3 [&>button]:h-auto [&>button]:min-h-12 [&>button]:w-full [&>button]:whitespace-normal [&>button]:px-4 [&>button]:py-3 [&>button]:text-center [&>button]:text-sm">
+          <Button className="col-span-full" onClick={() => void issue("openclaw-pchp-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pchp-dev" && item.isActive)}>Issue PCHP Wake DEV (encrypted)</Button>
           <Button onClick={() => void issue("openclaw-pc-worker-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-dev" && item.isActive)}>Issue PC DEV credential</Button>
           <Button onClick={() => void issue("openclaw-travelintrips-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-travelintrips-dev" && item.isActive)}>Issue Travelintrips DEV credential</Button>
           <Button onClick={() => void issue("openclaw-pc-worker-3")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
           <Button onClick={() => void issue("openclaw-vps-dev-consumer")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-vps-dev-consumer" && item.isActive)}>Issue VPS DEV credential</Button>
           <Button onClick={() => void issue("openclaw-dell-chatgpt-wake-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-dell-chatgpt-wake-dev" && item.isActive)}>Issue DELL Wake DEV credential</Button>
-          <Button onClick={() => void issue("openclaw-pchp-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pchp-dev" && item.isActive)}>Issue PCHP Wake DEV (encrypted)</Button>
           <Button variant="outline" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh credentials"}</Button>
         </div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
