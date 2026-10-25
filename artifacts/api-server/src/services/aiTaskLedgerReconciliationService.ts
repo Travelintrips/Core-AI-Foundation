@@ -123,12 +123,15 @@ async function loadTerminalBridgeCommands(
     .limit(PAGE_SIZE)
     .offset(offset);
   const responses = rows.length ? await db.select({
+    id: aiCodingBridgeResponsesTable.id,
     commandId: aiCodingBridgeResponsesTable.commandId,
     kind: aiCodingBridgeResponsesTable.kind,
+    acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
     .limit(400) : [];
   const observed = new Map<string, Set<string>>();
+  const responsesById = new Map(responses.map(response => [response.id, response]));
   for (const response of responses) {
     const kinds = observed.get(response.commandId) ?? new Set<string>();
     kinds.add(response.kind);
@@ -138,6 +141,17 @@ async function loadTerminalBridgeCommands(
     const metadata = row.metadataJson && typeof row.metadataJson === "object" &&
       !Array.isArray(row.metadataJson)
       ? row.metadataJson as Record<string, unknown> : {};
+    // This is an MCP delivery receipt only. It does not verify browser or E2E success.
+    // Require the exact response ID, durable acknowledgement, owner channel and
+    // a completed command before exposing this evidence to AI Task.
+    const linked = typeof metadata["mcpAckResponseId"] === "string"
+      ? responsesById.get(metadata["mcpAckResponseId"]) : undefined;
+    const mcpReceiptPersisted = row.status === "COMPLETED" &&
+      linked?.commandId === row.id && linked.acknowledgedAt instanceof Date &&
+      metadata["e2eCode"] === "MCP_ACK_VERIFIED" &&
+      metadata["deliveryCode"] === "DELIVERY_CONFIRMED" &&
+      typeof metadata["conversationId"] === "string" &&
+      metadata["conversationId"] === metadata["mcpAckConversationId"];
     const value = metadata["operationalSop"];
     const sop = value && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown> : {};
@@ -158,6 +172,10 @@ async function loadTerminalBridgeCommands(
         commandId: row.id,
         ackReceived: observed.get(row.id)?.has("ACK") === true,
         callbackObserved: observed.get(row.id)?.has("COMPLETED") === true || observed.get(row.id)?.has("FAILED") === true,
+        ...(mcpReceiptPersisted ? {
+          mcpReceiptPersisted: true,
+          mcpAckAt: linked?.acknowledgedAt?.toISOString(),
+        } : {}),
         ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
         ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),
         ...(typeof metadata["assignedClientId"] === "string" ? { workerId: metadata["assignedClientId"].slice(0, 200) } : {}),

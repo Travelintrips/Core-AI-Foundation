@@ -21,6 +21,9 @@ export interface AiTaskLedgerJobInput {
     workerId?: string;
     ackReceived?: boolean;
     callbackObserved?: boolean;
+    /** Verified only from a matching, acknowledged source response; not browser E2E. */
+    mcpReceiptPersisted?: boolean;
+    mcpAckAt?: string;
     sopSnapshot?: { version: string; title: string; steps: string[] };
   };
 }
