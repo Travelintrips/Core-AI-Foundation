@@ -109,6 +109,7 @@ async function loadTerminalBridgeCommands(
   const rows = await db.select({
     id: aiCodingBridgeCommandsTable.id,
     status: aiCodingBridgeCommandsTable.status,
+    metadataJson: aiCodingBridgeCommandsTable.metadataJson,
     createdAt: aiCodingBridgeCommandsTable.createdAt,
     updatedAt: aiCodingBridgeCommandsTable.updatedAt,
   })
