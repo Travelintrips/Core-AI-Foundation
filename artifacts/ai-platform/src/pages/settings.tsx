@@ -296,6 +296,12 @@ function AgentCredentialsPanel() {
   const [issued, setIssued] = useState("");
   // Retain only the encrypted ciphertext in this page session for a direct user-initiated retry.
   const [encryptedPchpDownload, setEncryptedPchpDownload] = useState("");
+  const [pchpTest, setPchpTest] = useState<{
+    commandId: string; correlationId: string; clientId: string; status: string;
+    callbackReceived: boolean; assistantReplyVerified: boolean;
+  } | null>(null);
+  const [pchpTestError, setPchpTestError] = useState("");
+  const [pchpTestBusy, setPchpTestBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -345,6 +351,81 @@ function AgentCredentialsPanel() {
       await refresh();
     } catch (err) { setError(String(err)); } finally { setLoading(false); }
   }
+  async function startPchpSopTest() {
+    if (pchpTestBusy || pchpTest) return;
+    setPchpTestBusy(true);
+    setPchpTestError("");
+    try {
+      if (window.location.hostname !== "dev.cstlogistic.co.id") throw new Error("Uji hanya tersedia di AI Core DEV");
+      const correlationId = "ai-task:HS_PCHP_20261025:5:" + crypto.randomUUID().replaceAll("-", "");
+      const response = await fetch("/api/ai/coding/bridge/ai-task-chatgpt-dispatch", {
+        method: "POST", credentials: "same-origin", headers, cache: "no-store",
+        body: JSON.stringify({
+          accountAlias: "GPT02",
+          targetWorkerId: "openclaw-pchp-dev",
+          jobAlias: "HS_PCHP_20261025",
+          correlationId,
+          instruction: "Uji Handshake SOP HS-PCHP-20261025 melalui AI Core DEV dan OpenClaw PCHP. Balas pada percakapan GPT02 dengan SOP_PCHP_E2E_ACK_20261025 dan satu kalimat SOP Resource-First, Human-Last. Jangan mengubah data, konfigurasi, atau melakukan deployment.",
+        }),
+      });
+      const body: unknown = await response.json().catch(() => null);
+      const reply = body && typeof body === "object" ? body as Record<string, unknown> : {};
+      if (!response.ok) throw new Error("Pengiriman uji gagal (HTTP " + response.status + "): " + String(reply.error ?? "Unknown error"));
+      if (reply.clientId !== "openclaw-pchp-dev" || typeof reply.commandId !== "string" ||
+          reply.correlationId !== correlationId) throw new Error("Worker PCHP tidak terkonfirmasi; uji tidak boleh dinyatakan PASS");
+      setPchpTest({
+        commandId: reply.commandId, correlationId, clientId: reply.clientId,
+        status: "QUEUED", callbackReceived: false, assistantReplyVerified: false,
+      });
+    } catch (err) {
+      setPchpTestError(String(err));
+    } finally {
+      setPchpTestBusy(false);
+    }
+  }
+  async function checkPchpSopTest() {
+    if (!pchpTest || pchpTestBusy) return;
+    setPchpTestBusy(true);
+    setPchpTestError("");
+    try {
+      const query = new URLSearchParams({
+        commandId: pchpTest.commandId, correlationId: pchpTest.correlationId,
+      });
+      const response = await fetch("/api/ai/coding/bridge/ai-task-chatgpt-timeline?" + query, {
+        credentials: "same-origin", headers, cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Pemeriksaan callback gagal (HTTP " + response.status + ")");
+      const body: unknown = await response.json();
+      if (!body || typeof body !== "object") throw new Error("Respons timeline tidak valid");
+      const timeline = body as Record<string, unknown>;
+      const metadata = timeline.commandMetadata as Record<string, unknown> | null;
+      if (timeline.commandId !== pchpTest.commandId || metadata?.assignedClientId !== "openclaw-pchp-dev" ||
+          metadata?.targetConversationId !== "6ada4099-af8c-83ec-9fed-8626d3ac9617") {
+        throw new Error("Binding percakapan atau worker tidak cocok; verifikasi ditolak");
+      }
+      const responses = Array.isArray(timeline.responses) ? timeline.responses : [];
+      const completed = responses.filter((r: unknown) =>
+        r && typeof r === "object" && (r as Record<string, unknown>).kind === "COMPLETED"
+      );
+      const attested = completed.some((r: unknown) => {
+        const item = r as Record<string, unknown>;
+        const evidence = item.metadata as Record<string, unknown> | null;
+        return evidence?.chatgptSubmitted === true &&
+          evidence?.verifiedAssistantReply === true &&
+          typeof item.message === "string" && item.message.includes("SOP_PCHP_E2E_ACK_20261025");
+      });
+      setPchpTest({
+        ...pchpTest,
+        status: typeof timeline.status === "string" ? timeline.status : "UNKNOWN",
+        callbackReceived: completed.length > 0,
+        assistantReplyVerified: attested,
+      });
+    } catch (err) {
+      setPchpTestError(String(err));
+    } finally {
+      setPchpTestBusy(false);
+    }
+  }
   async function revoke(id: string) {
     if (!window.confirm("Revoke this worker credential? Running workers using it will disconnect.")) return;
     setLoading(true); setError(""); setIssued(""); setEncryptedPchpDownload("");
@@ -360,6 +441,29 @@ function AgentCredentialsPanel() {
     <Card>
       <CardHeader><CardTitle>Agent Credentials</CardTitle></CardHeader>
       <CardContent className="space-y-3">
+        <div className="space-y-3 rounded-md border p-4">
+          <p className="text-sm font-semibold">Uji Handshake SOP PCHP — tanpa Console</p>
+          <p className="text-sm text-muted-foreground">
+            Uji satu kali dari sesi admin ini. Target dikunci ke OpenClaw PCHP dan percakapan GPT02 DEV;
+            hasil antrean saja bukan bukti balasan ChatGPT.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => void startPchpSopTest()} disabled={pchpTestBusy || !!pchpTest}>
+              {pchpTestBusy && !pchpTest ? "Mengirim uji…" : "Jalankan Uji SOP PCHP"}
+            </Button>
+            {pchpTest && <Button type="button" variant="outline" onClick={() => void checkPchpSopTest()} disabled={pchpTestBusy}>
+              {pchpTestBusy ? "Memeriksa…" : "Periksa balasan SOP"}
+            </Button>}
+          </div>
+          {pchpTest && <div role="status" className="space-y-1 text-sm">
+            <p>Worker: <strong>{pchpTest.clientId}</strong></p>
+            <p>Command ID: <span className="break-all">{pchpTest.commandId}</span></p>
+            <p>Status pekerjaan: {pchpTest.status}</p>
+            <p>Callback tersimpan: {pchpTest.callbackReceived ? "Ya" : "Belum diverifikasi"}</p>
+            <p>Balasan ChatGPT terverifikasi: <strong>{pchpTest.assistantReplyVerified ? "PASS" : "BELUM PASS"}</strong></p>
+          </div>}
+          {pchpTestError && <p role="alert" className="text-sm text-destructive">{pchpTestError}</p>}
+        </div>
         <p className="text-sm text-muted-foreground">Issue a scoped credential for PCHP DEV, PC Worker DEV, Travelintrips DEV, PC Worker 3, the isolated VPS DEV consumer, or the DELL ChatGPT wake worker. Secrets are displayed only once; store in approved secret management.</p>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3 [&>button]:h-auto [&>button]:min-h-12 [&>button]:w-full [&>button]:whitespace-normal [&>button]:px-4 [&>button]:py-3 [&>button]:text-center [&>button]:text-sm">
           <Button className="col-span-full" onClick={() => void issue("openclaw-pchp-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pchp-dev" && item.isActive)}>Issue PCHP Wake DEV (encrypted)</Button>
