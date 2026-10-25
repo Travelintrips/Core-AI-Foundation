@@ -63,6 +63,20 @@ describe("MCP command two-way routing", () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
+  it("provides a correlatable server handshake receipt without claiming ChatGPT session or event ACK", async () => {
+    const response = await callTool("handshake_ai_core", {});
+    const body = response.body.result.structuredContent;
+    expect(response.body.result.isError).toBeFalsy();
+    expect(body.authenticated).toBe(true);
+    expect(body.handshakeId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(body.handshakeAck).toEqual({
+      received: true, handshakeId: body.handshakeId, source: "ai_core_mcp_server",
+    });
+    expect(body.chatSessionId).toBeNull();
+    expect(body.chatSessionIdVerified).toBe(false);
+    expect(body.conversationAckVerified).toBe(false);
+  });
+
   it("answers MCP discovery from the live tool registry without falling through to chat or database routing", async () => {
     const response = await callTool("query_ai_core", {
       message: "cek discovery MCP AI Core yang aktif saat ini. Sebutkan jumlah tool dan nama semua tool yang terhubung",
@@ -90,6 +104,32 @@ describe("MCP command two-way routing", () => {
       events: ["ai_core.task.terminal"],
     });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not report a verified conversation from an unverified subscription", async () => {
+    const response = await callTool("subscribe_ai_core_events", { conversationId: "conversation-a" });
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      subscribed: true,
+      conversationId: "conversation-a",
+      chatSessionIdVerified: false,
+      conversationAckVerified: false,
+      bindingStatus: "UNVERIFIED_CLIENT_SUPPLIED_CONVERSATION_ID",
+    });
+  });
+
+  it("does not silently create a subscription when reading events", async () => {
+    mocks.list.mockResolvedValueOnce([]);
+    const response = await callTool("read_ai_core_events", { conversationId: "conversation-a" });
+    expect(response.body.result.isError).toBeFalsy();
+    expect(response.body.result.structuredContent).toMatchObject({
+      conversationId: "conversation-a",
+      events: [],
+    });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+    expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: "conversation-a",
+    }));
   });
 
   it("refuses event ACK without a matching conversation and passes scoped IDs to storage", async () => {
@@ -250,18 +290,14 @@ describe("MCP command two-way routing", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("renews the long conversation lease whenever events are read", async () => {
+  it("reads events without renewing or creating a subscription", async () => {
     const response = await callTool("read_ai_core_events", {
       conversationId: "conversation-a",
       limit: 25,
     });
 
     expect(response.body.result.isError).toBeFalsy();
-    expect(mocks.subscribe).toHaveBeenCalledWith({
-      conversationId: "conversation-a",
-      eventTypes: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
-      leaseSeconds: 86_400,
-    });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
     expect(mocks.list).toHaveBeenCalledWith({
       conversationId: "conversation-a",
       limit: 25,
@@ -303,4 +339,40 @@ describe("MCP command two-way routing", () => {
     expect(response.body.result.structuredContent).toMatchObject({ reply: "OK", eventDeliveryError: expect.any(String) });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it("isolates OAuth event subscriptions and reads to a server-derived user/client channel", async () => {
+    const { verifyMcpAccessToken } = await import("../services/aiCoreMcpOAuthService.js");
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "user-1" }, scopes: new Set(["ai_core.events"]), clientId: "chatgpt-client-1",
+    } as never);
+    const invoke = (name: string, args: Record<string, unknown>) => {
+      const app = express(); app.use(express.json()); app.use("/api", router);
+      return request(app).post("/api/ai/core-chat/mcp").set("Authorization", "Bearer oauth-unit-token")
+        .send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+    };
+    const subscribed = await invoke("subscribe_ai_core_events", { conversationId: "client-injected" });
+    const channel = subscribed.body.result.structuredContent.conversationId;
+    expect(channel).toMatch(/^ai-engine-oauth:[a-f0-9]{64}$/);
+    expect(channel).not.toBe("client-injected");
+    expect(subscribed.body.result.structuredContent.bindingStatus).toBe("OAUTH_PRINCIPAL_CLIENT_CHANNEL");
+    expect(subscribed.body.result.structuredContent.chatSessionIdVerified).toBe(false);
+    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
+    // OAuth command auto-subscription and job forwarding must use the SAME server channel.
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "user-1" }, scopes: new Set(["ai_core.events", "ai_core.command"]), clientId: "chatgpt-client-1",
+    } as never);
+    await invoke("send_ai_core_command", { conversationId: "arbitrary-input", message: "Uji koneksi MCP", confirmed: true });
+    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toMatchObject({ conversationId: channel });
+    await invoke("read_ai_core_events", { conversationId: "other-user-channel" });
+    expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
+    const responseId = "11111111-1111-4111-8111-111111111111";
+    await invoke("ack_ai_core_event", { conversationId: "other-user-channel", responseId });
+    expect(mocks.ack).toHaveBeenCalledWith({ conversationId: channel, responseId });
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "user-2" }, scopes: new Set(["ai_core.events"]), clientId: "chatgpt-client-1",
+    } as never);
+    const other = await invoke("subscribe_ai_core_events", { conversationId: "client-injected" });
+    expect(other.body.result.structuredContent.conversationId).not.toBe(channel);
+  });
+
 });
