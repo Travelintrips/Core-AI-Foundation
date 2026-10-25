@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { normalizePayment } from "../localCodingEngineService.js";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,6 +17,16 @@ import {
 } from "../localCodingEngineService.js";
 
 const workspaces: string[] = [];
+describe("normalizePayment", () => {
+  it("should normalize payment amount", () => {
+    expect(normalizePayment(100)).toBe(100);
+  });
+
+  it("should handle edge cases", () => {
+    expect(normalizePayment(0)).toBe(0);
+    expect(normalizePayment(-100)).toBe(-100);
+  });
+});
 
 async function createWorkspace(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "local-coding-engine-test-"));
