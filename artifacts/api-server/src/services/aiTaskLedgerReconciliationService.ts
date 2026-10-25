@@ -174,7 +174,7 @@ async function loadTerminalBridgeCommands(
         callbackObserved: observed.get(row.id)?.has("COMPLETED") === true || observed.get(row.id)?.has("FAILED") === true,
         ...(mcpReceiptPersisted ? {
           mcpReceiptPersisted: true,
-          mcpAckAt: linked.acknowledgedAt.toISOString(),
+          mcpAckAt: linked?.acknowledgedAt?.toISOString(),
         } : {}),
         ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
         ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),
