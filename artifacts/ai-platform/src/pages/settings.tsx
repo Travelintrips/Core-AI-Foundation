@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import HandshakeSopSettings from "@/components/HandshakeSopSettings";
 import { useListSettings } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -407,6 +408,7 @@ export default function Settings() {
       {/* Provider Health Alert config */}
       <AgentCredentialsPanel />
       <DevPingTestPanel />
+      <HandshakeSopSettings />
       <ProviderAlertSettings />
 
       <div className="space-y-8">

@@ -18,10 +18,10 @@ export const AI_CORE_BLOCKER_SOP = Object.freeze({
   ] as const,
   canonicalCommand: "/sop blocker",
 });
-export function renderAiCoreBlockerSop(): string {
+export function renderAiCoreBlockerSop(sop: { title: string; steps: readonly string[] } = AI_CORE_BLOCKER_SOP): string {
   return [
-    AI_CORE_BLOCKER_SOP.title + ":",
-    ...AI_CORE_BLOCKER_SOP.steps.map((step, index) => String(index + 1) + ". " + step),
+    sop.title + ":",
+    ...sop.steps.map((step, index) => String(index + 1) + ". " + step),
     "SOP ini hanya respons baca-saja; tidak membuat job, tidak membuktikan delivery ke sesi ChatGPT, dan tidak memberikan persetujuan baru.",
   ].join("\n");
 }

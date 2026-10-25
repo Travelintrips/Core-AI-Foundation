@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
 import { maskSecretValue, isSecretKey } from "../services/aiSecretService.js";
+import { SOP_CONTENT_KEY, SOP_REPLY_KEY, SOP_POLICY_KEY, parseEditableSop, parseReplyTemplates, parseRecoveryPolicy, parseSettingJson } from "../services/handshakeSopConfiguration.js";
 
 const router = Router();
 
@@ -67,6 +68,17 @@ router.put("/ai/settings/:key", async (req, res): Promise<void> => {
   // Settings should only store env-var references like "OPENAI_API_KEY", not the raw key.
   const { key } = params.data;
   const { value, isSecret } = parsed.data;
+  // Validate persisted SOP settings even if callers skip the dashboard.
+  if ([SOP_CONTENT_KEY, SOP_REPLY_KEY, SOP_POLICY_KEY].includes(key)) {
+    const decoded = parseSettingJson(value);
+    const valid = key === SOP_CONTENT_KEY ? parseEditableSop(decoded)
+      : key === SOP_REPLY_KEY ? parseReplyTemplates(decoded)
+      : parseRecoveryPolicy(decoded);
+    if (valid === null || isSecret) {
+      res.status(400).json({ error: "Invalid Handshake SOP configuration" });
+      return;
+    }
+  }
   if ((isSecret || isSecretKey(key)) && value && value.length > 80) {
     res.status(400).json({
       error:
