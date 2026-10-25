@@ -12,7 +12,10 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
     return { state: "NOT_SUBSCRIBED" as const, renewalRequired: true, expiresAt: null, pendingCount: 0 };
   }
   await ensureCodingControlBridgeTables();
-  const [lease, backlog] = await Promise.all([
+  // Preserve the same owner-bound RLS context as read_ai_core_events.
+  const { lease, backlog } = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${conversationId}, true)`);
+    const [lease, backlog] = await Promise.all([
     db.execute(sql`
       SELECT lease_expires_at, metadata_json ->> 'unsubscribedAt' AS unsubscribed_at
       FROM ai_platform.ai_coding_bridge_presence
@@ -26,7 +29,9 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
       WHERE command.metadata_json ->> 'conversationId' = ${conversationId}::text
         AND response.acknowledged_at IS NULL
     `),
-  ]);
+    ]);
+    return { lease, backlog };
+  });
   const row = lease.rows?.[0];
   const state = classifySubscriptionLease({
     leaseExpiresAt: row?.["lease_expires_at"] as Date | string | null | undefined,
