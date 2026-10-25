@@ -35,6 +35,7 @@ export interface TerminalLedgerSourceRow {
   createdAt: Date;
   updatedAt: Date;
   sourceKind?: TerminalLedgerSourceKind;
+  timeline?: import("./aiTaskLedgerBridgeService.js").AiTaskLedgerJobInput["timeline"];
   sessionId?: string | null;
 }
 
