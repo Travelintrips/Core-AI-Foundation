@@ -13,6 +13,7 @@ import {
   db,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { verifyMcpHandshakeEvidenceRow } from "./localCodingControlBridgeService.js";
 import {
   ledgerBridgeEnabled,
   mirrorAiTaskLedgerSourceState,
