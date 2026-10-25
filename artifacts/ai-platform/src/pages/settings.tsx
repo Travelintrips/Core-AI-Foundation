@@ -294,6 +294,8 @@ function DevPingTestPanel() {
 function AgentCredentialsPanel() {
   const [items, setItems] = useState<Array<{ id: string; name: string; scopes: string[]; isActive: boolean }>>([]);
   const [issued, setIssued] = useState("");
+  // Retain only the encrypted ciphertext in this page session for a direct user-initiated retry.
+  const [encryptedPchpDownload, setEncryptedPchpDownload] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -319,7 +321,7 @@ function AgentCredentialsPanel() {
     }
   }
   async function issue(name: "openclaw-pc-worker-3" | "openclaw-pc-worker-dev" | "openclaw-travelintrips-dev" | "openclaw-vps-dev-consumer" | "openclaw-dell-chatgpt-wake-dev" | "openclaw-pchp-dev") {
-    setLoading(true); setError(""); setIssued("");
+    setLoading(true); setError(""); setIssued(""); setEncryptedPchpDownload("");
     try {
       // Validate encrypted delivery BEFORE issuing a one-time worker secret.
       if (name === "openclaw-pchp-dev") await preflightPchpEncryption();
@@ -331,7 +333,12 @@ function AgentCredentialsPanel() {
       const body = await response.json();
       if (name === "openclaw-pchp-dev") {
         const encrypted = await encryptPchpWorkerToken(body.token);
-        downloadEncryptedPchpCredential(encrypted);
+        setEncryptedPchpDownload(encrypted);
+        // Best-effort automatic download; browser may block downloads after an async request.
+        // The manual button below uses a fresh user gesture, without exposing plaintext.
+        try { downloadEncryptedPchpCredential(encrypted); } catch {
+          setError("Automatic PCHP download was blocked. Use the manual encrypted download button below.");
+        }
       } else {
         setIssued(body.token);
       }
@@ -340,7 +347,7 @@ function AgentCredentialsPanel() {
   }
   async function revoke(id: string) {
     if (!window.confirm("Revoke this worker credential? Running workers using it will disconnect.")) return;
-    setLoading(true); setError(""); setIssued("");
+    setLoading(true); setError(""); setIssued(""); setEncryptedPchpDownload("");
     try {
       const response = await fetch("/api/ai/agent-runtime/credentials/" + encodeURIComponent(id) + "/revoke", {
         method: "POST", headers, credentials: "same-origin",
@@ -363,6 +370,12 @@ function AgentCredentialsPanel() {
           <Button onClick={() => void issue("openclaw-dell-chatgpt-wake-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-dell-chatgpt-wake-dev" && item.isActive)}>Issue DELL Wake DEV credential</Button>
           <Button variant="outline" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh credentials"}</Button>
         </div>
+        {encryptedPchpDownload && (
+          <div role="status" className="space-y-2 rounded-md border p-3">
+            <p className="text-sm">PCHP DEV credential issued and encrypted. The plaintext is intentionally not shown. If the automatic download did not appear, download the encrypted file directly here before leaving this page.</p>
+            <Button type="button" variant="outline" onClick={() => downloadEncryptedPchpCredential(encryptedPchpDownload)}>Download PCHP encrypted credential (.b64)</Button>
+          </div>
+        )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {lastRefresh && !error && <p role="status" className="text-sm text-muted-foreground">Credentials refreshed at {lastRefresh}. {items.length} credential(s) found.</p>}
         {issued && <div className="space-y-2"><Label htmlFor="issued-worker-token">One-time token (store securely; do not send via chat)</Label><Input id="issued-worker-token" value={issued} readOnly autoComplete="off" /><Button variant="outline" onClick={() => setIssued("")}>Hide token</Button></div>}
