@@ -353,7 +353,7 @@ function AgentCredentialsPanel() {
       <CardHeader><CardTitle>Agent Credentials</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">Issue a scoped credential for PC Worker DEV, Travelintrips DEV, PC Worker 3, the isolated VPS DEV consumer, or the DELL ChatGPT wake worker. Secrets are displayed only once; store in approved secret management.</p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={() => void issue("openclaw-pc-worker-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-dev" && item.isActive)}>Issue PC DEV credential</Button>
           <Button onClick={() => void issue("openclaw-travelintrips-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-travelintrips-dev" && item.isActive)}>Issue Travelintrips DEV credential</Button>
           <Button onClick={() => void issue("openclaw-pc-worker-3")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
