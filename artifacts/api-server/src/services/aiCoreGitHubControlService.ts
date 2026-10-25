@@ -26,8 +26,20 @@ function normalize(message: string): string {
   return message.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
-  const text = normalize(message);
+import { logAudit } from "./aiAuditService.js";
+import { createGitHubApiClient, parseGitHubRepository } from "./localCodingGitHubPublisherService.js";
+
+export async function detectAiCoreGitHubOperation(message: string): Promise<AiCoreGitHubOperation | null> {
+  const text = normalize(message);  if (!text) return null;
+
+  try {
+    const githubOperation = await logAudit("github_operation", { message });
+    if (githubOperation) return githubOperation;
+  } catch (error) {
+    console.error("Failed to log GitHub operation", error);
+  }
+
+
   if (!text) return null;
 
   const hostingerNodeDeploy =
