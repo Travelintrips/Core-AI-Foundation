@@ -23,6 +23,7 @@ export async function resolveVerifiedDevWakeTarget(
   accountAlias: string,
   requestHost?: string,
   expectedOwnerChannel?: string,
+  expectedWorkerId?: string,
 ): Promise<DevWakeTarget> {
   if (!isDevWakeRuntime(requestHost)) throw new Error("DEV_CHATGPT_DEV_HOST_REQUIRED");
   const config = await loadDevWakeRuntimeConfig(requestHost);
@@ -39,14 +40,18 @@ export async function resolveVerifiedDevWakeTarget(
 
   let target: DevWakeTarget | null = null;
   if (alias === "GPT01") {
-    target = legacyTarget ?? null;
+    target = legacyTarget && (expectedWorkerId === undefined || legacyTarget.workerId === expectedWorkerId) ? legacyTarget : null;
   } else {
     const candidates = config.bindings.filter(value =>
       value.accountAlias === alias &&
-      (expectedOwnerChannel === undefined || value.ownerChannel === expectedOwnerChannel));
+      (expectedOwnerChannel === undefined || value.ownerChannel === expectedOwnerChannel) &&
+      (expectedWorkerId === undefined || value.workerId === expectedWorkerId));
     if (!candidates.length) {
       if (expectedOwnerChannel !== undefined && config.bindings.some(value => value.accountAlias === alias)) {
         throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
+      }
+      if (expectedWorkerId !== undefined && config.bindings.some(value => value.accountAlias === alias)) {
+        throw new Error("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
       }
       throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
     }
