@@ -131,6 +131,7 @@ async function loadTerminalBridgeCommands(
     .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
     .limit(400) : [];
   const observed = new Map<string, Set<string>>();
+  const responsesById = new Map(responses.map(response => [response.id, response]));
   for (const response of responses) {
     const kinds = observed.get(response.commandId) ?? new Set<string>();
     kinds.add(response.kind);
