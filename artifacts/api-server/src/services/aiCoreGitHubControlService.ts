@@ -27,6 +27,11 @@ function normalize(message: string): string {
 }
 
 export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
+
+// Investigate the cause of the workflow failure in the production environment.
+// Identify the specific error or issue that led to the failure and document the findings.
+// This investigation is necessary to ensure the stability and reliability of the production environment.
+
   const text = normalize(message);
   if (!text) return null;
 
