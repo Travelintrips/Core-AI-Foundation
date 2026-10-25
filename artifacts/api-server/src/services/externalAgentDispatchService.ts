@@ -231,7 +231,9 @@ export async function dispatchExternalAgentWork(input: {
     resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
     resolvedClientId === "openclaw-dell-chatgpt-wake-dev" ||
     resolvedClientId === OPENCLAW_PC2_CLIENT_ID ||
-    resolvedClientId === OPENCLAW_VMSC_CHATGPT_CLIENT_ID;
+    resolvedClientId === OPENCLAW_VMSC_CHATGPT_CLIENT_ID ||
+    // PCHP also runs bounded tools: make it a dedicated browser worker only for signed DEV wake.
+    (resolvedClientId === OPENCLAW_PCHP_DEV_CLIENT_ID && isDevChatGptWake);
   if (isDedicatedDevWakeWorker &&
       (!isDevChatGptWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||

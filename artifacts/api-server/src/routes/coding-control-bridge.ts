@@ -149,6 +149,7 @@ router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{
 router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<void>=>{
  const p=z.object({
   accountAlias:z.string().regex(/^GPT[0-9]{2,4}$/),
+  targetWorkerId:z.enum(["openclaw-pchp-dev", "openclaw-dell-chatgpt-wake-dev"]).optional(),
   instruction:z.string().trim().min(1).max(2000),
   jobAlias:z.string().trim().regex(/^[A-Za-z0-9_-]{1,80}$/).optional(),
   correlationId:z.string().regex(/^ai-task:[A-Za-z0-9_-]{1,100}:[1-9][0-9]*:[A-Za-z0-9_-]{8,80}$/)
@@ -162,6 +163,7 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
    p.data.accountAlias,
    req.hostname,
    expectedOwnerChannel,
+   p.data.targetWorkerId,
   );
   const eventId=randomBytes(32).toString("hex");
   const queued=await queueDevBrowserWake({
