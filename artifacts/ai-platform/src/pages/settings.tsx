@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { preflightPchpEncryption, encryptPchpWorkerToken, downloadEncryptedPchpCredential } from "@/lib/pchp-token-transport";
 
 const ADMIN_KEY = import.meta.env["VITE_ADMIN_API_KEY"] as string | undefined;
 
@@ -316,16 +317,23 @@ function AgentCredentialsPanel() {
       setRefreshing(false);
     }
   }
-  async function issue(name: "openclaw-pc-worker-3" | "openclaw-pc-worker-dev" | "openclaw-travelintrips-dev" | "openclaw-vps-dev-consumer" | "openclaw-dell-chatgpt-wake-dev") {
+  async function issue(name: "openclaw-pc-worker-3" | "openclaw-pc-worker-dev" | "openclaw-travelintrips-dev" | "openclaw-vps-dev-consumer" | "openclaw-dell-chatgpt-wake-dev" | "openclaw-pchp-dev") {
     setLoading(true); setError(""); setIssued("");
     try {
+      // Validate encrypted delivery BEFORE issuing a one-time worker secret.
+      if (name === "openclaw-pchp-dev") await preflightPchpEncryption();
       const response = await fetch("/api/ai/agent-runtime/credentials", {
         method: "POST", headers, credentials: "same-origin",
-        body: JSON.stringify({ name, scopes: (name === "openclaw-vps-dev-consumer" || name === "openclaw-pc-worker-dev" || name === "openclaw-travelintrips-dev") ? ["agent:presence", "agent:work"] : ["agent:presence", "agent:work", "model:chat"] }),
+        body: JSON.stringify({ name, scopes: (name === "openclaw-vps-dev-consumer" || name === "openclaw-pc-worker-dev" || name === "openclaw-travelintrips-dev" || name === "openclaw-pchp-dev") ? ["agent:presence", "agent:work"] : ["agent:presence", "agent:work", "model:chat"] }),
       });
       if (!response.ok) throw new Error("Issuing credential failed (" + response.status + ")");
       const body = await response.json();
-      setIssued(body.token);
+      if (name === "openclaw-pchp-dev") {
+        const encrypted = await encryptPchpWorkerToken(body.token);
+        downloadEncryptedPchpCredential(encrypted);
+      } else {
+        setIssued(body.token);
+      }
       await refresh();
     } catch (err) { setError(String(err)); } finally { setLoading(false); }
   }
@@ -351,6 +359,7 @@ function AgentCredentialsPanel() {
           <Button onClick={() => void issue("openclaw-pc-worker-3")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
           <Button onClick={() => void issue("openclaw-vps-dev-consumer")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-vps-dev-consumer" && item.isActive)}>Issue VPS DEV credential</Button>
           <Button onClick={() => void issue("openclaw-dell-chatgpt-wake-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-dell-chatgpt-wake-dev" && item.isActive)}>Issue DELL Wake DEV credential</Button>
+          <Button onClick={() => void issue("openclaw-pchp-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pchp-dev" && item.isActive)}>Issue PCHP Wake DEV (encrypted)</Button>
           <Button variant="outline" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh credentials"}</Button>
         </div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
