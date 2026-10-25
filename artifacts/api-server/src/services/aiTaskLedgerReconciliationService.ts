@@ -248,6 +248,7 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
                 ? { sessionId: row.sessionId }
                 : {}),
               status: row.status,
+              ...(row.timeline ? { timeline: row.timeline } : {}),
               // Stable across retries and restarts; the receiver verifies
               // the canonical record before accepting any state transition.
               version: row.status === "REVIEW_REQUIRED" ? "review-required" : "terminal",
