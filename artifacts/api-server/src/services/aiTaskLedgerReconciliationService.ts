@@ -111,6 +111,9 @@ async function loadTerminalBridgeCommands(
   const rows = await db.select({
     id: aiCodingBridgeCommandsTable.id,
     status: aiCodingBridgeCommandsTable.status,
+    source: aiCodingBridgeCommandsTable.source,
+    commandType: aiCodingBridgeCommandsTable.commandType,
+    receivedAt: aiCodingBridgeCommandsTable.receivedAt,
     metadataJson: aiCodingBridgeCommandsTable.metadataJson,
     createdAt: aiCodingBridgeCommandsTable.createdAt,
     updatedAt: aiCodingBridgeCommandsTable.updatedAt,
@@ -128,6 +131,8 @@ async function loadTerminalBridgeCommands(
     commandId: aiCodingBridgeResponsesTable.commandId,
     kind: aiCodingBridgeResponsesTable.kind,
     acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
+    metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    createdAt: aiCodingBridgeResponsesTable.createdAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
     .limit(400) : [];
