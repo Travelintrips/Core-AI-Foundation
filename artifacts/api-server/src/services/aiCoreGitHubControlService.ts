@@ -3,6 +3,7 @@ import {
   createGitHubApiClient,
   parseGitHubRepository,
 } from "./localCodingGitHubPublisherService.js";
+import { getAiCoreCapabilityRegistrySnapshot } from "./aiCoreCapabilityRegistryService.js";
 
 export type AiCoreGitHubOperation =
   | "GITHUB_WORKFLOW_STATUS"
