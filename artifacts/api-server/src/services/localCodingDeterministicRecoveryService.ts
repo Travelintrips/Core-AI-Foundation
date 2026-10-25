@@ -42,6 +42,12 @@ const MAX_PATCH_BYTES = 160_000;
 const MAX_CHANGED_FILES = 40;
 const GIT_TIMEOUT_MS = 30_000;
 
+const MAX_RECOVERY_OPERATIONS = 8;
+const MAX_RECOVERY_ATTEMPTS = 2;
+const MAX_PATCH_BYTES = 160_000;
+const MAX_CHANGED_FILES = 40;
+const GIT_TIMEOUT_MS = 30_000;
+
 export class LocalDeterministicRecoveryError extends Error {
   constructor(
     message: string,
