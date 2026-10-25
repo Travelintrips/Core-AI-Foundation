@@ -15,6 +15,8 @@ import {
 import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
+import { readHandshakeSopSettings } from "./handshakeSopSettingsService.js";
+import { renderReplyTemplate } from "./handshakeSopConfiguration.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
@@ -197,8 +199,12 @@ export async function submitCodingBridgeCommand(input: {
     return { command: existing, created: false };
   }
 
+  const { operationalSop, operationalSopSource, replyTemplates } =
+    await readHandshakeSopSettings();
   const metadataJson = {
     ...(input.metadata ?? {}),
+    operationalSop,
+    operationalSopSource,
     ...(input.assignedClientId
       ? { assignedClientId: input.assignedClientId }
       : {}),
@@ -224,9 +230,13 @@ export async function submitCodingBridgeCommand(input: {
     commandId: command.id,
     taskId: command.taskId,
     kind: "ACK",
-    message: input.assignedClientId
+    message: renderReplyTemplate(replyTemplates,
+      input.assignedClientId ? "JOB_QUEUED" : "JOB_RECEIVED", {
+        job_id: String(command.id), status: String(command.status),
+        worker: input.assignedClientId ?? "AI Core",
+      }) ?? (input.assignedClientId
       ? `Command queued for ${input.assignedClientId} by AI Core.`
-      : "Command received by AI Core.",
+      : "Command received by AI Core."),
     checkpointJson: { status: command.status },
   });
 
