@@ -123,8 +123,10 @@ async function loadTerminalBridgeCommands(
     .limit(PAGE_SIZE)
     .offset(offset);
   const responses = rows.length ? await db.select({
+    id: aiCodingBridgeResponsesTable.id,
     commandId: aiCodingBridgeResponsesTable.commandId,
     kind: aiCodingBridgeResponsesTable.kind,
+    acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
     .limit(400) : [];
