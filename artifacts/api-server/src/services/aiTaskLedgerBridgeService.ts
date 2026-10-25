@@ -19,6 +19,8 @@ export interface AiTaskLedgerJobInput {
     commandId?: string;
     correlationId?: string;
     workerId?: string;
+    ackReceived?: boolean;
+    callbackObserved?: boolean;
     sopSnapshot?: { version: string; title: string; steps: string[] };
   };
 }
