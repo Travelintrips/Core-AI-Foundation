@@ -7,6 +7,7 @@ import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
+import { readCodingBridgeSubscriptionHealth } from "../services/codingBridgeSubscriptionDiagnostics.js";
 import {
   classifyAiCoreChatDispatch,
   isSafeDirectOpenClawPcCommand,
@@ -1694,6 +1695,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
       const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
+      const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
+        state: "UNAVAILABLE" as const,
+        renewalRequired: false,
+        expiresAt: null,
+        pendingCount: null,
+      }));
       let devEvents: unknown[] = [];
       if (identity.kind === "oauth" && devRelayEnabled()) {
         try {
@@ -1706,6 +1713,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId).catch(() => null);
       payload = {
         conversationId: parsed.conversationId,
+        subscription,
+        ...(subscription.renewalRequired ? { advisory: "SUBSCRIPTION_EXPIRED_OR_INACTIVE: authenticate via MCP and explicitly call subscribe_ai_core_events; pending events are preserved. Reading does not renew a lease or authorize an ACK." } : {}),
         handshakeEvidence,
         events: [...rows
           .map((row) => ({
