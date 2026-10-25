@@ -373,6 +373,25 @@ describe("new account dispatch uses the shared exact binding", () => {
     });
   });
 
+  it("selects the explicitly requested PCHP worker without silently preferring another GPT02 session", async () => {
+    const pchp = { ...account, workerId: "openclaw-pchp-dev",
+      targetConversationId: "33333333-3333-4333-8333-333333333333", browserProfile: "openclaw" };
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({
+      version: 1, bindings: [account, pchp],
+    }));
+    mocks.registry.mockResolvedValue([
+      { clientId: account.workerId, eligible: true, reportedHealth: "healthy", availableSlots: 3, activeJobs: 0 },
+      { clientId: pchp.workerId, eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+    ]);
+    const exact = await resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel, "openclaw-pchp-dev");
+    expect(exact).toMatchObject({workerId:"openclaw-pchp-dev",targetConversationId:pchp.targetConversationId,
+      wakeBinding: expect.objectContaining({browserProfile:"openclaw",workerId:"openclaw-pchp-dev"})});
+    await expect(resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel, "openclaw-pc-worker-22"))
+      .rejects.toThrow("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
+    const automatic = await resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel);
+    expect(automatic.workerId).toBe(account.workerId);
+  });
+
   it("uses the exact account binding directly and rejects another OAuth owner without MCP evidence", async () => {
     configure();
     await queueDevBrowserWake(newInput);
