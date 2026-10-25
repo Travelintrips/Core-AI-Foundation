@@ -44,7 +44,7 @@ import {
   assertApprovedAiHandoffFresh,
   LocalAiHandoffError,
   revokeAiHandoff,
-  startAiHandoffPreparation,
+  startAiHandofffPreparation,
 } from "./localCodingAiHandoffService.js";
 import { enqueueCodingAiExecution } from "./localCodingAiQueueRuntimeService.js";
 import { enqueueCodingMultiTaskPlanner } from "./localCodingPlannerQueueRuntimeService.js";
