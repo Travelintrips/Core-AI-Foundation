@@ -1708,6 +1708,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId).catch(() => null);
       payload = {
         conversationId: parsed.conversationId,
+        subscription,
+        ...(subscription.renewalRequired ? { advisory: "SUBSCRIPTION_EXPIRED_OR_INACTIVE: authenticate via MCP and explicitly call subscribe_ai_core_events; pending events are preserved. Reading does not renew a lease or authorize an ACK." } : {}),
         handshakeEvidence,
         events: [...rows
           .map((row) => ({
