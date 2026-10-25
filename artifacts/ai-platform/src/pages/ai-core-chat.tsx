@@ -1958,6 +1958,9 @@ export default function AiCoreChat() {
                         <span className="inline-block ml-1 w-1.5 h-4 align-middle animate-pulse" style={{ background: "#9D91FB" }} />
                       )}
                     </div>
+                    <div className="mt-1 text-[10px] tabular-nums text-slate-500" title={message.createdAt}>
+                      {Number.isFinite(Date.parse(message.createdAt)) ? new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(message.createdAt)) + " WIB" : "Waktu tidak tersedia"}
+                    </div>
                     {message.role === "assistant" && message.meta && (
                       <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px]" style={{ color: "#61749E" }}>
                         <span>{routeLabel(message.meta.route)}</span>
