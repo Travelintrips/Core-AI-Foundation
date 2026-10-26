@@ -45,6 +45,7 @@ import {
   LocalCodingAiExecutionGateError,
   validateAndApplyAiProposal,
 } from "./localCodingAiExecutionGateService.js";
+import { LocalCodingWorkstreamAiHandoffError } from "./localCodingWorkstreamAiHandoffService.js";
 import { resolvePreferredCodingModel } from "./localCodingAiPreferredModelService.js";
 import { buildLocalCodingAiPrompt } from "./localCodingAiPromptBuilderService.js";
 import { computeAiHandoffPackageHash } from "./localCodingAiProposalPolicyService.js";
