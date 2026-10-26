@@ -26,11 +26,17 @@ function normalize(message: string): string {
   return message.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+import { logger } from "../lib/logger.js";
+
 export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
+  logger.info(`Detecting GitHub operation for message: ${message}`);
+
   const text = normalize(message);
   if (!text) return null;
 
   const hostingerNodeDeploy =
+  logger.debug(`Hostinger node deploy detected: ${hostingerNodeDeploy}`);
+
     /\bhostinger\b/i.test(text) &&
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
     !/\b(?:docker|compose|container)\b/i.test(text) &&
@@ -43,6 +49,8 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
     /\b[A-Za-z0-9_.-]+\.ya?ml\b/i.test(message);
 
   const directMainProductionDeploy =
+  logger.debug(`Direct main production deploy detected: ${directMainProductionDeploy}`);
+
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
     /\bmain\b/i.test(text) &&
     !explicitWorkflowFile &&
