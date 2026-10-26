@@ -51,7 +51,8 @@ export class LocalDeterministicRecoveryError extends Error {
       | "STALE_HEAD"
       | "INVALID_CONTEXT"
       | "SANDBOX_BLOCKED"
-      | "RECOVERY_FAILED",
+      | "RECOVERY_FAILED"
+      | "PRODUCTION_DEPLOYMENT_FAILED",
   ) {
     super(message);
     this.name = "LocalDeterministicRecoveryError";
