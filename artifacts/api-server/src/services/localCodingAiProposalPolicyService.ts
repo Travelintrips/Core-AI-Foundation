@@ -7,6 +7,12 @@ import type {
   ApprovedAiHandoffLease,
 } from "./localCodingAiHandoffService.js";
 
+export const FORBIDDEN_NETWORK_CONDITIONS = {
+  networkRequest: false,
+  networkAccess: false,
+  externalServiceAccess: false,
+} as const;
+
 export const AI_PROPOSAL_POLICY_LIMITS = {
   maxPayloadBytes: 256_000,
   maxOperationBytes: 128_000,
