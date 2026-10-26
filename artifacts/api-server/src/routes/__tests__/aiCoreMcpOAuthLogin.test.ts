@@ -29,6 +29,11 @@ describe("OAuth login routes under strict script CSP", () => {
     expect(response.headers["content-type"]).toMatch(/^application\/javascript/);
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(() => new Script(response.text)).not.toThrow();
+    expect(response.text).toContain('"/api/internal/auth/logout"');
+    expect(response.text).toContain('method: "POST"');
+    expect(response.text).toContain('credentials: "same-origin"');
+    expect(response.text).toContain('window.location.replace("/api/ai/core-chat/oauth/login")');
+
     expect(resolver).not.toHaveBeenCalled();
   });
 
@@ -39,7 +44,10 @@ describe("OAuth login routes under strict script CSP", () => {
     expect(response.text).toContain("Sesi AI Engine aktif");
     expect(response.text).toContain("/api/ai/core-chat/oauth/pair/enter");
     expect(response.text).not.toContain("<form");
-    expect(response.text).not.toContain("<script");
+    expect(response.text).toContain('<script src="' + OAUTH_LOGIN_SCRIPT_PATH + '" defer></script>');
+    expect(response.text).toContain('id="mcp-switch-account"');
+    expect(response.text).toContain("Ganti Akun");
+    expect(response.text).toContain('role="status"');
   });
 
   it("shows only the signed-in account and never claims OAuth event ACK", async () => {
