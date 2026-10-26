@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";import { validateProposal } from "../localCodingEngineService.js";
+
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,7 +16,28 @@ import {
   runAllowlistedVerificationCommand,
 } from "../localCodingEngineService.js";
 
-const workspaces: string[] = [];
+const workspaces: string[] = [];describe("validateProposal", () => {
+  it("should validate the proposal correctly", async () => {
+    const proposal = {
+      summary: "Test proposal",
+      rationale: "Test rationale",
+      operations: []
+    };
+    const result = await validateProposal(proposal);
+    expect(result).toBe(true);
+  });
+
+  it("should reject invalid proposals", async () => {
+    const proposal = {
+      summary: "",
+      rationale: "",
+      operations: []
+    };
+    const result = await validateProposal(proposal);
+    expect(result).toBe(false);
+  });
+});
+
 
 async function createWorkspace(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "local-coding-engine-test-"));
