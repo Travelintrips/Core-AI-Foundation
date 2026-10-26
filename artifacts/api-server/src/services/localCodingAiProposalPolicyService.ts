@@ -15,7 +15,11 @@ export const AI_PROPOSAL_POLICY_LIMITS = {
   maxAllowedFiles: 80,
 } as const;
 
-export const AI_PROPOSAL_OPERATION_KINDS = [
+export const AI_PROPOSAL_OPERATION_KINDS = [  "replace_text",
+  "insert_before",
+  "insert_after",
+  "delete_text",
+
   "create_file",
   "replace_file",
   "update_file",
