@@ -74,6 +74,16 @@ function loginPage(): string {
 </body></html>`;
 }
 
+/** Only the authenticated user's own address may be displayed, and always escaped. */
+function sessionIdentityLabel(user: unknown): string {
+  if (typeof user !== "object" || user === null || !("email" in user) ||
+      typeof user.email !== "string") return "akun internal aktif";
+  const email = user.email.trim().slice(0, 254);
+  if (!email || /[\x00-\x1f\x7f]/.test(email)) return "akun internal aktif";
+  return email.replace(/[&<>"']/g, (ch) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch] ?? ch));
+}
+
 /** The parent OAuth router supplies its existing signed-session user resolver. */
 export function createAiCoreMcpOAuthLoginRouter(resolveSessionUser: (req: Request) => Promise<unknown>): Router {
   const router = Router();
@@ -87,7 +97,7 @@ export function createAiCoreMcpOAuthLoginRouter(resolveSessionUser: (req: Reques
     res.setHeader("Expires", "0");
     const user = await resolveSessionUser(req);
     if (user) {
-      res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif. Kembali ke tab pairing ChatGPT, lalu buka kembali halaman persetujuan pairing. Jangan login ulang.</p><p><a href="/api/ai/core-chat/oauth/pair/enter">Buka halaman pairing</a></p></body></html>`);
+      res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif sebagai <strong>${sessionIdentityLabel(user)}</strong>.</p><p><strong>Pastikan ini akun yang sama dengan pemilik job lama.</strong> Event dan Final ACK dibatasi oleh akun OAuth serta client ID ChatGPT yang sama. Login saja belum berarti ChatGPT telah tersambung atau mengirim ACK.</p><p>Jika ChatGPT sudah memulai OAuth, kembali ke halaman permintaan autentikasi tersebut. Kode pairing hanya muncul jika permintaan OAuth memang membuat pairing baru.</p><p><a href="/api/ai/core-chat/oauth/pair/enter">Buka halaman persetujuan pairing</a></p></body></html>`);
       return;
     }
     res.type("html").send(loginPage());
