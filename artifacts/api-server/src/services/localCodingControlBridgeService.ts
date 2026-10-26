@@ -724,7 +724,7 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
       ON command.id = response.command_id
     WHERE response.acknowledged_at IS NULL
       AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-      AND (${!input.lifecycleOnly}::boolean OR ${codingBridgeTerminalEventPredicate})
+      AND (${!input.lifecycleOnly}::boolean OR ${codingBridgeTerminalEventPredicate()})
     ORDER BY response.created_at ASC, response.id ASC
     LIMIT ${limit}::integer
     `);
