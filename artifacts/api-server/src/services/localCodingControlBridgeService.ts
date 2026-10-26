@@ -22,6 +22,7 @@ import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, i
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
 import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
+import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -701,6 +702,8 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
 export async function listPendingCodingBridgeResponsesForConversation(input: {
   conversationId: string;
   limit?: number;
+  /** Filter before LIMIT so transport ACK rows never crowd out terminal events. */
+  lifecycleOnly?: boolean;
 }) {
   await ensureCodingControlBridgeTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 50));
@@ -721,7 +724,8 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
       ON command.id = response.command_id
     WHERE response.acknowledged_at IS NULL
       AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-    ORDER BY response.created_at ASC
+      AND (${!input.lifecycleOnly}::boolean OR ${codingBridgeTerminalEventPredicate})
+    ORDER BY response.created_at ASC, response.id ASC
     LIMIT ${limit}::integer
     `);
   });
