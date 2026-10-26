@@ -34,7 +34,7 @@ export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperat
     /\bhostinger\b/i.test(text) &&
     /\b(?:deploy|redeploy|deployment|publish|rilis)\b/i.test(text) &&
     !/\b(?:docker|compose|container)\b/i.test(text) &&
-    /\b(?:node(?:\.?js|\s+js)|aicore|ai\s+core|commit|sha|production|produksi)\b/i.test(text);
+    /\b(?:node(?:\.?js|\s+js)|aicore|ai\s+core|commit|sha|production|produksi|error|failure)\b/i.test(text);
 
   // A deploy/redeploy of the already-merged main branch is an operational
   // delivery action. Route it straight to the deployment workflow; never create
