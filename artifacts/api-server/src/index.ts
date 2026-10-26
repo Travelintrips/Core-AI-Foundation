@@ -76,6 +76,8 @@ const codingOrchestrationRecovery =
   await import("./services/codingOrchestratorService.js");
 const ledgerReconciliation =
   await import("./services/aiTaskLedgerReconciliationService.js");
+const persistentMcpSubscriptions =
+  await import("./services/persistentMcpSubscriptionRuntime.js");
 const providerBilling =
   await import("./services/aiProviderBillingService.js");
 const devContinuity =
@@ -231,6 +233,9 @@ async function initializeRuntimeServices(): Promise<void> {
   // Source-backed retries recover missed terminal notifications after crashes.
   // No effect unless the existing AI_TASK_LEDGER_SYNC_ENABLED flag is on.
   ledgerReconciliation.startAiTaskLedgerReconciliationRuntime();
+  // DEV-only durable MCP leases. The authenticated owner can still revoke;
+  // no OAuth token is renewed and no event is ACKed by this runtime.
+  persistentMcpSubscriptions.startPersistentMcpSubscriptionRuntime();
 
   // Production workers fail closed: they only auto-start when explicitly enabled.
   // Development keeps the existing auto-start behavior for local workflows.
