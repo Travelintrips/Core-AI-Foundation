@@ -754,7 +754,8 @@ export async function subscribeCodingBridgeConversation(input: {
       conversationId: input.conversationId,
       eventTypes: input.eventTypes ?? ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
       autoRenewUntilTerminal: true,
-      leasePolicy: "chatgpt-terminal-events",
+      subscriptionLifecycle: "PERSISTENT_ACTIVE",
+      leasePolicy: "signed-final-ack-gated/v1",
     },
   });
 }
@@ -766,7 +767,11 @@ export async function unsubscribeCodingBridgeConversation(
   const result = await db.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_presence
     SET lease_expires_at = NOW(),
-        metadata_json = metadata_json || jsonb_build_object('unsubscribedAt', NOW()::text),
+        metadata_json = metadata_json || jsonb_build_object(
+          'unsubscribedAt', NOW()::text,
+          'subscriptionLifecycle', 'REVOKED',
+          'closedReason', 'EXPLICIT_UNSUBSCRIBE'
+        ),
         updated_at = NOW()
     WHERE client_id = ${`chatgpt:${conversationId}`}::text
     RETURNING client_id
