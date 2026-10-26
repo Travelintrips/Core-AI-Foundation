@@ -164,6 +164,10 @@ export function classifyAiCoreChatDispatch(
         "Leading # explicitly routes this command to the paired PC through OpenClaw without Coding Orchestrator.",
     };
   }
+  // Explicit bounded DEV-only ping to the named Travelintrips worker.
+  if (/\b(?:ping|uji\s+ping|test\s+ping)\b/i.test(message) && /\b(?:openclaw|oc)\b/i.test(message) && /\btravelintrips\b/i.test(message) && /\bdev\b/i.test(message) && !/\b(?:prod|production|produksi|deploy|hapus|delete|uninstall|install|restart)\b/i.test(message) && !hasExplicitSourceChange(message)) {
+    return { kind: "EXTERNAL_AGENT", workload, preset: null, infrastructureOperation: null, githubOperation: null, externalAgentClientId: "openclaw-travelintrips-dev", executionLane: "TARGETED", reason: "Explicit bounded DEV Travelintrips ping to named worker." };
+  }
   // Explicit benign pointer movement delegated to OpenClaw is a device action,
   // not an OpenAI answer or a repository coding task.
   const explicitMouseMove =
