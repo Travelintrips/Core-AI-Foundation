@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";import { replaceText } from "../localCodingEngineService.js";
+
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,7 +16,18 @@ import {
   runAllowlistedVerificationCommand,
 } from "../localCodingEngineService.js";
 
-const workspaces: string[] = [];
+const workspaces: string[] = [];describe("replaceText", () => {
+  it("should replace the expected number of occurrences", async () => {
+    const root = await createWorkspace();
+    const filePath = join(root, "test.txt");
+    await writeFile(filePath, "test test test", "utf8");
+    const result = await replaceText(filePath, "test", "replaced", 2);
+    expect(result).toBe(2);
+    const content = await readFile(filePath, "utf8");
+    expect(content).toBe("replaced replaced test");
+  });
+});
+
 
 async function createWorkspace(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "local-coding-engine-test-"));
