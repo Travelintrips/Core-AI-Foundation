@@ -77,7 +77,7 @@ async function reconcileOwner(clientId: string): Promise<"RENEWED" | "CLOSED_PAS
     await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${conversationId}, true)`);
     const counts = await tx.execute(sql`
       SELECT count(DISTINCT command.id)::integer AS total_commands,
-        count(response.id) FILTER (WHERE response.acknowledged_at IS NULL AND ${codingBridgeTerminalEventPredicate})::integer AS pending_responses
+        count(response.id) FILTER (WHERE response.acknowledged_at IS NULL AND ${codingBridgeTerminalEventPredicate()})::integer AS pending_responses
       FROM ai_platform.ai_coding_bridge_commands command
       LEFT JOIN ai_platform.ai_coding_bridge_responses response
         ON response.command_id = command.id
