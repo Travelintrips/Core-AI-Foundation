@@ -1583,8 +1583,14 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         conversationId: parsed.conversationId,
         instruction: command.instruction,
         payload,
-      }).catch(() => {
+      }).catch((eventError: unknown) => {
         // Preserve the completed command result so clients do not retry execution.
+        // Never log command contents or credentials.
+        req.log?.error?.({
+          errorName: eventError instanceof Error ? eventError.name : "UnknownError",
+          conversationBound: Boolean(parsed.conversationId),
+          eventStage: "mcp_terminal_result_persistence",
+        }, "[mcp-events] durable result persistence failed");
         payload = { ...(payload as Record<string, unknown>), eventDeliveryError: "The command returned, but its durable event could not be saved." };
       });
     } else if (params.name === "get_ai_core_task_progress") {
