@@ -42,6 +42,20 @@ describe("OAuth login routes under strict script CSP", () => {
     expect(response.text).not.toContain("<script");
   });
 
+  it("shows only the signed-in account and never claims OAuth event ACK", async () => {
+    const app = express();
+    app.use(createAiCoreMcpOAuthLoginRouter(async () => ({
+      id: 5, email: 'owner+<test>&"\'@example.com',
+    })));
+    const response = await request(app).get(OAUTH_LOGIN_PATH);
+    expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(response.text).toContain("owner+&lt;test&gt;&amp;&quot;&#39;@example.com");
+    expect(response.text).not.toContain('owner+<test>&"\'@example.com');
+    expect(response.text).toContain("Login saja belum berarti ChatGPT telah tersambung");
+    expect(response.text).not.toContain("<form");
+  });
+
   it("does not own auth submission or permit non-GET access to the asset", async () => {
     const app = express(); app.use(createAiCoreMcpOAuthLoginRouter(async () => null));
     app.use((_req, res) => { res.status(401).json({ error: "guard retained" }); });
