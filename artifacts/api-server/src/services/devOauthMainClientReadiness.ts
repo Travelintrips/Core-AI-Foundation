@@ -58,6 +58,6 @@ export async function readDevOauthMainClientReadiness(userId: number) {
     lastAuthenticatedMcpSubscriptionAt: Number.isFinite(stamp) ? new Date(stamp).toISOString() : null,
     authenticatedMcpSubscriptionRecentlySeen: recentlySeen,
     receiverState: recentlySeen ? "RECENT_MCP_SUBSCRIBE" : "WAITING_CHATGPT_MCP",
-    finalAckVerified: false, // This endpoint cannot establish per-command final ACK.
+    finalAckAssessed: false, // Only the authenticated ChatGPT MCP ACK tool can verify this.
   };
 }
