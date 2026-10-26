@@ -1,24 +1,30 @@
 import { sql } from "drizzle-orm";
 
 /**
- * SQL prefilter for lifecycle events exposed through read_ai_core_events.
- * Mirrors the route's classifier with fixed transport kinds, explicit event
- * types and legacy merge/deploy vocabulary. ACK and PROGRESS remain durable,
- * never auto-acknowledged, deleted or promoted to a ChatGPT Final ACK.
- * The response table must use the alias "response".
+ * Apply lifecycle eligibility before LIMIT. Keep all raw transport ACK and
+ * progress records in the ledger without allowing them to starve callbacks.
+ * Construct the SQL only when used so test suites that mock drizzle-orm
+ * without sql can still import unrelated bridge services safely.
  */
-export const codingBridgeTerminalEventPredicate = sql`(
-  response.kind IN ('COMPLETED', 'FAILED', 'BLOCKER')
-  OR response.checkpoint_json ->> 'eventType' IN
-    ('COMPLETED', 'FAILED', 'BLOCKED', 'MERGED', 'DEPLOYED')
-  OR response.metadata_json ->> 'eventType' IN
-    ('COMPLETED', 'FAILED', 'BLOCKED', 'MERGED', 'DEPLOYED')
-  OR concat_ws(' ', response.message, response.checkpoint_json::text, response.metadata_json::text)
-    ~* '\mmerge(d)?\M'
-  OR (
-    concat_ws(' ', response.message, response.checkpoint_json::text, response.metadata_json::text)
-      ~* '\mdeploy(ed|ment)?\M'
-    AND concat_ws(' ', response.message, response.checkpoint_json::text, response.metadata_json::text)
-      ~* 'success|succeed|completed|selesai|deployed'
-  )
-)`;
+export function codingBridgeTerminalEventPredicate() {
+  return sql`(
+    response.kind IN ('COMPLETED', 'FAILED', 'BLOCKER')
+    OR response.checkpoint_json ->> 'eventType' IN
+      ('COMPLETED', 'FAILED', 'BLOCKED', 'MERGED', 'DEPLOYED')
+    OR response.metadata_json ->> 'eventType' IN
+      ('COMPLETED', 'FAILED', 'BLOCKED', 'MERGED', 'DEPLOYED')
+    OR (
+      response.kind NOT IN ('ACK', 'PROGRESS')
+      AND (
+        concat_ws(' ', response.message, response.checkpoint_json::text, response.metadata_json::text)
+          ~* '(^|[^[:alnum:]_])merge(d)?([^[:alnum:]_]|$)'
+        OR (
+          concat_ws(' ', response.message, response.checkpoint_json::text, response.metadata_json::text)
+            ~* '(^|[^[:alnum:]_])deploy(ed|ment)?([^[:alnum:]_]|$)'
+          AND concat_ws(' ', response.message, response.checkpoint_json::text, response.metadata_json::text)
+            ~* 'success|succeed|completed|selesai|deployed'
+        )
+      )
+    )
+  )`;
+}
