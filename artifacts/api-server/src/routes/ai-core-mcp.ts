@@ -1694,7 +1694,12 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const parsed = eventChannelArgs(identity, ReadEventsArgs.parse(params.arguments ?? {}));
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
-      const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
+      // Filter lifecycle rows IN the owner-scoped query before applying LIMIT.
+      // Otherwise a large backlog of worker ACKs can starve real terminal
+      // results and indefinitely block a ChatGPT-side Final ACK.
+      const rows = await listPendingCodingBridgeResponsesForConversation({
+        ...parsed, lifecycleOnly: true,
+      });
       const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
         state: "UNAVAILABLE" as const,
         renewalRequired: false,

@@ -339,6 +339,7 @@ describe("MCP command two-way routing", () => {
     expect(mocks.list).toHaveBeenCalledWith({
       conversationId: "conversation-a",
       limit: 25,
+      lifecycleOnly: true,
     });
   });
 

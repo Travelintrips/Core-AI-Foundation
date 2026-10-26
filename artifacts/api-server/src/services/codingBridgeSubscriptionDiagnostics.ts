@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { classifySubscriptionLease } from "./subscriptionLeaseHealth.js";
+import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
 
 const OWNER_CHANNEL = /^ai-engine-oauth:[a-f0-9]{64}$/;
 /** Diagnostic only; does not renew a subscription or acknowledge any event.
@@ -23,7 +24,8 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
       LIMIT 1
     `),
     tx.execute(sql`
-      SELECT count(*)::integer AS pending
+      SELECT count(*)::integer AS pending,
+        count(*) FILTER (WHERE ${codingBridgeTerminalEventPredicate()})::integer AS terminal_pending
       FROM ai_platform.ai_coding_bridge_responses response
       JOIN ai_platform.ai_coding_bridge_commands command ON command.id = response.command_id
       WHERE command.metadata_json ->> 'conversationId' = ${conversationId}::text
@@ -38,5 +40,10 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
     unsubscribedAt: typeof row?.["unsubscribed_at"] === "string" ? row["unsubscribed_at"] : null,
   });
   const count = Number(backlog.rows?.[0]?.["pending"] ?? 0);
-  return { ...state, pendingCount: Number.isFinite(count) ? count : 0 };
+  const terminal = Number(backlog.rows?.[0]?.["terminal_pending"] ?? 0);
+  return { ...state,
+    pendingCount: Number.isFinite(count) ? count : 0,
+    pendingTerminalCount: Number.isFinite(terminal) ? terminal : 0,
+    pendingTransportCount: Number.isFinite(count - terminal) ? Math.max(0, count - terminal) : 0,
+  };
 }

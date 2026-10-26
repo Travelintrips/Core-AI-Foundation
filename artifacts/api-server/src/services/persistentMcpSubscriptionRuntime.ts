@@ -11,6 +11,7 @@ import { db } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { verifyMcpHandshakeEvidenceRow } from "./localCodingControlBridgeService.js";
+import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
 import {
   decidePersistentMcpSubscription,
   devPersistentMcpRuntimeEnabled,
@@ -76,7 +77,7 @@ async function reconcileOwner(clientId: string): Promise<"RENEWED" | "CLOSED_PAS
     await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${conversationId}, true)`);
     const counts = await tx.execute(sql`
       SELECT count(DISTINCT command.id)::integer AS total_commands,
-        count(response.id) FILTER (WHERE response.acknowledged_at IS NULL)::integer AS pending_responses
+        count(response.id) FILTER (WHERE response.acknowledged_at IS NULL AND ${codingBridgeTerminalEventPredicate()})::integer AS pending_responses
       FROM ai_platform.ai_coding_bridge_commands command
       LEFT JOIN ai_platform.ai_coding_bridge_responses response
         ON response.command_id = command.id
@@ -85,9 +86,11 @@ async function reconcileOwner(clientId: string): Promise<"RENEWED" | "CLOSED_PAS
     const totalCommands = Number(counts.rows?.[0]?.["total_commands"] ?? -1);
     const pendingResponses = Number(counts.rows?.[0]?.["pending_responses"] ?? -1);
 
-    // It is impossible for a time-based timeout, callback label, or transport
-    // receipt to establish E2E PASS. Only original signed handshake evidence
-    // for EVERY command plus zero pending response events can close a channel.
+    // Closing requires zero pending TERMINAL lifecycle events, not zero
+    // internal worker ACK / PROGRESS rows: those are not deliverable ChatGPT
+    // events and cannot be ACKed by a lifecycle-only MCP client.
+    // Still require original signed handshake evidence for EVERY command.
+    // A time-based timeout, callback label or transport receipt never suffices.
     let verifiedCommands = 0;
     let verificationComplete = false;
     if (pendingResponses === 0 && totalCommands > 0 &&
