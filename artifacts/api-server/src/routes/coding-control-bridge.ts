@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { codingBridgeCommandSchema } from "./coding-bridge-command-schema.js";
@@ -165,7 +165,11 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
    expectedOwnerChannel,
    p.data.targetWorkerId,
   );
-  const eventId=randomBytes(32).toString("hex");
+  // Retries of one authenticated AI Task command must map to one wake event.
+  // Random event IDs would create duplicate worker commands after lost HTTP responses.
+  const eventId=createHash("sha256").update([
+   "ai-task-chatgpt-dispatch/v1",target.ownerChannel,target.targetConversationId,p.data.correlationId
+  ].join("|")).digest("hex");
   const queued=await queueDevBrowserWake({
    ownerChannel:target.ownerChannel,
    targetConversationId:target.targetConversationId,
