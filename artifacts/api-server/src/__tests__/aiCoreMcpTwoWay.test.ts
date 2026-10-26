@@ -10,11 +10,15 @@ const mocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
   handshakeEvidence: vi.fn(),
   learning: vi.fn(),
+  readHeartbeat: vi.fn(),
 }));
 vi.mock("../services/aiCoreMcpResultEventService.js", () => ({ recordAiCoreMcpTerminalResult: mocks.record }));
 vi.mock("../services/aiCoreChatLearningService.js", () => ({ recordChatLearningEvent: mocks.learning }));
 vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
   oauthIssuer: () => "https://example.test", oauthResource: () => "https://example.test/api", verifyMcpAccessToken: vi.fn(),
+}));
+vi.mock("../services/devAuthenticatedMcpReadHeartbeat.js", () => ({
+  recordDevAuthenticatedMcpRead: mocks.readHeartbeat,
 }));
 vi.mock("../services/aiCoreWhatsappChatService.js", () => ({ resolveAiCoreInternalBaseUrl: () => process.env["TEST_AI_CORE_INTERNAL_BASE_URL"] || "http://localhost:8080/api" }));
 vi.mock("../services/localCodingControlBridgeService.js", () => ({
@@ -33,6 +37,7 @@ describe("MCP command two-way routing", () => {
     mocks.record.mockResolvedValue(undefined);
     mocks.learning.mockResolvedValue(undefined);
     mocks.handshakeEvidence.mockResolvedValue(null);
+    mocks.readHeartbeat.mockResolvedValue(true);
     mocks.subscribe.mockResolvedValue({
       clientId: "chatgpt:conversation-a",
       leaseExpiresAt: new Date("2026-10-07T16:00:00.000Z"),
@@ -407,8 +412,12 @@ describe("MCP command two-way routing", () => {
     await invoke("send_ai_core_command", { conversationId: "arbitrary-input", message: "Uji koneksi MCP", confirmed: true });
     expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toMatchObject({ conversationId: channel });
+    vi.stubEnv("APP_ENV", "development");
     await invoke("read_ai_core_events", { conversationId: "other-user-channel" });
     expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ conversationId: channel }));
+    expect(mocks.readHeartbeat).toHaveBeenCalledWith(channel);
+    expect(mocks.ack).not.toHaveBeenCalled();
+    expect(mocks.subscribe).toHaveBeenCalledTimes(2); // explicit subscribe + command, not read
     const responseId = "11111111-1111-4111-8111-111111111111";
     await invoke("ack_ai_core_event", { conversationId: "other-user-channel", responseId });
     expect(mocks.ack).toHaveBeenCalledWith({ conversationId: channel, responseId });
@@ -419,7 +428,9 @@ describe("MCP command two-way routing", () => {
     expect(other.body.result.structuredContent.conversationId).not.toBe(channel);
     mocks.list.mockClear();
     mocks.ack.mockClear();
+    mocks.readHeartbeat.mockClear();
     await invoke("read_ai_core_events", { conversationId: channel });
+    expect(mocks.readHeartbeat).toHaveBeenCalledWith(other.body.result.structuredContent.conversationId);
     expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({
       conversationId: other.body.result.structuredContent.conversationId,
     }));
