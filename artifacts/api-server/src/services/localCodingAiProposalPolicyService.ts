@@ -53,6 +53,15 @@ export type AiProposalPolicyCode =
   | "HANDOFF_POLICY_INVALID";
 
 export interface AiProposalPolicyViolation {
+
+/**
+ * Represents a policy violation in the AI proposal.
+ * @property {AiProposalPolicyCode} code - The code representing the type of violation.
+ * @property {string} message - A descriptive message about the violation.
+ * @property {number} [operationIndex] - The index of the operation that caused the violation, if applicable.
+ * @property {string} [path] - The file path associated with the violation, if applicable.
+ */
+
   code: AiProposalPolicyCode;
   message: string;
   operationIndex?: number;
