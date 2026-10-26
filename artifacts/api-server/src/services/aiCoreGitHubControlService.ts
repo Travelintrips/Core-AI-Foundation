@@ -26,6 +26,14 @@ function normalize(message: string): string {
   return message.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/*
+ * Investigation of workflow failure in production environment
+ *
+ * Findings:
+ * 1. The workflow failure occurred due to a missing dependency in the production environment.
+ * 2. The error message indicates that the 'localCodingGitHubPublisherService' module was not found.
+ * 3. This suggests that the module was not properly deployed or installed in the production environment.
+ */
 export function detectAiCoreGitHubOperation(message: string): AiCoreGitHubOperation | null {
   const text = normalize(message);
   if (!text) return null;
