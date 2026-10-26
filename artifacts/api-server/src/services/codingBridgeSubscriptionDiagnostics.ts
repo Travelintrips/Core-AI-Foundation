@@ -25,7 +25,7 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
     `),
     tx.execute(sql`
       SELECT count(*)::integer AS pending,
-        count(*) FILTER (WHERE ${codingBridgeTerminalEventPredicate})::integer AS terminal_pending
+        count(*) FILTER (WHERE ${codingBridgeTerminalEventPredicate()})::integer AS terminal_pending
       FROM ai_platform.ai_coding_bridge_responses response
       JOIN ai_platform.ai_coding_bridge_commands command ON command.id = response.command_id
       WHERE command.metadata_json ->> 'conversationId' = ${conversationId}::text
