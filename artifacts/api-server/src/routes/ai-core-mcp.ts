@@ -1706,6 +1706,19 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const rows = await listPendingCodingBridgeResponsesForConversation({
         ...parsed, lifecycleOnly: true,
       });
+      if (identity.kind === "oauth" && process.env["APP_ENV"] === "development") {
+        // An authenticated OAuth READ establishes real receiver activity.
+        // A login-only browser session and service-token reads do not. This
+        // best-effort telemetry never creates a lease, changes job state,
+        // or acknowledges any response.
+        try {
+          const { recordDevAuthenticatedMcpRead } =
+            await import("../services/devAuthenticatedMcpReadHeartbeat.js");
+          await recordDevAuthenticatedMcpRead(parsed.conversationId);
+        } catch {
+          // A telemetry outage must never block delivery of queued events.
+        }
+      }
       const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
         state: "UNAVAILABLE" as const,
         renewalRequired: false,
