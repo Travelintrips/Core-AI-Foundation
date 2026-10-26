@@ -6,14 +6,13 @@ set -euo pipefail
 host="dev.cstlogistic.co.id"
 issuer="https://${host}"
 resource="${issuer}/api/ai/core-chat/mcp"
-client_scopes="ai_core.events"
 
 for path in /.well-known/oauth-authorization-server /.well-known/oauth-protected-resource/api/ai/core-chat/mcp; do
   payload="$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 "${issuer}${path}")"
   printf '%s' "$payload" | jq -e 'type=="object"' >/dev/null
   if [[ "$path" == "/.well-known/oauth-authorization-server" ]]; then
     printf '%s' "$payload" | jq -e \
-      --arg iss "$issuer" --arg resource "$resource" \
+      --arg iss "$issuer" \
       '.issuer==$iss and
        .authorization_endpoint==($iss+"/api/ai/core-chat/oauth/authorize") and
        .token_endpoint==($iss+"/api/ai/core-chat/oauth/token") and
