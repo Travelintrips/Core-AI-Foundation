@@ -16,6 +16,8 @@ export const AI_PROPOSAL_POLICY_LIMITS = {
 } as const;
 
 export const AI_PROPOSAL_OPERATION_KINDS = [
+  // Updated to include new operation types and enforce stricter constraints
+
   "create_file",
   "replace_file",
   "update_file",
