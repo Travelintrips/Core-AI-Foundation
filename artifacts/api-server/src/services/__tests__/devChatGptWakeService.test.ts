@@ -96,6 +96,21 @@ describe("shared DEV browser wake queue", () => {
     });
   });
 
+  it("accepts multiline CONTINUE_JOB while rejecting dangerous control characters", async () => {
+    const task = "AI CORE — CONTINUE_JOB\r\njobId: job-123\ncheckpointId: cp-7\n\tstepId: step-8";
+    const encoded = Buffer.from(task, "utf8").toString("base64url");
+    const command = existingCommand();
+    command.instruction = `DEV_CHATGPT_WAKE_V2 conversation=${targetConversationId} event=${eventId} challenge=${challenge} task=${encoded}`;
+    mocks.dispatch.mockResolvedValueOnce({ clientId: worker, command, created: true });
+    await queueDevBrowserWake({ ...input, instruction: task, jobAlias: "TASK107" });
+    expect(mocks.dispatch.mock.calls[0]![0].instruction).toBe(command.instruction);
+    await expect(queueDevBrowserWake({ ...input, instruction: "hello\u0000world" }))
+      .rejects.toThrow("DEV_CHATGPT_WAKE_INSTRUCTION_INVALID");
+    await expect(queueDevBrowserWake({ ...input, instruction: "hello\u001bworld" }))
+      .rejects.toThrow("DEV_CHATGPT_WAKE_INSTRUCTION_INVALID");
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves every existing GPT01 owner and resolves aliases only for the exact caller", async () => {
     const otherOwner = "ai-engine-oauth:" + "c".repeat(64);
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel + "," + otherOwner);

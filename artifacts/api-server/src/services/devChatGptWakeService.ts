@@ -245,7 +245,9 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
     ...(wakeBinding ? { bindingFingerprint: wakeBinding.bindingFingerprint, browserProfile: wakeBinding.browserProfile } : {}),
   });
   const userInstruction = input.instruction?.trim() ?? "";
-  if (userInstruction && (userInstruction.length > 2000 || /[\u0000-\u001f\u007f]/.test(userInstruction))) {
+  // Preserve CR, LF and TAB for real multi-line SOP commands. The command is
+  // base64url-encoded before dispatch; reject other C0/DEL controls only.
+  if (userInstruction && (userInstruction.length > 2000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(userInstruction))) {
     throw new Error("DEV_CHATGPT_WAKE_INSTRUCTION_INVALID");
   }
   const encodedInstruction = userInstruction
