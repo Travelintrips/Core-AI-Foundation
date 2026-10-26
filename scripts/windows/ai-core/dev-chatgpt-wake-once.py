@@ -439,7 +439,7 @@ def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=No
             task_instruction = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
         except (ValueError, UnicodeDecodeError):
             raise RuntimeError("Invalid DEV wake task encoding") from None
-        if not task_instruction or len(task_instruction) > 2000 or any(ord(ch) < 32 or ord(ch) == 127 for ch in task_instruction):
+        if not task_instruction or len(task_instruction) > 2000 or any((ord(ch) < 32 and ch not in "\r\n\t") or ord(ch) == 127 for ch in task_instruction):
             raise RuntimeError("Invalid DEV wake task instruction")
     else:
         match = PATTERN_V1.fullmatch(raw)

@@ -124,6 +124,24 @@ class BrowserWakeTests(WakeTestCase):
         self.assertEqual(len(browser.submissions), 1)
         self.assertIn(TASK_TEXT, browser.submissions[0][-1])
 
+    def test_v2_multiline_sop_and_forbidden_controls(self):
+        multiline = "AI CORE — CONTINUE_JOB\r\njobId: job-123\n\tcheckpointId: cp-7"
+        encoded = wake.base64.urlsafe_b64encode(multiline.encode()).decode().rstrip("=")
+        command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + encoded
+        browser = FakeBrowser()
+        self.run_browser(browser, command)
+        self.assertEqual(len(browser.submissions), 1)
+        self.assertIn(multiline, browser.submissions[0][-1])
+
+        for control in ("\x00", "\x1b", "\x7f"):
+            unsafe = "CONTINUE_JOB" + control + "test"
+            token = wake.base64.urlsafe_b64encode(unsafe.encode()).decode().rstrip("=")
+            invalid_command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + token
+            with self.subTest(control=ord(control)), patch.object(wake, "browser") as mock_browser:
+                with self.assertRaisesRegex(RuntimeError, "Invalid DEV wake task instruction"):
+                    wake.submit_once(invalid_command, WORKER, self.root)
+                mock_browser.assert_not_called()
+
     def test_wrong_target_worker_or_shell_suffix_never_touch_browser(self):
         with patch.object(wake, "browser") as browser:
             for command, worker in [
