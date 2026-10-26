@@ -17,6 +17,17 @@ const mockWithTransientDatabaseRetry = vi.hoisted(() => vi.fn());
 const mockReserveCodingFileSet = vi.hoisted(() => vi.fn());
 const mockReportCodingTaskTerminalTransition = vi.hoisted(() => vi.fn());
 
+// Test for FORBIDDEN_NETWORK errors
+it("should throw FORBIDDEN_NETWORK error when network access is attempted", async () => {
+  const mockError = new Error("FORBIDDEN_NETWORK");
+  mockWithTransientDatabaseRetry.mockRejectedValue(mockError);
+
+  await expect(analyzeRepository("11111111-1111-4111-8111-111111111111")).rejects.toThrow("FORBIDDEN_NETWORK");
+
+  expect(mockWithTransientDatabaseRetry).toHaveBeenCalled();
+});
+
+
 const selectBuilder = {
   from: vi.fn(() => selectBuilder),
   where: vi.fn(() => Promise.resolve([{
