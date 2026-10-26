@@ -124,6 +124,38 @@ class BrowserWakeTests(WakeTestCase):
         self.assertEqual(len(browser.submissions), 1)
         self.assertIn(TASK_TEXT, browser.submissions[0][-1])
 
+    def test_v2_multiline_sop_and_forbidden_controls(self):
+        multiline = "AI CORE — CONTINUE_JOB\r\njobId: job-123\n\tcheckpointId: cp-7"
+        encoded = wake.base64.urlsafe_b64encode(multiline.encode()).decode().rstrip("=")
+        command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + encoded
+        browser = FakeBrowser()
+        self.run_browser(browser, command)
+        self.assertEqual(len(browser.submissions), 1)
+        self.assertIn(multiline, browser.submissions[0][-1])
+
+        for control in ("\x00", "\x1b", "\x7f"):
+            unsafe = "CONTINUE_JOB" + control + "test"
+            token = wake.base64.urlsafe_b64encode(unsafe.encode()).decode().rstrip("=")
+            invalid_command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + token
+            with self.subTest(control=ord(control)), patch.object(wake, "browser") as mock_browser:
+                with self.assertRaisesRegex(RuntimeError, "Invalid DEV wake task instruction"):
+                    wake.submit_once(invalid_command, WORKER, self.root)
+                mock_browser.assert_not_called()
+
+    def test_native_wake_prompt_encodes_multiline_unicode_as_safe_ascii(self):
+        raw_task = "AI CORE \u2014 CONTINUE_JOB\r\ncheckpointId: cp-7\n\tstepId: step-8"
+        message = wake._wake_message(EVENT, CHALLENGE, raw_task)
+        self.assertTrue(message.isascii())
+        self.assertNotIn("\n", message)
+        self.assertNotIn("\r", message)
+        self.assertIn(r"\u2014", message)
+        self.assertIn(r"\n", message)
+        self.assertEqual(message.count("[AI_CORE_WAKE:" + EVENT + "]"), 1)
+        self.assertEqual(message.count("[AI_CORE_ATTEST:" + CHALLENGE + "]"), 1)
+        self.assertEqual(message.count("[AI_CORE_ATTEST_ACK:" + CHALLENGE + "]"), 1)
+        self.assertLessEqual(len(message), 4096)
+        self.assertIn(raw_task, __import__("json").loads(message[message.index('"') : message.index('"', message.index('"') + 1) + 1]))
+
     def test_wrong_target_worker_or_shell_suffix_never_touch_browser(self):
         with patch.object(wake, "browser") as browser:
             for command, worker in [

@@ -291,7 +291,7 @@ def _assistant_probe(tab, expected_url, marker, challenge):
 
 
 def _wake_message(event, challenge, task_instruction):
-    job_text = ("Kerjakan job AI Core berikut: " + task_instruction + ". " if task_instruction else
+    job_text = ("Kerjakan job AI Core berikut (JSON-escaped UTF-8, interpretasikan isi string setelah decoding): " + json.dumps(task_instruction, ensure_ascii=True) + ". " if task_instruction else
                 "Lanjutkan pekerjaan sebelumnya. Periksa checkpoint AI Core DEV dan kerjakan sampai hasil terverifikasi. ")
     return ("[AI_CORE_WAKE:" + event + "] [AI_CORE_ATTEST:" + challenge + "] " + job_text +
             "Jangan melewati persetujuan keamanan, jangan mengubah PROD. "
@@ -439,7 +439,7 @@ def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=No
             task_instruction = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
         except (ValueError, UnicodeDecodeError):
             raise RuntimeError("Invalid DEV wake task encoding") from None
-        if not task_instruction or len(task_instruction) > 2000 or any(ord(ch) < 32 or ord(ch) == 127 for ch in task_instruction):
+        if not task_instruction or len(task_instruction) > 2000 or any((ord(ch) < 32 and ch not in "\r\n\t") or ord(ch) == 127 for ch in task_instruction):
             raise RuntimeError("Invalid DEV wake task instruction")
     else:
         match = PATTERN_V1.fullmatch(raw)
