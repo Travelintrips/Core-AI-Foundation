@@ -13,11 +13,36 @@ const mockTxExecute = vi.hoisted(() => vi.fn());
 const mockTxUpdateSet = vi.hoisted(() => vi.fn());
 const mockTxUpdateWhere = vi.hoisted(() => vi.fn());
 const mockTxUpdateReturning = vi.hoisted(() => vi.fn());
+
+describe("repositoryAnalyzerService network restrictions and policy compliance", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should handle network restrictions", async () => {
+    const result = await selectBuilder.networkRequest();
+    expect(result).toEqual({ success: true, message: "Network request successful" });
+    expect(mockNetworkRequest).toHaveBeenCalled();
+  });
+
+  it("should check policy compliance", async () => {
+    const result = await selectBuilder.policyComplianceCheck();
+    expect(result).toEqual({ compliant: true, message: "Policy compliant" });
+    expect(mockPolicyComplianceCheck).toHaveBeenCalled();
+  });
+});
+
 const mockWithTransientDatabaseRetry = vi.hoisted(() => vi.fn());
 const mockReserveCodingFileSet = vi.hoisted(() => vi.fn());
 const mockReportCodingTaskTerminalTransition = vi.hoisted(() => vi.fn());
+const mockNetworkRequest = vi.hoisted(() => vi.fn());
+const mockPolicyComplianceCheck = vi.hoisted(() => vi.fn());
+
 
 const selectBuilder = {
+  networkRequest: vi.fn(() => Promise.resolve({ success: true, message: "Network request successful" })),
+  policyComplianceCheck: vi.fn(() => Promise.resolve({ compliant: true, message: "Policy compliant" })),
+
   from: vi.fn(() => selectBuilder),
   where: vi.fn(() => Promise.resolve([{
     id: "11111111-1111-4111-8111-111111111111",
@@ -33,6 +58,9 @@ const updateBuilder = {
   returning: mockTxUpdateReturning,
 };
 const tx = {
+  networkRequest: mockNetworkRequest,
+  policyComplianceCheck: mockPolicyComplianceCheck,
+
   execute: mockTxExecute,
   update: vi.fn(() => updateBuilder),
 };
@@ -44,6 +72,9 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 vi.mock("@workspace/db", () => ({
+  networkRequest: mockNetworkRequest,
+  policyComplianceCheck: mockPolicyComplianceCheck,
+
   db: {
     execute: mockDbExecute,
     select: mockDbSelect,
