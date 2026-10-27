@@ -87,7 +87,7 @@ tiltTargets.forEach(el=>{
 const viewer=document.querySelector("#productViewer"),viewerImage=document.querySelector("#viewerImage");let drag=false,lastX=0,rot=0;
 function rotateViewer(x){rot+=x;viewerImage.style.transform=`rotateY(${rot}deg) rotateX(2deg) scale(1.03)`}
 viewer?.addEventListener("pointerdown",e=>{drag=true;lastX=e.clientX;viewer.setPointerCapture(e.pointerId)});
-viewer?.addEventListener("pointermove",e=>{if(!drag)return;rotateViewer((e.clientX-lastX)*.65);lastX=e.clientX});
+viewer?.addEventListener("pointermove",e=>{if(!drag)return;const sensitivity=e.pointerType==="touch"?.9:.65;rotateViewer((e.clientX-lastX)*sensitivity);lastX=e.clientX});
 viewer?.addEventListener("pointerup",()=>drag=false);viewer?.addEventListener("pointercancel",()=>drag=false);
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches("[data-work]")){e.preventDefault();const w=findWork(e.target.dataset.work);if(w)renderWorkDetail(w)}if((e.key==="ArrowLeft"||e.key==="ArrowRight")&&document.activeElement===viewer)rotateViewer(e.key==="ArrowLeft"?-12:12)});
 renderWorks();
