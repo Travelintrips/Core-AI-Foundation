@@ -290,9 +290,19 @@ def _assistant_probe(tab, expected_url, marker, challenge):
             "assistantText": text, "ackVisible": ack_visible}
 
 
-def _wake_message(event, challenge, task_instruction):
+def _wake_message(event, challenge, task_instruction, command_id=None, correlation_id=None):
     job_text = ("Kerjakan job AI Core berikut (JSON-escaped UTF-8, interpretasikan isi string setelah decoding): " + json.dumps(task_instruction, ensure_ascii=True) + ". " if task_instruction else
                 "Lanjutkan pekerjaan sebelumnya. Periksa checkpoint AI Core DEV dan kerjakan sampai hasil terverifikasi. ")
+    if (task_instruction and '"SOP_CHECKPOINT"' in task_instruction and command_id and correlation_id):
+        job_text += (
+            " Khusus checkpoint DEV ini, jika dan hanya jika langkah pertama memang PAUSED, "
+            "balas SATU objek JSON mentah (tanpa Markdown, tag escape, atau teks di luar JSON). "
+            "Gunakan commandId=" + json.dumps(command_id) + " dan correlationId=" + json.dumps(correlation_id) +
+            " sebagai properti JSON. Taruh token [AI_CORE_ATTEST_ACK:" + challenge +
+            "] di properti string JSON attestationAck, bukan setelah objek. "
+            "Pertahankan kind=SOP_CHECKPOINT, status=PAUSED, jobId, checkpointId, sopVersion, nextStepId "
+            "dari SOP; jangan mengarang tanda tangan, checkpointReceipt, atau ACK akhir. "
+        )
     return ("[AI_CORE_WAKE:" + event + "] [AI_CORE_ATTEST:" + challenge + "] " + job_text +
             "Jangan melewati persetujuan keamanan, jangan mengubah PROD. "
             "Pada balasan pertama setelah wake ini, sertakan token [AI_CORE_ATTEST_ACK:" + challenge + "] satu kali.")
@@ -332,7 +342,7 @@ def _attest_bound_observation(root, binding, conversation, event, challenge, obs
 
 
 def _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
-                              lease_guard=None):
+                              lease_guard=None, command_id=None):
     from dev_chatgpt_native_transport import NativeTransport, native_options
     options = native_options(data, binding)  # Inactive by default; no UI or receipt writes.
 
@@ -357,7 +367,8 @@ def _submit_bound_native_once(root, binding, conversation, event, challenge, tas
         if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in receipt_context.items()):
             raise RuntimeError("Wake event receipt context mismatch; reconciliation required")
     transport = NativeTransport(root, binding, event, challenge, options, authorize, lease_guard=lease_guard)
-    observed = transport.run(_wake_message(event, challenge, task_instruction))
+    observed = transport.run(_wake_message(event, challenge, task_instruction,
+                                           command_id, metadata.get("correlationId")))
     authorize()  # Revocation also fences key access and callback proof production.
     attestation = _attest_bound_observation(root, binding, conversation, event, challenge, observed, authorize)
     fingerprint = hashlib.sha256("|".join([binding["bindingFingerprint"], conversation, event, challenge,
@@ -426,7 +437,7 @@ def wait_for_assistant_attestation(root, tab, expected_url, conversation, event,
     return None
 
 
-def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=None):
+def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=None, command_id=None):
     if lease_guard is not None:
         lease_guard.authorize()
     raw = str(instruction).strip()
@@ -453,7 +464,7 @@ def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=No
         if binding is None:
             raise RuntimeError("Bound account session is not active")
         return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
-                                          lease_guard=lease_guard)
+                                          lease_guard=lease_guard, command_id=command_id)
     if WORKER == DELL_WORKER:
         binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
     else:
@@ -556,7 +567,8 @@ def main():
         if not isinstance(payload, dict):
             raise RuntimeError("Invalid DEV wake helper payload")
         result = submit_once(payload.get("instruction", ""), payload.get("workerId", ""),
-                             metadata=payload.get("metadata"), lease_guard=guard)
+                             metadata=payload.get("metadata"), lease_guard=guard,
+                             command_id=payload.get("commandId"))
         if guard is not None:
             guard.authorize()
         print(json.dumps({"ok": True, **result}, separators=(",", ":")), flush=True)
