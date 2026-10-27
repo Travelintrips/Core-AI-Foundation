@@ -48,6 +48,7 @@ jobs:
     env:
       HOSTINGER_API_BASE: https://developers.hostinger.com/api
       HOSTINGER_DOMAIN: ${{ matrix.domain }}
+      HOSTINGER_SCOPE_DOMAIN: aicore.cstlogistic.co.id
       EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
 
@@ -90,7 +91,7 @@ jobs:
           # Compare against the release that is actually live, not merely
           # EXPECTED_SHA^1. Empty trigger commits can otherwise hide runtime
           # changes that have never reached production.
-          health="https://$HOSTINGER_DOMAIN/api/healthz"
+          health="https://$HOSTINGER_SCOPE_DOMAIN/api/healthz"
           rm -f /tmp/deploy-scope.headers /tmp/deploy-scope.body
           curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
             -D /tmp/deploy-scope.headers -o /tmp/deploy-scope.body \
