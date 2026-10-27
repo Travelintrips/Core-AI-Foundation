@@ -46,11 +46,34 @@ document.querySelector("#profileBtn").onclick=profile;document.querySelector("#m
 document.querySelector("#sellBtn").onclick=sell;document.querySelector("#creatorJoinBtn").onclick=sell;document.querySelector("#creatorJoinBtnBottom").onclick=profile;document.querySelector("#mobileAdd").onclick=sell;
 document.querySelector("#messageBtn").onclick=()=>openDrawer("Pesan & penawaran","<div class='drawer-item'><strong>Raras Studio</strong><span>“Boleh ditawar untuk ukuran M?”</span></div><div class='drawer-item'><strong>Ruang Kayu</strong><span>“Pengiriman ke Jakarta tersedia.”</span></div>");
 
-document.querySelectorAll("[data-tilt]").forEach(el=>{el.addEventListener("pointermove",e=>{if(innerWidth<880)return;const r=el.getBoundingClientRect();const x=(e.clientX-r.left)/r.width-.5;const y=(e.clientY-r.top)/r.height-.5;el.style.transform=`perspective(1400px) rotateX(${-y*4}deg) rotateY(${x*6}deg)`});el.addEventListener("pointerleave",()=>el.style.transform="perspective(1400px) rotateX(0) rotateY(0)")});
+document.querySelectorAll("[data-tilt]").forEach(el=>{
+  let touching=false;
+  const applyTilt=e=>{
+    if(e.pointerType==="touch"&&!touching)return;
+    const r=el.getBoundingClientRect();
+    const x=(e.clientX-r.left)/r.width-.5;
+    const y=(e.clientY-r.top)/r.height-.5;
+    const mobile=matchMedia("(pointer: coarse)").matches;
+    const rx=-y*(mobile?6:4),ry=x*(mobile?9:6);
+    el.style.transform=`perspective(1400px) rotateX(${rx}deg) rotateY(${ry}deg)`;
+  };
+  el.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="touch"){touching=true;el.setPointerCapture?.(e.pointerId)}
+    applyTilt(e);
+  });
+  el.addEventListener("pointermove",applyTilt);
+  const reset=e=>{
+    if(e?.pointerType==="touch")touching=false;
+    el.style.transform="perspective(1400px) rotateX(0) rotateY(0)";
+  };
+  el.addEventListener("pointerup",reset);
+  el.addEventListener("pointercancel",reset);
+  el.addEventListener("pointerleave",e=>{if(e.pointerType!=="touch")reset(e)});
+});
 const viewer=document.querySelector("#productViewer"),viewerImage=document.querySelector("#viewerImage");let drag=false,lastX=0,rot=0;
 function rotateViewer(x){rot+=x;viewerImage.style.transform=`rotateY(${rot}deg) rotateX(2deg) scale(1.03)`}
-viewer?.addEventListener("pointerdown",e=>{drag=true;lastX=e.clientX;viewer.setPointerCapture(e.pointerId)});
-viewer?.addEventListener("pointermove",e=>{if(!drag)return;rotateViewer((e.clientX-lastX)*.65);lastX=e.clientX});
+viewer?.addEventListener("pointerdown",e=>{drag=true;lastX=e.clientX;viewer.setPointerCapture?.(e.pointerId)});
+viewer?.addEventListener("pointermove",e=>{if(!drag)return;rotateViewer((e.clientX-lastX)*(e.pointerType==="touch"?.9:.65));lastX=e.clientX});
 viewer?.addEventListener("pointerup",()=>drag=false);viewer?.addEventListener("pointercancel",()=>drag=false);
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches("[data-work]")){e.preventDefault();const w=findWork(e.target.dataset.work);if(w)renderWorkDetail(w)}if((e.key==="ArrowLeft"||e.key==="ArrowRight")&&document.activeElement===viewer)rotateViewer(e.key==="ArrowLeft"?-12:12)});
 renderWorks();
