@@ -67,11 +67,32 @@ else
   exit 1
 fi
 
-local_code="$(curl --silent --show-error --connect-timeout 5 --max-time 10   -H "Host: $DOMAIN" -o /tmp/nusa-karya-health.json -w '%{http_code}' http://127.0.0.1/healthz || true)"
-test "$local_code" = "200"
-grep -q '"status":"ok"' /tmp/nusa-karya-health.json
+local_code="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+  -H "Host: $DOMAIN" \
+  -D /tmp/nusa-karya-health.headers \
+  -o /tmp/nusa-karya-health.body \
+  -w '%{http_code}' http://127.0.0.1/healthz || true)"
 
-echo "NUSA_KARYA_LOCAL_HTTP=PASS domain=$DOMAIN web_root=$WEB_ROOT"
+case "$local_code" in
+  200)
+    grep -q '"status":"ok"' /tmp/nusa-karya-health.body
+    echo "NUSA_KARYA_LOCAL_HTTP=PASS domain=$DOMAIN web_root=$WEB_ROOT"
+    ;;
+  301|302|307|308)
+    grep -Eiq "^location:[[:space:]]*https://$DOMAIN(/healthz)?[[:space:]]*$" /tmp/nusa-karya-health.headers || {
+      echo "NUSA_KARYA_LOCAL_HTTP=UNEXPECTED_REDIRECT http=$local_code" >&2
+      cat /tmp/nusa-karya-health.headers >&2 || true
+      exit 1
+    }
+    echo "NUSA_KARYA_LOCAL_HTTP=REDIRECT_PASS domain=$DOMAIN http=$local_code"
+    ;;
+  *)
+    echo "NUSA_KARYA_LOCAL_HTTP=FAILED http=${local_code:-missing}" >&2
+    cat /tmp/nusa-karya-health.headers >&2 || true
+    cat /tmp/nusa-karya-health.body >&2 || true
+    exit 1
+    ;;
+esac
 
 if command -v certbot >/dev/null 2>&1; then
   if getent ahostsv4 "$DOMAIN" >/dev/null 2>&1; then
