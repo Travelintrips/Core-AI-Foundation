@@ -342,7 +342,7 @@ def _attest_bound_observation(root, binding, conversation, event, challenge, obs
 
 
 def _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
-                              lease_guard=None):
+                              lease_guard=None, command_id=None):
     from dev_chatgpt_native_transport import NativeTransport, native_options
     options = native_options(data, binding)  # Inactive by default; no UI or receipt writes.
 
@@ -367,7 +367,7 @@ def _submit_bound_native_once(root, binding, conversation, event, challenge, tas
         if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in receipt_context.items()):
             raise RuntimeError("Wake event receipt context mismatch; reconciliation required")
     transport = NativeTransport(root, binding, event, challenge, options, authorize, lease_guard=lease_guard)
-    observed = transport.run(_wake_message(event, challenge, task_instruction,\n                                           metadata.get("commandId"), metadata.get("correlationId")))
+    observed = transport.run(_wake_message(event, challenge, task_instruction,\n                                           command_id, metadata.get("correlationId")))
     authorize()  # Revocation also fences key access and callback proof production.
     attestation = _attest_bound_observation(root, binding, conversation, event, challenge, observed, authorize)
     fingerprint = hashlib.sha256("|".join([binding["bindingFingerprint"], conversation, event, challenge,
@@ -436,7 +436,7 @@ def wait_for_assistant_attestation(root, tab, expected_url, conversation, event,
     return None
 
 
-def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=None):
+def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=None, command_id=None):
     if lease_guard is not None:
         lease_guard.authorize()
     raw = str(instruction).strip()
@@ -463,7 +463,7 @@ def submit_once(instruction, worker_id, base=None, metadata=None, lease_guard=No
         if binding is None:
             raise RuntimeError("Bound account session is not active")
         return _submit_bound_native_once(root, binding, conversation, event, challenge, task_instruction, data, metadata,
-                                          lease_guard=lease_guard)
+                                          lease_guard=lease_guard, command_id=command_id)
     if WORKER == DELL_WORKER:
         binding = resolve_dell_binding(metadata, data, conversation, event, challenge)
     else:
@@ -566,7 +566,8 @@ def main():
         if not isinstance(payload, dict):
             raise RuntimeError("Invalid DEV wake helper payload")
         result = submit_once(payload.get("instruction", ""), payload.get("workerId", ""),
-                             metadata=payload.get("metadata"), lease_guard=guard)
+                             metadata=payload.get("metadata"), lease_guard=guard,
+                             command_id=payload.get("commandId"))
         if guard is not None:
             guard.authorize()
         print(json.dumps({"ok": True, **result}, separators=(",", ":")), flush=True)
