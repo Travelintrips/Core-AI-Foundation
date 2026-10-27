@@ -706,6 +706,24 @@ class HelperLeaseEntrypointTests(unittest.TestCase):
         browser.assert_not_called()
 
 
+class CheckpointPromptTests(unittest.TestCase):
+    def test_binds_ids_and_keeps_ack_token_inside_json(self):
+        text = wake._wake_message(
+            EVENT, CHALLENGE,
+            'Return {"kind":"SOP_CHECKPOINT","status":"PAUSED"}',
+            "11111111-1111-4111-8111-111111111111", "ai-task:110:1:regression20261028",
+        )
+        self.assertIn("11111111-1111-4111-8111-111111111111", text)
+        self.assertIn("ai-task:110:1:regression20261028", text)
+        self.assertIn("attestationAck", text)
+        self.assertIn("tanpa Markdown", text)
+
+    def test_normal_wake_remains_unmodified(self):
+        text = wake._wake_message(EVENT, CHALLENGE, "hello")
+        self.assertNotIn("attestationAck", text)
+        self.assertIn("AI_CORE_ATTEST_ACK", text)
+
+
 if __name__ == "__main__":
     unittest.main()
 
