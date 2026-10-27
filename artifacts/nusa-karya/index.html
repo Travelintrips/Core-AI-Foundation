@@ -3,77 +3,92 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#f7f0e5" />
-  <title>Nusa Karya — Marketplace & Komunitas Karya Anak Bangsa</title>
-  <meta name="description" content="Marketplace dan komunitas karya anak bangsa. Temukan produk, kreator, edukasi, dan karya Indonesia." />
+  <meta name="theme-color" content="#120d09" />
+  <title>Nusa Karya — Marketplace 3D Karya Indonesia</title>
+  <meta name="description" content="Marketplace dan komunitas karya Indonesia dengan pengalaman visual 3D interaktif." />
   <link rel="preconnect" href="https://images.unsplash.com" />
-  <link rel="stylesheet" href="/styles.css?v=20261028-cultural-marketplace-1" />
+  <link rel="stylesheet" href="/styles.css?v=20261028-3d-bronze-1" />
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#home" aria-label="Nusa Karya">
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <aside class="side-nav">
+    <a class="brand" href="#home">
       <span class="brand-mark">NK</span>
-      <span class="brand-copy"><strong>Nusa Karya</strong><small>Marketplace & Komunitas Karya Anak Bangsa</small></span>
+      <span class="brand-copy"><strong>Nusa Karya</strong><small>Marketplace Karya Anak Bangsa</small></span>
     </a>
-    <div class="tagline">
-      <em>“Dari Indonesia, untuk Dunia.”</em>
-      <span>Tempat berkumpulnya karya, kreator, dan pecinta budaya Indonesia.</span>
-    </div>
-    <nav class="nav-actions" aria-label="Aksi utama">
-      <button class="icon-btn" id="messageBtn" title="Pesan">✉</button>
-      <button class="icon-btn" id="savedBtn" title="Tersimpan">♡</button>
-      <button class="profile-btn" id="profileBtn">A</button>
+    <nav>
+      <button class="side-link active" data-scroll="#home">⌂ <span>Beranda</span></button>
+      <button class="side-link" data-scroll="#explore">⌕ <span>Jelajah</span></button>
+      <button class="side-link" data-scroll="#categories">▦ <span>Kategori</span></button>
+      <button class="side-link" id="creatorJoinBtn">♙ <span>Kreator</span></button>
+      <button class="side-link">♧ <span>Komunitas</span></button>
+      <button class="side-link">◇ <span>Edukasi</span></button>
+      <button class="side-link">▣ <span>Event & Workshop</span></button>
+      <button class="side-link">◎ <span>Promosi Global</span></button>
+      <button class="side-link">♨ <span>UMKM</span></button>
+      <button class="side-link">ⓘ <span>Tentang</span></button>
     </nav>
-  </header>
+    <div class="side-foot">Dari Indonesia,<br/>untuk Dunia.</div>
+  </aside>
 
-  <main id="home">
-    <section class="service-strip" aria-label="Fitur utama">
-      <button data-scroll="#explore"><span>👜</span><b>Marketplace</b><small>Produk & Jasa</small></button>
-      <button id="creatorJoinBtn"><span>👥</span><b>Komunitas</b><small>Kreator</small></button>
-      <button><span>🎓</span><b>Edukasi</b><small>& Workshop</small></button>
-      <button><span>🌐</span><b>Promosi</b><small>Global</small></button>
-      <button><span>♥</span><b>Dukung</b><small>UMKM</small></button>
-      <button><span>★</span><b>Karya Asli</b><small>Indonesia</small></button>
-    </section>
+  <main id="home" class="app-shell">
+    <header class="topbar">
+      <label class="global-search"><span>⌕</span><input id="searchInput" type="search" placeholder="Cari karya, kreator, kategori..." /></label>
+      <div class="top-actions">
+        <button class="circle-btn" id="messageBtn">✉</button>
+        <button class="circle-btn" id="savedBtn">♡</button>
+        <button class="profile-btn" id="profileBtn">A</button>
+      </div>
+    </header>
 
-    <section class="hero">
+    <section class="hero-3d tilt-card" data-tilt>
+      <div class="hero-bg"></div>
       <div class="hero-copy">
-        <p class="eyebrow">KARYA INDONESIA, UNTUK DUNIA</p>
-        <h1>Rayakan karya <em>anak bangsa.</em></h1>
-        <p class="hero-text">Belanja karya autentik, temukan kreator lokal, dan ikuti cerita di balik proses pembuatannya.</p>
+        <p class="eyebrow">NUSA KARYA IMMERSIVE</p>
+        <h1>Dari Indonesia<br/>untuk Dunia.</h1>
+        <p>Jelajahi karya, kreator, dan budaya Indonesia dalam pengalaman visual yang hidup.</p>
         <div class="hero-actions">
-          <button class="btn primary" data-scroll="#explore">Jelajahi sekarang</button>
-          <button class="btn ghost" id="sellBtn">Mulai berkarya</button>
+          <button class="btn primary" data-scroll="#explore">Jelajahi Karya</button>
+          <button class="btn glass" id="sellBtn">Gabung Komunitas</button>
         </div>
-        <label class="hero-search">
-          <span>⌕</span><input id="searchInput" type="search" placeholder="Cari karya, kreator, kota..." />
-        </label>
       </div>
-      <div class="hero-feature">
-        <img src="https://images.unsplash.com/photo-1577083552431-6e5fd01988a5?auto=format&fit=crop&w=1200&q=88" alt="Karya Indonesia" />
-        <div class="hero-feature-card"><span>Karya pilihan</span><strong>Autentik • Lokal • Bernilai</strong></div>
+      <div class="scene" id="heroScene" aria-label="Galeri kategori 3D">
+        <button class="scene-card depth-1" data-category="Seni"><img src="https://images.unsplash.com/photo-1577083552431-6e5fd01988a5?auto=format&fit=crop&w=500&q=85" alt="Seni"/><span>Seni Rupa</span></button>
+        <button class="scene-card depth-2" data-category="Interior"><img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=500&q=85" alt="Interior"/><span>Furnitur</span></button>
+        <button class="scene-card depth-3 active" data-category="Fesyen"><img src="https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&w=500&q=85" alt="Fesyen"/><span>Fashion</span></button>
+        <button class="scene-card depth-4" data-category="Kriya"><img src="https://images.unsplash.com/photo-1564399579883-451a5d44ec08?auto=format&fit=crop&w=500&q=85" alt="Kriya"/><span>Kriya</span></button>
       </div>
+      <div class="orbital-ring"></div>
     </section>
 
-    <section class="category-wrap" aria-label="Kategori">
+    <section class="feature-grid" id="categories">
+      <article class="glass-panel mini-panel">
+        <span class="mini-kicker">3D ROTATING HOME</span>
+        <h3>Kategori terasa hidup</h3>
+        <p>Gerakkan pointer untuk memberi depth dan parallax pada halaman.</p>
+      </article>
+      <article class="glass-panel viewer-panel">
+        <div class="viewer-stage" id="productViewer" tabindex="0">
+          <div class="viewer-glow"></div>
+          <img id="viewerImage" src="https://images.unsplash.com/photo-1564399579883-451a5d44ec08?auto=format&fit=crop&w=700&q=88" alt="Produk pilihan" />
+          <div class="viewer-ring"></div>
+          <span class="viewer-badge">360°</span>
+        </div>
+        <div class="viewer-copy"><span class="mini-kicker">PRODUCT 3D VIEW</span><h3>Putar produk</h3><p>Drag kiri/kanan untuk memutar tampilan produk secara interaktif.</p></div>
+      </article>
+      <article class="glass-panel creator-panel">
+        <div class="creator-avatar">R</div>
+        <div><span class="mini-kicker">CREATOR PROFILE</span><h3>Rani Studio</h3><p>Lombok, NTB • 124 karya • 12.5K pengikut</p></div>
+        <button class="small-btn" id="creatorJoinBtnBottom">Lihat profil</button>
+      </article>
+    </section>
+
+    <section class="feed glass-panel" id="explore">
       <div class="section-head">
-        <div><p class="eyebrow">EKSPLORASI</p><h2>Jelajahi kategori</h2></div>
-        <button class="link-btn" id="allCategoryBtn">Lihat semua →</button>
-      </div>
-      <div class="categories" id="categoryList"></div>
-    </section>
-
-    <section class="story-strip">
-      <div><span>01</span><strong>Belanja karya asli</strong><small>Langsung dari kreator Indonesia</small></div>
-      <div><span>02</span><strong>Kenali kreatornya</strong><small>Lihat profil, proses, dan cerita</small></div>
-      <div><span>03</span><strong>Tawar lewat DM</strong><small>Negosiasi langsung dan personal</small></div>
-      <div><span>04</span><strong>Dukung karya lokal</strong><small>Bangun ekonomi kreatif Indonesia</small></div>
-    </section>
-
-    <section class="feed" id="explore">
-      <div class="section-head">
-        <div><p class="eyebrow">PILIHAN HARI INI</p><h2>Karya yang sedang dibicarakan</h2></div>
-        <div class="feed-tabs" role="tablist">
+        <div><p class="eyebrow dark">PILIHAN HARI INI</p><h2>Karya yang sedang dibicarakan</h2></div>
+        <div class="feed-tabs">
           <button class="tab active" data-filter="Semua">Untukmu</button>
           <button class="tab" data-filter="Terbaru">Terbaru</button>
           <button class="tab" data-filter="Populer">Populer</button>
@@ -81,20 +96,14 @@
       </div>
       <div class="masonry" id="artGrid"></div>
     </section>
-
-    <section class="creator-banner">
-      <div>
-        <p class="eyebrow">UNTUK KREATOR</p>
-        <h2>Panggungmu. Toko-mu. Komunitasmu.</h2>
-        <p>Buat profil seperti Instagram, unggah karya, ceritakan proses, terima penawaran, dan bangun komunitas dari satu tempat.</p>
-      </div>
-      <button class="btn light" id="creatorJoinBtnBottom">Buka profil kreator</button>
-    </section>
   </main>
 
   <aside class="drawer" id="drawer" aria-hidden="true">
     <div class="drawer-backdrop" data-close-drawer></div>
-    <div class="drawer-panel"><button class="drawer-close" data-close-drawer>×</button><div id="drawerContent"></div></div>
+    <div class="drawer-panel">
+      <button class="drawer-close" data-close-drawer>×</button>
+      <div id="drawerContent"></div>
+    </div>
   </aside>
 
   <nav class="mobile-nav">
@@ -105,11 +114,6 @@
     <button id="mobileProfile">◎<span>Profil</span></button>
   </nav>
 
-  <footer>
-    <div class="brand footer-brand"><span class="brand-mark">NK</span><span class="brand-copy"><strong>Nusa Karya</strong><small>Dari Indonesia, untuk Dunia.</small></span></div>
-    <p>Ruang karya Indonesia untuk ditemukan, diapresiasi, dan dimiliki.</p>
-    <p class="copyright">© 2026 Nusa Karya</p>
-  </footer>
-  <script src="/app.js?v=20261028-cultural-marketplace-1" defer></script>
+  <script src="/app.js?v=20261028-3d-bronze-1" defer></script>
 </body>
 </html>
