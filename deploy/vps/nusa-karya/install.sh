@@ -30,6 +30,17 @@ if [ -f "$NGINX_AVAILABLE" ] && [ -L "$NGINX_ENABLED" ]; then
     exit 0
   fi
 
+  if command -v certbot >/dev/null 2>&1 && getent ahostsv4 "$DOMAIN" >/dev/null 2>&1; then
+    echo "NUSA_KARYA_TLS_REPAIR=START"
+    "${SUDO[@]}" certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --redirect --register-unsafely-without-email
+    public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15 -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
+    if [ "$public_code" = "200" ] && grep -qi "Nusa Karya" /tmp/nusa-karya-public.html; then
+      echo "NUSA_KARYA_TLS_REPAIR=PASS"
+      echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN"
+      exit 0
+    fi
+  fi
+
   echo "NUSA_KARYA_PUBLIC_HTTPS=NOT_YET_VERIFIED http=$public_code"
   exit 2
 fi
