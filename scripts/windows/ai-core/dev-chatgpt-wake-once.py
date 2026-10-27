@@ -298,8 +298,8 @@ def _wake_message(event, challenge, task_instruction, command_id=None, correlati
             " Khusus checkpoint DEV ini, jika dan hanya jika langkah pertama memang PAUSED, "
             "balas SATU objek JSON mentah (tanpa Markdown, tag escape, atau teks di luar JSON). "
             "Gunakan commandId=" + json.dumps(command_id) + " dan correlationId=" + json.dumps(correlation_id) +
-            " sebagai properti JSON. Taruh token [AI_CORE_ATTEST_ACK:" + challenge +
-            "] di properti string JSON attestationAck, bukan setelah objek. "
+            " sebagai properti JSON. Tempatkan token attestation ACK yang diwajibkan "
+            "SATU kali di properti string JSON attestationAck, bukan setelah objek. "
             "Pertahankan kind=SOP_CHECKPOINT, status=PAUSED, jobId, checkpointId, sopVersion, nextStepId "
             "dari SOP; jangan mengarang tanda tangan, checkpointReceipt, atau ACK akhir. "
         )
