@@ -52,6 +52,11 @@ jobs:
               target_client='openclaw-pc-worker'
               instruction='hostname'
               ;;
+            '[PC-SAFE] DEPLOY_NUSA_KARYA')
+              action='DEPLOY_NUSA_KARYA'
+              target_client='openclaw-pc-worker'
+              instruction='Owner-authorized bounded Nusa Karya deployment only. Use the real local exec tool on PC1. From PowerShell, use the existing SSH identity C:\Users\user\.ssh\openclaw_vps to connect non-interactively to root@72.61.210.205. On that VPS, deploy only Travelintrips/Core-AI-Foundation commit 404e258792f521d297f150a5499a969b8d235ad4 into /opt/nusa-karya-source, then run bash deploy/vps/nusa-karya/install.sh /opt/nusa-karya-source. Do not modify databases, AI Core containers, unrelated Nginx vhosts, firewall, SSH settings, or other services. Capture the actual exit code and output. Report COMPLETED only if the installer emits exactly NUSA_KARYA_PUBLIC_HTTPS=PASS domain=nusakarya.aicst.co.id. Otherwise report FAILED/BLOCKED with the real error; never infer success from SSH connection or local health alone.'
+              ;;
             '[PC-SAFE] OPEN_NOTEPAD')
               action='OPEN_NOTEPAD'
               instruction='This is an owner-authorized safe PC test. Use the real local exec tool to run: powershell.exe -NoProfile -Command Start-Process -FilePath notepad.exe . Do not write or delete files. Report the actual execution result. Do not claim success without a tool call.'
@@ -129,6 +134,9 @@ jobs:
               # A returned hostname must be machine-verified, not merely completed.
               if [ "$ACTION" = 'HOSTNAME' ] && [ "$status" = 'VERIFIED_COMPLETED' ]; then
                 jq -e '.message == "Travelintrips" and .checkpoint.statusCode == "RESULT_VERIFIED"' <<< "$event" >/dev/null || status='HOSTNAME_PROOF_FAILED'
+              fi
+              if [ "$ACTION" = 'DEPLOY_NUSA_KARYA' ] && [ "$status" = 'VERIFIED_COMPLETED' ]; then
+                jq -e '.checkpoint.statusCode == "RESULT_VERIFIED" and (.message | contains("NUSA_KARYA_PUBLIC_HTTPS=PASS domain=nusakarya.aicst.co.id"))' <<< "$event" >/dev/null || status='DEPLOY_PROOF_FAILED'
               fi
               response_id="$(jq -r '.id // empty' <<< "$event")"
               if [ -n "$response_id" ]; then
