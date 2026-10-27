@@ -1,0 +1,129 @@
+name: Nusa Karya VPS Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'artifacts/nusa-karya/**'
+      - 'deploy/vps/nusa-karya/**'
+      - '.github/workflows/nusa-karya-vps-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nusa-karya-vps-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ai-workers-vps
+    env:
+      DOMAIN: nusakarya.aicst.co.id
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - name: Resolve exact target commit
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "NUSA_KARYA_TARGET_SHA=$sha"
+
+      - name: Validate Nusa Karya deployment payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s artifacts/nusa-karya/index.html
+          test -s artifacts/nusa-karya/styles.css
+          test -s artifacts/nusa-karya/app.js
+          test -s deploy/vps/nusa-karya/nginx.conf
+          test -s deploy/vps/nusa-karya/install.sh
+          grep -q 'Nusa Karya' artifacts/nusa-karya/index.html
+          bash -n deploy/vps/nusa-karya/install.sh
+          echo "NUSA_KARYA_PAYLOAD=PASS"
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AI_WORKERS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.AI_WORKERS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/nusa-karya"
+          chmod 600 "$HOME/.ssh/nusa-karya"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Deploy isolated Nusa Karya site on VPS
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.AI_WORKERS_SSH_HOST }}
+          SSH_USER: ${{ secrets.AI_WORKERS_SSH_USER }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$TARGET_SHA"
+          ssh -i "$HOME/.ssh/nusa-karya"             -o BatchMode=yes             -o StrictHostKeyChecking=yes             "$SSH_USER@$SSH_HOST"             bash -s -- "$TARGET_SHA" <<'REMOTE'
+          set -euo pipefail
+          TARGET_SHA="$1"
+          DEPLOY_PATH="/opt/nusa-karya-source"
+
+          if [ "$(id -u)" -eq 0 ]; then SUDO=(); else SUDO=(sudo); fi
+
+          if [ ! -d "$DEPLOY_PATH/.git" ]; then
+            "${SUDO[@]}" mkdir -p "$DEPLOY_PATH"
+            "${SUDO[@]}" chown "$(id -u):$(id -g)" "$DEPLOY_PATH"
+            git clone https://github.com/Travelintrips/Core-AI-Foundation.git "$DEPLOY_PATH"
+          fi
+
+          git -C "$DEPLOY_PATH" fetch --prune origin
+          git -C "$DEPLOY_PATH" checkout --detach "$TARGET_SHA"
+
+          cd "$DEPLOY_PATH"
+          bash deploy/vps/nusa-karya/install.sh "$DEPLOY_PATH"
+          REMOTE
+
+      - name: Verify public HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            code="$(curl --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya.html -w '%{http_code}' "https://$DOMAIN/" || true)"
+            health="$(curl --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya-health.json -w '%{http_code}' "https://$DOMAIN/healthz" || true)"
+            if [ "$code" = "200" ] && [ "$health" = "200" ] &&
+               grep -qi 'Nusa Karya' /tmp/nusakarya.html &&
+               grep -q '"status":"ok"' /tmp/nusakarya-health.json; then
+              echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN sha=${{ steps.target.outputs.sha }}"
+              exit 0
+            fi
+            echo "NUSA_KARYA_WAIT attempt=$attempt page=$code health=$health"
+            sleep 10
+          done
+          echo "::error::Nusa Karya public HTTPS verification failed."
+          exit 1
+
+      - name: Remove local SSH material
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.ssh/nusa-karya"

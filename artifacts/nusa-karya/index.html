@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5efe5" />
+  <title>Nusa Karya — Karya Indonesia</title>
+  <meta name="description" content="Temukan, dukung, dan miliki karya terbaik kreator Indonesia." />
+  <link rel="preconnect" href="https://images.unsplash.com" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#home" aria-label="Nusa Karya">
+      <span class="brand-mark">NK</span>
+      <span><strong>Nusa</strong> Karya</span>
+    </a>
+    <label class="search">
+      <span>⌕</span>
+      <input id="searchInput" type="search" placeholder="Cari karya, kreator, kota..." />
+    </label>
+    <nav class="nav-actions" aria-label="Aksi utama">
+      <button class="icon-btn" id="messageBtn" title="Pesan">✉</button>
+      <button class="icon-btn" id="savedBtn" title="Tersimpan">♡</button>
+      <button class="profile-btn" id="profileBtn">A</button>
+    </nav>
+  </header>
+
+  <main id="home">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">KARYA INDONESIA, DALAM SATU RUMAH</p>
+        <h1>Temukan karya yang punya <em>cerita.</em></h1>
+        <p class="hero-text">Jelajahi karya seni, fesyen, furnitur, pertunjukan, musik, kriya, dan karya unik dari kreator di seluruh Indonesia.</p>
+        <div class="hero-actions">
+          <button class="btn primary" data-scroll="#explore">Jelajahi karya</button>
+          <button class="btn ghost" id="sellBtn">Mulai berkarya</button>
+        </div>
+      </div>
+      <div class="hero-collage" aria-hidden="true">
+        <div class="tile tall" style="background-image:url('https://images.unsplash.com/photo-1577083552431-6e5fd01988a5?auto=format&fit=crop&w=900&q=80')"></div>
+        <div class="tile" style="background-image:url('https://images.unsplash.com/photo-1605106702734-205df224ecce?auto=format&fit=crop&w=900&q=80')"></div>
+        <div class="tile" style="background-image:url('https://images.unsplash.com/photo-1598301257982-0cf014dabbcd?auto=format&fit=crop&w=900&q=80')"></div>
+      </div>
+    </section>
+
+    <section class="category-wrap" aria-label="Kategori">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">EKSPLORASI</p>
+          <h2>Pilih duniamu</h2>
+        </div>
+        <button class="link-btn" id="allCategoryBtn">Lihat semua →</button>
+      </div>
+      <div class="categories" id="categoryList"></div>
+    </section>
+
+    <section class="feed" id="explore">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">PILIHAN HARI INI</p>
+          <h2>Karya yang sedang dibicarakan</h2>
+        </div>
+        <div class="feed-tabs" role="tablist">
+          <button class="tab active" data-filter="Semua">Untukmu</button>
+          <button class="tab" data-filter="Terbaru">Terbaru</button>
+          <button class="tab" data-filter="Populer">Populer</button>
+        </div>
+      </div>
+      <div class="masonry" id="artGrid"></div>
+    </section>
+
+    <section class="creator-banner">
+      <div>
+        <p class="eyebrow">UNTUK KREATOR</p>
+        <h2>Panggungmu. Toko-mu. Komunitasmu.</h2>
+        <p>Buat profil seperti portofolio sosial, unggah foto atau video, terima penawaran lewat DM, tandai karya SOLD, dan jual langsung ke kolektor.</p>
+      </div>
+      <button class="btn light" id="creatorJoinBtn">Buka profil kreator</button>
+    </section>
+  </main>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-backdrop" data-close-drawer></div>
+    <div class="drawer-panel">
+      <button class="drawer-close" data-close-drawer>×</button>
+      <div id="drawerContent"></div>
+    </div>
+  </aside>
+
+  <nav class="mobile-nav">
+    <button data-scroll="#home">⌂<span>Beranda</span></button>
+    <button data-scroll="#explore">⌕<span>Jelajah</span></button>
+    <button id="mobileAdd">＋<span>Jual</span></button>
+    <button id="mobileSaved">♡<span>Simpan</span></button>
+    <button id="mobileProfile">◎<span>Profil</span></button>
+  </nav>
+
+  <footer>
+    <div class="brand footer-brand"><span class="brand-mark">NK</span><span><strong>Nusa</strong> Karya</span></div>
+    <p>Ruang karya Indonesia untuk ditemukan, diapresiasi, dan dimiliki.</p>
+    <p class="copyright">© 2026 Nusa Karya</p>
+  </footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>
