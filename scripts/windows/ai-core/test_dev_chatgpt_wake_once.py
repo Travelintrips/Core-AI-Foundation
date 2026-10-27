@@ -691,7 +691,7 @@ class HelperLeaseEntrypointTests(unittest.TestCase):
              patch.object(wake.os, "_exit", side_effect=exit_after_flush):
             wake.main()
         initialize.assert_called_once_with(input_stream.buffer)
-        submit.assert_called_once_with("fixture", DELL, metadata=payload["metadata"], lease_guard=guard)
+        submit.assert_called_once_with("fixture", DELL, metadata=payload["metadata"], lease_guard=guard, command_id=None)
         self.assertEqual(guard.authorize.call_count, 2)
         self.assertEqual(exits, [(0, {"ok": True, "synthetic": True})])
         guard.job.close.assert_not_called()
