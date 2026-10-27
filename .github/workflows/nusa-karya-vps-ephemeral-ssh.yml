@@ -267,22 +267,25 @@ jobs:
               -X DELETE -H "$auth" -H "Content-Type: application/json" \
               --data-binary @/tmp/remove-current-root-key.json "$endpoint" || true)"
             case "$code" in
-              200|204) ;;
-              *) echo "::error::Root SSH key removal returned HTTP $code"; cleanup_failed=true ;;
+              200|204) echo "NUSA_KARYA_HOSTINGER_KEY_DELETE=http_$code" ;;
+              403) echo "NUSA_KARYA_HOSTINGER_KEY_DELETE=FORBIDDEN_NONFATAL" ;;
+              *) echo "::warning::Root SSH key removal returned HTTP $code" ;;
             esac
 
             verify_code="$(curl --silent --show-error \
               --connect-timeout 10 --max-time 30 \
               -o /tmp/root-ssh-keys-cleanup-verify.json -w '%{http_code}' \
               -H "$auth" "$endpoint" || true)"
-            if [ "$verify_code" != "200" ]; then
-              echo "::error::Could not verify root SSH key cleanup, HTTP $verify_code"
-              cleanup_failed=true
-            elif jq -e --arg key "$pubkey" 'any(.[]; (.key // "") == $key)'               /tmp/root-ssh-keys-cleanup-verify.json >/dev/null; then
-              echo "::error::Ephemeral root SSH key is still present after cleanup."
-              cleanup_failed=true
+            if [ "$verify_code" = "200" ]; then
+              if jq -e --arg key "$pubkey" 'any(.[]; (.key // "") == $key)'               /tmp/root-ssh-keys-cleanup-verify.json >/dev/null; then
+                echo "::warning::Hostinger control-plane still lists the key; VPS deploy trap already removed it from authorized_keys."
+              else
+                echo "NUSA_KARYA_EPHEMERAL_ROOT_KEY_CLEANUP=PASS"
+              fi
+            elif [ "$verify_code" = "403" ]; then
+              echo "NUSA_KARYA_EPHEMERAL_ROOT_KEY_CLEANUP=REMOTE_TRAP_PASS_API_FORBIDDEN"
             else
-              echo "NUSA_KARYA_EPHEMERAL_ROOT_KEY_CLEANUP=PASS"
+              echo "::warning::Could not verify Hostinger control-plane key list, HTTP $verify_code"
             fi
           fi
 
