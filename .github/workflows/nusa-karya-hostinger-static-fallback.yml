@@ -1,0 +1,217 @@
+name: Nusa Karya Hostinger Static Fallback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'artifacts/nusa-karya/**'
+      - '.github/workflows/nusa-karya-hostinger-static-fallback.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nusa-karya-hostinger-static-fallback
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: development
+    timeout-minutes: 15
+    env:
+      HOSTINGER_API_BASE: https://developers.hostinger.com/api
+      TARGET_DOMAIN: nusakarya.aicst.co.id
+      FAMILY_DOMAIN: aicst.co.id
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate isolated static payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOSTINGER_API_TOKEN"
+          test -s artifacts/nusa-karya/index.html
+          test -s artifacts/nusa-karya/styles.css
+          test -s artifacts/nusa-karya/app.js
+          test -s artifacts/nusa-karya/healthz
+          grep -qi 'Nusa Karya' artifacts/nusa-karya/index.html
+          jq -e '.status == "ok"' artifacts/nusa-karya/healthz >/dev/null
+          echo "NUSA_KARYA_STATIC_PAYLOAD=PASS"
+
+      - name: Resolve one existing Hostinger order for aicst.co.id family
+        id: hosting
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100"             -o /tmp/websites.json
+          jq -e '(.data | type) == "array"' /tmp/websites.json >/dev/null
+
+          target_count="$(jq --arg d "$TARGET_DOMAIN" '[.data[] | select(.domain == $d)] | length' /tmp/websites.json)"
+          if [ "$target_count" -gt 1 ]; then
+            echo "::error::Target domain appears more than once in Hostinger inventory."
+            exit 1
+          fi
+
+          if [ "$target_count" -eq 1 ]; then
+            username="$(jq -r --arg d "$TARGET_DOMAIN" '.data[] | select(.domain == $d) | .username // empty' /tmp/websites.json)"
+            order_id="$(jq -r --arg d "$TARGET_DOMAIN" '.data[] | select(.domain == $d) | .order_id // empty' /tmp/websites.json)"
+            test -n "$username"
+            test -n "$order_id"
+            echo "existing=true" >> "$GITHUB_OUTPUT"
+            echo "username=$username" >> "$GITHUB_OUTPUT"
+            echo "order_id=$order_id" >> "$GITHUB_OUTPUT"
+            echo "NUSA_KARYA_HOSTING=EXISTING"
+            exit 0
+          fi
+
+          mapfile -t orders < <(jq -r --arg root "$FAMILY_DOMAIN" --arg target "$TARGET_DOMAIN" '
+            [.data[]
+              | select(.is_enabled == true)
+              | select(.domain != $target)
+              | select(.domain == $root or (.domain | endswith("." + $root)))
+              | (.order_id | tostring)]
+            | unique[]' /tmp/websites.json)
+
+          if [ "${#orders[@]}" -ne 1 ] || [ -z "${orders[0]:-}" ]; then
+            echo "::error::No unique existing Hostinger hosting order for aicst.co.id family; refusing ambiguous placement."
+            exit 1
+          fi
+
+          echo "existing=false" >> "$GITHUB_OUTPUT"
+          echo "order_id=${orders[0]}" >> "$GITHUB_OUTPUT"
+          echo "NUSA_KARYA_HOSTING_ORDER=UNIQUE"
+
+      - name: Create isolated Nusa Karya website when absent
+        if: steps.hosting.outputs.existing != 'true'
+        shell: bash
+        env:
+          ORDER_ID: ${{ steps.hosting.outputs.order_id }}
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          jq -n --arg domain "$TARGET_DOMAIN" --argjson order_id "$ORDER_ID"             '{domain:$domain,order_id:$order_id}' > /tmp/create-site.json
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/create-site.json             "$HOSTINGER_API_BASE/hosting/v1/websites" >/tmp/create-response.json
+          echo "NUSA_KARYA_HOSTING_CREATE=ACCEPTED"
+
+      - name: Wait for exact target website
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          for attempt in $(seq 1 30); do
+            curl --fail-with-body --silent --show-error               --connect-timeout 10 --max-time 25               -H "$auth" "$HOSTINGER_API_BASE/hosting/v1/websites?per_page=100"               -o /tmp/websites-current.json
+            row="$(jq -c --arg d "$TARGET_DOMAIN" '[.data[] | select(.domain == $d)] | if length == 1 then .[0] else empty end' /tmp/websites-current.json)"
+            if [ -n "$row" ]; then
+              username="$(jq -r '.username // empty' <<<"$row")"
+              enabled="$(jq -r '.is_enabled // false' <<<"$row")"
+              if [ -n "$username" ] && [ "$enabled" = "true" ]; then
+                echo "username=$username" >> "$GITHUB_OUTPUT"
+                echo "NUSA_KARYA_HOSTING_READY=PASS"
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "::error::Nusa Karya Hostinger website did not become ready in time."
+          exit 1
+
+      - name: Build static archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/nusa-karya.zip
+          (
+            cd artifacts/nusa-karya
+            zip -q -r /tmp/nusa-karya.zip index.html styles.css app.js healthz
+          )
+          test -s /tmp/nusa-karya.zip
+          echo "NUSA_KARYA_ARCHIVE=PASS"
+
+      - name: Upload archive through Hostinger file API
+        id: upload
+        shell: bash
+        env:
+          USERNAME: ${{ steps.target.outputs.username }}
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          jq -n --arg username "$USERNAME" --arg domain "$TARGET_DOMAIN"             '{username:$username,domain:$domain}' > /tmp/upload-url-request.json
+
+          for attempt in $(seq 1 20); do
+            code="$(curl --silent --show-error               --connect-timeout 10 --max-time 30               -o /tmp/upload-url.json -w '%{http_code}'               -H "$auth" -H "Content-Type: application/json"               --data-binary @/tmp/upload-url-request.json               "$HOSTINGER_API_BASE/hosting/v1/files/upload-urls" || true)"
+            if [ "$code" = "200" ]; then break; fi
+            if [ "$code" != "409" ]; then
+              cat /tmp/upload-url.json 2>/dev/null || true
+              echo "::error::Hostinger upload URL request failed HTTP $code"
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$code" = "200"
+
+          upload_url="$(jq -r '.url // empty' /tmp/upload-url.json)"
+          auth_key="$(jq -r '.auth_key // empty' /tmp/upload-url.json)"
+          rest_auth_key="$(jq -r '.rest_auth_key // empty' /tmp/upload-url.json)"
+          test -n "$upload_url"
+          test -n "$auth_key"
+          test -n "$rest_auth_key"
+
+          archive_name="nusa-karya.zip"
+          size="$(stat -c%s /tmp/nusa-karya.zip)"
+          endpoint="${upload_url%/}/$archive_name?override=true"
+
+          create_code="$(curl --silent --show-error             --connect-timeout 10 --max-time 30             -o /tmp/tus-create.out -w '%{http_code}'             -X POST "$endpoint"             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Upload-Length: $size"             -H "Upload-Offset: 0" || true)"
+          test "$create_code" = "201"
+
+          patch_code="$(curl --silent --show-error             --connect-timeout 10 --max-time 60             -o /tmp/tus-patch.out -w '%{http_code}'             -X PATCH "$endpoint"             -H "X-Auth: $auth_key"             -H "X-Auth-Rest: $rest_auth_key"             -H "Tus-Resumable: 1.0.0"             -H "Content-Type: application/offset+octet-stream"             -H "Upload-Offset: 0"             --data-binary @/tmp/nusa-karya.zip || true)"
+          test "$patch_code" = "204"
+          echo "archive_path=$archive_name" >> "$GITHUB_OUTPUT"
+          echo "NUSA_KARYA_UPLOAD=PASS"
+
+      - name: Deploy uploaded static archive
+        shell: bash
+        env:
+          USERNAME: ${{ steps.target.outputs.username }}
+          ARCHIVE_PATH: ${{ steps.upload.outputs.archive_path }}
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          jq -n --arg archive_path "$ARCHIVE_PATH" '{archive_path:$archive_path}' > /tmp/deploy-static.json
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 60             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/deploy-static.json             "$HOSTINGER_API_BASE/hosting/v1/accounts/$USERNAME/websites/$TARGET_DOMAIN/deploy"             >/tmp/deploy-response.json
+          echo "NUSA_KARYA_STATIC_DEPLOY=ACCEPTED"
+
+      - name: Request SSL for exact target
+        shell: bash
+        env:
+          USERNAME: ${{ steps.target.outputs.username }}
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          code="$(curl --silent --show-error             --connect-timeout 10 --max-time 30             -o /tmp/ssl-setup.json -w '%{http_code}'             -X POST -H "$auth"             "$HOSTINGER_API_BASE/hosting/v1/accounts/$USERNAME/websites/$TARGET_DOMAIN/ssl/setup" || true)"
+          case "$code" in
+            200|201|202|409|422) echo "NUSA_KARYA_SSL_REQUEST=http_$code" ;;
+            *) cat /tmp/ssl-setup.json 2>/dev/null || true; echo "::error::Unexpected SSL setup HTTP $code"; exit 1 ;;
+          esac
+
+      - name: Verify public Nusa Karya
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            page="$(curl --silent --show-error --connect-timeout 6 --max-time 15               -o /tmp/nk-page.html -w '%{http_code}' "https://$TARGET_DOMAIN/" || true)"
+            health="$(curl --silent --show-error --connect-timeout 6 --max-time 15               -o /tmp/nk-health.json -w '%{http_code}' "https://$TARGET_DOMAIN/healthz" || true)"
+            if [ "$page" = "200" ] && [ "$health" = "200" ] &&                grep -qi 'Nusa Karya' /tmp/nk-page.html &&                jq -e '.status == "ok"' /tmp/nk-health.json >/dev/null 2>&1; then
+              echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$TARGET_DOMAIN"
+              exit 0
+            fi
+            echo "NUSA_KARYA_PUBLIC_WAIT attempt=$attempt page=$page health=$health"
+            sleep 10
+          done
+          echo "::error::Nusa Karya public HTTPS did not become healthy."
+          exit 1
