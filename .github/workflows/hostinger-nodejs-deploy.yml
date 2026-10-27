@@ -92,13 +92,19 @@ jobs:
           # EXPECTED_SHA^1. Empty trigger commits can otherwise hide runtime
           # changes that have never reached production.
           health="https://$HOSTINGER_SCOPE_DOMAIN/api/healthz"
-          rm -f /tmp/deploy-scope.headers /tmp/deploy-scope.body
-          curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
-            -D /tmp/deploy-scope.headers -o /tmp/deploy-scope.body \
-            -H "Accept: application/json" \
-            -H "User-Agent: CST-AI-Core-Deploy-Scope/1.0" \
-            "$health" || true
-          base_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\\r","",$2); print $2}' /tmp/deploy-scope.headers | tail -n1)
+          base_sha=""
+          for attempt in 1 2 3; do
+            rm -f /tmp/deploy-scope.headers /tmp/deploy-scope.body
+            curl --http1.1 --silent --show-error --connect-timeout 5 --max-time 10 \
+              -D /tmp/deploy-scope.headers -o /tmp/deploy-scope.body \
+              -H "Accept: application/json" \
+              -H "User-Agent: CST-AI-Core-Deploy-Scope/1.0" \
+              "$health" || true
+            base_sha=$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\\r","",$2); print $2}' /tmp/deploy-scope.headers | tail -n1)
+            echo "deploy_scope_probe_attempt=$attempt live_sha=${base_sha:-missing}"
+            [ -n "$base_sha" ] && break
+            [ "$attempt" = "3" ] || sleep 2
+          done
 
           if [ -z "$base_sha" ]; then
             echo "deploy_required=true" >> "$GITHUB_OUTPUT"
