@@ -67,16 +67,6 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # Fail closed BEFORE checking Hostinger native deploy or using API tokens.
-      - name: Require verified live DEV release and exact CI ancestry
-        if: steps.freshness.outputs.stale != 'true'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          node scripts/verify-dev-first-release.mjs "$EXPECTED_SHA"
-
       - name: Detect whether runtime deployment is required
         id: deploy_scope
         if: steps.freshness.outputs.stale != 'true'
@@ -143,6 +133,17 @@ jobs:
           echo "deploy_required=$deploy_required" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
           echo "runtime_deploy=$([ "$deploy_required" = "true" ] && echo RUN || echo SKIP) reason=$reason"
+
+      # Runtime-neutral changes must be classified before the production gate.
+      # Only actual AI Core runtime releases may proceed to DEV-first verification.
+      - name: Require verified live DEV release and exact CI ancestry
+        if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-dev-first-release.mjs "$EXPECTED_SHA"
 
       - name: Give native Hostinger deploy a short grace period
         if: steps.freshness.outputs.stale != 'true' && steps.deploy_scope.outputs.deploy_required == 'true'
