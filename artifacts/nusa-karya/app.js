@@ -111,7 +111,7 @@ document.querySelector("#mobileSaved").onclick=showSaved;
 const profile=()=>openDrawer("Profilmu","<p>Profil pembeli/kreator akan memuat karya, pengikut, likes, lokasi, bio, dan katalog SOLD.</p><button class='btn primary'>Masuk / Daftar</button>");
 document.querySelector("#profileBtn").onclick=profile;document.querySelector("#mobileProfile").onclick=profile;
 const sell=()=>openDrawer("Mulai menjual karya","<p>Alur MVP: buat profil kreator → unggah foto/video → tentukan harga atau buka penawaran → terima DM → tandai SOLD → checkout.</p><button class='btn primary'>Buat profil kreator</button>");
-document.querySelector("#sellBtn").onclick=sell;document.querySelector("#creatorJoinBtn").onclick=sell;document.querySelector("#mobileAdd").onclick=sell;
+document.querySelector("#sellBtn").onclick=sell;document.querySelector("#creatorJoinBtn").onclick=sell;document.querySelector("#creatorJoinBtnBottom").onclick=sell;document.querySelector("#mobileAdd").onclick=sell;
 document.querySelector("#messageBtn").onclick=()=>openDrawer("Pesan & penawaran","<div class='drawer-item'><strong>Raras Studio</strong><span>“Boleh ditawar untuk ukuran M?”</span></div><div class='drawer-item'><strong>Ruang Kayu</strong><span>“Pengiriman ke Jakarta tersedia.”</span></div>");
 renderCategories();renderWorks();
 
