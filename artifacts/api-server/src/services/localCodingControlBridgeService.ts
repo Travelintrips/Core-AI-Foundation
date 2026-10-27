@@ -22,6 +22,7 @@ import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, i
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
 import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
+import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent } from "./devSopCheckpointIssuer.js";
 import { assertNoSelfAttestedCheckpoint } from "./devCheckpointClaimGuard.js";
 import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
 
@@ -985,6 +986,7 @@ export async function completeCodingBridgeCommand(input: {
 }) {
   await ensureCodingControlBridgeTables();
   const details = input.details ?? {};
+  const sopCheckpointIntent = input.status === "FAILED" ? parseDevSopCheckpointIntent(input.message) : null;
   // Prevent a successful process exit from masquerading as a passed E2E.
   const verifiedStatus = input.status === "COMPLETED" &&
     hasUnverifiedExternalBrowserCompletion({ message: input.message, details })
@@ -1026,10 +1028,12 @@ export async function completeCodingBridgeCommand(input: {
     if (!row) return null;
     // The terminal UPDATE holds the claim row lock. Reject a forged or downgraded
     // browser receipt inside this transaction, before either completion can commit.
-    if (input.status === "COMPLETED") {
+    let verifiedCheckpointWake = false;
+    if (input.status === "COMPLETED" || sopCheckpointIntent !== null) {
       const metadata = row["metadata_json"];
       const wakeBinding = isRecord(metadata) ? readDevWakeBinding(metadata["wakeBinding"]) : null;
       const mustVerifyWake = input.clientId === DEV_WAKE_DELL_WORKER || wakeBinding !== null;
+      if (sopCheckpointIntent && !mustVerifyWake) throw new Error("DEV_SOP_CHECKPOINT_WORKER_BINDING_REQUIRED");
       if (mustVerifyWake) {
         const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
         const owner = isRecord(metadata) ? metadata["conversationId"] : null;
@@ -1050,9 +1054,40 @@ export async function completeCodingBridgeCommand(input: {
         const receipt = verifyDevWakeCommandReceipt({ metadata, details, notBefore: receivedAt,
           receivedAt: new Date().toISOString(), publicKeyDerBase64 });
         if (!receipt.verified) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_ATTESTATION_INVALID");
+        verifiedCheckpointWake = true;
       }
     }
     const taskId=row["task_id"] ? String(row["task_id"]) : null;
+    if (sopCheckpointIntent) {
+      const commandMeta = isRecord(row["metadata_json"]) ? row["metadata_json"] as Record<string, unknown> : {};
+      if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
+          commandMeta["devOnly"] !== true || commandMeta["capability"] !== "chatgpt:wake" ||
+          typeof commandMeta["correlationId"] !== "string") {
+        throw new Error("DEV_SOP_CHECKPOINT_SOURCE_NOT_AUTHORIZED");
+      }
+      const assistantAttestation = isRecord(details["attestation"]) ? details["attestation"] : {};
+      const checkpointReceipt = issueVerifiedDevSopCheckpoint({
+        message: input.message, intent: sopCheckpointIntent, verifiedAssistantReceipt: verifiedCheckpointWake,
+        assistantResponseHash: assistantAttestation["assistantResponseHash"],
+        commandId: input.commandId, correlationId: commandMeta["correlationId"],
+        privateKeyPkcs8DerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
+      });
+      // One parent command update, checkpoint insert, and terminal insert share this transaction.
+      // A concurrent duplicate callback cannot claim the same PROCESSING command twice.
+      await tx.insert(aiCodingBridgeResponsesTable).values({
+        commandId: input.commandId, taskId, kind: "CHECKPOINT", message: "Verified DEV SOP checkpoint",
+        checkpointJson: {
+          jobId: checkpointReceipt.jobId, checkpointId: checkpointReceipt.checkpointId,
+          nextStepId: checkpointReceipt.nextStepId, sopVersion: checkpointReceipt.sopVersion,
+        },
+        metadataJson: {
+          verified: true, checkpointVerified: true, verifiedAssistantReply: true,
+          jobId: checkpointReceipt.jobId, sopVersion: checkpointReceipt.sopVersion,
+          attestation: { algorithm: "Ed25519", signature: checkpointReceipt.signature },
+          checkpointReceipt,
+        },
+      });
+    }
     const [response]=await tx.insert(aiCodingBridgeResponsesTable).values({
       commandId:input.commandId,taskId,kind:verifiedStatus,message:input.message,
       checkpointJson:{status:verifiedStatus,statusCode:evidence.statusCode,deliveryCode:evidence.deliveryCode,e2eCode:evidence.e2eCode,clientId:input.clientId},
