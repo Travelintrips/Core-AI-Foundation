@@ -5,13 +5,16 @@ import assert from "node:assert/strict";
 const workflow = (name) =>
   readFileSync(new URL("../.github/workflows/" + name, import.meta.url), "utf8");
 
-test("all GitHub production Node release paths require DEV proof before scope and deploy", () => {
+test("production Node release classifies scope before DEV proof and deploy", () => {
   const yaml = workflow("hostinger-nodejs-deploy.yml");
-  const evidence = yaml.indexOf("node scripts/verify-dev-first-release.mjs");
   const scope = yaml.indexOf("- name: Detect whether runtime deployment is required");
+  const evidence = yaml.indexOf("node scripts/verify-dev-first-release.mjs");
   const nativeGrace = yaml.indexOf("- name: Give native Hostinger deploy a short grace period");
-  assert.ok(evidence > 0 && evidence < scope && scope < nativeGrace);
-  assert.match(yaml, /steps\.freshness\.outputs\.stale != 'true'/);
+  assert.ok(scope > 0 && scope < evidence && evidence < nativeGrace);
+  assert.match(
+    yaml,
+    /Require verified live DEV release and exact CI ancestry[\s\S]*?if: steps\.freshness\.outputs\.stale != 'true' && steps\.deploy_scope\.outputs\.deploy_required == 'true'/,
+  );
 });
 
 test("VPS PROD release is manual and proves exact DEV before SSH", () => {
