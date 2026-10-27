@@ -607,8 +607,25 @@ function runBoundChild(context, work, runtime, lease) {
   });
 }
 
+/** Only a genuinely attested, precisely bound JSON pause may close a step for auto-resume. */
+export function statusForBoundAnswer(work, answer) {
+  if (!answer?.ok) return "FAILED";
+  const meta = record(work?.metadata) ? work.metadata : {};
+  if (answer.details?.verifiedAssistantReply !== true ||
+      answer.message !== answer.details?.assistantResponseText ||
+      typeof meta.correlationId !== "string") return "COMPLETED";
+  let paused;
+  try { paused = JSON.parse(answer.message); } catch { return "COMPLETED"; }
+  const id = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
+  if (record(paused) && paused.kind === "SOP_CHECKPOINT" && paused.status === "PAUSED" &&
+      paused.commandId === work.commandId && paused.correlationId === meta.correlationId &&
+      [paused.jobId, paused.checkpointId, paused.sopVersion, paused.nextStepId]
+        .every(value => typeof value === "string" && id.test(value))) return "FAILED";
+  return "COMPLETED";
+}
+
 function confirmsBoundResult(value, work, answer) {
-  const status = answer.ok ? "COMPLETED" : "FAILED";
+  const status = statusForBoundAnswer(work, answer);
   const response = value?.response;
   if (!record(value) || value.commandId !== work.commandId || value.status !== status ||
       !record(response) || !matches(UUID, response.id) || response.commandId !== work.commandId ||
@@ -630,7 +647,7 @@ async function deliverBoundAnswer(work, runtime, lease, answer) {
   for (let attempt = 1; attempt <= 8 && lease.usable(); attempt++) {
     try {
       const committed = await http(runtime, "/ai/agent-runtime/work/" + encodeURIComponent(work.commandId) + "/result", {
-        clientId: workerId, claimToken: work.claimToken, status: answer.ok ? "COMPLETED" : "FAILED",
+        clientId: workerId, claimToken: work.claimToken, status: statusForBoundAnswer(work, answer),
         message: answer.message, details: answer.details,
       });
       if (!confirmsBoundResult(committed, work, answer)) {
