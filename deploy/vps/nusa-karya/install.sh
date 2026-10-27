@@ -17,6 +17,23 @@ test -f "$SOURCE_DIR/app.js"
 test -f "$NGINX_SOURCE"
 command -v nginx >/dev/null 2>&1
 
+if [ -f "$NGINX_AVAILABLE" ] && [ -L "$NGINX_ENABLED" ]; then
+  "${SUDO[@]}" install -d -m 0755 "$WEB_ROOT"
+  "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/index.html" "$WEB_ROOT/index.html"
+  "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/styles.css" "$WEB_ROOT/styles.css"
+  "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/app.js" "$WEB_ROOT/app.js"
+  echo "NUSA_KARYA_STATIC_REFRESH=PASS web_root=$WEB_ROOT"
+
+  public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15 -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
+  if [ "$public_code" = "200" ] && grep -qi "Nusa Karya" /tmp/nusa-karya-public.html; then
+    echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN"
+    exit 0
+  fi
+
+  echo "NUSA_KARYA_PUBLIC_HTTPS=NOT_YET_VERIFIED http=$public_code"
+  exit 2
+fi
+
 "${SUDO[@]}" install -d -m 0755 "$WEB_ROOT"
 "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/index.html" "$WEB_ROOT/index.html"
 "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/styles.css" "$WEB_ROOT/styles.css"
