@@ -367,7 +367,8 @@ def _submit_bound_native_once(root, binding, conversation, event, challenge, tas
         if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in receipt_context.items()):
             raise RuntimeError("Wake event receipt context mismatch; reconciliation required")
     transport = NativeTransport(root, binding, event, challenge, options, authorize, lease_guard=lease_guard)
-    observed = transport.run(_wake_message(event, challenge, task_instruction,\n                                           command_id, metadata.get("correlationId")))
+    observed = transport.run(_wake_message(event, challenge, task_instruction,
+                                           command_id, metadata.get("correlationId")))
     authorize()  # Revocation also fences key access and callback proof production.
     attestation = _attest_bound_observation(root, binding, conversation, event, challenge, observed, authorize)
     fingerprint = hashlib.sha256("|".join([binding["bindingFingerprint"], conversation, event, challenge,
