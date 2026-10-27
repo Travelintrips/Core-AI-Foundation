@@ -69,6 +69,14 @@ jobs:
             exit 0
           fi
 
+          family_site_count="$(jq --arg root "$FAMILY_DOMAIN" --arg target "$TARGET_DOMAIN" '
+            [.data[]
+              | select(.is_enabled == true)
+              | select(.domain != $target)
+              | select(.domain == $root or (.domain | endswith("." + $root)))]
+            | length' /tmp/websites.json)"
+          parent_site_count="$(jq --arg root "$FAMILY_DOMAIN" '
+            [.data[] | select(.is_enabled == true and .domain == $root)] | length' /tmp/websites.json)"
           mapfile -t orders < <(jq -r --arg root "$FAMILY_DOMAIN" --arg target "$TARGET_DOMAIN" '
             [.data[]
               | select(.is_enabled == true)
@@ -76,6 +84,26 @@ jobs:
               | select(.domain == $root or (.domain | endswith("." + $root)))
               | (.order_id | tostring)]
             | unique[]' /tmp/websites.json)
+
+          echo "NUSA_KARYA_DISCOVERY target_count=$target_count family_sites=$family_site_count family_orders=${#orders[@]} parent_sites=$parent_site_count"
+
+          if [ "$parent_site_count" -eq 1 ]; then
+            parent_username="$(jq -r --arg root "$FAMILY_DOMAIN" '.data[] | select(.is_enabled == true and .domain == $root) | .username // empty' /tmp/websites.json)"
+            parent_order_id="$(jq -r --arg root "$FAMILY_DOMAIN" '.data[] | select(.is_enabled == true and .domain == $root) | .order_id // empty' /tmp/websites.json)"
+            test -n "$parent_username"
+            test -n "$parent_order_id"
+            echo "parent=true" >> "$GITHUB_OUTPUT"
+            echo "parent_username=$parent_username" >> "$GITHUB_OUTPUT"
+            echo "order_id=$parent_order_id" >> "$GITHUB_OUTPUT"
+            echo "existing=false" >> "$GITHUB_OUTPUT"
+            echo "NUSA_KARYA_HOSTING_PARENT=UNIQUE"
+            exit 0
+          fi
+
+          if [ "$parent_site_count" -gt 1 ]; then
+            echo "::error::Parent aicst.co.id appears more than once; refusing ambiguous placement."
+            exit 1
+          fi
 
           if [ "${#orders[@]}" -ne 1 ] || [ -z "${orders[0]:-}" ]; then
             echo "::error::No unique existing Hostinger hosting order for aicst.co.id family; refusing ambiguous placement."
