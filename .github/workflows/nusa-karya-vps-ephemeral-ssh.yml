@@ -234,8 +234,8 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 24); do
-            page="$(curl --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya.html -w '%{http_code}' "https://$TARGET_DOMAIN/" || true)"
-            health="$(curl --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya-health.json -w '%{http_code}' "https://$TARGET_DOMAIN/healthz" || true)"
+            page="$(curl -4 --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya.html -w '%{http_code}' "https://$TARGET_DOMAIN/" || true)"
+            health="$(curl -4 --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya-health.json -w '%{http_code}' "https://$TARGET_DOMAIN/healthz" || true)"
             if [ "$page" = "200" ] && [ "$health" = "200" ] &&                grep -qi 'Nusa Karya' /tmp/nusakarya.html &&                grep -q '"status":"ok"' /tmp/nusakarya-health.json; then
               echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$TARGET_DOMAIN sha=$TARGET_APP_SHA"
               exit 0
