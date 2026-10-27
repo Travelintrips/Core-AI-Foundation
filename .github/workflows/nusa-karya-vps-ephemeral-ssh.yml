@@ -1,0 +1,241 @@
+name: Nusa Karya VPS Ephemeral SSH Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'artifacts/nusa-karya/**'
+      - 'deploy/vps/nusa-karya/**'
+      - '.github/workflows/nusa-karya-vps-ephemeral-ssh.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nusa-karya-vps-ephemeral-ssh
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: development
+    timeout-minutes: 20
+    env:
+      HOSTINGER_API_BASE: https://developers.hostinger.com/api
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+      TARGET_IP: 72.61.210.205
+      TARGET_DOMAIN: nusakarya.aicst.co.id
+      DNS_ZONE: aicst.co.id
+      DNS_NAME: nusakarya
+      TARGET_APP_SHA: 404e258792f521d297f150a5499a969b8d235ad4
+      TRUSTED_HOST_FINGERPRINT: SHA256:JwJ2yJtDrk5W3ptIfWGIxPHytDEaoHfPZ8WW/5ikUHc
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate Nusa Karya source and API token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOSTINGER_API_TOKEN"
+          git cat-file -e "$TARGET_APP_SHA^{commit}"
+          git show "$TARGET_APP_SHA:artifacts/nusa-karya/index.html" | grep -qi 'Nusa Karya'
+          git show "$TARGET_APP_SHA:deploy/vps/nusa-karya/install.sh" >/dev/null
+          echo "NUSA_KARYA_EPHEMERAL_PREFLIGHT=PASS"
+
+      - name: Resolve exact VPS and verify trusted SSH host key
+        id: vps
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" "$HOSTINGER_API_BASE/vps/v1/virtual-machines"             -o /tmp/vms.json
+
+          vm_row="$(jq -c --arg ip "$TARGET_IP" '
+            (if type=="array" then . elif (.data|type)=="array" then .data else [] end)
+            | [.[] | select(.state=="running") | select(any(.ipv4[]?; .address==$ip))]
+            | if length==1 then .[0] else empty end' /tmp/vms.json)"
+          test -n "$vm_row" || { echo "::error::Expected exactly one running VPS with target IP."; exit 1; }
+          vm_id="$(jq -r '.id // empty' <<<"$vm_row")"
+          test -n "$vm_id"
+          echo "vm_id=$vm_id" >> "$GITHUB_OUTPUT"
+
+          rm -f /tmp/nusa-karya-hostkey /tmp/nusa-karya-known-hosts
+          for attempt in 1 2 3; do
+            ssh-keyscan -T 10 -t ed25519 "$TARGET_IP" > /tmp/nusa-karya-hostkey 2>/dev/null || true
+            [ -s /tmp/nusa-karya-hostkey ] && break
+            sleep 2
+          done
+          test -s /tmp/nusa-karya-hostkey
+          actual_fp="$(ssh-keygen -lf /tmp/nusa-karya-hostkey -E sha256 | awk 'NR==1{print $2}')"
+          echo "NUSA_KARYA_SSH_HOST_FP=$actual_fp"
+          test "$actual_fp" = "$TRUSTED_HOST_FINGERPRINT" || {
+            echo "::error::VPS SSH host fingerprint mismatch; refusing connection."
+            exit 1
+          }
+          cp /tmp/nusa-karya-hostkey /tmp/nusa-karya-known-hosts
+          chmod 600 /tmp/nusa-karya-known-hosts
+          echo "NUSA_KARYA_SSH_HOST_TRUST=PASS"
+
+      - name: Generate and attach one-time SSH key
+        id: ephemeral
+        shell: bash
+        env:
+          VM_ID: ${{ steps.vps.outputs.vm_id }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_ID"
+          rm -f /tmp/nusa-karya-ci /tmp/nusa-karya-ci.pub /tmp/nusa-karya-public-key-id
+          ssh-keygen -q -t ed25519 -N ''             -C "nusa-karya-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"             -f /tmp/nusa-karya-ci
+          chmod 600 /tmp/nusa-karya-ci
+          pubkey="$(cat /tmp/nusa-karya-ci.pub)"
+          name="nusa-karya-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+
+          jq -n --arg name "$name" --arg key "$pubkey" '{name:$name,key:$key}' > /tmp/create-key.json
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/create-key.json             "$HOSTINGER_API_BASE/vps/v1/public-keys"             -o /tmp/create-key-response.json
+          key_id="$(jq -r '.id // empty' /tmp/create-key-response.json)"
+          test -n "$key_id"
+          printf '%s' "$key_id" > /tmp/nusa-karya-public-key-id
+          echo "key_id=$key_id" >> "$GITHUB_OUTPUT"
+
+          jq -n --argjson id "$key_id" '{ids:[$id]}' > /tmp/attach-key.json
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/attach-key.json             "$HOSTINGER_API_BASE/vps/v1/public-keys/attach/$VM_ID"             -o /tmp/attach-key-response.json
+          echo "NUSA_KARYA_EPHEMERAL_KEY_ATTACH=ACCEPTED"
+
+      - name: Provision exact Nusa Karya DNS record
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          endpoint="$HOSTINGER_API_BASE/dns/v1/zones/$DNS_ZONE"
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" "$endpoint" > /tmp/nusa-zone.json
+          jq -e 'type=="array"' /tmp/nusa-zone.json >/dev/null
+
+          records="$(jq --arg name "$DNS_NAME" '[.[] | select(.name==$name) | {name,type,records}]' /tmp/nusa-zone.json)"
+          if echo "$records" | jq -e 'any(.[]; .type != "A")' >/dev/null; then
+            echo "::error::Target DNS name exists with a non-A record; refusing overwrite."
+            exit 1
+          fi
+          current="$(echo "$records" | jq -r '[.[] | .records[]?.content] | unique | join(",")')"
+          if [ -n "$current" ] && [ "$current" != "$TARGET_IP" ]; then
+            echo "::error::Target DNS exists with a different IP; refusing overwrite."
+            exit 1
+          fi
+          if [ "$current" = "$TARGET_IP" ]; then
+            echo "NUSA_KARYA_DNS=ALREADY_CORRECT"
+            exit 0
+          fi
+
+          jq -n --arg name "$DNS_NAME" --arg ip "$TARGET_IP"             '{overwrite:true,zone:[{name:$name,type:"A",ttl:300,records:[{content:$ip}]}]}'             > /tmp/nusa-dns-write.json
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/nusa-dns-write.json             "$endpoint/validate" >/dev/null
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             -X PUT --data-binary @/tmp/nusa-dns-write.json             "$endpoint" >/dev/null
+          echo "NUSA_KARYA_DNS=WRITE_ACCEPTED domain=$TARGET_DOMAIN target=$TARGET_IP"
+
+      - name: Wait for one-time SSH access and public DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_ready=false
+          for attempt in $(seq 1 30); do
+            if ssh -i /tmp/nusa-karya-ci               -o BatchMode=yes -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts               -o ConnectTimeout=8               root@"$TARGET_IP" true 2>/dev/null; then
+              ssh_ready=true
+              echo "NUSA_KARYA_EPHEMERAL_SSH=PASS attempt=$attempt"
+              break
+            fi
+            sleep 4
+          done
+          [ "$ssh_ready" = "true" ] || { echo "::error::One-time SSH key did not become usable."; exit 1; }
+
+          dns_ready=false
+          for attempt in $(seq 1 60); do
+            ips="$(dig +short A "$TARGET_DOMAIN" @1.1.1.1 | sort -u | paste -sd, - || true)"
+            echo "NUSA_KARYA_DNS_WAIT attempt=$attempt ips=${ips:-missing}"
+            if [ "$ips" = "$TARGET_IP" ]; then dns_ready=true; break; fi
+            sleep 5
+          done
+          [ "$dns_ready" = "true" ] || { echo "::error::Public DNS did not converge to target VPS."; exit 1; }
+          echo "NUSA_KARYA_PUBLIC_DNS=PASS"
+
+      - name: Deploy isolated Nusa Karya to VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          pubkey_b64="$(base64 -w0 /tmp/nusa-karya-ci.pub)"
+          ssh -i /tmp/nusa-karya-ci             -o BatchMode=yes -o IdentitiesOnly=yes             -o StrictHostKeyChecking=yes             -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts             root@"$TARGET_IP"             bash -s -- "$TARGET_APP_SHA" "$pubkey_b64" <<'REMOTE'
+          set -euo pipefail
+          TARGET_SHA="$1"
+          PUBKEY_B64="$2"
+          DEPLOY_PATH="/opt/nusa-karya-source"
+          pubkey="$(printf '%s' "$PUBKEY_B64" | base64 --decode)"
+          key_blob="$(awk '{print $2}' <<<"$pubkey")"
+
+          cleanup_ephemeral_key() {
+            if [ -f /root/.ssh/authorized_keys ] && [ -n "$key_blob" ]; then
+              tmp="$(mktemp)"
+              awk -v k="$key_blob" 'NF < 2 || $2 != k' /root/.ssh/authorized_keys > "$tmp"
+              install -m 600 "$tmp" /root/.ssh/authorized_keys
+              rm -f "$tmp"
+            fi
+          }
+          trap cleanup_ephemeral_key EXIT
+
+          mkdir -p "$DEPLOY_PATH"
+          if [ ! -d "$DEPLOY_PATH/.git" ]; then
+            rm -rf "$DEPLOY_PATH"
+            git clone https://github.com/Travelintrips/Core-AI-Foundation.git "$DEPLOY_PATH"
+          fi
+          git -C "$DEPLOY_PATH" fetch --prune origin
+          git -C "$DEPLOY_PATH" checkout --detach "$TARGET_SHA"
+          test "$(git -C "$DEPLOY_PATH" rev-parse HEAD)" = "$TARGET_SHA"
+          cd "$DEPLOY_PATH"
+          bash deploy/vps/nusa-karya/install.sh "$DEPLOY_PATH"
+          REMOTE
+
+      - name: Verify public HTTPS independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            page="$(curl --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya.html -w '%{http_code}' "https://$TARGET_DOMAIN/" || true)"
+            health="$(curl --silent --show-error --connect-timeout 8 --max-time 15               -o /tmp/nusakarya-health.json -w '%{http_code}' "https://$TARGET_DOMAIN/healthz" || true)"
+            if [ "$page" = "200" ] && [ "$health" = "200" ] &&                grep -qi 'Nusa Karya' /tmp/nusakarya.html &&                grep -q '"status":"ok"' /tmp/nusakarya-health.json; then
+              echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$TARGET_DOMAIN sha=$TARGET_APP_SHA"
+              exit 0
+            fi
+            echo "NUSA_KARYA_HTTPS_WAIT attempt=$attempt page=$page health=$health"
+            sleep 10
+          done
+          echo "::error::Public Nusa Karya HTTPS verification failed."
+          exit 1
+
+      - name: Remove one-time SSH key material
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -s /tmp/nusa-karya-ci.pub ] && [ -s /tmp/nusa-karya-ci ] && [ -s /tmp/nusa-karya-known-hosts ]; then
+            pubkey_b64="$(base64 -w0 /tmp/nusa-karya-ci.pub)"
+            ssh -i /tmp/nusa-karya-ci               -o BatchMode=yes -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts               -o ConnectTimeout=8               root@"$TARGET_IP" bash -s -- "$pubkey_b64" <<'REMOTE'
+            PUBKEY_B64="$1"
+            pubkey="$(printf '%s' "$PUBKEY_B64" | base64 --decode)"
+            key_blob="$(awk '{print $2}' <<<"$pubkey")"
+            if [ -f /root/.ssh/authorized_keys ] && [ -n "$key_blob" ]; then
+              tmp="$(mktemp)"
+              awk -v k="$key_blob" 'NF < 2 || $2 != k' /root/.ssh/authorized_keys > "$tmp"
+              install -m 600 "$tmp" /root/.ssh/authorized_keys
+              rm -f "$tmp"
+            fi
+            REMOTE
+          fi
+
+          if [ -s /tmp/nusa-karya-public-key-id ] && [ -n "$HOSTINGER_API_TOKEN" ]; then
+            key_id="$(cat /tmp/nusa-karya-public-key-id)"
+            curl --silent --show-error               --connect-timeout 10 --max-time 30               -X DELETE               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$HOSTINGER_API_BASE/vps/v1/public-keys/$key_id"               >/tmp/delete-key.json || true
+          fi
+
+          rm -f /tmp/nusa-karya-ci /tmp/nusa-karya-ci.pub             /tmp/nusa-karya-hostkey /tmp/nusa-karya-known-hosts             /tmp/nusa-karya-public-key-id
+          echo "NUSA_KARYA_EPHEMERAL_KEY_CLEANUP=COMPLETE"
