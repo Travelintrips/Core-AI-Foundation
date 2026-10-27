@@ -43,8 +43,8 @@ def _matches(pattern, value):
 
 def binding_fingerprint(binding):
     return hashlib.sha256("|".join([
-        "dev-chatgpt-wake-binding/v1", binding["accountAlias"], binding["ownerChannel"],
-        binding["targetConversationId"], binding["workerId"], binding["browserProfile"],
+        "dev-chatgpt-account-binding/v2", binding["accountAlias"], binding["ownerChannel"],
+        binding["targetConversationId"],
     ]).encode("utf-8")).hexdigest()
 
 
