@@ -28,7 +28,7 @@ jobs:
       TARGET_DOMAIN: nusakarya.aicst.co.id
       DNS_ZONE: aicst.co.id
       DNS_NAME: nusakarya
-      TARGET_APP_SHA: 404e258792f521d297f150a5499a969b8d235ad4
+      TARGET_APP_SHA: ${{ github.sha }}
       TRUSTED_HOST_FINGERPRINT: SHA256:JwJ2yJtDrk5W3ptIfWGIxPHytDEaoHfPZ8WW/5ikUHc
 
     steps:

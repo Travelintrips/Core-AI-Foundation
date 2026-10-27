@@ -29,7 +29,15 @@ sed "s/nusakarya\.aicst\.co\.id/$DOMAIN/g" "$NGINX_SOURCE" > "$tmp_conf"
 "${SUDO[@]}" ln -sfn "$NGINX_AVAILABLE" "$NGINX_ENABLED"
 
 "${SUDO[@]}" nginx -t
-"${SUDO[@]}" systemctl reload nginx
+if "${SUDO[@]}" systemctl reload nginx 2>/tmp/nusa-karya-nginx-reload.err; then
+  echo "NUSA_KARYA_NGINX_RELOAD=SYSTEMCTL_PASS"
+elif "${SUDO[@]}" nginx -s reload 2>>/tmp/nusa-karya-nginx-reload.err; then
+  echo "NUSA_KARYA_NGINX_RELOAD=SIGNAL_PASS"
+else
+  cat /tmp/nusa-karya-nginx-reload.err >&2 || true
+  echo "NUSA_KARYA_NGINX_RELOAD=FAILED" >&2
+  exit 1
+fi
 
 local_code="$(curl --silent --show-error --connect-timeout 5 --max-time 10   -H "Host: $DOMAIN" -o /tmp/nusa-karya-health.json -w '%{http_code}' http://127.0.0.1/healthz || true)"
 test "$local_code" = "200"
