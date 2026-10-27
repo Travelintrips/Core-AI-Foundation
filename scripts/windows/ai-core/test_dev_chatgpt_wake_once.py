@@ -717,6 +717,9 @@ class CheckpointPromptTests(unittest.TestCase):
         self.assertIn("ai-task:110:1:regression20261028", text)
         self.assertIn("attestationAck", text)
         self.assertIn("tanpa Markdown", text)
+        self.assertEqual(text.count("[AI_CORE_WAKE:" + EVENT + "]"), 1)
+        self.assertEqual(text.count("[AI_CORE_ATTEST:" + CHALLENGE + "]"), 1)
+        self.assertEqual(text.count("[AI_CORE_ATTEST_ACK:" + CHALLENGE + "]"), 1)
 
     def test_normal_wake_remains_unmodified(self):
         text = wake._wake_message(EVENT, CHALLENGE, "hello")
