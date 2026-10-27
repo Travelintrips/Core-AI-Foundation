@@ -104,7 +104,40 @@ jobs:
 
           jq -n --argjson id "$key_id" '{ids:[$id]}' > /tmp/attach-key.json
           curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/attach-key.json             "$HOSTINGER_API_BASE/vps/v1/public-keys/attach/$VM_ID"             -o /tmp/attach-key-response.json
-          echo "NUSA_KARYA_EPHEMERAL_KEY_ATTACH=ACCEPTED"
+
+          action_id="$(jq -r '.id // empty' /tmp/attach-key-response.json)"
+          action_state="$(jq -r '.state // empty' /tmp/attach-key-response.json)"
+          test -n "$action_id"
+          echo "NUSA_KARYA_EPHEMERAL_KEY_ATTACH=ACCEPTED action_id=$action_id state=${action_state:-unknown}"
+
+          action_ok=false
+          for attempt in $(seq 1 60); do
+            curl --fail-with-body --silent --show-error               --connect-timeout 10 --max-time 30               -H "$auth"               "$HOSTINGER_API_BASE/vps/v1/virtual-machines/$VM_ID/actions/$action_id"               -o /tmp/attach-action.json
+            action_state="$(jq -r '.state // empty' /tmp/attach-action.json)"
+            echo "NUSA_KARYA_KEY_ATTACH_ACTION attempt=$attempt state=${action_state:-unknown}"
+            case "$action_state" in
+              success)
+                action_ok=true
+                break
+                ;;
+              failed|error|cancelled|canceled)
+                echo "::error::Hostinger SSH key attach action failed with state=$action_state"
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          [ "$action_ok" = "true" ] || { echo "::error::Hostinger SSH key attach action did not reach success."; exit 1; }
+
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth"             "$HOSTINGER_API_BASE/vps/v1/virtual-machines/$VM_ID/public-keys"             -o /tmp/attached-public-keys.json
+          jq -e --argjson id "$key_id" '
+            (if type=="array" then . elif (.data|type)=="array" then .data else [] end)
+            | any(.[]; (.id // 0) == $id)
+          ' /tmp/attached-public-keys.json >/dev/null || {
+            echo "::error::Hostinger action succeeded but the generated key is not listed on the VPS."
+            exit 1
+          }
+          echo "NUSA_KARYA_EPHEMERAL_KEY_ATTACH=VERIFIED"
 
       - name: Provision exact Nusa Karya DNS record
         shell: bash
@@ -218,18 +251,9 @@ jobs:
         run: |
           set +e
           if [ -s /tmp/nusa-karya-ci.pub ] && [ -s /tmp/nusa-karya-ci ] && [ -s /tmp/nusa-karya-known-hosts ]; then
-            pubkey_b64="$(base64 -w0 /tmp/nusa-karya-ci.pub)"
-            ssh -i /tmp/nusa-karya-ci               -o BatchMode=yes -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts               -o ConnectTimeout=8               root@"$TARGET_IP" bash -s -- "$pubkey_b64" <<'REMOTE'
-            PUBKEY_B64="$1"
-            pubkey="$(printf '%s' "$PUBKEY_B64" | base64 --decode)"
-            key_blob="$(awk '{print $2}' <<<"$pubkey")"
-            if [ -f /root/.ssh/authorized_keys ] && [ -n "$key_blob" ]; then
-              tmp="$(mktemp)"
-              awk -v k="$key_blob" 'NF < 2 || $2 != k' /root/.ssh/authorized_keys > "$tmp"
-              install -m 600 "$tmp" /root/.ssh/authorized_keys
-              rm -f "$tmp"
-            fi
-            REMOTE
+            key_blob="$(awk '{print $2}' /tmp/nusa-karya-ci.pub)"
+            key_blob_q="$(printf '%q' "$key_blob")"
+            ssh -i /tmp/nusa-karya-ci               -o BatchMode=yes -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts               -o ConnectTimeout=8               root@"$TARGET_IP"               "key_blob=$key_blob_q; if [ -f /root/.ssh/authorized_keys ]; then tmp=\$(mktemp); grep -vF -- \"\$key_blob\" /root/.ssh/authorized_keys > \"\$tmp\" || true; install -m 600 \"\$tmp\" /root/.ssh/authorized_keys; rm -f \"\$tmp\"; fi"
           fi
 
           if [ -s /tmp/nusa-karya-public-key-id ] && [ -n "$HOSTINGER_API_TOKEN" ]; then
