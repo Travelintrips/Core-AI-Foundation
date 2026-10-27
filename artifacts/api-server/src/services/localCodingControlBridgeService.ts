@@ -1356,7 +1356,15 @@ export async function getAiTaskChatGptBridgeTimeline(commandId: string, correlat
     createdAt: aiCodingBridgeResponsesTable.createdAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
-    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
+    .orderBy(
+      asc(aiCodingBridgeResponsesTable.createdAt),
+      // Same-transaction checkpoint and terminal failure share the database NOW().
+      // The checkpoint must precede the FAILED response in AI Task's reducer.
+      sql`CASE WHEN ${aiCodingBridgeResponsesTable.kind} = 'CHECKPOINT' THEN 0
+               WHEN ${aiCodingBridgeResponsesTable.kind} IN ('FAILED','BLOCKER','COMPLETED') THEN 2
+               ELSE 1 END`,
+      asc(aiCodingBridgeResponsesTable.id),
+    ).limit(100);
   return {
     commandId: command.id,
     status: command.status,
