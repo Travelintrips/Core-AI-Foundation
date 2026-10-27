@@ -80,7 +80,7 @@ jobs:
           chmod 600 /tmp/nusa-karya-known-hosts
           echo "NUSA_KARYA_SSH_HOST_TRUST=PASS"
 
-      - name: Generate and attach one-time SSH key
+      - name: Generate and add one-time root SSH key
         id: ephemeral
         shell: bash
         env:
@@ -88,56 +88,57 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$VM_ID"
-          rm -f /tmp/nusa-karya-ci /tmp/nusa-karya-ci.pub /tmp/nusa-karya-public-key-id
-          ssh-keygen -q -t ed25519 -N ''             -C "nusa-karya-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"             -f /tmp/nusa-karya-ci
+          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+          endpoint="$HOSTINGER_API_BASE/vps/v1/virtual-machines/$VM_ID/ssh-keys"
+
+          rm -f /tmp/nusa-karya-ci /tmp/nusa-karya-ci.pub
+          ssh-keygen -q -t ed25519 -N '' \
+            -C "nusa-karya-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -f /tmp/nusa-karya-ci
           chmod 600 /tmp/nusa-karya-ci
           pubkey="$(cat /tmp/nusa-karya-ci.pub)"
-          name="nusa-karya-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
 
-          jq -n --arg name "$name" --arg key "$pubkey" '{name:$name,key:$key}' > /tmp/create-key.json
-          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/create-key.json             "$HOSTINGER_API_BASE/vps/v1/public-keys"             -o /tmp/create-key-response.json
-          key_id="$(jq -r '.id // empty' /tmp/create-key-response.json)"
-          test -n "$key_id"
-          printf '%s' "$key_id" > /tmp/nusa-karya-public-key-id
-          echo "key_id=$key_id" >> "$GITHUB_OUTPUT"
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            -H "$auth" "$endpoint" -o /tmp/root-ssh-keys-before.json
+          jq -e 'type=="array"' /tmp/root-ssh-keys-before.json >/dev/null
 
-          jq -n --argjson id "$key_id" '{ids:[$id]}' > /tmp/attach-key.json
-          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/attach-key.json             "$HOSTINGER_API_BASE/vps/v1/public-keys/attach/$VM_ID"             -o /tmp/attach-key-response.json
+          mapfile -t stale_keys < <(jq -r '
+            .[]
+            | select((.name // "") | startswith("nusa-karya-ci-"))
+            | .key // empty
+          ' /tmp/root-ssh-keys-before.json)
+          echo "NUSA_KARYA_STALE_ROOT_KEYS=${#stale_keys[@]}"
 
-          action_id="$(jq -r '.id // empty' /tmp/attach-key-response.json)"
-          action_state="$(jq -r '.state // empty' /tmp/attach-key-response.json)"
-          test -n "$action_id"
-          echo "NUSA_KARYA_EPHEMERAL_KEY_ATTACH=ACCEPTED action_id=$action_id state=${action_state:-unknown}"
+          if [ "${#stale_keys[@]}" -gt 0 ]; then
+            printf '%s\n' "${stale_keys[@]}" | jq -R . | jq -s '{keys:.}' > /tmp/remove-stale-keys.json
+            curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              -X DELETE -H "$auth" -H "Content-Type: application/json" \
+              --data-binary @/tmp/remove-stale-keys.json "$endpoint" \
+              -o /tmp/remove-stale-response.json
+            echo "NUSA_KARYA_STALE_ROOT_KEY_CLEANUP=PASS"
+          fi
 
-          action_ok=false
-          for attempt in $(seq 1 60); do
-            curl --fail-with-body --silent --show-error               --connect-timeout 10 --max-time 30               -H "$auth"               "$HOSTINGER_API_BASE/vps/v1/virtual-machines/$VM_ID/actions/$action_id"               -o /tmp/attach-action.json
-            action_state="$(jq -r '.state // empty' /tmp/attach-action.json)"
-            echo "NUSA_KARYA_KEY_ATTACH_ACTION attempt=$attempt state=${action_state:-unknown}"
-            case "$action_state" in
-              success)
-                action_ok=true
-                break
-                ;;
-              failed|error|cancelled|canceled)
-                echo "::error::Hostinger SSH key attach action failed with state=$action_state"
-                exit 1
-                ;;
-            esac
-            sleep 5
-          done
-          [ "$action_ok" = "true" ] || { echo "::error::Hostinger SSH key attach action did not reach success."; exit 1; }
+          jq -n --arg key "$pubkey" '{keys:[$key]}' > /tmp/add-root-key.json
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            -H "$auth" -H "Content-Type: application/json" \
+            --data-binary @/tmp/add-root-key.json "$endpoint" \
+            -o /tmp/add-root-key-response.json
+          jq -e --arg key "$pubkey" 'any(.[]; (.key // "") == $key)'             /tmp/add-root-key-response.json >/dev/null || {
+              echo "::error::Hostinger did not return the generated key in the VM root key list."
+              exit 1
+            }
 
-          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth"             "$HOSTINGER_API_BASE/vps/v1/virtual-machines/$VM_ID/public-keys"             -o /tmp/attached-public-keys.json
-          jq -e --argjson id "$key_id" '
-            (if type=="array" then . elif (.data|type)=="array" then .data else [] end)
-            | any(.[]; (.id // 0) == $id)
-          ' /tmp/attached-public-keys.json >/dev/null || {
-            echo "::error::Hostinger action succeeded but the generated key is not listed on the VPS."
-            exit 1
-          }
-          echo "NUSA_KARYA_EPHEMERAL_KEY_ATTACH=VERIFIED"
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            -H "$auth" "$endpoint" -o /tmp/root-ssh-keys-after.json
+          jq -e --arg key "$pubkey" 'any(.[]; (.key // "") == $key)'             /tmp/root-ssh-keys-after.json >/dev/null || {
+              echo "::error::Generated root SSH key is not persisted on the target VM."
+              exit 1
+            }
+          echo "NUSA_KARYA_EPHEMERAL_ROOT_KEY=VERIFIED"
 
       - name: Provision exact Nusa Karya DNS record
         shell: bash
@@ -248,18 +249,48 @@ jobs:
       - name: Remove one-time SSH key material
         if: always()
         shell: bash
+        env:
+          VM_ID: ${{ steps.vps.outputs.vm_id }}
         run: |
           set +e
-          if [ -s /tmp/nusa-karya-ci.pub ] && [ -s /tmp/nusa-karya-ci ] && [ -s /tmp/nusa-karya-known-hosts ]; then
-            key_blob="$(awk '{print $2}' /tmp/nusa-karya-ci.pub)"
-            key_blob_q="$(printf '%q' "$key_blob")"
-            ssh -i /tmp/nusa-karya-ci               -o BatchMode=yes -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts               -o ConnectTimeout=8               root@"$TARGET_IP"               "key_blob=$key_blob_q; if [ -f /root/.ssh/authorized_keys ]; then tmp=\$(mktemp); grep -vF -- \"\$key_blob\" /root/.ssh/authorized_keys > \"\$tmp\" || true; install -m 600 \"\$tmp\" /root/.ssh/authorized_keys; rm -f \"\$tmp\"; fi"
+          cleanup_failed=false
+
+          if [ -s /tmp/nusa-karya-ci.pub ] && [ -n "${VM_ID:-}" ] && [ -n "$HOSTINGER_API_TOKEN" ]; then
+            pubkey="$(cat /tmp/nusa-karya-ci.pub)"
+            endpoint="$HOSTINGER_API_BASE/vps/v1/virtual-machines/$VM_ID/ssh-keys"
+            auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
+            jq -n --arg key "$pubkey" '{keys:[$key]}' > /tmp/remove-current-root-key.json
+
+            code="$(curl --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              -o /tmp/remove-current-root-key-response.json -w '%{http_code}' \
+              -X DELETE -H "$auth" -H "Content-Type: application/json" \
+              --data-binary @/tmp/remove-current-root-key.json "$endpoint" || true)"
+            case "$code" in
+              200|204) ;;
+              *) echo "::error::Root SSH key removal returned HTTP $code"; cleanup_failed=true ;;
+            esac
+
+            verify_code="$(curl --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              -o /tmp/root-ssh-keys-cleanup-verify.json -w '%{http_code}' \
+              -H "$auth" "$endpoint" || true)"
+            if [ "$verify_code" != "200" ]; then
+              echo "::error::Could not verify root SSH key cleanup, HTTP $verify_code"
+              cleanup_failed=true
+            elif jq -e --arg key "$pubkey" 'any(.[]; (.key // "") == $key)'               /tmp/root-ssh-keys-cleanup-verify.json >/dev/null; then
+              echo "::error::Ephemeral root SSH key is still present after cleanup."
+              cleanup_failed=true
+            else
+              echo "NUSA_KARYA_EPHEMERAL_ROOT_KEY_CLEANUP=PASS"
+            fi
           fi
 
-          if [ -s /tmp/nusa-karya-public-key-id ] && [ -n "$HOSTINGER_API_TOKEN" ]; then
-            key_id="$(cat /tmp/nusa-karya-public-key-id)"
-            curl --silent --show-error               --connect-timeout 10 --max-time 30               -X DELETE               -H "Authorization: Bearer $HOSTINGER_API_TOKEN"               "$HOSTINGER_API_BASE/vps/v1/public-keys/$key_id"               >/tmp/delete-key.json || true
-          fi
+          rm -f /tmp/nusa-karya-ci /tmp/nusa-karya-ci.pub \
+            /tmp/nusa-karya-hostkey /tmp/nusa-karya-known-hosts
 
-          rm -f /tmp/nusa-karya-ci /tmp/nusa-karya-ci.pub             /tmp/nusa-karya-hostkey /tmp/nusa-karya-known-hosts             /tmp/nusa-karya-public-key-id
+          if [ "$cleanup_failed" = "true" ]; then
+            exit 1
+          fi
           echo "NUSA_KARYA_EPHEMERAL_KEY_CLEANUP=COMPLETE"
+
