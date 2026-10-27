@@ -105,24 +105,58 @@ jobs:
             exit 1
           fi
 
-          if [ "${#orders[@]}" -ne 1 ] || [ -z "${orders[0]:-}" ]; then
-            echo "::error::No unique existing Hostinger hosting order for aicst.co.id family; refusing ambiguous placement."
+          if [ "${#orders[@]}" -eq 1 ] && [ -n "${orders[0]:-}" ]; then
+            echo "existing=false" >> "$GITHUB_OUTPUT"
+            echo "order_id=${orders[0]}" >> "$GITHUB_OUTPUT"
+            echo "needs_datacenter=false" >> "$GITHUB_OUTPUT"
+            echo "NUSA_KARYA_HOSTING_ORDER=UNIQUE_FAMILY"
+            exit 0
+          fi
+
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" "$HOSTINGER_API_BASE/hosting/v1/orders?statuses[]=active&per_page=100"             -o /tmp/orders.json
+          jq -e '(.data | type) == "array"' /tmp/orders.json >/dev/null
+
+          mapfile -t occupied_orders < <(jq -r '[.data[] | (.order_id | tostring)] | unique[]' /tmp/websites.json)
+          mapfile -t active_orders < <(jq -r '[.data[] | select(.status == "active") | (.id | tostring)] | unique[]' /tmp/orders.json)
+          spare_orders=()
+          for candidate in "${active_orders[@]}"; do
+            occupied=false
+            for used in "${occupied_orders[@]}"; do
+              if [ "$candidate" = "$used" ]; then occupied=true; break; fi
+            done
+            [ "$occupied" = "false" ] && spare_orders+=("$candidate")
+          done
+
+          echo "NUSA_KARYA_SPARE_DISCOVERY active_orders=${#active_orders[@]} occupied_orders=${#occupied_orders[@]} spare_orders=${#spare_orders[@]}"
+
+          if [ "${#spare_orders[@]}" -ne 1 ] || [ -z "${spare_orders[0]:-}" ]; then
+            echo "::error::No unique unused active Hostinger hosting order; refusing ambiguous provisioning."
             exit 1
           fi
 
           echo "existing=false" >> "$GITHUB_OUTPUT"
-          echo "order_id=${orders[0]}" >> "$GITHUB_OUTPUT"
-          echo "NUSA_KARYA_HOSTING_ORDER=UNIQUE"
+          echo "order_id=${spare_orders[0]}" >> "$GITHUB_OUTPUT"
+          echo "needs_datacenter=true" >> "$GITHUB_OUTPUT"
+          echo "NUSA_KARYA_HOSTING_ORDER=UNIQUE_SPARE"
 
       - name: Create isolated Nusa Karya website when absent
         if: steps.hosting.outputs.existing != 'true'
         shell: bash
         env:
           ORDER_ID: ${{ steps.hosting.outputs.order_id }}
+          NEEDS_DATACENTER: ${{ steps.hosting.outputs.needs_datacenter }}
         run: |
           set -euo pipefail
           auth="Authorization: Bearer $HOSTINGER_API_TOKEN"
-          jq -n --arg domain "$TARGET_DOMAIN" --argjson order_id "$ORDER_ID"             '{domain:$domain,order_id:$order_id}' > /tmp/create-site.json
+          if [ "$NEEDS_DATACENTER" = "true" ]; then
+            curl --fail-with-body --silent --show-error               --connect-timeout 10 --max-time 30               -H "$auth" "$HOSTINGER_API_BASE/hosting/v1/datacenters?order_id=$ORDER_ID"               -o /tmp/datacenters.json
+            datacenter_code="$(jq -r 'if type=="array" then .[0].code // empty elif (.data|type)=="array" then .data[0].code // empty else empty end' /tmp/datacenters.json)"
+            test -n "$datacenter_code" || { echo "::error::No recommended datacenter returned for the unique spare order."; exit 1; }
+            jq -n --arg domain "$TARGET_DOMAIN" --argjson order_id "$ORDER_ID" --arg datacenter_code "$datacenter_code"               '{domain:$domain,order_id:$order_id,datacenter_code:$datacenter_code}' > /tmp/create-site.json
+            echo "NUSA_KARYA_DATACENTER=RECOMMENDED"
+          else
+            jq -n --arg domain "$TARGET_DOMAIN" --argjson order_id "$ORDER_ID"               '{domain:$domain,order_id:$order_id}' > /tmp/create-site.json
+          fi
           curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             -H "$auth" -H "Content-Type: application/json"             --data-binary @/tmp/create-site.json             "$HOSTINGER_API_BASE/hosting/v1/websites" >/tmp/create-response.json
           echo "NUSA_KARYA_HOSTING_CREATE=ACCEPTED"
 
