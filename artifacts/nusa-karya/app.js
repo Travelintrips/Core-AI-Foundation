@@ -91,3 +91,4 @@ viewer?.addEventListener("pointermove",e=>{if(!drag)return;const sensitivity=e.p
 viewer?.addEventListener("pointerup",()=>drag=false);viewer?.addEventListener("pointercancel",()=>drag=false);
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches("[data-work]")){e.preventDefault();const w=findWork(e.target.dataset.work);if(w)renderWorkDetail(w)}if((e.key==="ArrowLeft"||e.key==="ArrowRight")&&document.activeElement===viewer)rotateViewer(e.key==="ArrowLeft"?-12:12)});
 renderWorks();
+// deploy-retrigger: 2026-10-28 mobile-3d-runtime
