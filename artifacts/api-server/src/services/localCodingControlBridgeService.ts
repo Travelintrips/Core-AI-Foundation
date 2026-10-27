@@ -22,6 +22,7 @@ import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, i
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
 import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
+import { assertNoSelfAttestedCheckpoint } from "./devCheckpointClaimGuard.js";
 import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
@@ -339,6 +340,7 @@ export async function appendCodingBridgeResponse(input: {
   await ensureCodingControlBridgeTables();
   const checkpointJson = input.checkpoint ?? {};
   const metadataJson = input.metadata ?? {};
+  assertNoSelfAttestedCheckpoint(input.kind, metadataJson);
 
   let created = true;
   let response;
