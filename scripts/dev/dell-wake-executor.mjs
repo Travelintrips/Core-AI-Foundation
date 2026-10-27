@@ -57,8 +57,8 @@ function matches(pattern, value) {
 
 export function bindingFingerprint(binding) {
   return createHash("sha256").update([
-    "dev-chatgpt-wake-binding/v1", binding.accountAlias, binding.ownerChannel,
-    binding.targetConversationId, binding.workerId, binding.browserProfile,
+    "dev-chatgpt-account-binding/v2", binding.accountAlias, binding.ownerChannel,
+    binding.targetConversationId,
   ].join("|")).digest("hex");
 }
 
