@@ -2,6 +2,12 @@ name: Hostinger Node.js Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      force_runtime_deploy:
+        description: Force Hostinger runtime deployment after DEV-first verification
+        required: false
+        default: false
+        type: boolean
   workflow_run:
     workflows:
       - CI Verify
@@ -74,10 +80,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_runtime_deploy }}" = "true" ]; then
             echo "deploy_required=true" >> "$GITHUB_OUTPUT"
-            echo "reason=manual_dispatch" >> "$GITHUB_OUTPUT"
-            echo "runtime_deploy=RUN reason=manual_dispatch"
+            echo "reason=manual_force_runtime_deploy" >> "$GITHUB_OUTPUT"
+            echo "runtime_deploy=RUN reason=manual_force_runtime_deploy"
             exit 0
           fi
 
