@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { codingBridgeCommandSchema } from "./coding-bridge-command-schema.js";
+import { getCodingTaskCompletionEvidence } from "../services/codingTaskCompletionEvidence.js";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
   getCodingWhatsappConfigStatus,
@@ -310,6 +311,14 @@ router.post("/ai/coding/tasks/:id/autonomous/run-once",async(req,res):Promise<vo
  if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
  const cycle=await runAutonomousCodingCycle(id.data);
  res.json(cycle);
+});
+// Read-only persisted worker evidence. This endpoint never authorizes WhatsApp.
+router.get("/ai/coding/tasks/:id/completion-evidence",async(req,res):Promise<void>=>{
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
+ const evidence=await getCodingTaskCompletionEvidence(id.data);
+ if(!evidence.found){res.status(404).json({error:"Task not found"});return;}
+ res.json(evidence);
 });
 router.get("/ai/coding/tasks/:id/autonomous",async(req,res):Promise<void>=>{
  const id=Uuid.safeParse(req.params["id"]);
