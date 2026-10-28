@@ -17,38 +17,12 @@ test -f "$SOURCE_DIR/app.js"
 test -f "$NGINX_SOURCE"
 command -v nginx >/dev/null 2>&1
 
-if [ -f "$NGINX_AVAILABLE" ] && [ -L "$NGINX_ENABLED" ]; then
-  "${SUDO[@]}" install -d -m 0755 "$WEB_ROOT"
-  "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/index.html" "$WEB_ROOT/index.html"
-  "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/styles.css" "$WEB_ROOT/styles.css"
-  "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/app.js" "$WEB_ROOT/app.js"
-  echo "NUSA_KARYA_STATIC_REFRESH=PASS web_root=$WEB_ROOT"
-
-  public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15 -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
-  if [ "$public_code" = "200" ] && grep -qi "Nusa Karya" /tmp/nusa-karya-public.html; then
-    echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN"
-    exit 0
-  fi
-
-  if command -v certbot >/dev/null 2>&1 && getent ahostsv4 "$DOMAIN" >/dev/null 2>&1; then
-    echo "NUSA_KARYA_TLS_REPAIR=START"
-    "${SUDO[@]}" certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --redirect --register-unsafely-without-email
-    public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15 -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
-    if [ "$public_code" = "200" ] && grep -qi "Nusa Karya" /tmp/nusa-karya-public.html; then
-      echo "NUSA_KARYA_TLS_REPAIR=PASS"
-      echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN"
-      exit 0
-    fi
-  fi
-
-  echo "NUSA_KARYA_PUBLIC_HTTPS=NOT_YET_VERIFIED http=$public_code"
-  exit 2
-fi
-
 "${SUDO[@]}" install -d -m 0755 "$WEB_ROOT"
 "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/index.html" "$WEB_ROOT/index.html"
 "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/styles.css" "$WEB_ROOT/styles.css"
 "${SUDO[@]}" install -m 0644 "$SOURCE_DIR/app.js" "$WEB_ROOT/app.js"
+printf '%s\n' "$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo unknown)" | "${SUDO[@]}" tee "$WEB_ROOT/deploy-sha.txt" >/dev/null
+echo "NUSA_KARYA_STATIC_SYNC=PASS web_root=$WEB_ROOT"
 
 tmp_conf="$(mktemp)"
 trap 'rm -f "$tmp_conf"' EXIT
@@ -76,7 +50,11 @@ local_code="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
 case "$local_code" in
   200)
     grep -q '"status":"ok"' /tmp/nusa-karya-health.body
-    echo "NUSA_KARYA_LOCAL_HTTP=PASS domain=$DOMAIN web_root=$WEB_ROOT"
+    local_home="$(curl --silent --show-error --connect-timeout 5 --max-time 10 -H "Host: $DOMAIN" http://127.0.0.1/ || true)"
+    grep -q 'Marketplace 3D Karya Indonesia' <<<"$local_home"
+    grep -q 'hero-3d' <<<"$local_home"
+    grep -q '20261028-3d-bronze-1' <<<"$local_home"
+    echo "NUSA_KARYA_LOCAL_HTTP=PASS domain=$DOMAIN web_root=$WEB_ROOT redesign=bronze-3d"
     ;;
   301|302|307|308)
     grep -Eiq "^location:[[:space:]]*https://$DOMAIN(/healthz)?[[:space:]]*$" /tmp/nusa-karya-health.headers || {
@@ -101,8 +79,8 @@ if command -v certbot >/dev/null 2>&1; then
 fi
 
 public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15   -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
-if [ "$public_code" = "200" ] && grep -qi "Nusa Karya" /tmp/nusa-karya-public.html; then
-  echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN"
+if [ "$public_code" = "200" ] && grep -q 'Marketplace 3D Karya Indonesia' /tmp/nusa-karya-public.html && grep -q 'hero-3d' /tmp/nusa-karya-public.html && grep -q '20261028-3d-bronze-1' /tmp/nusa-karya-public.html; then
+  echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN redesign=bronze-3d"
 else
   echo "NUSA_KARYA_PUBLIC_HTTPS=NOT_YET_VERIFIED http=$public_code"
   exit 2
