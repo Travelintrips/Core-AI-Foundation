@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { pool } from "@workspace/db";
 import jwt from "jsonwebtoken";
 import { getInternalUserById } from "./internalAuthService.js";
 
@@ -240,7 +241,9 @@ export async function exchangeAuthorizationCode(input: {
   const user = await getInternalUserById(decoded.sub);
   if (!user || user.status !== "active" || user.accountType !== "internal") throw new Error("invalid_grant");
   usedCodes.set(decoded.jti, Date.now() + CODE_TTL_SECONDS * 1000);
-  return issueTokenPair(decoded.sub, decoded.clientId, decoded.scope.split(" "), decoded.resource);
+  const tokens = issueTokenPair(decoded.sub, decoded.clientId, decoded.scope.split(" "), decoded.resource);
+  await auditSuccessfulMcpExchange("authorization_code_exchanged", decoded.sub, decoded.clientId);
+  return tokens;
 }
 
 export async function refreshAccessToken(input: {
@@ -258,7 +261,37 @@ export async function refreshAccessToken(input: {
   if (decoded.resource !== input.resource || input.resource !== oauthResource()) throw new Error("invalid_target");
   const user = await getInternalUserById(decoded.sub);
   if (!user || user.status !== "active" || user.accountType !== "internal") throw new Error("invalid_grant");
-  return issueTokenPair(decoded.sub, decoded.clientId, decoded.scope.split(" "), decoded.resource);
+  const tokens = issueTokenPair(decoded.sub, decoded.clientId, decoded.scope.split(" "), decoded.resource);
+  await auditSuccessfulMcpExchange("refresh_token_exchanged", decoded.sub, decoded.clientId);
+  return tokens;
+}
+
+/** Record verified OAuth exchanges without persisting bearer material or the raw client ID.
+ * Disabled outside DEV; failures must not invalidate an already verified OAuth grant.
+ */
+async function auditSuccessfulMcpExchange(
+  eventType: "authorization_code_exchanged" | "refresh_token_exchanged",
+  userId: number,
+  clientId: string,
+): Promise<void> {
+  if (process.env["APP_ENV"] !== "development" || process.env["NODE_ENV"] === "production") return;
+  const issuer = oauthIssuer();
+  const clientHash = createHash("sha256").update(clientId).digest("hex");
+  const channel = "ai-engine-oauth:" + createHash("sha256")
+    .update(JSON.stringify([issuer, userId, clientId])).digest("hex");
+  const clientKind = clientId.startsWith("aicore_dcr_") ? "dynamic" :
+    clientId.startsWith("https://chatgpt.com/oauth/") ? "chatgpt" : "other";
+  try {
+    await pool.query(
+      `INSERT INTO ai_platform.mcp_oauth_exchange_audit
+       (event_type, issuer, user_id, client_id_sha256, client_kind, receiver_channel)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [eventType, issuer, userId, clientHash, clientKind, channel],
+    );
+  } catch {
+    // Do not log credentials, codes or client IDs even when audit storage is unavailable.
+    console.warn("[mcp-oauth] DEV exchange audit could not be persisted");
+  }
 }
 
 function issueTokenPair(userId: number, clientId: string, scopes: string[], resource: string) {
