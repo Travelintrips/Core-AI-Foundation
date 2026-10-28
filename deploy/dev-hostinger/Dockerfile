@@ -1,5 +1,9 @@
 FROM node:22-bookworm-slim
 
+# Supplied by the trusted CI/deploy runner, never derived from a worker response.
+ARG AI_CORE_BUILD_SHA=unknown
+LABEL org.opencontainers.image.revision=$AI_CORE_BUILD_SHA
+
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 
