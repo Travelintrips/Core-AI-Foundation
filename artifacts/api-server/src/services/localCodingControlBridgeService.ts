@@ -343,6 +343,18 @@ export async function appendCodingBridgeResponse(input: {
   const metadataJson = input.metadata ?? {};
   assertNoSelfAttestedCheckpoint(input.kind, metadataJson);
 
+  // Resolve task identity from the persisted command, never from worker metadata.
+  // Reject conflicting claims, and keep unbound commands unbound.
+  const [sourceCommand] = await db.select({ taskId: aiCodingBridgeCommandsTable.taskId })
+    .from(aiCodingBridgeCommandsTable)
+    .where(eq(aiCodingBridgeCommandsTable.id, input.commandId))
+    .limit(1);
+  if (!sourceCommand) throw new Error("BRIDGE_COMMAND_NOT_FOUND");
+  if (input.taskId && input.taskId !== sourceCommand.taskId)
+    throw new Error("BRIDGE_TASK_COMMAND_MISMATCH");
+  const resolvedInput = { ...input, taskId: sourceCommand.taskId ?? null };
+  input = resolvedInput;
+
   let created = true;
   let response;
 
