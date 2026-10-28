@@ -154,15 +154,17 @@ export async function dispatchExternalAgentWork(input: {
   // instruction names a concrete DEV executor. Respect that explicit target
   // before any sticky-leader or failover selection. Never silently substitute
   // an unrelated PC or legacy GCP worker.
+  const pinnedDevWorker = input.metadata?.explicitWorkerTarget === true &&
+    (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId);
   const explicitlyNamesDellWakeDev = /\bopenclaw-dell-chatgpt-wake-dev\b/i.test(input.instruction);
-  if (explicitlyNamesDellWakeDev &&
+  if (!pinnedDevWorker && explicitlyNamesDellWakeDev &&
       (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
        (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId))) {
     resolvedClientId = "openclaw-dell-chatgpt-wake-dev";
   }
   const explicitlyNamesTravelintripsDev =
     /\bopenclaw-travelintrips-dev\b|\bopenclaw[\s-]*travelintrips[\s-]*dev\b/i.test(input.instruction);
-  if (explicitlyNamesTravelintripsDev &&
+  if (!pinnedDevWorker && explicitlyNamesTravelintripsDev &&
       (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
        (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId))) {
     resolvedClientId = OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID;
@@ -186,7 +188,10 @@ export async function dispatchExternalAgentWork(input: {
     const targetPc = (explicitPc || explicitlyNamesDevPc) && (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)
       ? input.clientId
       : explicitlyNamesDevPc ? OPENCLAW_PC_DEV_CLIENT_ID : null;
-    const preferred = serverMonitor
+    if (pinnedDevWorker && !registry.some((worker) => worker.clientId === input.clientId && worker.eligible)) {
+      throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", `Explicit DEV worker ${input.clientId} is not eligible. Dispatch rejected without fallback.`);
+    }
+    const preferred = pinnedDevWorker ? input.clientId : serverMonitor
       ? selectOpenClawExecutor(registry, { preferServer: true })
       : targetPc && registry.some((worker) => worker.clientId === targetPc && worker.eligible)
         ? targetPc
@@ -216,7 +221,11 @@ export async function dispatchExternalAgentWork(input: {
   const requiredCapability = requiredCapabilityForExternalAgent(
     resolvedClientId as ExternalAgentClientId,
   );
+  const routingDecision = resolvedClientId === input.clientId ? "requested" : "redirected";
+  const routeAudit = { requestedClientId: input.clientId, resolvedClientId, requiredCapability, routingDecision };
+  console.info("AI_CORE_DEV_DISPATCH_ROUTE", JSON.stringify({ ...routeAudit, denialCode: null }));
   if (!rule.capabilities.some((capability) => capability === requiredCapability)) {
+    console.warn("AI_CORE_DEV_DISPATCH_DENIED", JSON.stringify({ ...routeAudit, denialCode: "CAPABILITY_DENIED" }));
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
       `SOP/CAPABILITY_DENIED: worker ${resolvedClientId} tidak diizinkan menggunakan capability ${requiredCapability}. Perintah tidak dieksekusi.`,
@@ -238,6 +247,7 @@ export async function dispatchExternalAgentWork(input: {
       (!isDevChatGptWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||
        !rule.capabilities.some((capability: string) => capability === "chatgpt:wake"))) {
+    console.warn("AI_CORE_DEV_DISPATCH_DENIED", JSON.stringify({ ...routeAudit, denialCode: "DEV_CHATGPT_WAKE_PREFLIGHT_REQUIRED" }));
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
       "DEV_CHATGPT_WAKE_PREFLIGHT_REQUIRED: issue a server-authorized challenge-bound DEV_CHATGPT_WAKE_V1/V2 command; do not queue natural language on a model-free worker.",
