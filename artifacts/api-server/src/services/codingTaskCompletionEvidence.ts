@@ -20,8 +20,12 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
     .orderBy(asc(aiCodingBridgeResponsesTable.createdAt));
   // Terminal events must belong to the same command as ACK.
   // An ACK from a previous job cannot validate a different command's completion.
-  const completionCommands = new Set(rows.filter(r => r.kind === "COMPLETED").map(r => r.commandId));
-  const matchingAck = rows.some(r => r.kind === "ACK" && completionCommands.has(r.commandId));
+  const terminal = [...rows].reverse().find(r => r.kind === "COMPLETED" || r.kind === "FAILED");
+  const terminalIndex = terminal ? rows.findIndex(r => r.id === terminal.id) : -1;
+  const matchingAck = terminal?.kind === "COMPLETED" && rows.some((r, i) =>
+    i < terminalIndex && r.kind === "ACK" && r.commandId === terminal.commandId);
+  const matchingProgress = terminal?.kind === "COMPLETED" && rows.some((r, i) =>
+    i < terminalIndex && r.kind === "PROGRESS" && r.commandId === terminal.commandId);
   const kinds = new Set(rows.map(r => r.kind));
   return {
     found: true as const, taskId, status: task.status,
@@ -32,7 +36,7 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
     hasAck: kinds.has("ACK"), hasProgress: kinds.has("PROGRESS"),
     hasCompletedEvent: kinds.has("COMPLETED"),
     hasFailedEvent: kinds.has("FAILED"),
-    bridgeCompleted: task.status === "COMPLETED" && matchingAck && kinds.has("COMPLETED"),
+    bridgeCompleted: task.status === "COMPLETED" && matchingAck && matchingProgress && terminal?.kind === "COMPLETED",
     trustedCiVerified: false, trustedDeploymentVerified: false,
     trustedProductionE2eVerified: false,
     notificationAuthorized: false,

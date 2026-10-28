@@ -30,9 +30,30 @@ describe("read-only task evidence", () => {
     expect(result.found).toBe(true);
     if (result.found) expect(result.bridgeCompleted).toBe(false);
   });
+  it("rejects completion with no progress", async () => {
+    dbMock.select.mockReturnValueOnce(chain([{status:"COMPLETED"}]))
+      .mockReturnValueOnce(chain([
+        {id:"a",kind:"ACK",commandId:"c"},
+        {id:"b",kind:"COMPLETED",commandId:"c"},
+      ]));
+    const result=await getCodingTaskCompletionEvidence("test");
+    if(result.found) expect(result.bridgeCompleted).toBe(false);
+  });
+  it("rejects failed terminal after completed event", async () => {
+    dbMock.select.mockReturnValueOnce(chain([{status:"COMPLETED"}]))
+      .mockReturnValueOnce(chain([
+        {id:"a",kind:"ACK",commandId:"c"},
+        {id:"p",kind:"PROGRESS",commandId:"c"},
+        {id:"b",kind:"COMPLETED",commandId:"c"},
+        {id:"f",kind:"FAILED",commandId:"c"},
+      ]));
+    const result=await getCodingTaskCompletionEvidence("test");
+    if(result.found) expect(result.bridgeCompleted).toBe(false);
+  });
   it("never grants notification based on bridge completion alone", async () => {
     dbMock.select.mockReturnValueOnce(chain([{status:"COMPLETED"}]))
       .mockReturnValueOnce(chain([{id:"a",kind:"ACK",commandId:"c",createdAt:new Date(),acknowledgedAt:null},
+        {id:"p",kind:"PROGRESS",commandId:"c",createdAt:new Date(),acknowledgedAt:null},
         {id:"b",kind:"COMPLETED",commandId:"c",createdAt:new Date(),acknowledgedAt:null}]));
     const result = await getCodingTaskCompletionEvidence("test");
     expect(result.found).toBe(true);
