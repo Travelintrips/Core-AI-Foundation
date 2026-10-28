@@ -217,6 +217,19 @@ router.post("/ai/coding/bridge/ai-task-dispatch",async(req,res):Promise<void>=>{
   metadata:z.record(z.string(),z.unknown()).optional()
  }).strict().safeParse(req.body);
  if(!p.success){res.status(400).json({error:p.error.message});return;}
+ // Fail closed: model-free PC workers only accept explicitly supported operations.
+ // Reasoning requires an independent, authorized AI Core orchestration job; never
+ // forward arbitrary natural language to the bounded worker or mark it completed.
+ const normalizedInstruction=p.data.instruction.trim().replace(/\s+/g," ").toLowerCase().replace(/[.!?]+$/g,"");
+ const target=p.data.preferredClientId??OPENCLAW_AGENT_CLIENT_ID;
+ const boundedPcInstructions=new Set(["ping","status"]);
+ const primaryHostnameInstructions=new Set(["hostname","read hostname","baca hostname","cek hostname","get hostname","hostname pc travelintrips","baca hostname pc travelintrips","cek hostname pc travelintrips","read hostname pc travelintrips","jalankan hostname pada pc travelintrips"]);
+ const isModelFreePc=[OPENCLAW_AGENT_CLIENT_ID,"openclaw-pc-worker-dev","openclaw-pc-worker","openclaw-pc-worker-2","openclaw-pc-worker-3"].includes(target);
+ if(isModelFreePc && !(boundedPcInstructions.has(normalizedInstruction) || (target==="openclaw-pc-worker" && primaryHostnameInstructions.has(normalizedInstruction)))){
+  console.info("AI_CORE_DEV_INSTRUCTION_CLASSIFICATION",JSON.stringify({clientId:target,classification:"reasoning_required",dispatched:false}));
+  res.status(422).json({error:"AI_CORE_REASONING_ROUTE_REQUIRED",classification:"reasoning_required",dispatched:false,executed:false,message:"Use the authorized AI Core orchestration path for reasoning tasks; bounded PC workers cannot process this instruction."});return;
+ }
+ console.info("AI_CORE_DEV_INSTRUCTION_CLASSIFICATION",JSON.stringify({clientId:target,classification:isModelFreePc?"bounded":"policy_routed",dispatched:true}));
  try{
   const x=await dispatchExternalAgentWork({
    clientId:p.data.preferredClientId??OPENCLAW_AGENT_CLIENT_ID,
