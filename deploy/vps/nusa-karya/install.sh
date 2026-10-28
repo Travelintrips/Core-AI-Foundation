@@ -50,7 +50,11 @@ local_code="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
 case "$local_code" in
   200)
     grep -q '"status":"ok"' /tmp/nusa-karya-health.body
-    echo "NUSA_KARYA_LOCAL_HTTP=PASS domain=$DOMAIN web_root=$WEB_ROOT"
+    local_home="$(curl --silent --show-error --connect-timeout 5 --max-time 10 -H "Host: $DOMAIN" http://127.0.0.1/ || true)"
+    grep -q 'Marketplace 3D Karya Indonesia' <<<"$local_home"
+    grep -q 'hero-3d' <<<"$local_home"
+    grep -q '20261028-3d-bronze-1' <<<"$local_home"
+    echo "NUSA_KARYA_LOCAL_HTTP=PASS domain=$DOMAIN web_root=$WEB_ROOT redesign=bronze-3d"
     ;;
   301|302|307|308)
     grep -Eiq "^location:[[:space:]]*https://$DOMAIN(/healthz)?[[:space:]]*$" /tmp/nusa-karya-health.headers || {
@@ -75,8 +79,8 @@ if command -v certbot >/dev/null 2>&1; then
 fi
 
 public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15   -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
-if [ "$public_code" = "200" ] && grep -qi "Nusa Karya" /tmp/nusa-karya-public.html; then
-  echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN"
+if [ "$public_code" = "200" ] && grep -q 'Marketplace 3D Karya Indonesia' /tmp/nusa-karya-public.html && grep -q 'hero-3d' /tmp/nusa-karya-public.html && grep -q '20261028-3d-bronze-1' /tmp/nusa-karya-public.html; then
+  echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN redesign=bronze-3d"
 else
   echo "NUSA_KARYA_PUBLIC_HTTPS=NOT_YET_VERIFIED http=$public_code"
   exit 2
