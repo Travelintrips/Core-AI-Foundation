@@ -9,7 +9,7 @@ import { getProviderApiKey } from "../services/aiSecretService.js";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logger } from "../lib/logger.js";
 import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
-import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim, getCodingBridgeCommandExecutionState } from "../services/localCodingControlBridgeService.js";
+import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim, recordClaimedCodingBridgeProgress, getCodingBridgeCommandExecutionState } from "../services/localCodingControlBridgeService.js";
 import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionService.js";
 import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
@@ -657,6 +657,33 @@ router.post(
       ...parsed.data,
     });
     res.status(renewed ? 200 : 409).json({ renewed });
+  },
+);
+
+const ExternalAgentWorkProgressRequest = z.object({
+  clientId: z.string().trim().min(1).max(200),
+  claimToken: z.string().uuid(),
+  message: z.string().trim().min(1).max(1000),
+}).strict();
+
+router.post(
+  "/ai/agent-runtime/work/:commandId/progress",
+  requireAgentServiceScope("agent:work"),
+  async (req, res): Promise<void> => {
+    const commandId = z.string().uuid().safeParse(req.params["commandId"]);
+    const parsed = ExternalAgentWorkProgressRequest.safeParse(req.body ?? {});
+    if (!commandId.success || !parsed.success) {
+      res.status(400).json({ error: "Invalid progress request" });
+      return;
+    }
+    const responseId = await recordClaimedCodingBridgeProgress({
+      commandId: commandId.data, ...parsed.data,
+    });
+    if (!responseId) {
+      res.status(409).json({ error: "Work claim invalid or progress already recorded" });
+      return;
+    }
+    res.json({ commandId: commandId.data, responseId, kind: "PROGRESS" });
   },
 );
 

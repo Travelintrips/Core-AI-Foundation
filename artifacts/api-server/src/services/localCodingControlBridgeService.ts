@@ -885,6 +885,36 @@ export async function claimCodingBridgeCommand(input: {
   };
 }
 
+// Only a worker holding the active command claim may persist execution progress.
+export async function recordClaimedCodingBridgeProgress(input: {
+  clientId: string;
+  commandId: string;
+  claimToken: string;
+  message: string;
+}): Promise<string | null> {
+  await ensureCodingControlBridgeTables();
+  const result = await db.execute(sql`
+    INSERT INTO ai_platform.ai_coding_bridge_responses
+      (command_id, task_id, kind, message, checkpoint_json, metadata_json)
+    SELECT c.id, c.task_id, 'PROGRESS', ${input.message}::text,
+           '{}'::jsonb, jsonb_build_object('workerId', ${input.clientId}::text)
+    FROM ai_platform.ai_coding_bridge_commands AS c
+    WHERE c.id = ${input.commandId}::uuid
+      AND c.status = 'PROCESSING'
+      AND c.command_type <> 'DEV_CONTINUITY_WATCH'
+      AND c.metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+      AND c.metadata_json ->> 'claimToken' = ${input.claimToken}::text
+      AND (c.metadata_json ->> 'claimLeaseExpiresAt')::timestamptz > NOW()
+      AND NOT EXISTS (
+        SELECT 1 FROM ai_platform.ai_coding_bridge_responses AS r
+        WHERE r.command_id = c.id AND r.kind = 'PROGRESS'
+          AND r.message = ${input.message}::text
+      )
+    RETURNING id
+  `);
+  return (result.rows?.[0] as { id?: string } | undefined)?.id ?? null;
+}
+
 export async function renewCodingBridgeCommandClaim(input: {
   clientId: string;
   commandId: string;
