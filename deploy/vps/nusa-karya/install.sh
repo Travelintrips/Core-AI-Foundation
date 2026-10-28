@@ -78,10 +78,13 @@ if command -v certbot >/dev/null 2>&1; then
   fi
 fi
 
-public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15   -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
-if [ "$public_code" = "200" ] && grep -q 'Marketplace 3D Karya Indonesia' /tmp/nusa-karya-public.html && grep -q 'hero-3d' /tmp/nusa-karya-public.html && grep -q '20261028-3d-bronze-1' /tmp/nusa-karya-public.html; then
-  echo "NUSA_KARYA_PUBLIC_HTTPS=PASS domain=$DOMAIN redesign=bronze-3d"
+public_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15 -D /tmp/nusa-karya-public.headers -o /tmp/nusa-karya-public.html -w '%{http_code}' "https://$DOMAIN/" || true)"
+css_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15 -D /tmp/nusa-karya-css.headers -o /tmp/nusa-karya-public.css -w '%{http_code}' "https://$DOMAIN/styles.css?v=20261028-3d-bronze-1" || true)"
+js_code="$(curl --silent --show-error --connect-timeout 8 --max-time 15 -D /tmp/nusa-karya-js.headers -o /tmp/nusa-karya-public.js -w '%{http_code}' "https://$DOMAIN/app.js?v=20261028-mobile-tilt-1" || true)"
+
+if [ "$public_code" = "200" ] && [ "$css_code" = "200" ] && [ "$js_code" = "200" ] && grep -q 'Marketplace 3D Karya Indonesia' /tmp/nusa-karya-public.html && grep -q 'hero-3d' /tmp/nusa-karya-public.html && grep -q '20261028-3d-bronze-1' /tmp/nusa-karya-public.html && cmp -s "$SOURCE_DIR/styles.css" /tmp/nusa-karya-public.css && cmp -s "$SOURCE_DIR/app.js" /tmp/nusa-karya-public.js && grep -Eiq '^cache-control:.*no-cache.*no-store.*must-revalidate' /tmp/nusa-karya-public.headers && grep -Eiq '^cache-control:.*no-cache.*no-store.*must-revalidate' /tmp/nusa-karya-css.headers && grep -Eiq '^cache-control:.*no-cache.*no-store.*must-revalidate' /tmp/nusa-karya-js.headers; then
+  echo "NUSA_KARYA_BROWSER_ASSETS=PASS domain=$DOMAIN redesign=bronze-3d cache=no-store"
 else
-  echo "NUSA_KARYA_PUBLIC_HTTPS=NOT_YET_VERIFIED http=$public_code"
+  echo "NUSA_KARYA_BROWSER_ASSETS=FAILED html=$public_code css=$css_code js=$js_code"
   exit 2
 fi
