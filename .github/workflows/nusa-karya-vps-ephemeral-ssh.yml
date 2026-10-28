@@ -199,7 +199,7 @@ jobs:
         run: |
           set -euo pipefail
           pubkey_b64="$(base64 -w0 /tmp/nusa-karya-ci.pub)"
-          ssh -i /tmp/nusa-karya-ci             -o BatchMode=yes -o IdentitiesOnly=yes             -o StrictHostKeyChecking=yes             -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts             root@"$TARGET_IP"             bash -s -- "$TARGET_APP_SHA" "$pubkey_b64" <<'REMOTE'
+          cat > /tmp/nusa-karya-remote-deploy.sh <<'REMOTE'
           set -euo pipefail
           TARGET_SHA="$1"
           PUBKEY_B64="$2"
@@ -228,6 +228,35 @@ jobs:
           cd "$DEPLOY_PATH"
           bash deploy/vps/nusa-karya/install.sh "$DEPLOY_PATH"
           REMOTE
+
+          deploy_ok=false
+          for attempt in $(seq 1 6); do
+            set +e
+            ssh -i /tmp/nusa-karya-ci               -o BatchMode=yes -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               -o UserKnownHostsFile=/tmp/nusa-karya-known-hosts               -o ConnectTimeout=12               -o ServerAliveInterval=10               -o ServerAliveCountMax=3               root@"$TARGET_IP"               bash -s -- "$TARGET_APP_SHA" "$pubkey_b64"               < /tmp/nusa-karya-remote-deploy.sh
+            rc=$?
+            set -e
+
+            if [ "$rc" -eq 0 ]; then
+              deploy_ok=true
+              echo "NUSA_KARYA_REMOTE_DEPLOY=PASS attempt=$attempt"
+              break
+            fi
+
+            if [ "$rc" -ne 255 ]; then
+              echo "::error::Remote deploy command failed with exit code $rc; not retrying non-transport failure."
+              rm -f /tmp/nusa-karya-remote-deploy.sh
+              exit "$rc"
+            fi
+
+            echo "::warning::Transient SSH transport failure during deploy attempt=$attempt rc=$rc"
+            sleep $((attempt * 10))
+          done
+
+          rm -f /tmp/nusa-karya-remote-deploy.sh
+          [ "$deploy_ok" = "true" ] || {
+            echo "::error::SSH transport did not remain reachable for deploy after retries."
+            exit 1
+          }
 
       - name: Verify public HTTPS independently
         shell: bash
