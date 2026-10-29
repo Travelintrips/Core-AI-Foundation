@@ -2123,6 +2123,8 @@ async function maybeRecoverOrphanedReadyReviewTasks(): Promise<void> {
 }
 
 export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
+  const scopedTaskId = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"]?.trim();
+  if (scopedTaskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scopedTaskId)) return;
   const readyReviewCandidates = await db
     .select({ id: aiCodingTasksTable.id })
     .from(aiCodingTasksTable)
@@ -2180,6 +2182,7 @@ export async function recoverOrphanedReadyReviewTasks(): Promise<void> {
   ]);
 
   for (const candidate of candidates) {
+    if (scopedTaskId && candidate.id.toLowerCase() !== scopedTaskId.toLowerCase()) continue;
     const state = await loadTaskState(candidate.id).catch(() => null);
     if (!state || !state.nextAction || !recoverable.has(state.nextAction)) continue;
 
