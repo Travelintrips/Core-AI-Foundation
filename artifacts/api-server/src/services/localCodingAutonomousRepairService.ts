@@ -1062,6 +1062,15 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
   status: AutonomousStatus;
   action: string;
 }> {
+  // Defense in depth: even direct callers must respect DEV single-task scope.
+  // Reject before schema initialization or any database write.
+  const scopedTaskId = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"]?.trim();
+  if (scopedTaskId && (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scopedTaskId)
+    || taskId.toLowerCase() !== scopedTaskId.toLowerCase()
+  )) {
+    return { taskId, status: "BLOCKED", action: "TASK_NOT_ALLOWLISTED" };
+  }
   await ensureCodingControlBridgeTables();
 
   const rowResult = await db.execute(sql`
