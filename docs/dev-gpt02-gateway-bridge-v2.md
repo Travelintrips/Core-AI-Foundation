@@ -114,15 +114,25 @@ principal verification fails, stop with GATEWAY_PRINCIPAL_NOT_VERIFIED.
 
 ## 30 Oct: official result reception and durable event state
 
-- The new DEV-only official reader invokes the authenticated OpenClaw
-  Gateway CLI agent.wait using its immutable runId and bounded timeout.
-  It never sends a job or reads ChatGPT/browser/CDP.
+- The DEV-only official reader invokes OpenClaw Gateway agent.wait with
+  the original immutable runId to confirm the terminal status. That RPC
+  returns a status ONLY; it does NOT provide the assistant text.
+- After status ok, use the separately authorized read-only chat.history
+  method with the exact original sessionKey. Select exactly ONE assistant
+  message whose idempotencyKey matches the first submission, require a
+  supported text content shape and non-error stopReason, and reject
+  truncated history, ambiguous messages and a changed session.
 - agent.wait returning timeout or pending means the same run remains
   unresolved; it is NOT a reason to start another model turn.
 - A terminal reply is recorded as terminal_observed with
-  principalVerified=false. The reader intentionally cannot invent
-  GPT02 OAuth identity, a signed assistant message ID or Final ACK from
-  terminal text alone. Existing callback/attestation gates must reject it.
+  principalVerified=false and messageIdVerified=false. Read-only Gateway
+  history cannot by itself prove that the model's OAuth principal equals
+  the ChatGPT browser GPT02, or invent an official assistant message UUID,
+  attestation signature, callback or Final ACK. Current AI Core callback
+  still requires browser-specific v2 proof, so the Gateway route is NOT
+  enabled and must NOT forge browserConfirmed/chatgptSubmitted fields.
+  Implement a separately approved Gateway-specific verifier backed by a
+  trusted provider credential identity before any live callback cutover.
 - SQLite DevGatewaySqliteStore provides unique event reservation,
   transactional CAS state changes and persistence across process restart;
   requires an explicitly DEV-only private storage path.

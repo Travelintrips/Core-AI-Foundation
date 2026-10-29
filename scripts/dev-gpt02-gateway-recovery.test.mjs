@@ -133,75 +133,217 @@ test("durable ambiguous send cannot replay after restart",async()=>{
     store.close();
   });
 });
-test("agent.wait timeout is pending, not a failed or retried job",async()=>{
-  const result=await observeOfficialRun({
-    rpc:async(method,params)=>{
-      assert.equal(method,"agent.wait");
-      assert.equal(params.runId,runId);
-      return {runId,status:"timeout"};
-    },runId,
-  });
-  assert.deepEqual(result,{status:"running",runId,terminalVerified:false});
+const sessionKey="agent:gpt02-approved:ai-task-dev-"+"f".repeat(40);
+const idempotencyKey="f".repeat(64);
+const expectedArgs={runId,sessionKey,idempotencyKey};
+function officialHistory(msgs,overrides={}) {
+ return {sessionKey,messages:msgs,hasMore:false,...overrides};
+}
+function officialAssistant(overrides={}) {
+ return {role:"assistant",idempotencyKey,provider:"openai",model:"gpt-5.5",
+   stopReason:"stop",content:[{type:"text",text:"isolated verified gateway response"}],...overrides};
+}
+async function simulatedOfficial(method,params) {
+ if(method==="agent.wait")return {runId,status:"ok"};
+ if(method==="chat.history"){
+   assert.equal(params.sessionKey,sessionKey);
+   return officialHistory([
+     {role:"user",idempotencyKey,content:"user prompt"},
+     officialAssistant(),
+   ]);
+ }
+ throw Error("unexpected gateway method");
+}
+test("agent.wait timeout is pending, no history fetch, no send",async()=>{
+ const seen=[];
+ const observed=await observeOfficialRun({
+   rpc:async(method,params)=>{
+     seen.push(method);
+     assert.equal(params.runId,runId);
+     return {runId,status:"timeout"};
+   },...expectedArgs,
+ });
+ assert.deepEqual(observed,{status:"running",runId,terminalVerified:false});
+ assert.deepEqual(seen,["agent.wait"]);
 });
-test("agent.wait with terminal reply is explicitly NOT GPT02 principal verified",async()=>{
-  const result=await observeOfficialRun({
-    rpc:async()=>({
-      runId,status:"ok",terminalReply:"test response",
-      terminalReceipt:{sourceReplyDelivered:true},
-    }),runId,
-  });
-  assert.deepEqual(result,{
-    status:"terminal_observed",runId,terminalReply:"test response",
-    terminalVerified:true,principalVerified:false,sourceReplyDelivered:true,
-  });
+test("agent.wait then chat.history returns a bound assistant response, not account proof",async()=>{
+ const seen=[];
+ const result=await observeOfficialRun({
+   rpc:async(method,params)=>{
+     seen.push(method);
+     return simulatedOfficial(method,params);
+   },...expectedArgs,
+ });
+ assert.deepEqual(seen,["agent.wait","chat.history"]);
+ assert.deepEqual(result,{
+   status:"terminal_observed",runId,sessionKey,idempotencyKey,
+   terminalReply:"isolated verified gateway response",
+   provider:"openai",model:"gpt-5.5",
+   terminalVerified:true,principalVerified:false,
+   messageIdVerified:false,sourceReplyDelivered:false,
+ });
 });
-test("wrong runId and absent terminal content fail closed",async()=>{
-  await assert.rejects(observeOfficialRun({
-    rpc:async()=>({runId:"55555555-5555-4555-8555-555555555555",status:"ok",terminalReply:"hello"}),
-    runId,
-  }), e=>e instanceof GatewayReadError&&e.code==="GATEWAY_RUN_MISMATCH");
-  await assert.rejects(observeOfficialRun({
-    rpc:async()=>({runId,status:"ok"}),runId,
-  }),e=>e instanceof GatewayReadError&&e.code==="GATEWAY_TERMINAL_REPLY_UNAVAILABLE");
+test("wrong agent.wait runId fails before looking up another session",async()=>{
+ const seen=[];
+ await assert.rejects(observeOfficialRun({
+   rpc:async(method)=>{
+     seen.push(method);
+     return {runId:"55555555-5555-4555-8555-555555555555",status:"ok"};
+   },...expectedArgs,
+ }),e=>e instanceof GatewayReadError && e.code==="GATEWAY_RUN_MISMATCH");
+ assert.deepEqual(seen,["agent.wait"]);
 });
-test("gateway agent failure and pending keep distinct outcomes",async()=>{
-  const failed=await observeOfficialRun({rpc:async()=>({runId,status:"error"}),runId});
-  const pending=await observeOfficialRun({rpc:async()=>({runId,status:"pending"}),runId});
-  assert.equal(failed.status,"failed");
-  assert.equal(pending.status,"running");
+test("wrong history sessionKey or incomplete history refuses attestation",async()=>{
+ for(const patch of [
+   {sessionKey:"agent:wrong:ai-task-dev-"+ "f".repeat(40)},
+   {hasMore:true},
+   {messages:null},
+ ]){
+   await assert.rejects(observeOfficialRun({
+     rpc:async(method)=>method==="agent.wait"?{runId,status:"ok"}:
+       officialHistory([officialAssistant()],patch),
+     ...expectedArgs,
+   }),e=>e instanceof GatewayReadError && e.code==="GATEWAY_HISTORY_CONTEXT_INVALID");
+ }
 });
-test("official CLI adapter refuses any send or browser RPC",async()=>{
-  const gateway=makeOfficialReadRpc({
-    executable:"fake-node",entrypoint:"fake-openclaw",spawnProcess:()=>{
-      throw Error("DO_NOT_SPAWN");
-    },
+test("missing, duplicated or mismatched idempotency key is rejected",async()=>{
+ for(const messages of [
+   [{role:"user",idempotencyKey,content:"marker only"}],
+   [officialAssistant({idempotencyKey:"e".repeat(64)})],
+   [officialAssistant(),officialAssistant()],
+   [officialAssistant({role:"tool"})],
+ ]){
+   await assert.rejects(observeOfficialRun({
+     rpc:async(method)=>method==="agent.wait"?{runId,status:"ok"}:
+       officialHistory(messages),
+     ...expectedArgs,
+   }),e=>e instanceof GatewayReadError && e.code==="GATEWAY_REPLY_NOT_UNIQUELY_BOUND");
+ }
+});
+test("model errors and missing provider/model provenance refuse result",async()=>{
+ for(const m of [
+   {stopReason:"error"},{stopReason:"aborted"},
+   {provider:null},{model:null},
+ ]){
+   await assert.rejects(observeOfficialRun({
+     rpc:async(method)=>method==="agent.wait"?{runId,status:"ok"}:
+       officialHistory([officialAssistant(m)]),
+     ...expectedArgs,
+   }),e=>e instanceof GatewayReadError && e.code==="GATEWAY_MESSAGE_PROVENANCE_INVALID");
+ }
+});
+test("empty, non-text or overly long assistant content is refused",async()=>{
+ for(const content of [[],[{type:"image",url:"https://example.invalid/x"}],
+   [{type:"text",text:""}],"x".repeat(4001),null]){
+   await assert.rejects(observeOfficialRun({
+     rpc:async(method)=>method==="agent.wait"?{runId,status:"ok"}:
+       officialHistory([officialAssistant({content})]),
+     ...expectedArgs,
+   }),e=>e instanceof GatewayReadError && e.code==="GATEWAY_TERMINAL_REPLY_UNAVAILABLE");
+ }
+});
+test("explicit model timeout and agent failure remain non-final",async()=>{
+ const f=await observeOfficialRun({rpc:async()=>({runId,status:"error"}),...expectedArgs});
+ const p=await observeOfficialRun({rpc:async()=>({runId,status:"pending"}),...expectedArgs});
+ assert.equal(f.status,"failed");
+ assert.equal(p.status,"running");
+});
+test("no unverifiable run/session can be passed to the official observer",async()=>{
+ for(const fields of [
+   {...expectedArgs,runId:"invalid"},
+   {...expectedArgs,sessionKey:"agent:main:any-session"},
+   {...expectedArgs,idempotencyKey:"untrusted key"},
+ ]){
+   await assert.rejects(observeOfficialRun({
+     rpc:()=>{throw Error("NOT_CALLED");},
+     ...fields,
+   }),e=>e instanceof GatewayReadError && e.code==="INVALID_GATEWAY_OBSERVATION");
+ }
+});
+test("official CLI adapter never allows message sending, browser or mutation RPC",async()=>{
+ const gateway=makeOfficialReadRpc({
+   executable:"fake-node",entrypoint:"fake-openclaw",
+   spawnProcess:()=>{throw Error("DO_NOT_SPAWN");},
+ });
+ for(const name of ["chat.send","browser.snapshot","chat.inject","agent",
+   "config.patch","agents.add","agents.delete"]){
+   await assert.rejects(gateway(name,{}),
+     e=>e instanceof GatewayReadError&&e.code==="GATEWAY_METHOD_NOT_READ_ONLY");
+ }
+});
+test("official CLI invokes fixed method, exact args and no shell",async()=>{
+ const captured=[];
+ const rpc=makeOfficialReadRpc({
+   executable:"fake-node",entrypoint:"fake-openclaw",
+   spawnProcess:(bin,args,opts)=>{
+     captured.push({bin,args,opts});
+     const child=new EventEmitter();
+     child.stdout=new PassThrough();
+     child.stderr=new PassThrough();
+     child.kill=()=>{};
+     queueMicrotask(()=>{
+       const method=args[3];
+       child.stdout.end(JSON.stringify(method==="agent.wait"?
+         {runId,status:"ok"}:officialHistory([officialAssistant()])));
+       child.emit("close",0,null);
+     });
+     return child;
+   },
+ });
+ const result=await observeOfficialRun({rpc,...expectedArgs});
+ assert.equal(result.status,"terminal_observed");
+ assert.deepEqual(captured.map(x=>x.args[3]),["agent.wait","chat.history"]);
+ for(const call of captured){
+   assert.equal(call.opts.shell,false);
+   assert.equal(call.opts.stdio[0],"ignore");
+ }
+ const first=JSON.parse(captured[0].args[captured[0].args.indexOf("--params")+1]);
+ const second=JSON.parse(captured[1].args[captured[1].args.indexOf("--params")+1]);
+ assert.equal(first.runId,runId);
+ assert.equal(second.sessionKey,sessionKey);
+});
+
+test("official Gateway history alone cannot trigger callback or fake Final ACK",async()=>{
+  await withDb(async file=>{
+    const store=new DevGatewaySqliteStore(file);
+    let callbacks=0, sends=0;
+    const gateway={
+      identity:async()=>({
+        authenticated:true,source:"gateway-credential-store",
+        gatewayAgentId:binding.gatewayAgentId,provider:binding.provider,
+        principalFingerprint:binding.principalFingerprint,
+      }),
+      send:async input=>{
+        sends++;
+        return {accepted:true,runId,sessionKey:input.sessionKey};
+      },
+      observe:async input=>observeOfficialRun({
+        rpc:async(method,params)=>{
+          if(method==="agent.wait")return {runId,status:"ok"};
+          if(method==="chat.history")return {
+            sessionKey:params.sessionKey,hasMore:false,
+            messages:[{
+              role:"assistant",idempotencyKey:runKey(work,binding),
+              provider:"openai",model:"gpt-5.5",stopReason:"stop",
+              content:[{type:"text",text:"[AI_CORE_ATTEST_ACK:"+work.challenge+"]"}],
+            }],
+          };
+          throw Error("UNEXPECTED_RPC");
+        },runId,sessionKey:input.sessionKey,idempotencyKey:runKey(work,binding),
+      }),
+    };
+    const callback={
+      submit:async()=>{callbacks++;throw Error("NO_CALLBACK_ALLOWED");},
+      lookup:async()=>{throw Error("NO_CALLBACK_LOOKUP");},
+      readFinalAck:async()=>{throw Error("NO_FINAL_ACK_LOOKUP");},
+    };
+    const input={work,binding,gateway,store,callback,privateKey:"unused"};
+    assert.equal((await dispatchOnce(input)).status,"SUBMITTED");
+    await assert.rejects(reconcile(input),
+      e=>e?.code==="GATEWAY_REPLY_CONTEXT_INVALID");
+    assert.equal(sends,1);
+    assert.equal(callbacks,0);
+    assert.equal((await store.read(runKey(work,binding))).status,"SUBMITTED");
+    store.close();
   });
-  for(const name of ["chat.send","browser.snapshot","chat.inject","agent"]){
-    await assert.rejects(gateway(name,{}),
-      e=>e instanceof GatewayReadError&&e.code==="GATEWAY_METHOD_NOT_READ_ONLY");
-  }
-});
-test("official CLI reader invokes the immutable runId with no shell",async()=>{
-  let captured;
-  const gateway=makeOfficialReadRpc({
-    executable:"fake-node",entrypoint:"fake-openclaw",
-    spawnProcess:(bin,args,opts)=>{
-      captured={bin,args,opts};
-      const child=new EventEmitter();
-      child.stdout=new PassThrough();
-      child.stderr=new PassThrough();
-      child.kill=()=>{};
-      queueMicrotask(()=>{
-        child.stdout.end(JSON.stringify({runId,status:"timeout"}));
-        child.emit("close",0,null);
-      });
-      return child;
-    },
-  });
-  const result=await observeOfficialRun({rpc:gateway,runId});
-  assert.equal(result.status,"running");
-  assert.equal(captured.opts.shell,false);
-  assert.equal(captured.args[3],"agent.wait");
-  const parsed=JSON.parse(captured.args[captured.args.indexOf("--params")+1]);
-  assert.equal(parsed.runId,runId);
 });

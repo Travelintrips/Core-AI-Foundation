@@ -6,7 +6,7 @@
 import { spawn } from "node:child_process";
 
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
-const READ_METHODS = new Set(["agent.wait", "health", "models.list", "sessions.list"]);
+const READ_METHODS = new Set(["agent.wait", "chat.history", "health", "models.list", "sessions.list"]);
 export class GatewayReadError extends Error {
   constructor(code) { super(code); this.name = "GatewayReadError"; this.code = code; }
 }
@@ -77,20 +77,33 @@ export function makeOfficialReadRpc({
     });
   };
 }
-function terminalText(reply) {
-  if (typeof reply === "string") return reply;
-  if (reply && typeof reply === "object" && !Array.isArray(reply) &&
-    typeof reply.text === "string") return reply.text;
+function terminalText(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    if (content.length === 0 || content.some(x =>
+      !x || typeof x !== "object" || x.type !== "text" ||
+      typeof x.text !== "string")) return null;
+    return content.map(x => x.text).join("\n");
+  }
+  if (content && typeof content === "object" && !Array.isArray(content) &&
+      typeof content.text === "string") return content.text;
   return null;
 }
+const KEY = /^(?:[a-f0-9]{64}|[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})$/i;
 /**
- * This intentionally returns no model principal fingerprint or message UUID:
- * agent.wait does not independently attest that its model is the browser GPT02.
- * Never pass this result directly to bridge.assertReply() as a verified answer.
+ * agent.wait returns the completion status, not assistant text.
+ * Read chat.history in the SAME isolated session, and require one assistant
+ * message associated with the original idempotency key. Never mistake a
+ * user message, earlier turn or a different session for the reply.
  */
-export async function observeOfficialRun({ rpc, runId, timeoutMs = 5000 }) {
+export async function observeOfficialRun({
+  rpc, runId, sessionKey, idempotencyKey, timeoutMs = 5000,
+}) {
   assert(typeof rpc === "function" && typeof runId === "string" &&
-    UUID.test(runId) && Number.isSafeInteger(timeoutMs) &&
+    UUID.test(runId) && typeof sessionKey === "string" &&
+    /^agent:[a-z0-9-]+:ai-task-dev-[a-f0-9]{40}$|^agent:[a-z0-9-]+:dev-oauth-[a-z0-9-]{20,120}$/.test(sessionKey) &&
+    typeof idempotencyKey === "string" && KEY.test(idempotencyKey) &&
+    Number.isSafeInteger(timeoutMs) &&
     timeoutMs >= 1000 && timeoutMs <= 30_000, "INVALID_GATEWAY_OBSERVATION");
   const result = await rpc("agent.wait", { runId, timeoutMs });
   assert(result && result.runId === runId, "GATEWAY_RUN_MISMATCH");
@@ -101,15 +114,27 @@ export async function observeOfficialRun({ rpc, runId, timeoutMs = 5000 }) {
     return { status: "failed", runId, terminalVerified: false };
   }
   assert(result.status === "ok", "GATEWAY_TERMINAL_STATUS_INVALID");
-  const text = terminalText(result.terminalReply);
+  const history = await rpc("chat.history", { sessionKey, limit: 30 });
+  assert(history && history.sessionKey === sessionKey &&
+    Array.isArray(history.messages) &&
+    history.hasMore !== true, "GATEWAY_HISTORY_CONTEXT_INVALID");
+  const candidates = history.messages.filter(x =>
+    x && x.role === "assistant" && x.idempotencyKey === idempotencyKey);
+  assert(candidates.length === 1, "GATEWAY_REPLY_NOT_UNIQUELY_BOUND");
+  const msg = candidates[0];
+  assert(typeof msg.provider === "string" &&
+    typeof msg.model === "string" && msg.stopReason !== "error" &&
+    msg.stopReason !== "aborted", "GATEWAY_MESSAGE_PROVENANCE_INVALID");
+  const text = terminalText(msg.content);
   assert(text !== null && text.length > 0 && text.length <= 4000,
     "GATEWAY_TERMINAL_REPLY_UNAVAILABLE");
-  // Not a complete attestation: provider identity/message origin must be
-  // verified separately by a trusted agent/session evidence adapter.
+  // Gateway history is not ChatGPT browser identity. It provides no
+  // independently signed principal fingerprint or message UUID.
   return {
-    status: "terminal_observed", runId,
-    terminalReply: text, terminalVerified: true,
-    principalVerified: false,
-    sourceReplyDelivered: result.terminalReceipt?.sourceReplyDelivered === true,
+    status: "terminal_observed", runId, sessionKey, idempotencyKey,
+    terminalReply: text, provider: msg.provider, model: msg.model,
+    terminalVerified: true, principalVerified: false,
+    messageIdVerified: false,
+    sourceReplyDelivered: false,
   };
 }
