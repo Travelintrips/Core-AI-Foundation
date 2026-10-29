@@ -1131,7 +1131,7 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       if (state.task.status === "COMPLETED" || state.task.status === "READY_REVIEW") {
         await db
           .update(aiCodingTasksTable)
-          .set({ status: "BLOCKED", resultSummary: message })
+          .set({ status: "READY_REVIEW", resultSummary: message })
           .where(eq(aiCodingTasksTable.id, taskId));
       }
       await setState(taskId, "BLOCKED", "COMPLETION_EVIDENCE_MISSING", message);
@@ -1150,7 +1150,9 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       await db
         .update(aiCodingTasksTable)
         .set({
-          status: "BLOCKED",
+          // BLOCKED belongs to autonomous bookkeeping, not ai_coding_tasks.
+          // Keep the coding task at a valid pending-review lifecycle gate.
+          status: "READY_REVIEW",
           resultSummary: message,
         })
         .where(eq(aiCodingTasksTable.id, taskId));
