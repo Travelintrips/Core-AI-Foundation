@@ -83,6 +83,10 @@ export function verifyPersistedFinalAck({ ack, evidence, expected }) {
     ack?.attestationVerified === true &&
     ack?.eventId === expected.eventId &&
     ack?.commandId === expected.commandId &&
+    ack?.runId === expected.runId &&
+    ack?.sessionKey === expected.sessionKey &&
+    ack?.assistantResponseHash === expected.assistantResponseHash &&
+    ack?.signingKeyId === expected.signingKeyId &&
     ack?.transport === "openclaw-gateway" &&
     typeof ack.ackId === "string" && ack.ackId.length > 0,
     "GATEWAY_FINAL_ACK_NOT_VERIFIED");
