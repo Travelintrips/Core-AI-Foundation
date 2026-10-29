@@ -86,6 +86,19 @@ test("Final ACK requires separate verified persisted server outcome", () => {
   const ack = {
     state: "COMPLETED", attestationVerified: true, transport: "openclaw-gateway",
     eventId: f.expected.eventId, commandId: f.expected.commandId, ackId: uuid,
+    runId: f.expected.runId, sessionKey: f.expected.sessionKey,
+    assistantResponseHash: f.expected.assistantResponseHash, signingKeyId: f.expected.signingKeyId,
   };
   assert.equal(verifyPersistedFinalAck({ evidence, expected: f.expected, ack }).finalAckVerified, true);
+});
+
+test("Final ACK rejects mismatched run, session, response hash, signing key", () => {
+  const f = fixture(), evidence = check(f);
+  const ack = {state:"COMPLETED",attestationVerified:true,transport:"openclaw-gateway",
+    eventId:f.expected.eventId,commandId:f.expected.commandId,ackId:uuid,
+    runId:f.expected.runId,sessionKey:f.expected.sessionKey,
+    assistantResponseHash:f.expected.assistantResponseHash,signingKeyId:f.expected.signingKeyId};
+  for (const key of ["runId","sessionKey","assistantResponseHash","signingKeyId"]) {
+    assert.throws(() => verifyPersistedFinalAck({ack:{...ack,[key]:"incorrect"},evidence,expected:f.expected}),/GATEWAY_FINAL_ACK_NOT_VERIFIED/);
+  }
 });
