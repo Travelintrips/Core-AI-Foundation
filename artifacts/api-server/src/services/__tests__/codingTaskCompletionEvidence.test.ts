@@ -50,6 +50,20 @@ describe("read-only task evidence", () => {
     const result=await getCodingTaskCompletionEvidence("test");
     if(result.found) expect(result.bridgeCompleted).toBe(false);
   });
+  it("reports completed command while keeping pending parent task unverified", async () => {
+    dbMock.select.mockReturnValueOnce(chain([{status:"PENDING"}]))
+      .mockReturnValueOnce(chain([
+        {id:"a",kind:"ACK",commandId:"c"},
+        {id:"p",kind:"PROGRESS",commandId:"c"},
+        {id:"b",kind:"COMPLETED",commandId:"c"},
+      ]));
+    const result=await getCodingTaskCompletionEvidence("test");
+    if (!result.found) throw new Error("expected task");
+    expect(result.commandLifecycleCompleted).toBe(true);
+    expect(result.taskCompletionPending).toBe(true);
+    expect(result.bridgeCompleted).toBe(false);
+    expect(result.notificationAuthorized).toBe(false);
+  });
   it("never grants notification based on bridge completion alone", async () => {
     dbMock.select.mockReturnValueOnce(chain([{status:"COMPLETED"}]))
       .mockReturnValueOnce(chain([{id:"a",kind:"ACK",commandId:"c",createdAt:new Date(),acknowledgedAt:null},
