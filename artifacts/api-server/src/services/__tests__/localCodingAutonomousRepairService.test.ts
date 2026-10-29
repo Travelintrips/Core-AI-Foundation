@@ -1145,8 +1145,11 @@ describe("autonomous terminal task status", () => {
     const missingEvidenceStart = source.indexOf('state.nextAction === "DONE" && !completionVerified');
     const missingEvidenceEnd = source.indexOf("if (state.activeRun)", missingEvidenceStart);
     const missingEvidenceBlock = source.slice(missingEvidenceStart, missingEvidenceEnd);
-    expect(missingEvidenceBlock).toContain('status: "BLOCKED"');
-    expect(missingEvidenceBlock).not.toContain('status: "READY_REVIEW"');
+    // Coding tasks have no BLOCKED status in the database CHECK constraint.
+    // The autonomous record must retain the BLOCKED safety gate.
+    expect(missingEvidenceBlock).toContain('.set({ status: "READY_REVIEW", resultSummary: message })');
+    expect(missingEvidenceBlock).toContain('setState(taskId, "BLOCKED", "COMPLETION_EVIDENCE_MISSING"');
+    expect(missingEvidenceBlock).toContain('return { taskId, status: "BLOCKED", action: "COMPLETION_EVIDENCE_MISSING" }');
   });
 });
 
