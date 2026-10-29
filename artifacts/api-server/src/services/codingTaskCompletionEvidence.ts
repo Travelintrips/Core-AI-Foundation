@@ -36,6 +36,10 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
     hasAck: kinds.has("ACK"), hasProgress: kinds.has("PROGRESS"),
     hasCompletedEvent: kinds.has("COMPLETED"),
     hasFailedEvent: kinds.has("FAILED"),
+    // Command lifecycle is distinct from the parent coding task lifecycle.
+    // A successful read-only worker command must never auto-complete a coding task.
+    commandLifecycleCompleted: Boolean(matchingAck && matchingProgress && terminal?.kind === "COMPLETED"),
+    taskCompletionPending: task.status !== "COMPLETED" && Boolean(matchingAck && matchingProgress && terminal?.kind === "COMPLETED"),
     bridgeCompleted: task.status === "COMPLETED" && matchingAck && matchingProgress && terminal?.kind === "COMPLETED",
     trustedCiVerified: false, trustedDeploymentVerified: false,
     trustedProductionE2eVerified: false,
