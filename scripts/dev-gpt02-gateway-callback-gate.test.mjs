@@ -53,3 +53,10 @@ test("rejects absent pinned key before any ledger write", async () => {
   );
   assert.equal(writes, 0);
 });
+
+test("callback persistence statement is executable, not hidden in comment", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./dev-gpt02-gateway-callback-gate.mjs", import.meta.url), "utf8");
+  assert.match(source, /^  const saved = await ledger\.acceptVerifiedEvidence\(evidence, receipt\);$/m);
+  assert.doesNotMatch(source, /\\\\n  \\//);
+});
