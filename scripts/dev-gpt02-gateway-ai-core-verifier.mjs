@@ -77,7 +77,12 @@ export function verifyGatewayCallbackEvidence({ receipt, expected, binding, iden
  * the callback idempotently and return its own persisted finalization result.
  */
 export function verifyPersistedFinalAck({ ack, evidence, expected }) {
-  requireCondition(evidence?.verified === true && evidence.eventId === expected?.eventId,
+  requireCondition(evidence?.verified === true && expected &&
+    evidence.eventId === expected.eventId &&
+    evidence.commandId === expected.commandId &&
+    evidence.runId === expected.runId &&
+    evidence.sessionKey === expected.sessionKey &&
+    evidence.signingKeyId === expected.signingKeyId,
     "GATEWAY_CALLBACK_NOT_VERIFIED");
   requireCondition(ack?.state === "COMPLETED" &&
     ack?.attestationVerified === true &&
