@@ -102,3 +102,14 @@ test("Final ACK rejects mismatched run, session, response hash, signing key", ()
     assert.throws(() => verifyPersistedFinalAck({ack:{...ack,[key]:"incorrect"},evidence,expected:f.expected}),/GATEWAY_FINAL_ACK_NOT_VERIFIED/);
   }
 });
+
+test("Final ACK rejects evidence that does not match the trusted expected event", () => {
+  const f = fixture(), evidence = check(f);
+  const ack = { state: "COMPLETED", attestationVerified: true, transport: "openclaw-gateway",
+    eventId: f.expected.eventId, commandId: f.expected.commandId, ackId: uuid,
+    runId: f.expected.runId, sessionKey: f.expected.sessionKey,
+    assistantResponseHash: f.expected.assistantResponseHash, signingKeyId: f.expected.signingKeyId };
+  for (const key of ["commandId", "runId", "sessionKey", "signingKeyId"]) {
+    assert.throws(() => verifyPersistedFinalAck({ack, evidence: {...evidence,[key]:"wrong"}, expected:f.expected}), /GATEWAY_CALLBACK_NOT_VERIFIED/);
+  }
+});
