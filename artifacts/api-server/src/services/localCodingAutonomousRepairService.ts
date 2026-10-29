@@ -2326,11 +2326,19 @@ async function autonomousTick(): Promise<void> {
       return;
     }
 
+    // Optional single-task guard for isolated DEV validation. Fail closed on
+    // malformed configuration rather than unintentionally running every task.
+    const scopedTaskId = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"]?.trim();
+    if (scopedTaskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scopedTaskId)) {
+      logger.error("[coding-autonomous] Invalid task allowlist; skipping all cycles");
+      return;
+    }
     const rows = await withTransientDatabaseRetry(() => db.execute(sql`
       SELECT task_id
       FROM ai_platform.ai_coding_autonomous_tasks
       WHERE enabled = TRUE
         AND status IN ('ACTIVE','WAITING')
+        AND (${scopedTaskId ? sql`task_id = ${scopedTaskId}::uuid` : sql`TRUE`})
         AND (
           ${!temporalActive}
           OR (
