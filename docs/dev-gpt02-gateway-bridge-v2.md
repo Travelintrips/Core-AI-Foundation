@@ -110,3 +110,26 @@ current allowlist or scheduled tasks, never sends A06 again, and does not
 expose token values. Retain the existing browser transport until a verified
 migration is available; do not erase existing SEND_INVOKED records. If
 principal verification fails, stop with GATEWAY_PRINCIPAL_NOT_VERIFIED.
+
+
+## 30 Oct: official result reception and durable event state
+
+- The new DEV-only official reader invokes the authenticated OpenClaw
+  Gateway CLI agent.wait using its immutable runId and bounded timeout.
+  It never sends a job or reads ChatGPT/browser/CDP.
+- agent.wait returning timeout or pending means the same run remains
+  unresolved; it is NOT a reason to start another model turn.
+- A terminal reply is recorded as terminal_observed with
+  principalVerified=false. The reader intentionally cannot invent
+  GPT02 OAuth identity, a signed assistant message ID or Final ACK from
+  terminal text alone. Existing callback/attestation gates must reject it.
+- SQLite DevGatewaySqliteStore provides unique event reservation,
+  transactional CAS state changes and persistence across process restart;
+  requires an explicitly DEV-only private storage path.
+- This code still needs a signed/authenticated provider account and an
+  approved message provenance adapter before enabling the live GPT02
+  callback path. ChatGPT web login is not an OpenClaw provider OAuth login.
+
+Validated directly on DELL: a read-only Gateway agent.wait for a nonexistent
+run ID returned structured timeout and runId. No model inference,
+callbacks, or synthetic ACKs were emitted.
