@@ -1540,6 +1540,18 @@ export async function runAutonomousCodingCycle(taskId: string): Promise<{
       return { taskId, status: error.status, action: error.action };
     }
     const message = error instanceof Error ? error.message : String(error);
+    // Log only bounded DB diagnostics, never SQL parameters or credentials.
+    const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : null;
+    const sqlState = cause && typeof cause === "object" && "code" in cause
+      ? String((cause as { code: unknown }).code).slice(0, 10)
+      : null;
+    logger.warn({
+      taskId,
+      sqlState,
+      errorClass: error instanceof Error ? error.constructor.name : typeof error,
+      databasePermissionDenied: /permission denied/i.test(message) || sqlState === "42501",
+      databaseTimeout: /timeout exceeded when trying to connect/i.test(message),
+    }, "[coding-autonomous] cycle failure diagnostics");
     const state = await loadTaskState(taskId).catch(() => null);
 
     if (
