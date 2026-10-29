@@ -327,3 +327,60 @@ test("final ACK on a different event or command is never marked complete", async
     });
   }
 });
+
+test("same event with different command ID cannot create a second Gateway submission", async () => {
+  const f = fixture();
+  await dispatch(f);
+  const changed = {
+    ...work, commandId: "77777777-7777-4777-8777-777777777777",
+  };
+  assert.equal(runKey(changed, binding), runKey(work, binding));
+  await assert.rejects(dispatch({ ...f, work: changed }),
+    checkCode("EVENT_REUSE_CONTEXT_MISMATCH"));
+  assert.equal(f.calls.send, 1);
+});
+test("same event with changed challenge, correlation or payload is refused", async () => {
+  for (const patch of [
+    { challenge: "f".repeat(64) },
+    { correlationId: "ai-task:task-118:1:mutated-a06" },
+    { instruction: "A different prompt must not reuse the same send." },
+  ]) {
+    const f = fixture();
+    await dispatch(f);
+    await assert.rejects(dispatch({ ...f, work: { ...work, ...patch } }),
+      checkCode("EVENT_REUSE_CONTEXT_MISMATCH"));
+    assert.equal(f.calls.send, 1);
+  }
+});
+test("reconciliation cannot convert an original send into a new task", async () => {
+  const f = fixture();
+  await dispatch(f);
+  await assert.rejects(recover({
+    ...f, work: { ...work, instruction: "Unauthorized replacement instructions" },
+  }), checkCode("RECONCILIATION_CONTEXT_MISMATCH"));
+  assert.equal(f.calls.send, 1);
+  assert.equal(f.calls.callback, 0);
+});
+
+test("credential rotation cannot create a second delivery for the same event", async () => {
+  const f = fixture();
+  await dispatch(f);
+  const changed = {
+    ...binding, principalFingerprint: "e".repeat(64),
+    proofId: "88888888-8888-4888-8888-888888888888",
+  };
+  const gateway = {
+    ...f.gateway,
+    async identity() {
+      return {
+        authenticated: true, source: "gateway-credential-store",
+        gatewayAgentId: changed.gatewayAgentId, provider: changed.provider,
+        principalFingerprint: changed.principalFingerprint,
+      };
+    },
+  };
+  assert.equal(runKey(f.work, binding), runKey(f.work, changed));
+  await assert.rejects(dispatch({ ...f, binding: changed, gateway }),
+    checkCode("EVENT_REUSE_CONTEXT_MISMATCH"));
+  assert.equal(f.calls.send, 1);
+});

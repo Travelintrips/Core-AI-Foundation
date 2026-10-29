@@ -62,9 +62,10 @@ export function validateJob(work, binding) {
   return work;
 }
 export function runKey(work, binding) {
-  return hash(["dev-gateway-turn/v1", binding.ownerChannel,
-    binding.principalFingerprint, work.commandId, work.eventId,
-    work.correlationId].join("|"));
+  // One physical event has one transport key even if an upstream bug
+  // generates a new commandId for an existing event. The ledger rejects
+  // mismatched metadata rather than silently creating another send.
+  return hash(["dev-gateway-turn/v1", binding.workerId, work.eventId].join("|"));
 }
 export function gatewaySessionKey(binding, work) {
   return "agent:" + binding.gatewayAgentId + ":ai-task-dev-" + runKey(work, binding).slice(0, 40);
@@ -164,19 +165,40 @@ export async function dispatchOnce({ work, binding, gateway, store }) {
   assertPrincipal(await gateway.identity(), binding);
   const key = runKey(work, binding);
   const sessionKey = gatewaySessionKey(binding, work);
+  const request = trustedRequest(work, binding);
+  const requestHash = hash(request);
   const reservation = await store.reserve(key, {
     status: "RESERVED", key, commandId: work.commandId,
-    eventId: work.eventId, sessionKey, runId: null,
+    eventId: work.eventId, challenge: work.challenge,
+    correlationId: work.correlationId, requestHash,
+    ownerChannel: binding.ownerChannel,
+    targetConversationId: binding.targetConversationId,
+    principalFingerprint: binding.principalFingerprint,
+    gatewayAgentId: binding.gatewayAgentId, provider: binding.provider,
+    sessionKey, runId: null,
   });
   ensure(reservation?.record, "DURABLE_RESERVATION_UNAVAILABLE");
+  const reserved = validateState(reservation.record);
+  ensure(reserved.commandId === work.commandId &&
+    reserved.eventId === work.eventId &&
+    reserved.challenge === work.challenge &&
+    reserved.correlationId === work.correlationId &&
+    reserved.requestHash === requestHash &&
+    reserved.ownerChannel === binding.ownerChannel &&
+    reserved.targetConversationId === binding.targetConversationId &&
+    reserved.principalFingerprint === binding.principalFingerprint &&
+    reserved.gatewayAgentId === binding.gatewayAgentId &&
+    reserved.provider === binding.provider &&
+    reserved.sessionKey === sessionKey,
+  "EVENT_REUSE_CONTEXT_MISMATCH");
   if (!reservation.created) {
-    return { status: validateState(reservation.record).status, deduplicated: true, key };
+    return { status: reserved.status, deduplicated: true, key };
   }
   try {
     const response = await gateway.send({
       sessionKey, idempotencyKey: key,
       agentId: binding.gatewayAgentId,
-      text: trustedRequest(work, binding),
+      text: request,
     });
     ensure(response?.accepted === true && UUID.test(response.runId) &&
       response.sessionKey === sessionKey, "GATEWAY_ACCEPTANCE_UNVERIFIED");
@@ -197,6 +219,14 @@ export async function reconcile({ work, binding, gateway, store, callback, priva
   let existing = validateState(await store.read(key));
   ensure(existing.commandId === work.commandId &&
     existing.eventId === work.eventId &&
+    existing.challenge === work.challenge &&
+    existing.correlationId === work.correlationId &&
+    existing.requestHash === hash(trustedRequest(work, binding)) &&
+    existing.ownerChannel === binding.ownerChannel &&
+    existing.targetConversationId === binding.targetConversationId &&
+    existing.principalFingerprint === binding.principalFingerprint &&
+    existing.gatewayAgentId === binding.gatewayAgentId &&
+    existing.provider === binding.provider &&
     existing.sessionKey === gatewaySessionKey(binding, work),
   "RECONCILIATION_CONTEXT_MISMATCH");
   if (existing.status === "RESERVED" || existing.status === "SUBMISSION_UNKNOWN") {

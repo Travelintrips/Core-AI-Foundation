@@ -71,7 +71,11 @@ use that official RPC and implement read-only lookup of durable
 submission/run history. A process-local map alone is not adequate:
 store.reserve, store.transition, store.read must use durable transactional
 storage with unique workerId/eventId and compare-and-swap transitions.
-Never let an API timeout trigger another send.
+The transport idempotency key depends only on workerId and eventId.
+A repeated event with changed commandId, correlation, challenge, owner,
+credential fingerprint, agent, provider or prompt must fail with a
+context-mismatch error, never result in another send. Never let an API
+timeout trigger another send.
 
 ## Rollout gates (all DEV)
 
