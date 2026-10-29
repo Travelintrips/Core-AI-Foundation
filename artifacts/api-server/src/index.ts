@@ -192,7 +192,13 @@ async function initializeRuntimeServices(): Promise<void> {
     }
   });
   await runStartupStep("[coding-multi-worker] Stale run recovery", async () => {
-    const recovered = await reconcileStaleMultiWorkerRuns();
+    // Isolated DEV validation must not run a global startup reconciliation.
+    const scopedTaskId = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"]?.trim();
+    if (scopedTaskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scopedTaskId)) {
+      logger.warn("[coding-multi-worker] Invalid startup task allowlist; skipping recovery");
+      return;
+    }
+    const recovered = await reconcileStaleMultiWorkerRuns(scopedTaskId ? { taskId: scopedTaskId } : {});
     if (
       recovered.recoveredRuns > 0 ||
       recovered.recoveredWorkstreams > 0 ||
