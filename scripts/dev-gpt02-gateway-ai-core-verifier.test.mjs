@@ -5,7 +5,7 @@ import { verifyGatewayCallbackEvidence, verifyPersistedFinalAck } from "./dev-gp
 
 const digest = x => createHash("sha256").update(x).digest("hex");
 const uuid = "12345678-1234-4234-8234-123456789abc";
-function fixture() {
+export function fixture() {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const binding = {
     accountAlias: "GPT02", workerId: "openclaw-dell-chatgpt-wake-dev",
