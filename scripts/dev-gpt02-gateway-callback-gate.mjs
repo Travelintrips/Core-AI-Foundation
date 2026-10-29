@@ -21,7 +21,10 @@ export async function acceptGatewayCallback({ receipt, eventId, trusted, ledger 
   });
   // Atomic compare-and-set, unique by eventId and commandId. Must never run
   // an external callback twice after a lost response.
-  // The implementation of this port MUST use a DB transaction with a unique\n  // eventId+commandId constraint and immutable receipt fingerprint. On replay,\n  // it may return the prior matching row, but must never create another effect.\n  const saved = await ledger.acceptVerifiedEvidence(evidence, receipt);
+  // The implementation of this port MUST use a DB transaction with a unique
+  // eventId+commandId constraint and immutable receipt fingerprint. On replay,
+  // it may return the prior matching row, but must never create another effect.
+  const saved = await ledger.acceptVerifiedEvidence(evidence, receipt);
   if (!saved || saved.eventId !== eventId || saved.commandId !== record.commandId ||
     saved.attestationVerified !== true ||
     saved.runId !== record.runId || saved.sessionKey !== record.sessionKey ||
