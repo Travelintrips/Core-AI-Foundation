@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { timingSafeEqual } from "node:crypto";
+import { and, eq, asc } from "drizzle-orm";
+import { db, aiCodingBridgeCommandsTable, aiCodingBridgeResponsesTable } from "@workspace/db";
 import { z } from "zod";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
@@ -18,6 +21,53 @@ import {
   runAutonomousCodingCycle,
 } from "../services/localCodingAutonomousRepairService.js";
 const router=Router(); const Uuid=z.string().uuid();
+function authorizedAiTaskBridge(req:import("express").Request):boolean {
+ const expected=process.env["AI_TASK_BRIDGE_TOKEN"]?.trim()??"";
+ const received=req.header("x-ai-task-engine-key")??"";
+ const a=Buffer.from(expected);const b=Buffer.from(received);
+ return expected.length>=32 && a.length===b.length && timingSafeEqual(a,b);
+}
+router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<void>=>{
+ if(!authorizedAiTaskBridge(req)){res.status(403).json({error:"AI_TASK_BRIDGE_UNAUTHORIZED"});return;}
+ const parsed=z.object({accountAlias:z.literal("GPT02"),instruction:z.string().trim().min(1).max(50000),
+  correlationId:z.string().min(1).max(200),jobAlias:z.string().min(1).max(120).optional()}).strict().safeParse(req.body);
+ if(!parsed.success){res.status(400).json({error:"INVALID_GPT02_DISPATCH"});return;}
+ const {accountAlias,instruction,correlationId,jobAlias}=parsed.data;
+ const clientId="openclaw-dell-chatgpt-wake-dev";
+ const result=await submitCodingBridgeCommand({
+  externalCommandId:correlationId,source:"ai-task-chatgpt-dev",instruction,
+  assignedClientId:clientId,metadata:{correlationId,accountAlias,jobAlias:jobAlias??null},
+ });
+ const stored=result.command;
+ if(stored.instruction!==instruction || (stored.metadataJson as Record<string,unknown>)?.["assignedClientId"]!==clientId){
+  res.status(409).json({error:"GPT02_DISPATCH_IDEMPOTENCY_CONFLICT"});return;
+ }
+ res.status(result.created?201:200).json({created:result.created,commandId:stored.id,
+  clientId,eventId:stored.id,correlationId,accountAlias,status:stored.status});
+});
+// Read-only GPT02 timeline. A configured shared secret is mandatory, and
+// correlation/worker ownership must match the original command.
+router.get("/ai/coding/bridge/ai-task-chatgpt-timeline", async(req,res):Promise<void>=>{
+ if(!authorizedAiTaskBridge(req)){
+  res.status(403).json({error:"AI_TASK_BRIDGE_UNAUTHORIZED"});return;
+ }
+ const parsed=z.object({commandId:Uuid,correlationId:z.string().min(1).max(200)}).safeParse(req.query);
+ if(!parsed.success){res.status(400).json({error:"INVALID_TIMELINE_QUERY"});return;}
+ const [command]=await db.select().from(aiCodingBridgeCommandsTable)
+  .where(eq(aiCodingBridgeCommandsTable.id,parsed.data.commandId)).limit(1);
+ const metadata=command?.metadataJson as Record<string,unknown> | null | undefined;
+ if(!command || !metadata || typeof metadata!=="object" || Array.isArray(metadata)
+   || metadata["correlationId"]!==parsed.data.correlationId
+   || metadata["assignedClientId"]!=="openclaw-dell-chatgpt-wake-dev"){
+  res.status(404).json({error:"TIMELINE_NOT_FOUND"});return;
+ }
+ const rows=await db.select().from(aiCodingBridgeResponsesTable)
+  .where(eq(aiCodingBridgeResponsesTable.commandId,command.id))
+  .orderBy(asc(aiCodingBridgeResponsesTable.createdAt));
+ res.json({commandId:command.id,status:command.status,commandMetadata:metadata,
+  responses:rows.map(row=>({id:row.id,kind:row.kind,message:row.message,
+   checkpoint:row.checkpointJson,metadata:row.metadataJson,createdAt:row.createdAt}))});
+});
 router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{const p=z.object({externalCommandId:z.string().min(1).max(200),instruction:z.string().min(1).max(50000),taskId:Uuid.nullish(),source:z.string().min(1).max(50).optional(),commandType:z.string().min(1).max(50).optional(),authority:z.record(z.string(),z.unknown()).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await submitCodingBridgeCommand(p.data);res.status(x.created?201:200).json(x);});
 router.get("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.coerce.number().int().min(1).max(100).optional().safeParse(req.query["limit"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const responses=await listPendingCodingBridgeResponses(p.data??50);res.json({responses,total:responses.length});});
 router.post("/ai/coding/bridge/responses/:id/ack",async(req,res):Promise<void>=>{const p=Uuid.safeParse(req.params["id"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await acknowledgeCodingBridgeResponse(p.data);if(!x){res.status(404).json({error:"Bridge response not found"});return;}res.json(x);});

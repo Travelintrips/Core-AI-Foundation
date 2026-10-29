@@ -245,6 +245,74 @@ async function deliverCodingBridgeWhatsappNotification(input: {
     .where(eq(aiCodingBridgeResponsesTable.id, input.responseId));
 }
 
+function fanoutCodingBridgeResponse(
+  response: typeof aiCodingBridgeResponsesTable.$inferSelect,
+  input: {
+    commandId: string;
+    taskId?: string | null;
+    kind: "ACK" | "PROGRESS" | "CHECKPOINT" | "BLOCKER" | "COMPLETED" | "FAILED";
+    message: string;
+    checkpoint?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  },
+): void {
+  publishSafe({
+    eventType: "coding.bridge.response.created",
+    sourceModule: "coding-control-bridge",
+    sourceId: response.id,
+    correlationId: input.commandId,
+    payload: {
+      responseId: response.id,
+      commandId: input.commandId,
+      kind: input.kind,
+    },
+  });
+
+  void deliverCodingBridgeWhatsappNotification({
+    responseId: response.id,
+    commandId: input.commandId,
+    taskId: input.taskId ?? null,
+    kind: input.kind,
+    message: input.message,
+    checkpoint: input.checkpoint ?? {},
+    metadata: input.metadata ?? {},
+    eventTimestamp: response.createdAt,
+  }).catch(() => undefined);
+
+  void enqueueAiCoreChatInboxMessage({
+    responseId: response.id,
+    commandId: input.commandId,
+    taskId: input.taskId ?? null,
+    kind: input.kind,
+    message: input.message,
+    checkpoint: input.checkpoint ?? {},
+    metadata: input.metadata ?? {},
+  }).catch(() => undefined);
+
+  if (
+    input.kind === "COMPLETED" ||
+    input.kind === "FAILED" ||
+    input.kind === "BLOCKER"
+  ) {
+    void syncTerminalBridgeResponseToGitHub({
+      responseId: response.id,
+      commandId: input.commandId,
+      taskId: input.taskId ?? null,
+      kind: input.kind,
+    }).catch(() => undefined);
+    void enqueueAiCoreMcpBridgeLifecycleEvent({
+      responseId: response.id,
+      taskId: input.taskId ?? null,
+      kind: input.kind,
+      message: input.message,
+      checkpoint: input.checkpoint ?? {},
+      metadata: input.metadata ?? {},
+      createdAt: response.createdAt,
+    }).catch(() => undefined);
+  }
+
+}
+
 export async function appendCodingBridgeResponse(input: {
   commandId: string;
   taskId?: string | null;
@@ -337,61 +405,7 @@ export async function appendCodingBridgeResponse(input: {
 
   if (!created) return response;
 
-  publishSafe({
-    eventType: "coding.bridge.response.created",
-    sourceModule: "coding-control-bridge",
-    sourceId: response.id,
-    correlationId: input.commandId,
-    payload: {
-      responseId: response.id,
-      commandId: input.commandId,
-      kind: input.kind,
-    },
-  });
-
-  void deliverCodingBridgeWhatsappNotification({
-    responseId: response.id,
-    commandId: input.commandId,
-    taskId: input.taskId ?? null,
-    kind: input.kind,
-    message: input.message,
-    checkpoint: input.checkpoint ?? {},
-    metadata: input.metadata ?? {},
-    eventTimestamp: response.createdAt,
-  }).catch(() => undefined);
-
-  void enqueueAiCoreChatInboxMessage({
-    responseId: response.id,
-    commandId: input.commandId,
-    taskId: input.taskId ?? null,
-    kind: input.kind,
-    message: input.message,
-    checkpoint: input.checkpoint ?? {},
-    metadata: input.metadata ?? {},
-  }).catch(() => undefined);
-
-  if (
-    input.kind === "COMPLETED" ||
-    input.kind === "FAILED" ||
-    input.kind === "BLOCKER"
-  ) {
-    void syncTerminalBridgeResponseToGitHub({
-      responseId: response.id,
-      commandId: input.commandId,
-      taskId: input.taskId ?? null,
-      kind: input.kind,
-    }).catch(() => undefined);
-    void enqueueAiCoreMcpBridgeLifecycleEvent({
-      responseId: response.id,
-      taskId: input.taskId ?? null,
-      kind: input.kind,
-      message: input.message,
-      checkpoint: input.checkpoint ?? {},
-      metadata: input.metadata ?? {},
-      createdAt: response.createdAt,
-    }).catch(() => undefined);
-  }
-
+  fanoutCodingBridgeResponse(response, input);
   return response;
 }
 
@@ -609,7 +623,8 @@ export async function completeCodingBridgeCommand(input: {
     throw new Error("Bridge command result details exceed 64000 bytes");
   }
 
-  const result = await db.execute(sql`
+  const persisted = await db.transaction(async (tx) => {
+    const result = await tx.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_commands
     SET status = ${input.status},
         processed_at = NOW(),
@@ -630,18 +645,53 @@ export async function completeCodingBridgeCommand(input: {
   const row = result.rows?.[0] as Record<string, unknown> | undefined;
   if (!row) return null;
 
-  const response = await appendCodingBridgeResponse({
+  // Only the authenticated GPT02 worker may advance its linked coding task.
+  // Never overwrite a manual stop, a reviewed task, or a newer command's result.
+  // This is a guarded transition, not a declaration that review has passed.
+  if (input.clientId === "openclaw-dell-chatgpt-wake-dev" && row["task_id"]) {
+    const nextStatus = input.status === "COMPLETED" ? "READY_REVIEW" : "FAILED";
+    await tx.execute(sql`
+      UPDATE ai_platform.ai_coding_tasks AS task
+      SET status = ${nextStatus},
+          result_summary = ${`GPT02 bridge ${input.status}: ${input.message.slice(0, 500)}`},
+          updated_at = NOW()
+      WHERE task.id = ${String(row["task_id"])}::uuid
+        AND task.status IN ('PENDING', 'ANALYZING', 'CODING', 'TESTING')
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_platform.ai_coding_bridge_commands AS newer
+          WHERE newer.task_id = task.id
+            AND newer.id <> ${input.commandId}::uuid
+            AND newer.created_at > (
+              SELECT current_command.created_at
+              FROM ai_platform.ai_coding_bridge_commands AS current_command
+              WHERE current_command.id = ${input.commandId}::uuid
+            )
+        )
+    `);
+  }
+    // Persist terminal evidence in the same transaction as command/task state.
+    // Any insertion failure rolls back the terminal transition.
+    const [response] = await tx.insert(aiCodingBridgeResponsesTable).values({
+      commandId: input.commandId,
+      taskId: row["task_id"] ? String(row["task_id"]) : null,
+      kind: input.status,
+      message: input.message,
+      checkpointJson: { status: input.status, clientId: input.clientId },
+      metadataJson: details,
+    }).returning();
+    if (!response) throw new Error("Failed to persist terminal bridge response");
+    return { row, response };
+  });
+  if (!persisted) return null;
+  const { response, row } = persisted;
+  fanoutCodingBridgeResponse(response, {
     commandId: input.commandId,
     taskId: row["task_id"] ? String(row["task_id"]) : null,
     kind: input.status,
     message: input.message,
-    checkpoint: {
-      status: input.status,
-      clientId: input.clientId,
-    },
+    checkpoint: { status: input.status, clientId: input.clientId },
     metadata: details,
   });
-
   return { commandId: input.commandId, status: input.status, response };
 }
 
