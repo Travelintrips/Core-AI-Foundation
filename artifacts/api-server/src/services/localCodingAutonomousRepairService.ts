@@ -2094,6 +2094,8 @@ export function readyReviewAutonomousRecoveryDecision(input: {
 }
 
 async function maybeRecoverOrphanedReadyReviewTasks(): Promise<void> {
+  const scopedTaskId = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"]?.trim();
+  if (scopedTaskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scopedTaskId)) return;
   const nowMs = Date.now();
   if (
     nowMs - lastReadyReviewRecoveryAt <
@@ -2108,7 +2110,7 @@ async function maybeRecoverOrphanedReadyReviewTasks(): Promise<void> {
   // Multi-worker REVIEW_REQUIRED is an automated QC state. Sweep it on the
   // same bounded cadence as legacy READY_REVIEW recovery so an APPROVED
   // candidate missed during a rolling-deploy startup cannot remain parked.
-  await reconcileStaleMultiWorkerRuns().catch((error) => {
+  await reconcileStaleMultiWorkerRuns(scopedTaskId ? { taskId: scopedTaskId } : {}).catch((error) => {
     logger.warn(
       { err: error },
       "[coding-autonomous] periodic multi-worker recovery failed",
@@ -2296,7 +2298,9 @@ async function autonomousTick(): Promise<void> {
   if (tickRunning) return;
   tickRunning = true;
   try {
-    const recovery = await reconcileStaleCodingRuns().catch((error) => {
+    const scopedTaskId = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"]?.trim();
+    if (scopedTaskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scopedTaskId)) return;
+    const recovery = scopedTaskId ? null : await reconcileStaleCodingRuns().catch((error) => {
       logger.warn({ err: error }, "[coding-autonomous] stale coding-run reconciliation failed");
       return null;
     });
@@ -2308,7 +2312,7 @@ async function autonomousTick(): Promise<void> {
 
     await maybeRecoverOrphanedReadyReviewTasks();
 
-    if (nowMs - lastTestTaskRetentionSweepAt >= TEST_TASK_RETENTION_SWEEP_INTERVAL_MS) {
+    if (!scopedTaskId && nowMs - lastTestTaskRetentionSweepAt >= TEST_TASK_RETENTION_SWEEP_INTERVAL_MS) {
       lastTestTaskRetentionSweepAt = nowMs;
       const retention = await purgeExpiredCodingTestTasks().catch((error) => {
         logger.warn({ err: error }, "[coding-autonomous] coding test-task retention sweep failed");
@@ -2331,11 +2335,6 @@ async function autonomousTick(): Promise<void> {
 
     // Optional single-task guard for isolated DEV validation. Fail closed on
     // malformed configuration rather than unintentionally running every task.
-    const scopedTaskId = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"]?.trim();
-    if (scopedTaskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scopedTaskId)) {
-      logger.error("[coding-autonomous] Invalid task allowlist; skipping all cycles");
-      return;
-    }
     const rows = await withTransientDatabaseRetry(() => db.execute(sql`
       SELECT task_id
       FROM ai_platform.ai_coding_autonomous_tasks
