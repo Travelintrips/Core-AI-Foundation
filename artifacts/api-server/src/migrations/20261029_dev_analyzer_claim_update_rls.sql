@@ -25,7 +25,7 @@ WITH CHECK (
   AND EXISTS (
     SELECT 1 FROM ai_platform.ai_coding_runs r
     JOIN ai_platform.ai_coding_tasks t ON t.id=r.task_id
-    WHERE (payload_json->>'codingRunId') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    WHERE (payload_json->>'codingRunId') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND r.id=(payload_json->>'codingRunId')::uuid
       AND t.task_number ~ '^CWS-[A-F0-9]{8}$'
   )
