@@ -233,7 +233,9 @@ test("tampered signature never validates", async () => {
     assistantResponseHash: stored.receipt.assistantResponseHash,
   };
   assert.throws(() => verifyReceipt({
-    ...stored.receipt, signature: "A" + stored.receipt.signature.slice(1),
+    ...stored.receipt,
+    signature: (stored.receipt.signature.startsWith("A") ? "B" : "A") +
+      stored.receipt.signature.slice(1),
   }, f.publicKey, expected), checkCode("ATTESTATION_SIGNATURE_INVALID"));
 });
 test("callback timeout requires lookup, never repeat callback", async () => {
