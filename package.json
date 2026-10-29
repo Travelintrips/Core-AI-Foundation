@@ -24,7 +24,7 @@
     "migrate:prod:dry-run": "pnpm --filter @workspace/scripts run migrate:prod:dry-run",
     "ci:verify": "pnpm run verify",
     "ci:build": "pnpm run build:workspace",
-    "test:dev-gpt02-gateway-bridge": "node --test scripts/dev-gpt02-gateway-bridge.test.mjs scripts/dev-gpt02-gateway-recovery.test.mjs",
+    "test:dev-gpt02-gateway-bridge": "node --test scripts/dev-gpt02-gateway-bridge.test.mjs scripts/dev-gpt02-gateway-recovery.test.mjs scripts/dev-gpt02-gateway-ai-core-verifier.test.mjs scripts/dev-gpt02-gateway-callback-gate.test.mjs scripts/dev-gpt02-gateway-callback-sqlite-ledger.test.mjs scripts/dev-gpt02-gateway-callback-integration.test.mjs",
     "ci:test": "pnpm run test:dev-gpt02-gateway-bridge && pnpm -r --if-present run test",
     "ci:codegen": "pnpm run build:generated",
     "security:scan-secrets": "pnpm --filter @workspace/scripts run security:scan-secrets",
