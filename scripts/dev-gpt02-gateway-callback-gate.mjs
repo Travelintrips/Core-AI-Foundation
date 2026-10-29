@@ -12,14 +12,16 @@ export async function acceptGatewayCallback({ receipt, eventId, trusted, ledger 
   const record = await trusted.loadEvent(eventId);
   if (!record || record.devOnly !== true || record.eventId !== eventId) fail("GATEWAY_TRUSTED_EVENT_MISSING");
   const binding = await trusted.loadBinding(record.workerId);
+  if (!binding || binding.workerId !== record.workerId) fail("GATEWAY_TRUSTED_BINDING_MISSING");
   const identity = await trusted.inspectGatewayCredential(binding.gatewayAgentId);
   const publicKey = await trusted.loadPinnedSigningKey(binding.signingKeyId);
+  if (!publicKey) fail("GATEWAY_PINNED_KEY_MISSING");
   const evidence = verifyGatewayCallbackEvidence({
     receipt, expected: record, binding, identity, publicKey,
   });
   // Atomic compare-and-set, unique by eventId and commandId. Must never run
   // an external callback twice after a lost response.
-  const saved = await ledger.acceptVerifiedEvidence(evidence, receipt);
+  // The implementation of this port MUST use a DB transaction with a unique\n  // eventId+commandId constraint and immutable receipt fingerprint. On replay,\n  // it may return the prior matching row, but must never create another effect.\n  const saved = await ledger.acceptVerifiedEvidence(evidence, receipt);
   if (!saved || saved.eventId !== eventId || saved.commandId !== record.commandId ||
     saved.attestationVerified !== true ||
     saved.runId !== record.runId || saved.sessionKey !== record.sessionKey ||
