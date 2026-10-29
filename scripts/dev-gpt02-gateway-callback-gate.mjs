@@ -21,7 +21,10 @@ export async function acceptGatewayCallback({ receipt, eventId, trusted, ledger 
   // an external callback twice after a lost response.
   const saved = await ledger.acceptVerifiedEvidence(evidence, receipt);
   if (!saved || saved.eventId !== eventId || saved.commandId !== record.commandId ||
-    saved.attestationVerified !== true) fail("GATEWAY_CALLBACK_PERSISTENCE_UNVERIFIED");
+    saved.attestationVerified !== true ||
+    saved.runId !== record.runId || saved.sessionKey !== record.sessionKey ||
+    saved.assistantResponseHash !== record.assistantResponseHash ||
+    saved.signingKeyId !== record.signingKeyId) fail("GATEWAY_CALLBACK_PERSISTENCE_UNVERIFIED");
   // No fabricated ACK: only the separately committed server result qualifies.
   const ack = await ledger.readFinalAck(eventId);
   if (!ack) return { status: "CALLBACK_ACCEPTED", finalAckVerified: false };
