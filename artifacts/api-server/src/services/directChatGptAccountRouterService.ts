@@ -157,6 +157,17 @@ export async function dispatchDirectChatGptAccountWork(input: {
 }) {
   assertDevRuntime();
 
+  // A named DELL executor is not an account alias. The automatic account
+  // selector must never replace an explicitly requested worker with a
+  // different PC (or a legacy travelincars binding). The DELL browser path
+  // requires a separate server-authorized, challenge-bound wake dispatch.
+  if (/\bopenclaw-dell-chatgpt-wake-dev\b/i.test(input.instruction)) {
+    throw new ExternalAgentDispatchError(
+      "CAPABILITY_DENIED",
+      "EXPLICIT_DELL_WAKE_REQUIRED: use verified DEV_CHATGPT_WAKE dispatch pinned to openclaw-dell-chatgpt-wake-dev; no account fallback is permitted.",
+    );
+  }
+
   const registry = await getExternalAgentRegistrySnapshot();
   const counts = await activeJobCounts();
   const personal = DIRECT_CHATGPT_ACCOUNT_BINDINGS.personal;
