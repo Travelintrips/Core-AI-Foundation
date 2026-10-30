@@ -2652,6 +2652,9 @@ async function startExternalAgentWork(
       ...(input.branch ? { branch: input.branch } : {}),
       ...(openClawExecutionProfile ? { openClawExecutionProfile } : {}),
       source: input.source,
+      ...(clientId === "openclaw-dell-chatgpt-wake-dev"
+        ? { explicitWorkerTarget: true, preferredClientId: clientId }
+        : {}),
       ...(clientId === OPENCLAW_AGENT_CLIENT_ID && /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.test(input.message)
         ? { openClawExecutionProfile: "monitor-direct", directOperation: /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.exec(input.message)![1]!.toLowerCase() }
         : {}),
@@ -4119,8 +4122,15 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       !parsed.data.image
         ? (parseOpenClawPcCodingRequest(rawInput.message) ?? parseDirectOpenClawPcCommand(rawInput.message))
         : null;
+    // Explicit DELL commands take precedence over ChatGPT account aliases.
+    // A pinned worker is fail-closed: never substitute a legacy account or PC.
+    const explicitDellWorker = parsed.data.mode === "agent" &&
+      rawInput.message.trim().startsWith("@") &&
+      /\bopenclaw-dell-chatgpt-wake-dev\b/i.test(rawInput.message);
     const result =
-      simpleWakeCommand
+      explicitDellWorker
+        ? await startExternalAgentWork(effectiveInput, "openclaw-dell-chatgpt-wake-dev")
+        : simpleWakeCommand
         ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
           parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined)
         : directAccountReset
