@@ -643,6 +643,43 @@ export async function claimCodingBridgeCommand(input: {
   };
 }
 
+/**
+ * Privileged reconciliation primitive, deliberately not exposed to worker routes.
+ * A verified operator workflow must authorize the actor and evidence before calling.
+ * Never marks an ambiguous command COMPLETED or FAILED, and never permits replay.
+ */
+export async function quarantineCodingBridgeCommandForReconciliation(input: {
+  commandId: string;
+  actorId: string;
+  reason: string;
+  evidenceReference: string;
+}): Promise<boolean> {
+  const actorId = input.actorId.trim();
+  const reason = input.reason.trim();
+  const evidenceReference = input.evidenceReference.trim();
+  if (!actorId || actorId.length > 128 || !reason || reason.length > 500 ||
+      !evidenceReference || evidenceReference.length > 500) {
+    throw new Error("Reconciliation requires actor, reason, and evidence reference");
+  }
+  await ensureCodingControlBridgeTables();
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_bridge_commands
+    SET metadata_json = metadata_json || jsonb_build_object(
+      'reconciliationRequired', true,
+      'reconciliationActor', ${actorId}::text,
+      'reconciliationReason', ${reason}::text,
+      'reconciliationEvidenceReference', ${evidenceReference}::text,
+      'reconciliationMarkedAt', NOW()::text
+    ),
+    updated_at = NOW()
+    WHERE id = ${input.commandId}::uuid
+      AND status = 'PROCESSING'
+      AND COALESCE(metadata_json ->> 'reconciliationRequired', 'false') <> 'true'
+    RETURNING id
+  `);
+  return Boolean(result.rows?.[0]);
+}
+
 export async function renewCodingBridgeCommandClaim(input: {
   clientId: string;
   commandId: string;
