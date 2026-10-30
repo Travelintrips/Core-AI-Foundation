@@ -14,6 +14,7 @@ import re
 import subprocess
 import threading
 import time
+from urllib.request import urlopen
 
 from dev_chatgpt_native_reader import select_observed_request, validate_native_response
 
@@ -149,6 +150,7 @@ class NativeTransport:
         self.directory = self.root / "chatgpt-wake-dev-receipts"
         self.marker = self.directory / (binding["bindingFingerprint"] + "-" + event + ".native-input.json")
         self.reader_marker = self.directory / (binding["bindingFingerprint"] + "-" + event + ".native-reader.json")
+        self.audit_marker = self.directory / (binding["bindingFingerprint"] + "-" + event + ".stages.jsonl")
         # The parent renews the existing 300s claim while a bounded helper runs.
         # Renewal never extends this fixed total observation deadline.
         self.deadline = time.monotonic() + TRANSPORT_SECONDS
@@ -160,6 +162,25 @@ class NativeTransport:
         self.reader_identity = None
         self.last_tabs = None
         self.last_tabs_observed_at = None
+        self.composer_geometry = None
+
+    def _audit_stage(self, stage):
+        # Evidence-only: bounded stage identifiers, timestamp and event digest.
+        # Never persist user input, browser content, challenge or credentials.
+        permitted = {"PREFLIGHT", "SEND_ATTEMPTED", "SEND_CONFIRMED", "RESULT_VERIFIED"}
+        if stage not in permitted:
+            raise ValueError("Invalid native audit stage")
+        self.directory.mkdir(parents=True, exist_ok=True)
+        record = json.dumps({"stage": stage, "at": time.time(),
+                             "eventDigest": hashlib.sha256(self.event.encode("ascii")).hexdigest()},
+                            separators=(",", ":")) + "\n"
+        data = record.encode("ascii")
+        fd = os.open(str(self.audit_marker), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, data)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
     def _remaining(self, cap=CLI_SECONDS):
         remaining = min(cap, self.deadline - time.monotonic())
@@ -197,13 +218,29 @@ class NativeTransport:
         system = os.environ.get("SystemRoot")
         if not local or not user or not system:
             raise RuntimeError("Native Windows paths are unavailable")
-        portable = Path(local) / "OpenClaw" / "deps" / "portable-node"
-        self.node = portable / "node.exe"
-        self.entry = portable / "node_modules" / "openclaw" / "openclaw.mjs"
+        # Match the authenticated running OpenClaw 2026.10.7 gateway: the old
+        # portable package (2026.9.9) rejects the current config migration.
+        self.node = Path(local) / "OpenClaw" / "deps" / "node24-compatible" / "node-v24.22.1-win-x64" / "node.exe"
+        self.entry = Path(local) / "OpenClaw" / "staged-update-2026.10.7" / "node_modules" / "openclaw" / "openclaw.mjs"
         self.powershell = Path(system) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
         self.bridge = Path(__file__).with_name("dev-chatgpt-native-bridge.ps1")
-        self.expected_user_data = str(PureWindowsPath(user) / ".openclaw" / "browser" / self.binding["browserProfile"] / "user-data")
-        if not all(path.is_file() for path in (self.node, self.entry, self.powershell, self.bridge,
+        self.cdp_snapshot = Path(__file__).with_name("dev-chatgpt-cdp-snapshot.js")
+        self.expected_user_data = str(PureWindowsPath(local) / "AI-Core" / "gateway-stable3-main" / "browser" / self.binding["browserProfile"] / "user-data")
+        # Bind the port to the named OpenClaw profile, never to another account's fixed port.
+        # Fail closed for missing/malformed configuration and preserve the PID/path/tab fences.
+        profile_config_path = Path(user) / ".openclaw" / "openclaw.json"
+        try:
+            if profile_config_path.stat().st_size > 1024 * 1024:
+                raise ValueError("oversized")
+            config = json.loads(profile_config_path.read_text(encoding="utf-8-sig"))
+            profile_config = config["browser"]["profiles"][self.binding["browserProfile"]]
+            expected_port = profile_config["cdpPort"]
+        except (OSError, UnicodeError, ValueError, KeyError, TypeError) as error:
+            raise RuntimeError("OpenClaw managed profile configuration is unavailable") from error
+        if type(expected_port) is not int or not 1024 <= expected_port <= 65535:
+            raise RuntimeError("OpenClaw managed profile CDP port is invalid")
+        self.expected_cdp_port = expected_port
+        if not all(path.is_file() for path in (self.node, self.entry, self.powershell, self.bridge, self.cdp_snapshot,
                                                self.bridge.with_name("dev-chatgpt-native-composer.psm1"))):
             raise RuntimeError("Reviewed native transport files are unavailable")
 
@@ -235,6 +272,34 @@ class NativeTransport:
             raise RuntimeError("Native command returned an invalid envelope")
         return value
 
+    def _cdp_submit(self, message, allow_provider_lf):
+        """Single-attempt bound CDP Send; JS owns durable native-input marker."""
+        self.authorize()
+        if self.lease_guard is None:
+            raise RuntimeError("CDP Send requires an active leased process guard")
+        remaining = self._remaining(native_submit_seconds(message))
+        expiry_ms = int((time.time() + min(remaining, self.lease_guard.total_remaining())) * 1000)
+        script = Path(__file__).with_name("dev-chatgpt-ax-identity-readonly.js")
+        if not script.is_file() or self.marker.exists():
+            raise RuntimeError("CDP Send unavailable or already attempted")
+        args = [str(self.node), str(script), str(self.context["pid"]), str(self.context["cdpPort"]),
+                self.context["rawTargetId"], self.page_url, self.expected_user_data,
+                self.binding["accountAlias"], self.binding["bindingFingerprint"], "submit"]
+        payload = json.dumps({"message": message, "eventId": self.event,
+                              "challenge": self.challenge, "allowProviderLf": bool(allow_provider_lf),
+                              "leaseDeadlineEpochMs": expiry_ms}, separators=(",", ":")).encode("utf-8")
+        try:
+            output = _Capture(args, payload).finish(remaining)
+            envelope = json.loads(output)
+        except (RuntimeError, ValueError, RecursionError):
+            raise RuntimeError("Bound CDP Send outcome unknown; do not replay") from None
+        result = envelope.get("result") if isinstance(envelope, dict) else None
+        if (not isinstance(envelope, dict) or envelope.get("ok") is not True or
+                not isinstance(result, dict) or result.get("sendInvoked") is not True or
+                result.get("eventId") != self.event or
+                result.get("bindingFingerprint") != self.binding["bindingFingerprint"]):
+            raise RuntimeError("Bound CDP Send attestation mismatch; do not replay")
+        return result
     def _bridge(self, action, **data):
         self.authorize()
         if self.lease_guard is None:
@@ -245,24 +310,182 @@ class NativeTransport:
                         "-Action", action], json.dumps({"target": self.target, **data,
                             "leaseExpiresTickCount64": lease_expiry}, separators=(",", ":")).encode("utf-8"))
         try:
-            value = json.loads(raw.finish(timeout))
+            bridge_output = raw.finish(timeout)
+        except RuntimeError as error:
+            raise RuntimeError("Native " + self.phase + "/" + action + ": " + str(error)) from None
+        try:
+            value = json.loads(bridge_output)
         except (ValueError, RecursionError):
             raise RuntimeError("Native bridge returned invalid JSON") from None
         if not isinstance(value, dict) or value.get("ok") is not True or not isinstance(value.get("result"), dict):
             raise RuntimeError("Native UI guard failed; preserve the attempt for reconciliation")
         return value["result"]
 
+    def _native_profile_pid(self, cdp_port):
+        if type(cdp_port) is not int or not 1024 <= cdp_port <= 65535:
+            raise RuntimeError("OpenClaw CDP identity is unavailable")
+        expected = self.expected_user_data.replace("'", "''")
+        script = (
+            "$rows=@(Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { "
+            "$_.CommandLine -and $_.CommandLine -notmatch '--type=' -and "
+            "$_.CommandLine -match '--remote-debugging-port=" + str(cdp_port) + "(?:\\s|$)' -and "
+            "$_.CommandLine -like '*--user-data-dir=" + expected + "*' } | Select-Object ProcessId,CommandLine); "
+            "if($rows.Count -ne 1){exit 41}; $rows[0] | ConvertTo-Json -Compress"
+        )
+        last_error = None
+        for attempt in range(3):
+            try:
+                raw = _Capture([str(self.powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script]).finish(NATIVE_SECONDS)
+                row = json.loads(raw)
+                pid = row.get("ProcessId") if isinstance(row, dict) else None
+                if type(pid) is int and pid > 0:
+                    return pid
+                last_error = RuntimeError("Native profile identity returned invalid JSON")
+            except (RuntimeError, ValueError, RecursionError) as error:
+                last_error = error
+            if attempt < 2:
+                self._sleep(1)
+        raise RuntimeError("Native profile identity is unavailable") from last_error
+
+    def _cdp_tab_inventory(self, cdp_port):
+        if type(cdp_port) is not int or not 1024 <= cdp_port <= 65535:
+            raise RuntimeError("OpenClaw CDP identity is unavailable")
+        try:
+            with urlopen(f"http://127.0.0.1:{cdp_port}/json", timeout=3) as response:
+                raw = response.read(512 * 1024)
+            inventory = json.loads(raw)
+        except Exception as error:
+            raise RuntimeError("Native CDP tab inventory is unavailable") from error
+        if not isinstance(inventory, list) or not 1 <= len(inventory) <= 256:
+            raise RuntimeError("Native CDP tab inventory is unavailable")
+        tabs = []
+        for item in inventory:
+            if not isinstance(item, dict):
+                continue
+            target_id = item.get("id")
+            if not isinstance(target_id, str) or not RAW_TARGET.fullmatch(target_id):
+                raise RuntimeError("Native CDP raw tab inventory is ambiguous")
+            tabs.append({"targetId": target_id, "type": item.get("type"), "url": item.get("url")})
+        if not tabs or len({tab["targetId"].lower() for tab in tabs}) != len(tabs):
+            raise RuntimeError("Native CDP raw tab inventory is ambiguous")
+        return tabs
+
+    def _cdp_exact_bound_tab(self, cdp_port):
+        tabs = self._cdp_tab_inventory(cdp_port)
+        matching = [tab for tab in tabs if tab.get("type") == "page" and tab.get("url") == self.page_url]
+        if len(matching) != 1:
+            raise RuntimeError("Expected exactly one native bound ChatGPT tab")
+        return matching[0]["targetId"]
+
+    def _cdp_activate_target(self, cdp_port, target_id):
+        tabs = self._cdp_tab_inventory(cdp_port)
+        if sum(tab["targetId"] == target_id for tab in tabs) != 1:
+            raise RuntimeError("Native CDP target activation is ambiguous")
+        try:
+            with urlopen(f"http://127.0.0.1:{cdp_port}/json/activate/{target_id}", timeout=3) as response:
+                body = response.read(4096).decode("utf-8", "strict")
+        except Exception as error:
+            raise RuntimeError("Native CDP target activation failed") from error
+        if "activated" not in body.lower():
+            raise RuntimeError("Native CDP target activation was not confirmed")
+
     def _session(self, reader_url=None):
         self.authorize()
         # Actual same-profile parallel startup exceeded 30s and did not return
         # a usable inventory. Serialized reads preserve both identity fences.
-        status = self._cli("status")
-        tab_envelope = self._cli("tabs")
+        def _diag(stage, ok, failure="none"):
+            # Allowlisted stage/failure strings only; no CLI output or browser data.
+            import datetime
+            entry = "IDENTITY_DIAG time=%s stage=%s ok=%s failure=%s\n" % (
+                datetime.datetime.now(datetime.timezone.utc).isoformat(), stage, ok, failure)
+            try:
+                with open(Path(__file__).with_name("dev-identity-diagnostic.log"), "a", encoding="utf-8") as log:
+                    log.write(entry)
+            except OSError:
+                pass
+        try:
+            status = self._cli("status")
+        except Exception:
+            _diag("status", False, "cli_exception")
+            raise
+        _diag("status", isinstance(status, dict), "none" if isinstance(status, dict) else "invalid_type")
+        # Shape-only diagnostics: never log profile values, paths, URLs or tokens.
+        def _status_shape(stage, value):
+            if not isinstance(value, dict):
+                _diag(stage, False, "invalid_type")
+                return
+            for field in ("profile", "running", "pid", "userDataDir", "cdpPort"):
+                present = field in value and value[field] is not None
+                _diag(stage + "_" + field, present, "none" if present else "missing")
+        _status_shape("status_fields", status)
+        try:
+            tab_envelope = self._cli("tabs")
+        except Exception:
+            _diag("tabs", False, "cli_exception")
+            raise
+        _diag("tabs", isinstance(tab_envelope, dict), "none" if isinstance(tab_envelope, dict) else "invalid_type")
+        # Retry only incomplete managed-status observations; never retry a wrong identity.
+        def _valid_managed_status(value):
+            return (isinstance(value, dict) and
+                    value.get("profile") == self.binding["browserProfile"] and
+                    value.get("running") is True and
+                    type(value.get("pid")) is int and value["pid"] > 0 and
+                    value.get("userDataDir") == self.expected_user_data and
+                    type(value.get("cdpPort")) is int and
+                    value.get("cdpPort") == self.expected_cdp_port)
+        if isinstance(status, dict) and status.get("profile") == self.binding["browserProfile"] and not _valid_managed_status(status):
+            for attempt in range(5):
+                self.authorize()
+                self._sleep(2)
+                try:
+                    candidate = self._cli("status")
+                except Exception:
+                    _diag("status_retry", False, "cli_exception")
+                    continue
+                if not isinstance(candidate, dict) or candidate.get("profile") != self.binding["browserProfile"]:
+                    _diag("status_retry", False, "identity_mismatch")
+                    break
+                _status_shape("retry_fields", candidate)
+                _diag("status_retry", _valid_managed_status(candidate),
+                      "none" if _valid_managed_status(candidate) else "incomplete")
+                status = candidate
+                if _valid_managed_status(status):
+                    break
         tabs_observed_at = time.time()
-        if (status.get("profile") != self.binding["browserProfile"] or status.get("running") is not True or
-                type(status.get("pid")) is not int or status["pid"] <= 0 or status.get("userDataDir") != self.expected_user_data):
-            raise RuntimeError("OpenClaw managed profile identity is unavailable")
         tabs = tab_envelope.get("tabs")
+        # Identity diagnostics: local append-only booleans; no browser data or secrets.
+        import datetime
+        import sys
+        checks = (
+            status.get("profile") == self.binding["browserProfile"],
+            status.get("running") is True,
+            type(status.get("pid")) is int and status.get("pid") > 0,
+            status.get("userDataDir") == self.expected_user_data,
+            type(status.get("cdpPort")) is int and status.get("cdpPort") == self.expected_cdp_port,
+        )
+        diagnostic = "IDENTITY_DIAG time=%s stage=session profile_ok=%s running_ok=%s pid_ok=%s dir_ok=%s cdp_ok=%s\n" % (
+            datetime.datetime.now(datetime.timezone.utc).isoformat(), *checks)
+        try:
+            with open(Path(__file__).with_name("dev-identity-diagnostic.log"), "a", encoding="utf-8") as log:
+                log.write(diagnostic)
+        except OSError:
+            pass  # Diagnostics must never change identity decisions.
+        if (status.get("profile") != self.binding["browserProfile"] or
+                status.get("running") is not True or
+                type(status.get("cdpPort")) is not int or
+                status.get("cdpPort") != self.expected_cdp_port):
+            raise RuntimeError("OpenClaw managed profile identity is unavailable")
+        pid = status.get("pid")
+        user_data = status.get("userDataDir")
+        # Independently prove the Chrome parent PID owns this same port and
+        # profile data directory. Never substitute an unrelated process.
+        native_pid = self._native_profile_pid(self.expected_cdp_port)
+        if pid is None and user_data is None:
+            pid = native_pid
+            user_data = self.expected_user_data
+        if (type(pid) is not int or pid <= 0 or pid != native_pid or
+                user_data != self.expected_user_data):
+            raise RuntimeError("OpenClaw managed profile identity is unavailable")
         if not isinstance(tabs, list) or not 1 <= len(tabs) <= 128:
             raise RuntimeError("OpenClaw tab inventory is unavailable")
         ids = [tab.get("targetId") if isinstance(tab, dict) else None for tab in tabs]
@@ -279,61 +502,148 @@ class NativeTransport:
                 raise RuntimeError("Owned blank reader is not uniquely identifiable")
         # The exclusion exists only after this invocation creates and durably
         # records its exact new raw ID. Old sidecars never grant an exclusion.
-        matching = [tab for tab in tabs if tab.get("type") == "page" and tab.get("url") == self.page_url
-                    and tab["targetId"] != self.reader_id]
+        def bound_candidates(rows):
+            return [tab for tab in rows if tab.get("type") == "page" and tab.get("url") == self.page_url
+                    and tab["targetId"] != self.reader_id
+                    and not (isinstance(tab.get("suggestedTargetId"), str) and
+                             re.fullmatch(r"aicore-reader-[a-f0-9]{16}", tab["suggestedTargetId"]) and
+                             (tab.get("label") is None or tab.get("label") == tab["suggestedTargetId"]))]
+        matching = bound_candidates(tabs)
+        # After activating a newly opened reader, the managed tab inventory can
+        # transiently omit the original bound page for one refresh cycle. This
+        # retry is read-only and only applies to zero candidates; ambiguity
+        # remains fail-closed and no target substitution is allowed.
+        if self.reader_id is not None and len(matching) == 0:
+            for _ in range(3):
+                self._sleep(1)
+                retry_envelope = self._cli("tabs")
+                retry_tabs = retry_envelope.get("tabs")
+                if not isinstance(retry_tabs, list) or not 1 <= len(retry_tabs) <= 128:
+                    continue
+                retry_ids = [tab.get("targetId") if isinstance(tab, dict) else None for tab in retry_tabs]
+                if (any(not isinstance(value, str) or not RAW_TARGET.fullmatch(value) for value in retry_ids) or
+                        len({value.lower() for value in retry_ids}) != len(retry_ids)):
+                    raise RuntimeError("OpenClaw raw tab inventory is ambiguous")
+                retry_matching = bound_candidates(retry_tabs)
+                if len(retry_matching) > 1:
+                    raise RuntimeError("Expected exactly one native bound ChatGPT tab; candidates=" + str(len(retry_matching)))
+                if len(retry_matching) == 1:
+                    tabs = retry_tabs
+                    matching = retry_matching
+                    tabs_observed_at = time.time()
+                    break
+        if self.reader_id is not None and len(matching) == 0:
+            # Immediately after activating the owned reader, OpenClaw's managed
+            # inventory can transiently omit the previously pinned original tab.
+            # Never substitute another tab: accept only the exact raw IDs already
+            # bound by this execution and prove both URLs through CDP.
+            cdp_tabs = self._cdp_tab_inventory(status.get("cdpPort"))
+            original_ok = sum(tab.get("targetId") == self.context["rawTargetId"] and
+                              tab.get("type") == "page" and tab.get("url") == self.page_url
+                              for tab in cdp_tabs) == 1
+            reader_ok = sum(tab.get("targetId") == self.reader_id and
+                            tab.get("type") == "page" and tab.get("url") == reader_url
+                            for tab in cdp_tabs) == 1
+            if original_ok and reader_ok:
+                return {"profile": status["profile"], "pid": pid, "userDataDir": user_data,
+                        "cdpPort": status.get("cdpPort"), "rawTargetId": self.context["rawTargetId"],
+                        "pageUrl": self.page_url}
         if len(matching) != 1 or not isinstance(matching[0].get("targetId"), str) or not RAW_TARGET.fullmatch(matching[0]["targetId"]):
-            raise RuntimeError("Expected exactly one native bound ChatGPT tab")
+            raise RuntimeError("Expected exactly one native bound ChatGPT tab; candidates=" + str(len(matching)))
+        raw_target_id = matching[0]["targetId"]
+        cdp_tabs = self._cdp_tab_inventory(status.get("cdpPort"))
+        if sum(tab.get("targetId") == raw_target_id and tab.get("type") == "page" and
+               tab.get("url") == self.page_url for tab in cdp_tabs) != 1:
+            raise RuntimeError("Native CDP pairing for the bound ChatGPT tab is unavailable")
         self.last_tabs = tabs
         self.last_tabs_observed_at = tabs_observed_at
-        return {"profile": status["profile"], "pid": status["pid"], "userDataDir": status["userDataDir"],
-                "rawTargetId": matching[0]["targetId"], "pageUrl": self.page_url}
+        return {"profile": status["profile"], "pid": pid, "userDataDir": user_data,
+                "cdpPort": status.get("cdpPort"), "rawTargetId": raw_target_id, "pageUrl": self.page_url}
 
     def _guard(self, reader_url=None):
         if self._session(reader_url) != self.context:
             raise RuntimeError("Native OpenClaw target changed")
 
     def _snapshot(self):
-        # This is a read of the already resolved raw target, not input. Avoid
-        # launching redundant status/tabs processes for each readiness poll;
-        # full context guards fence input, capture and final proof separately.
-        self.authorize()
-        snapshot = self._cli("snapshot", "--target-id", self.context["rawTargetId"], json_output=False)
-        names = re.findall(r'^[ \t]*- textbox "(Ask ChatGPT|Tanya ChatGPT)"[^\r\n]*$', snapshot, re.M)
-        truncated = snapshot.rstrip().endswith("[...TRUNCATED - page too large]")
-        # Long conversations can make the supported OpenClaw accessibility
-        # snapshot truncate before the bottom composer. Zero composer rows are
-        # acceptable only with that explicit truncation marker: the following
-        # native resolver still requires the configured exact Edit role/name
-        # before any input, and any visible wrong/duplicate locale remains a
-        # hard failure.
-        if (names and any(name != self.options["composerName"] for name in names)) or (not names and not truncated):
+        # Read visible text from the exact CDP target. ChatGPT can briefly
+        # replace the composer during a post-response rerender, so a read-only
+        # snapshot gets a small bounded retry window. Target URL/raw ID and all
+        # evidence validation remain exact; no UI action is replayed here.
+        last_error = None
+        for attempt in range(6):
+            self.authorize()
+            timeout = self._remaining(CLI_SECONDS)
+            try:
+                raw = _Capture([str(self.node), str(self.cdp_snapshot), str(self.context["cdpPort"]),
+                                self.context["rawTargetId"], self.page_url]).finish(timeout)
+                value = json.loads(raw)
+                if not isinstance(value, dict) or value.get("url") != self.page_url:
+                    raise RuntimeError("Native CDP snapshot target changed")
+                snapshot = value.get("bodyText")
+                names = value.get("composerNames")
+                bounds = value.get("composerBounds")
+                if (not isinstance(snapshot, str) or len(snapshot) > 200000 or
+                        not isinstance(names, list) or not isinstance(bounds, list) or len(bounds) != 1):
+                    raise RuntimeError("Native CDP snapshot is invalid")
+                break
+            except (RuntimeError, ValueError, RecursionError) as error:
+                last_error = error
+                if attempt == 5:
+                    raise RuntimeError("Native " + self.phase + "/snapshot: CDP snapshot unavailable") from error
+                self._sleep(2)
+        else:
+            raise RuntimeError("Native " + self.phase + "/snapshot: CDP snapshot unavailable") from last_error
+        if (len(names) != 1 or names[0] != self.options["composerName"]):
             raise RuntimeError("Native ChatGPT composer role or locale is ambiguous")
+        geometry = bounds[0]
+        required_geometry = ("screenX", "screenY", "width", "height")
+        if (not isinstance(geometry, dict) or any(type(geometry.get(key)) not in (int, float) for key in required_geometry) or
+                geometry.get("name") != self.options["composerName"] or
+                geometry["width"] <= 0 or geometry["height"] <= 0):
+            raise RuntimeError("Native CDP composer geometry is invalid")
+        self.composer_geometry = {key: float(geometry[key]) for key in required_geometry}
+        # Preserve the STOP semantic expected by _ready().
+        if value.get("stopVisible") is True:
+            snapshot += '\nbutton "Stop generating"'
         return snapshot
 
+    def _ax_verify_bound_composer(self):
+        """Independently verify the exact bound Chromium AX editor before native actions."""
+        script = Path(__file__).with_name("dev-chatgpt-ax-identity-readonly.js")
+        if not script.is_file():
+            raise RuntimeError("Bound Chromium accessibility adapter missing")
+        argv = [str(self.node), str(script), str(self.context["pid"]),
+                str(self.context["cdpPort"]), self.context["rawTargetId"],
+                self.page_url, self.expected_user_data,
+                self.binding["accountAlias"], self.binding["bindingFingerprint"], "focus"]
+        try:
+            raw = _Capture(argv).finish(self._remaining(CLI_SECONDS))
+            result = json.loads(raw)
+        except (RuntimeError, ValueError, RecursionError):
+            raise RuntimeError("Bound Chromium accessibility preflight failed") from None
+        if (not isinstance(result, dict) or result.get("ok") is not True or
+                result.get("mode") != "focus-verified" or
+                result.get("pid") != self.context["pid"] or
+                result.get("port") != self.context["cdpPort"] or
+                result.get("targetId") != self.context["rawTargetId"] or
+                result.get("axHits") != 1 or result.get("urlVerified") is not True or
+                result.get("domAttributesVerified") is not True):
+            raise RuntimeError("Bound Chromium accessibility identity mismatch")
     def _resolve(self, reader_url=None):
-        # The exact paired tab may be in the background. Use the supported
-        # raw-ID focus action, then recheck the managed profile before resolving
-        # its native address/composer; never substitute another visible tab.
+        """CDP-only bound composer resolver; no native HWND/UI Automation."""
         self.authorize()
-        focused = self._cli("focus", self.context["rawTargetId"])
-        if focused.get("ok") is not True:
-            raise RuntimeError("Exact native ChatGPT target could not be focused")
         self._guard(reader_url)
-        prior_handle = self.target.get("WindowHandle") if self.target is not None else None
-        self.target = {"AccountAlias": self.binding["accountAlias"], "OwnerChannel": self.binding["ownerChannel"],
-                       "ConversationId": self.binding["targetConversationId"], "BrowserProfile": self.binding["browserProfile"],
-                       "BindingFingerprint": self.binding["bindingFingerprint"], "WorkerId": self.binding["workerId"],
-                       "EventId": self.event, "Challenge": self.challenge, "ComposerName": self.options["composerName"],
-                       "PageUrl": self.page_url, "RawTargetId": self.context["rawTargetId"], "BrowserProcessId": self.context["pid"]}
-        resolved = self._bridge("resolve")
-        if (type(resolved.get("windowHandle")) is not int or resolved["windowHandle"] <= 0 or
-                resolved.get("browserProcessId") != self.context["pid"] or resolved.get("pageUrl") != self.page_url or
-                resolved.get("rawTargetId") != self.context["rawTargetId"]):
-            raise RuntimeError("Native window resolution does not match OpenClaw")
-        if prior_handle is not None and resolved["windowHandle"] != prior_handle:
-            raise RuntimeError("Original native window changed; preserve the reader")
-        self.target["WindowHandle"] = resolved["windowHandle"]
-
+        self._ax_verify_bound_composer()
+        self._guard(reader_url)
+        self.target = {"AccountAlias": self.binding["accountAlias"],
+                       "OwnerChannel": self.binding["ownerChannel"],
+                       "ConversationId": self.binding["targetConversationId"],
+                       "BrowserProfile": self.binding["browserProfile"],
+                       "BindingFingerprint": self.binding["bindingFingerprint"],
+                       "WorkerId": self.binding["workerId"], "EventId": self.event,
+                       "Challenge": self.challenge, "ComposerName": self.options["composerName"],
+                       "PageUrl": self.page_url, "RawTargetId": self.context["rawTargetId"],
+                       "BrowserProcessId": self.context["pid"]}
     def _reader_record(self):
         try:
             if self.reader_marker.stat().st_size > 32768:
@@ -425,6 +735,24 @@ class NativeTransport:
                 snapshot.count("[AI_CORE_ATTEST:" + self.challenge + "]") == 1 and
                 snapshot.count("[AI_CORE_ATTEST_ACK:" + self.challenge + "]") >= 2)
 
+    def _log_readiness_observation(self, snapshot, message):
+        """Log bounded boolean-only evidence; never persist chat text or token values."""
+        flags = (
+            bool(STOP.search(snapshot)),
+            snapshot.count(message) == 1,
+            snapshot.count("[AI_CORE_WAKE:" + self.event + "]") == 1,
+            snapshot.count("[AI_CORE_ATTEST:" + self.challenge + "]") == 1,
+            snapshot.count("[AI_CORE_ATTEST_ACK:" + self.challenge + "]") >= 2,
+        )
+        result = ("READINESS_DIAG time=%s phase=%s responding=%s user_exact=%s "
+                  "wake_exact=%s attest_exact=%s assistant_ack_visible=%s\n" %
+                  (time.time(), self.phase, *flags))
+        try:
+            with open(Path(__file__).with_name("dev-identity-diagnostic.log"), "a", encoding="utf-8") as log:
+                log.write(result)
+        except OSError:
+            pass  # Diagnostics must not change execution or evidence policy.
+
     def _capture_response(self, request_url, message_hash):
         # An existing marker blocks a second reader even if the prior open or
         # native navigation timed out before returning its outcome.
@@ -462,25 +790,23 @@ class NativeTransport:
         record = self._reader_update(record, status="BLANK_CREATED", readerRawTargetId=raw_id)
         self.reader_id = raw_id
         self.authorize()
-        focused = self._cli("focus", self.reader_id)
-        if focused.get("ok") is not True:
-            raise RuntimeError("Owned blank reader could not be focused; preserve it")
+        self._cdp_activate_target(self.context["cdpPort"], self.reader_id)
         self._guard("about:blank")
-        resolved = self._bridge("reader-resolve", reader={"RawTargetId": self.reader_id})
-        if (type(resolved.get("windowHandle")) is not int or resolved["windowHandle"] <= 0 or
-                resolved.get("browserProcessId") != self.context["pid"] or
-                resolved.get("rawTargetId") != self.reader_id or resolved.get("address") != "about:blank"):
-            raise RuntimeError("Owned blank native window is unproven; preserve it")
-        # Preserve when the sole-blank inventory was actually observed. A slow
-        # native resolve must never make that earlier raw-ID proof look newer.
-        record = self._reader_update(record, status="BLANK_VERIFIED", readerWindowHandle=resolved["windowHandle"],
-                                     blankVerifiedAt=self.last_tabs_observed_at, blankNativeVerifiedAt=time.time())
-        reader = {"RawTargetId": self.reader_id, "WindowHandle": resolved["windowHandle"]}
+        fresh = self._cdp_tab_inventory(self.context["cdpPort"])
+        if (sum(tab.get("targetId") == self.reader_id and tab.get("url") == "about:blank"
+                for tab in fresh) != 1 or
+                sum(tab.get("targetId") == self.context["rawTargetId"] and tab.get("url") == self.page_url
+                    for tab in fresh) != 1):
+            raise RuntimeError("CDP reader identity is unproven")
+        record = self._reader_update(record, status="BLANK_VERIFIED",
+                                     blankVerifiedAt=self.last_tabs_observed_at,
+                                     blankNativeVerifiedAt=time.time())
+        reader = {"RawTargetId": self.reader_id}
         return self._listen_reader(request_url, message_hash, reader)
 
     def _listen_reader(self, request_url, message_hash, reader):
         self.phase = "reader_listener"
-        argv = self._argv("responsebody", request_url, "--target-id", self.reader_id,
+        argv = self._argv("responsebody", "/backend-api/conversations/" + self.binding["targetConversationId"], "--target-id", self.reader_id,
                           "--max-chars", "200000", "--timeout-ms", "180000")
         argv[argv.index("--timeout") + 1] = "210000"
         listener = _Capture(argv)
@@ -496,15 +822,28 @@ class NativeTransport:
             # independently; local revocation is still checked immediately.
             self.authorize()
             self._reserve(NATIVE_SECONDS + LISTENER_CAPTURE_SECONDS + FINAL_PROOF_SECONDS)
-            navigation = self._bridge("reader-navigate", reader=reader, messageHash=message_hash,
-                                      receiptDirectory=str(self.directory))
-            if (navigation.get("navigationInvoked") is not True or navigation.get("rawTargetId") != self.reader_id or
-                    navigation.get("pageUrl") != self.page_url):
-                raise RuntimeError("Owned reader navigation outcome is unknown; do not retry")
+            self.authorize()
+            script = Path(__file__).with_name("dev-chatgpt-cdp-reader-navigate.js")
+            if not script.is_file():
+                raise RuntimeError("CDP reader navigator missing")
             record = self._reader_record()
-            if record["status"] != "NAVIGATION_INVOKED":
-                raise RuntimeError("Owned reader navigation record is unavailable; do not retry")
-            # Leave time for the original snapshot, exact original focus and
+            if record["status"] != "BLANK_VERIFIED":
+                raise RuntimeError("CDP reader is not blank verified")
+            self._reader_update(record, status="NAVIGATION_ATTEMPTING", navigationAttemptedAt=time.time())
+            args = [str(self.node), str(script), str(self.context["pid"]),
+                    str(self.context["cdpPort"]), self.context["rawTargetId"], self.reader_id,
+                    self.page_url, self.expected_user_data, self.binding["bindingFingerprint"]]
+            try:
+                navigation = json.loads(_Capture(args).finish(self._remaining(NATIVE_SECONDS)))
+            except (RuntimeError, ValueError, RecursionError):
+                raise RuntimeError("CDP reader navigation unknown; do not retry") from None
+            if (not isinstance(navigation, dict) or navigation.get("ok") is not True or
+                    navigation.get("navigationInvoked") is not True or
+                    navigation.get("rawTargetId") != self.reader_id or
+                    navigation.get("pageUrl") != self.page_url):
+                raise RuntimeError("CDP reader outcome unknown")
+            record = self._reader_record()
+            self._reader_update(record, status="NAVIGATION_INVOKED", navigationInvokedAt=time.time())            # Leave time for the original snapshot, exact original focus and
             # final identity check. Closing a loaded reader is never attempted.
             capture_budget = self.deadline - time.monotonic() - FINAL_PROOF_SECONDS
             if capture_budget <= 0:
@@ -532,6 +871,7 @@ class NativeTransport:
             if self.reader_marker.exists():
                 raise RuntimeError("Owned reader was already attempted; reconciliation is required")
             self.phase = "preflight"
+            self._audit_stage("PREFLIGHT")
             self.context = self._session()
             before = self._snapshot()
             existing = self.marker.exists()
@@ -549,20 +889,29 @@ class NativeTransport:
                     raise RuntimeError("A preexisting blank tab prevents unique native reader ownership")
                 self.authorize()
                 self.phase = "native_submit"
-                result = self._bridge("submit", message=message, receiptDirectory=str(self.directory),
-                                      allowProviderLf=self.options["allowProviderLf"])
+                self._audit_stage("SEND_ATTEMPTED")
+                result = self._cdp_submit(message, self.options["allowProviderLf"])
                 if result.get("sendInvoked") is not True:
                     raise RuntimeError("Native Send outcome is unknown; do not replay")
                 record = self._attempt(message_hash)
+                self._audit_stage("SEND_CONFIRMED")
             self.phase = "assistant_readiness"
             self.phase_deadline = min(self.deadline - POST_READINESS_SECONDS, time.monotonic() + READINESS_SECONDS)
             try:
                 snapshot = self._snapshot()
-                while not self._ready(snapshot, message) and time.monotonic() < self.phase_deadline:
-                    self._sleep(min(2, self._remaining(2)))
+                while not self._ready(snapshot, message):
+                    # Reserve a small final margin for deterministic, evidence-only
+                    # timeout reporting; never start another read at expiry.
+                    time_left = self.phase_deadline - time.monotonic()
+                    if time_left <= 5:
+                        break
+                    self._sleep(min(2, time_left - 5))
+                    if self.phase_deadline - time.monotonic() <= 5:
+                        break
                     snapshot = self._snapshot()
             finally:
                 self.phase_deadline = None
+            self._log_readiness_observation(snapshot, message)
             if not self._ready(snapshot, message):
                 raise RuntimeError("Native assistant reply is not visibly ready")
             if "refreshAttemptedAt" in record:
@@ -570,15 +919,27 @@ class NativeTransport:
             self.phase = "observed_requests"
             requests = self._cli("requests", "--target-id", self.context["rawTargetId"],
                                  "--filter", self.binding["targetConversationId"])
-            request_url = select_observed_request(requests, page_url=self.page_url,
-                                                 raw_target_id=self.context["rawTargetId"],
-                                                 conversation_id=self.binding["targetConversationId"])
+            try:
+                request_url = select_observed_request(requests, page_url=self.page_url,
+                                                     raw_target_id=self.context["rawTargetId"],
+                                                     conversation_id=self.binding["targetConversationId"])
+            except ValueError as error:
+                if str(error) != "NATIVE_OBSERVED_REQUEST_MISSING_OR_AMBIGUOUS":
+                    raise
+                # The original ChatGPT tab can legitimately have no retained
+                # conversation GET after a long-lived session. Do not invent or
+                # replay a URL. The owned reader listener will observe the exact
+                # navigation response and its strict validator remains authoritative.
+                request_url = None
             envelope = self._capture_response(request_url, message_hash)
+            captured_request_url = (envelope.get("response", {}).get("url")
+                                    if isinstance(envelope, dict) and isinstance(envelope.get("response"), dict)
+                                    else None)
             captured_at = time.time()
             self.phase = "final_proof"
             self._reserve(FINAL_PROOF_SECONDS)
             snapshot = self._snapshot()
-            observed = validate_native_response(envelope, page_url=self.page_url, request_url=request_url,
+            observed = validate_native_response(envelope, page_url=self.page_url, request_url=captured_request_url,
                                                 raw_target_id=self.reader_id,
                                                 conversation_id=self.binding["targetConversationId"], event_id=self.event,
                                                 challenge=self.challenge, visible_snapshot=snapshot,
@@ -593,6 +954,7 @@ class NativeTransport:
             self._reader_update(reader_record, status="CAPTURE_VERIFIED", capturedAt=captured_at,
                                 originalFocusRestored=True)
             self.authorize()
+            self._audit_stage("RESULT_VERIFIED")
             return {**observed, "alreadyVisible": existing, "rawTargetId": self.context["rawTargetId"],
                     "captureRawTargetId": self.reader_id, "readerDisposition": "PRESERVED_RECONCILIATION_REQUIRED",
                     "sendAttemptedAt": record["sendAttemptedAt"]}

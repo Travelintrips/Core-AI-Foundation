@@ -350,8 +350,8 @@ class NativeTransportTests(unittest.TestCase):
     def test_request_url_is_a_direct_node_argument_not_shell_text(self):
         self.transport._runtime()
         argv = self.transport._argv("responsebody", REQUEST, "--target-id", RAW)
-        self.assertEqual(argv[0], "/synthetic/node.exe")
-        self.assertEqual(argv[1], "/synthetic/openclaw.mjs")
+        self.assertEqual(argv[0].replace("\\", "/"), "/synthetic/node.exe")
+        self.assertEqual(argv[1].replace("\\", "/"), "/synthetic/openclaw.mjs")
         self.assertEqual(argv.count(REQUEST), 1)
         self.assertNotIn("openclaw.cmd", " ".join(argv))
         self.assertIn("&include_has_versions=true", argv[argv.index("responsebody") + 1])
