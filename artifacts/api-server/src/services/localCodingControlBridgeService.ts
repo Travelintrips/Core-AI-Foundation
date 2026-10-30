@@ -213,8 +213,9 @@ export async function submitCodingBridgeCommand(input: {
       : {}),
   };
 
+  const command = await db.transaction(async (tx) => {
   stage = "COMMAND_INSERT_FAILED";
-  const [command] = await db
+  const [command] = await tx
     .insert(aiCodingBridgeCommandsTable)
     .values({
       taskId: input.taskId ?? null,
@@ -229,7 +230,7 @@ export async function submitCodingBridgeCommand(input: {
   if (!command) throw new Error("Failed to persist bridge command");
 
   stage = "ACK_INSERT_FAILED";
-  await db.insert(aiCodingBridgeResponsesTable).values({
+  await tx.insert(aiCodingBridgeResponsesTable).values({
     commandId: command.id,
     taskId: command.taskId,
     kind: "ACK",
@@ -243,6 +244,8 @@ export async function submitCodingBridgeCommand(input: {
     checkpointJson: { status: command.status },
   });
 
+  return command;
+  });
   stage = "EVENT_PUBLISH_FAILED";
   publishSafe({
     eventType: "coding.bridge.command.received",
