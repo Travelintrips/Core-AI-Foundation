@@ -156,7 +156,27 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
   correlationId:z.string().regex(/^ai-task:[A-Za-z0-9_-]{1,100}:[1-9][0-9]*:[A-Za-z0-9_-]{8,80}$/)
  }).strict().safeParse(req.body);
  if(!p.success){res.status(400).json({error:p.error.message});return;}
+ // GPT02 identity is bound exclusively to DELL, including AI Task bridge dispatch.
+ // A requested worker change must be explicitly rejected, never treated as a retry.
+ if(p.data.accountAlias==="GPT02" && p.data.targetWorkerId!==undefined &&
+    p.data.targetWorkerId!=="openclaw-dell-chatgpt-wake-dev"){
+  res.status(409).json({error:"GPT02_DELL_EXCLUSIVE_WORKER",executed:false});return;
+ }
  try{
+  if(p.data.accountAlias==="GPT02") {
+   // Legacy commands predate the unique index. Block a live parent even if
+   // its original event targeted another worker or its lease expired.
+   const {db}=await import("@workspace/db");
+   const {sql}=await import("drizzle-orm");
+   const existing=await db.execute(sql`
+    SELECT id FROM ai_platform.ai_coding_bridge_commands
+    WHERE metadata_json->>'correlationId'=${p.data.correlationId}
+      AND metadata_json->'wakeBinding'->>'accountAlias'='GPT02'
+      AND status IN ('RECEIVED','PENDING','QUEUED','PROCESSING')
+    LIMIT 1
+   `);
+   if(existing.rows?.length){res.status(409).json({error:"GPT02_PARENT_COMMAND_ACTIVE",executed:false});return;}
+  }
   const expectedOwnerChannel=p.data.accountAlias==="GPT01"
    ? await resolveAiTaskGptOwnerChannel()
    : undefined;
@@ -164,7 +184,7 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
    p.data.accountAlias,
    req.hostname,
    expectedOwnerChannel,
-   p.data.targetWorkerId,
+   p.data.accountAlias==="GPT02"?"openclaw-dell-chatgpt-wake-dev":p.data.targetWorkerId,
   );
   // Retries of one authenticated AI Task command must map to one wake event.
   // Random event IDs would create duplicate worker commands after lost HTTP responses.
@@ -193,7 +213,8 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
   });
  }catch(error){
   const code=error instanceof Error?error.message:"DEV_CHATGPT_WAKE_UNAVAILABLE";
-  res.status(code.includes("UNVERIFIED")||code.includes("DENIED")||code.includes("MISMATCH")?403:503).json({
+  res.status(code.includes("unique")||code.includes("duplicate")?409:
+   code.includes("UNVERIFIED")||code.includes("DENIED")||code.includes("MISMATCH")?403:503).json({
    error:code,
    executed:false
   });
