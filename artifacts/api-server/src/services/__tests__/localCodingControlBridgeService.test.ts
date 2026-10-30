@@ -209,3 +209,22 @@ describe("durable reconciliation claim gate", () => {
     expect(claim.indexOf("reconciliationRequired")).toBeLessThan(claim.indexOf("status = 'RECEIVED'"));
   });
 });
+
+describe("reconciliation quarantine primitive", () => {
+  it("has an atomic PROCESSING-only update with durable no-replay flag", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(
+      new URL("../localCodingControlBridgeService.ts", import.meta.url), "utf8",
+    );
+    const start = source.indexOf("export async function quarantineCodingBridgeCommandForReconciliation(");
+    const end = source.indexOf("export async function renewCodingBridgeCommandClaim(", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const fn = source.slice(start, end);
+    expect(fn).toContain("'reconciliationRequired', true");
+    expect(fn).toContain("AND status = 'PROCESSING'");
+    expect(fn).toContain("reconciliationEvidenceReference");
+    expect(fn).toContain("RETURNING id");
+    expect(fn).not.toContain("SET status = 'COMPLETED'");
+  });
+});
