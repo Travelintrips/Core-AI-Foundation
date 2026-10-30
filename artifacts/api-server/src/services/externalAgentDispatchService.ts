@@ -15,6 +15,7 @@ export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
 export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
 
 const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
+  "openclaw-dell-chatgpt-wake-dev": "tools:bounded",
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
   [OPENHANDS_AGENT_CLIENT_ID]: "coding:workspace",
   [N8N_AGENT_CLIENT_ID]: "workflow:automation",

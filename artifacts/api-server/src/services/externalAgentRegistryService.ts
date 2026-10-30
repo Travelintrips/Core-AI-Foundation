@@ -7,6 +7,11 @@ export const EXTERNAL_AGENT_POLICY_VERSION = 1;
 export const EXTERNAL_AGENT_LEASE_SECONDS = 90;
 
 export const EXTERNAL_AGENT_RULES = {
+  "openclaw-dell-chatgpt-wake-dev": {
+    source: "openclaw", role: "bounded_dell_dev_worker",
+    capabilities: ["tools:bounded", "task:coordinate"],
+    permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
+  },
   "gcp-openclaw-main": {
     source: "openclaw",
     role: "bounded_orchestration_agent",
