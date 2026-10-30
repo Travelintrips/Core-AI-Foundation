@@ -2579,8 +2579,9 @@ async function startSimpleChatGptWake(
   command: ChatGptWakeCommand,
   requestHost?: string,
   expectedOwnerChannel?: string,
+  expectedWorkerId?: string,
 ): Promise<Record<string, unknown>> {
-  const target = await resolveVerifiedDevWakeTarget(command.accountAlias, requestHost, expectedOwnerChannel);
+  const target = await resolveVerifiedDevWakeTarget(command.accountAlias, requestHost, expectedOwnerChannel, expectedWorkerId);
   const eventId = randomBytes(32).toString("hex");
   const jobLabel = command.jobAlias ?? "JOB";
   const correlationId =
@@ -3879,7 +3880,9 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       : null;
     if (simpleWakeCommand) {
       writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
-          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined));
+          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined,
+          parsed.data.message.trim().startsWith("/job") && simpleWakeCommand.accountAlias === "GPT02"
+            ? "openclaw-dell-chatgpt-wake-dev" : undefined));
       return;
     }
 
@@ -4132,7 +4135,9 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
         ? await startExternalAgentWork(effectiveInput, "openclaw-dell-chatgpt-wake-dev")
         : simpleWakeCommand
         ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
-          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined)
+          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined,
+          parsed.data.message.trim().startsWith("/job") && simpleWakeCommand.accountAlias === "GPT02"
+            ? "openclaw-dell-chatgpt-wake-dev" : undefined)
         : directAccountReset
         ? {
             kind: "external_agent_binding",
