@@ -577,6 +577,9 @@ export async function claimCodingBridgeCommand(input: {
       SELECT id, metadata_json ->> 'assignedClientId' AS assigned_client_id
       FROM ai_platform.ai_coding_bridge_commands
       WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+        -- A command with uncertain delivery must never be reclaimed after lease expiry.
+        -- A privileged reconciliation workflow may set this durable flag; the worker cannot.
+        AND COALESCE(metadata_json ->> 'reconciliationRequired', 'false') <> 'true'
         AND (
           status = 'RECEIVED'
           OR (
