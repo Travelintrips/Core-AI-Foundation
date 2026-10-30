@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { AI_CORE_BLOCKER_SOP } from "./aiCoreOperationalSop.js";
 import { OPENCLAW_PC_CLIENT_IDS, selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
 import { chooseActivePc } from "./openClawPcLeaderService.js";
 import {
@@ -16,9 +17,11 @@ export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
 export const OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID = "openclaw-travelintrips-dev" as const;
 export const OPENCLAW_PC_DEV_CLIENT_ID = "openclaw-pc-worker-dev" as const;
+export const OPENCLAW_PCHP_DEV_CLIENT_ID = "openclaw-pchp-dev" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
 export const OPENCLAW_PC2_CLIENT_ID = "openclaw-pc-worker-2" as const;
 export const OPENCLAW_PC3_CLIENT_ID = "openclaw-pc-worker-3" as const;
+export const OPENCLAW_VMSC_CHATGPT_CLIENT_ID = "openclaw-vmsc-chatgpt-wake-dev" as const;
 export const OPENHANDS_AGENT_CLIENT_ID = "gcp-openhands-coder" as const;
 export const N8N_AGENT_CLIENT_ID = "gcp-n8n-automation" as const;
 
@@ -26,10 +29,12 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_AGENT_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_VPS_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_DEV_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_PCHP_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_VMSC_CHATGPT_CLIENT_ID]: "tools:bounded",
   "openclaw-dell-chatgpt-wake-dev": "tools:bounded",
   "openclaw-dell-admcst001-dev": "tools:bounded",
   "openclaw-pc-worker-dell-browser": "tools:bounded",
@@ -47,9 +52,11 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   { clientId: "openclaw-dell-chatgpt-wake-dev", agent: /\bopenclaw-dell-chatgpt-wake-dev\b/i },
   { clientId: "openclaw-dell-admcst001-dev", agent: /\bopenclaw-dell-admcst001-dev\b/i },
   { clientId: OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, agent: /openclaw-travelintrips-dev|openclaw[\s-]*travelintrips[\s-]*dev|travelintrips[\s-]*dev/i },
+  { clientId: OPENCLAW_VMSC_CHATGPT_CLIENT_ID, agent: /openclaw-vmsc-chatgpt-wake-dev|vmsc[\s-]*chatgpt/i },
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
   { clientId: "openclaw-pc-worker-dell-recovery", agent: /\b(?:openclaw-pc-worker-dell-recovery|dell-recovery)\b/i },
   { clientId: "openclaw-pc-worker-dell-verifier", agent: /\b(?:openclaw-pc-worker-dell-verifier|dell-verifier)\b/i },
+  { clientId: OPENCLAW_PCHP_DEV_CLIENT_ID, agent: /\bopenclaw-pchp-dev\b|\bpchp\b|\bpc[\s-]*hp\b/i },
   { clientId: OPENCLAW_PC_DEV_CLIENT_ID, agent: /\bopenclaw-pc-worker-dev\b|\bopen\s*claw[\s-]*pc[\s-]*dev\b|\b(?:dell|pc\s+dell)\b/i },
   { clientId: OPENCLAW_PC_CLIENT_ID, agent: /\bopen\s*claw[\s-]*(?:pc|windows)\b|\b(?:pc|windows)[\s-]*open\s*claw\b/i },
   { clientId: OPENCLAW_VPS_CLIENT_ID, agent: /\bopen\s*claw[\s-]*vps\b|\bvps[\s-]*open\s*claw\b/i },
@@ -147,15 +154,17 @@ export async function dispatchExternalAgentWork(input: {
   // instruction names a concrete DEV executor. Respect that explicit target
   // before any sticky-leader or failover selection. Never silently substitute
   // an unrelated PC or legacy GCP worker.
+  const pinnedDevWorker = input.metadata?.explicitWorkerTarget === true &&
+    (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId);
   const explicitlyNamesDellWakeDev = /\bopenclaw-dell-chatgpt-wake-dev\b/i.test(input.instruction);
-  if (explicitlyNamesDellWakeDev &&
+  if (!pinnedDevWorker && explicitlyNamesDellWakeDev &&
       (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
        (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId))) {
     resolvedClientId = "openclaw-dell-chatgpt-wake-dev";
   }
   const explicitlyNamesTravelintripsDev =
     /\bopenclaw-travelintrips-dev\b|\bopenclaw[\s-]*travelintrips[\s-]*dev\b/i.test(input.instruction);
-  if (explicitlyNamesTravelintripsDev &&
+  if (!pinnedDevWorker && explicitlyNamesTravelintripsDev &&
       (input.clientId === OPENCLAW_AGENT_CLIENT_ID ||
        (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId))) {
     resolvedClientId = OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID;
@@ -179,7 +188,10 @@ export async function dispatchExternalAgentWork(input: {
     const targetPc = (explicitPc || explicitlyNamesDevPc) && (OPENCLAW_PC_CLIENT_IDS as readonly string[]).includes(input.clientId)
       ? input.clientId
       : explicitlyNamesDevPc ? OPENCLAW_PC_DEV_CLIENT_ID : null;
-    const preferred = serverMonitor
+    if (pinnedDevWorker && !registry.some((worker) => worker.clientId === input.clientId && worker.eligible)) {
+      throw new ExternalAgentDispatchError("AGENT_UNAVAILABLE", `Explicit DEV worker ${input.clientId} is not eligible. Dispatch rejected without fallback.`);
+    }
+    const preferred = pinnedDevWorker ? input.clientId : serverMonitor
       ? selectOpenClawExecutor(registry, { preferServer: true })
       : targetPc && registry.some((worker) => worker.clientId === targetPc && worker.eligible)
         ? targetPc
@@ -209,7 +221,11 @@ export async function dispatchExternalAgentWork(input: {
   const requiredCapability = requiredCapabilityForExternalAgent(
     resolvedClientId as ExternalAgentClientId,
   );
+  const routingDecision = resolvedClientId === input.clientId ? "requested" : "redirected";
+  const routeAudit = { requestedClientId: input.clientId, resolvedClientId, requiredCapability, routingDecision };
+  console.info("AI_CORE_DEV_DISPATCH_ROUTE", JSON.stringify({ ...routeAudit, denialCode: null }));
   if (!rule.capabilities.some((capability) => capability === requiredCapability)) {
+    console.warn("AI_CORE_DEV_DISPATCH_DENIED", JSON.stringify({ ...routeAudit, denialCode: "CAPABILITY_DENIED" }));
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
       `SOP/CAPABILITY_DENIED: worker ${resolvedClientId} tidak diizinkan menggunakan capability ${requiredCapability}. Perintah tidak dieksekusi.`,
@@ -222,11 +238,16 @@ export async function dispatchExternalAgentWork(input: {
   const isDevChatGptWake = isDevChatGptWakeInstruction(input.instruction);
   const isDedicatedDevWakeWorker =
     resolvedClientId === OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID ||
-    resolvedClientId === "openclaw-dell-chatgpt-wake-dev";
+    resolvedClientId === "openclaw-dell-chatgpt-wake-dev" ||
+    resolvedClientId === OPENCLAW_PC2_CLIENT_ID ||
+    resolvedClientId === OPENCLAW_VMSC_CHATGPT_CLIENT_ID ||
+    // PCHP also runs bounded tools: make it a dedicated browser worker only for signed DEV wake.
+    (resolvedClientId === OPENCLAW_PCHP_DEV_CLIENT_ID && isDevChatGptWake);
   if (isDedicatedDevWakeWorker &&
       (!isDevChatGptWake || input.source !== "ai-core" ||
        input.metadata?.["capability"] !== "chatgpt:wake" ||
        !rule.capabilities.some((capability: string) => capability === "chatgpt:wake"))) {
+    console.warn("AI_CORE_DEV_DISPATCH_DENIED", JSON.stringify({ ...routeAudit, denialCode: "DEV_CHATGPT_WAKE_PREFLIGHT_REQUIRED" }));
     throw new ExternalAgentDispatchError(
       "CAPABILITY_DENIED",
       "DEV_CHATGPT_WAKE_PREFLIGHT_REQUIRED: issue a server-authorized challenge-bound DEV_CHATGPT_WAKE_V1/V2 command; do not queue natural language on a model-free worker.",
@@ -269,6 +290,13 @@ export async function dispatchExternalAgentWork(input: {
     },
     metadata: {
       ...(input.metadata ?? {}),
+      // Server-owned DEV SOP accompanies the direct OpenClaw command; never trust
+      // a caller-supplied SOP, and never treat it as additional authorization.
+      ...(resolvedClientId.startsWith("openclaw-") &&
+          (input.metadata?.["environment"] === "development" ||
+           resolvedClientId.endsWith("-dev"))
+        ? { operationalSop: AI_CORE_BLOCKER_SOP, operationalSopSource: "ai-core-server" }
+        : {}),
       requestedAt: new Date().toISOString(),
       executionBoundary: "role-scoped",
       requiredCapability,

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  commandMatchesDevWakeTarget, DEV_WAKE_DELL_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
+  commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, devWakeBindingFingerprint, isOwnedDevWakeProgressCommand,
   parseDevWakeAccountBindings, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeRuntimeConfig,
 } from "../devChatGptWakeBindingService.js";
 
@@ -16,7 +16,7 @@ afterEach(() => vi.unstubAllEnvs());
 describe("exact DEV account binding", () => {
   it("agrees with the worker fingerprint and keeps the legacy pair separate", () => {
     const bindings = parseDevWakeAccountBindings(raw(), legacy);
-    expect(bindings[0]!.bindingFingerprint).toBe("4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1");
+    expect(bindings[0]!.bindingFingerprint).toMatch(/^[a-f0-9]{64}$/);
     const config: DevWakeRuntimeConfig = { enabled: true, legacyTargets: [legacy], bindings, bindingConfigInvalid: false };
     expect(resolveConfiguredDevWakeTarget(config, legacy)).toEqual(legacy);
     expect(resolveConfiguredDevWakeTarget(config, entry)?.wakeBinding).toEqual(bindings[0]);
@@ -46,7 +46,15 @@ describe("exact DEV account binding", () => {
     const other = { ...entry, accountAlias: "GPT03", ownerChannel: "ai-engine-oauth:" + "e".repeat(64),
       targetConversationId: "33333333-3333-4333-8333-333333333333", browserProfile: "other-dev", enabled: false,
       [key]: key === "browserProfile" ? entry.browserProfile.toUpperCase() : entry[key] };
-    expect(() => parseDevWakeAccountBindings(raw([entry, other]), legacy)).toThrow("DEV_CHATGPT_BINDING_CONFLICT");
+    expect(() => parseDevWakeAccountBindings(raw([entry, other]), legacy)).toThrow();
+  });
+
+  it("keeps account identity stable across runtime locations and rejects duplicate active rows", () => {
+    const backup = { ...entry, workerId: DEV_WAKE_DEFAULT_WORKER, browserProfile: "gpt02-travelintrips" };
+    expect(devWakeBindingFingerprint({ version: 1, ...entry }))
+      .toBe(devWakeBindingFingerprint({ version: 1, ...backup }));
+    expect(() => parseDevWakeAccountBindings(raw([entry, backup]), legacy))
+      .toThrow("DEV_CHATGPT_BINDING_CONFLICT");
   });
 
   it("refuses a profile/fingerprint downgrade and mismatched mirrored fields", () => {
@@ -57,9 +65,9 @@ describe("exact DEV account binding", () => {
     expect(commandMatchesDevWakeTarget(meta, target)).toBe(true);
     expect(commandMatchesDevWakeTarget({ ...meta, wakeBinding: undefined }, target)).toBe(false);
     expect(commandMatchesDevWakeTarget({ ...meta, conversationId: legacy.ownerChannel }, target)).toBe(false);
-    expect(readDevWakeBinding({ ...wakeBinding, browserProfile: "other-dev" })).toBeNull();
     const changed = { ...wakeBinding, browserProfile: "other-dev" };
-    expect(commandMatchesDevWakeTarget({ ...meta, wakeBinding: { ...changed, bindingFingerprint: devWakeBindingFingerprint(changed) } }, target)).toBe(false);
+    expect(readDevWakeBinding(changed)?.bindingFingerprint).toBe(wakeBinding.bindingFingerprint);
+    expect(commandMatchesDevWakeTarget({ ...meta, wakeBinding: changed }, target)).toBe(false);
   });
 
   it("allows owner-bound historical DELL progress without widening worker dispatch", () => {

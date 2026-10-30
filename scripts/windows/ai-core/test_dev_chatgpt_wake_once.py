@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 MODULE_PATH = Path(__file__).with_name("dev-chatgpt-wake-once.py")
 WORKER = "openclaw-travelintrips-dev"
 DELL = "openclaw-dell-chatgpt-wake-dev"
+PC2 = "openclaw-pc-worker-2"
 OWNER = "ai-engine-oauth:" + "a" * 64
 OWNER_TWO = "ai-engine-oauth:" + "d" * 64
 CHAT = "6ad3a9a6-97e4-83ec-af32-a0a5d580b649"
@@ -122,6 +123,38 @@ class BrowserWakeTests(WakeTestCase):
         self.run_browser(browser, command)
         self.assertEqual(len(browser.submissions), 1)
         self.assertIn(TASK_TEXT, browser.submissions[0][-1])
+
+    def test_v2_multiline_sop_and_forbidden_controls(self):
+        multiline = "AI CORE — CONTINUE_JOB\r\njobId: job-123\n\tcheckpointId: cp-7"
+        encoded = wake.base64.urlsafe_b64encode(multiline.encode()).decode().rstrip("=")
+        command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + encoded
+        browser = FakeBrowser()
+        self.run_browser(browser, command)
+        self.assertEqual(len(browser.submissions), 1)
+        self.assertIn(multiline, browser.submissions[0][-1])
+
+        for control in ("\x00", "\x1b", "\x7f"):
+            unsafe = "CONTINUE_JOB" + control + "test"
+            token = wake.base64.urlsafe_b64encode(unsafe.encode()).decode().rstrip("=")
+            invalid_command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + token
+            with self.subTest(control=ord(control)), patch.object(wake, "browser") as mock_browser:
+                with self.assertRaisesRegex(RuntimeError, "Invalid DEV wake task instruction"):
+                    wake.submit_once(invalid_command, WORKER, self.root)
+                mock_browser.assert_not_called()
+
+    def test_native_wake_prompt_encodes_multiline_unicode_as_safe_ascii(self):
+        raw_task = "AI CORE \u2014 CONTINUE_JOB\r\ncheckpointId: cp-7\n\tstepId: step-8"
+        message = wake._wake_message(EVENT, CHALLENGE, raw_task)
+        self.assertTrue(message.isascii())
+        self.assertNotIn("\n", message)
+        self.assertNotIn("\r", message)
+        self.assertIn(r"\u2014", message)
+        self.assertIn(r"\n", message)
+        self.assertEqual(message.count("[AI_CORE_WAKE:" + EVENT + "]"), 1)
+        self.assertEqual(message.count("[AI_CORE_ATTEST:" + CHALLENGE + "]"), 1)
+        self.assertEqual(message.count("[AI_CORE_ATTEST_ACK:" + CHALLENGE + "]"), 1)
+        self.assertLessEqual(len(message), 4096)
+        self.assertIn(raw_task, __import__("json").loads(message[message.index('"') : message.index('"', message.index('"') + 1) + 1]))
 
     def test_wrong_target_worker_or_shell_suffix_never_touch_browser(self):
         with patch.object(wake, "browser") as browser:
@@ -269,6 +302,36 @@ class BrowserWakeTests(WakeTestCase):
             with self.assertRaises(RuntimeError):
                 wake.browser("tabs", "--json")
             self.assertEqual(process.call_count, 3)
+
+
+class PortablePc2BindingTests(WakeTestCase):
+    def test_pc2_accepts_only_its_exact_bound_session_tuple(self):
+        module = load_wake(PC2, "gpt02-vmsc")
+        binding = {
+            "version": 1, "accountAlias": "GPT02", "ownerChannel": OWNER_TWO,
+            "targetConversationId": CHAT_TWO, "workerId": PC2,
+            "browserProfile": "gpt02-vmsc",
+        }
+        binding["bindingFingerprint"] = module.binding_fingerprint(binding)
+        config = {"enabled": True, "allowedConversationIds": [CHAT],
+                  "bindings": [{**binding, "enabled": True}]}
+        metadata = {
+            "assignedClientId": PC2, "conversationId": OWNER_TWO,
+            "targetConversationId": CHAT_TWO, "eventId": EVENT,
+            "capability": "chatgpt:wake", "source": "authorized-dev-browser-wake",
+            "explicitWorkerTarget": True, "devOnly": True, "wakeBinding": dict(binding),
+        }
+        metadata["assistantAttestationChallenge"] = module.assistant_challenge(
+            metadata, binding["bindingFingerprint"])
+        selected = module.resolve_dell_binding(
+            metadata, config, CHAT_TWO, EVENT, metadata["assistantAttestationChallenge"])
+        self.assertEqual(selected, binding)
+        self.assertIn(PC2, module.BOUND_WORKERS)
+        changed = copy.deepcopy(metadata)
+        changed["wakeBinding"]["workerId"] = DELL
+        with self.assertRaises(RuntimeError):
+            module.resolve_dell_binding(
+                changed, config, CHAT_TWO, EVENT, changed["assistantAttestationChallenge"])
 
 
 class DellBindingTests(WakeTestCase):
@@ -641,6 +704,29 @@ class HelperLeaseEntrypointTests(unittest.TestCase):
                 wake.submit_once(COMMAND, WORKER, lease_guard=guard)
         config.assert_not_called()
         browser.assert_not_called()
+
+
+class CheckpointPromptTests(unittest.TestCase):
+    def test_binds_ids_and_keeps_ack_token_inside_json(self):
+        text = wake._wake_message(
+            EVENT, CHALLENGE,
+            'Return {"kind":"SOP_CHECKPOINT","status":"PAUSED"}',
+            "11111111-1111-4111-8111-111111111111", "ai-task:110:1:regression20261028",
+        )
+        self.assertIn("11111111-1111-4111-8111-111111111111", text)
+        self.assertIn("ai-task:110:1:regression20261028", text)
+        self.assertIn("attestationAck", text)
+        self.assertIn("tanpa Markdown", text)
+        self.assertEqual(text.count("[AI_CORE_WAKE:" + EVENT + "]"), 1)
+        self.assertEqual(text.count("[AI_CORE_ATTEST:" + CHALLENGE + "]"), 1)
+        self.assertEqual(text.count("[AI_CORE_ATTEST_ACK:" + CHALLENGE + "]"), 1)
+        self.assertLessEqual(len(text), 4096)
+        self.assertTrue(all(32 <= ord(c) <= 126 for c in text))
+
+    def test_normal_wake_remains_unmodified(self):
+        text = wake._wake_message(EVENT, CHALLENGE, "hello")
+        self.assertNotIn("attestationAck", text)
+        self.assertIn("AI_CORE_ATTEST_ACK", text)
 
 
 if __name__ == "__main__":

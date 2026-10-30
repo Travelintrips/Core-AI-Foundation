@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { dispatchExternalAgentWork } from "./externalAgentDispatchService.js";
-import { deriveDevAssistantChallenge } from "./devAssistantAttestation.js";
+import { deriveDevAssistantChallenge, devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
+import { getExternalAgentRegistrySnapshot } from "./externalAgentRegistryService.js";
 import { devWakeAttestationExpected } from "./devChatGptWakeEvidenceService.js";
 import { getVerifiedMcpHandshakeEvidenceForConversation } from "./localCodingControlBridgeService.js";
 import {
   DEV_WAKE_DELL_WORKER, isDevWakeRuntime, loadDevWakeRuntimeConfig, readDevWakeBinding,
-  resolveConfiguredDevWakeTarget, type DevWakeBinding, type DevWakeTarget, type DevWakeWorker,
+  resolveConfiguredDevWakeTargets, type DevWakeBinding, type DevWakeTarget, type DevWakeWorker,
 } from "./devChatGptWakeBindingService.js";
 export type { DevWakeTarget } from "./devChatGptWakeBindingService.js";
 
@@ -22,12 +23,12 @@ export async function resolveVerifiedDevWakeTarget(
   accountAlias: string,
   requestHost?: string,
   expectedOwnerChannel?: string,
+  expectedWorkerId?: string,
 ): Promise<DevWakeTarget> {
   if (!isDevWakeRuntime(requestHost)) throw new Error("DEV_CHATGPT_DEV_HOST_REQUIRED");
   const config = await loadDevWakeRuntimeConfig(requestHost);
   if (!config.enabled) throw new Error("DEV_CHATGPT_WAKE_DISABLED");
   const alias = normalizeDevWakeAccountAlias(accountAlias);
-  const binding = config.bindings.find(value => value.accountAlias === alias);
   if (alias === "GPT01" && expectedOwnerChannel === undefined && config.legacyTargets.length > 1) {
     throw new Error("DEV_CHATGPT_ALIAS_OWNER_REQUIRED");
   }
@@ -36,9 +37,56 @@ export async function resolveVerifiedDevWakeTarget(
   if (alias === "GPT01" && expectedOwnerChannel !== undefined && config.legacyTargets.length && !legacyTarget) {
     throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
   }
-  const target: DevWakeTarget | null = alias === "GPT01" ? legacyTarget ?? null :
-    binding ? { ownerChannel: binding.ownerChannel, targetConversationId: binding.targetConversationId,
-      workerId: binding.workerId, wakeBinding: binding } : null;
+
+  let target: DevWakeTarget | null = null;
+  if (alias === "GPT01") {
+    target = legacyTarget && (expectedWorkerId === undefined || legacyTarget.workerId === expectedWorkerId) ? legacyTarget : null;
+  } else {
+    const candidates = config.bindings.filter(value =>
+      value.accountAlias === alias &&
+      (expectedOwnerChannel === undefined || value.ownerChannel === expectedOwnerChannel) &&
+      (expectedWorkerId === undefined || value.workerId === expectedWorkerId));
+    if (!candidates.length) {
+      if (expectedOwnerChannel !== undefined && !config.bindings.some(value =>
+        value.accountAlias === alias && value.ownerChannel === expectedOwnerChannel)) {
+        throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
+      }
+      if (expectedWorkerId !== undefined && config.bindings.some(value =>
+        value.accountAlias === alias &&
+        (expectedOwnerChannel === undefined || value.ownerChannel === expectedOwnerChannel))) {
+        throw new Error("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
+      }
+      throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
+    }
+
+    const registry = await getExternalAgentRegistrySnapshot();
+    const binding = [...candidates]
+      .filter(value => {
+        const worker = registry.find(item => item.clientId === value.workerId);
+        return worker?.eligible === true &&
+          worker.reportedHealth === "healthy" &&
+          (worker.availableSlots === undefined || worker.availableSlots > 0);
+      })
+      .sort((a, b) => {
+        const aw = registry.find(item => item.clientId === a.workerId);
+        const bw = registry.find(item => item.clientId === b.workerId);
+        const slotDelta = (bw?.availableSlots ?? 1) - (aw?.availableSlots ?? 1);
+        if (slotDelta !== 0) return slotDelta;
+        const loadDelta = (aw?.activeJobs ?? 0) - (bw?.activeJobs ?? 0);
+        if (loadDelta !== 0) return loadDelta;
+        const workerDelta = a.workerId.localeCompare(b.workerId);
+        return workerDelta !== 0 ? workerDelta : a.browserProfile.localeCompare(b.browserProfile);
+      })[0];
+
+    if (!binding) throw new Error("DEV_CHATGPT_ALIAS_NO_HEALTHY_SESSION");
+    target = {
+      ownerChannel: binding.ownerChannel,
+      targetConversationId: binding.targetConversationId,
+      workerId: binding.workerId,
+      wakeBinding: binding,
+    };
+  }
+
   if (!target) throw new Error("DEV_CHATGPT_ALIAS_NOT_CONFIGURED");
   if (expectedOwnerChannel !== undefined && expectedOwnerChannel !== target.ownerChannel) {
     throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
@@ -75,7 +123,7 @@ export async function isDevBrowserWakeAllowed(input: {
   ownerChannel: string; targetConversationId: string; requestHost?: string;
 }): Promise<boolean> {
   try {
-    return !!resolveConfiguredDevWakeTarget(await loadDevWakeRuntimeConfig(input.requestHost), input);
+    return resolveConfiguredDevWakeTargets(await loadDevWakeRuntimeConfig(input.requestHost), input).length > 0;
   } catch { return false; }
 }
 
@@ -106,7 +154,7 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, wo
       metadata["targetConversationId"] !== input.targetConversationId.toLowerCase() ||
       metadata["eventId"] !== input.eventId.toLowerCase() ||
       metadata["assistantAttestationChallenge"] !== challenge) return false;
-  if (worker === DEV_WAKE_DELL_WORKER && !devWakeAttestationExpected(metadata)) return false;
+  if (wakeBinding && !devWakeAttestationExpected(metadata)) return false;
   if (input.watchCommandId !== undefined) {
     if (metadata["explicitWorkerTarget"] !== true) return false;
     const association = metadata["devContinuity"];
@@ -147,7 +195,16 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   created: boolean;
 }> {
   const config = await loadDevWakeRuntimeConfig(input.requestHost);
-  const target = resolveConfiguredDevWakeTarget(config, input);
+  const candidates = resolveConfiguredDevWakeTargets(config, {
+    ownerChannel: input.ownerChannel,
+    targetConversationId: input.targetConversationId,
+  });
+  const target = input.expectedBindingFingerprint
+    ? candidates.find(value => value.wakeBinding?.bindingFingerprint === input.expectedBindingFingerprint) ?? null
+    : candidates.length === 1 ? candidates[0]! : null;
+  if (!target && input.expectedBindingFingerprint && candidates.length > 0) {
+    throw new Error("DEV_CHATGPT_WAKE_BINDING_CHANGED");
+  }
   if (!target || typeof input.eventId !== "string" ||
       input.eventId.length !== 64 || !/^[a-f0-9]{64}$/i.test(input.eventId)) {
     throw new Error("DEV_CHATGPT_WAKE_DENIED");
@@ -158,8 +215,10 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
       (input.expectedBindingFingerprint !== undefined && input.expectedBindingFingerprint !== wakeBinding?.bindingFingerprint)) {
     throw new Error("DEV_CHATGPT_WAKE_BINDING_CHANGED");
   }
-  if (worker === DEV_WAKE_DELL_WORKER && !config.attestationPublicKeyDerB64) {
-    throw new Error("DEV_CHATGPT_WAKE_DELL_ATTESTATION_NOT_CONFIGURED");
+  const attestationPublicKey = devAssistantPublicKeyForWorker(worker) ||
+    (worker === DEV_WAKE_DELL_WORKER ? config.attestationPublicKeyDerB64 : undefined);
+  if (wakeBinding && !attestationPublicKey) {
+    throw new Error("DEV_CHATGPT_WAKE_ATTESTATION_NOT_CONFIGURED");
   }
   if ((input.watchCommandId !== undefined && (typeof input.watchCommandId !== "string" || input.watchCommandId.length !== 36 || !UUID.test(input.watchCommandId))) ||
       (input.jobId !== undefined && (typeof input.jobId !== "string" || input.jobId.length !== 36 || !UUID.test(input.jobId))) ||
@@ -186,7 +245,9 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
     ...(wakeBinding ? { bindingFingerprint: wakeBinding.bindingFingerprint, browserProfile: wakeBinding.browserProfile } : {}),
   });
   const userInstruction = input.instruction?.trim() ?? "";
-  if (userInstruction && (userInstruction.length > 2000 || /[\u0000-\u001f\u007f]/.test(userInstruction))) {
+  // Preserve CR, LF and TAB for real multi-line SOP commands. The command is
+  // base64url-encoded before dispatch; reject other C0/DEL controls only.
+  if (userInstruction && (userInstruction.length > 2000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(userInstruction))) {
     throw new Error("DEV_CHATGPT_WAKE_INSTRUCTION_INVALID");
   }
   const encodedInstruction = userInstruction

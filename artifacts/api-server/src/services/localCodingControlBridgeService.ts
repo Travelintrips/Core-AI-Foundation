@@ -15,11 +15,16 @@ import {
 import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
+import { readHandshakeSopSettings } from "./handshakeSopSettingsService.js";
+import { renderReplyTemplate } from "./handshakeSopConfiguration.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
-import { commandMatchesDevWakeTarget, DEV_WAKE_DELL_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
+import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
+import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent } from "./devSopCheckpointIssuer.js";
+import { assertNoSelfAttestedCheckpoint } from "./devCheckpointClaimGuard.js";
+import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -176,7 +181,10 @@ export async function submitCodingBridgeCommand(input: {
   authority?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }) {
+  let stage = "SCHEMA_CHECK_FAILED";
+  try {
   await ensureCodingControlBridgeTables();
+  stage = "COMMAND_LOOKUP_FAILED";
   const source = input.source ?? "chatgpt";
   const [existing] = await db
     .select()
@@ -189,18 +197,25 @@ export async function submitCodingBridgeCommand(input: {
     )
     .limit(1);
   if (existing) {
+    stage = "EXISTING_COMMAND_NOTIFICATION_FAILED";
     if (input.assignedClientId) await notifyExternalAgentWork(input.assignedClientId, existing.id);
     return { command: existing, created: false };
   }
 
+  const { operationalSop, operationalSopSource, replyTemplates } =
+    await readHandshakeSopSettings();
   const metadataJson = {
     ...(input.metadata ?? {}),
+    operationalSop,
+    operationalSopSource,
     ...(input.assignedClientId
       ? { assignedClientId: input.assignedClientId }
       : {}),
   };
 
-  const [command] = await db
+  const command = await db.transaction(async (tx) => {
+  stage = "COMMAND_INSERT_FAILED";
+  const [command] = await tx
     .insert(aiCodingBridgeCommandsTable)
     .values({
       taskId: input.taskId ?? null,
@@ -214,16 +229,24 @@ export async function submitCodingBridgeCommand(input: {
     .returning();
   if (!command) throw new Error("Failed to persist bridge command");
 
-  await db.insert(aiCodingBridgeResponsesTable).values({
+  stage = "ACK_INSERT_FAILED";
+  await tx.insert(aiCodingBridgeResponsesTable).values({
     commandId: command.id,
     taskId: command.taskId,
     kind: "ACK",
-    message: input.assignedClientId
+    message: renderReplyTemplate(replyTemplates,
+      input.assignedClientId ? "JOB_QUEUED" : "JOB_RECEIVED", {
+        job_id: String(command.id), status: String(command.status),
+        worker: input.assignedClientId ?? "AI Core",
+      }) ?? (input.assignedClientId
       ? `Command queued for ${input.assignedClientId} by AI Core.`
-      : "Command received by AI Core.",
+      : "Command received by AI Core."),
     checkpointJson: { status: command.status },
   });
 
+  return command;
+  });
+  stage = "EVENT_PUBLISH_FAILED";
   publishSafe({
     eventType: "coding.bridge.command.received",
     sourceModule: "coding-control-bridge",
@@ -237,12 +260,28 @@ export async function submitCodingBridgeCommand(input: {
     },
   });
 
+  stage = "WORKER_DISPATCH_FAILED";
   if (input.assignedClientId) {
-    await notifyExternalAgentWork(input.assignedClientId, command.id);
+    // Notification is an optimization: a persisted command must remain claimable
+    // even when the external event transport is temporarily unavailable.
+    try {
+      await notifyExternalAgentWork(input.assignedClientId, command.id);
+    } catch (error) {
+      console.error("[coding-bridge] work notification failed after persistence", {
+        commandId: command.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     void ensureGcpCodingWorkerStarted().catch(() => undefined);
   }
 
   return { command, created: true };
+  } catch (error) {
+    console.error("[coding-bridge] submission stage failed", { stage, error: error instanceof Error ? error.message : String(error) });
+    const wrapped = new Error("Coding bridge submission failed at " + stage);
+    Object.assign(wrapped, { bridgeStage: stage });
+    throw wrapped;
+  }
 }
 
 async function deliverCodingBridgeWhatsappNotification(input: {
@@ -305,6 +344,19 @@ export async function appendCodingBridgeResponse(input: {
   await ensureCodingControlBridgeTables();
   const checkpointJson = input.checkpoint ?? {};
   const metadataJson = input.metadata ?? {};
+  assertNoSelfAttestedCheckpoint(input.kind, metadataJson);
+
+  // Resolve task identity from the persisted command, never from worker metadata.
+  // Reject conflicting claims, and keep unbound commands unbound.
+  const [sourceCommand] = await db.select({ taskId: aiCodingBridgeCommandsTable.taskId })
+    .from(aiCodingBridgeCommandsTable)
+    .where(eq(aiCodingBridgeCommandsTable.id, input.commandId))
+    .limit(1);
+  if (!sourceCommand) throw new Error("BRIDGE_COMMAND_NOT_FOUND");
+  if (input.taskId && input.taskId !== sourceCommand.taskId)
+    throw new Error("BRIDGE_TASK_COMMAND_MISMATCH");
+  const resolvedInput = { ...input, taskId: sourceCommand.taskId ?? null };
+  input = resolvedInput;
 
   let created = true;
   let response;
@@ -660,7 +712,7 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
       responseMetadata: row["response_metadata_json"],
       responseCreatedAt: row["response_created_at"],
       acknowledgedAt: row["acknowledged_at"],
-    }, options?.publicKeyDerBase64 ?? (target.workerId === DEV_WAKE_DELL_WORKER ? config.attestationPublicKeyDerB64 : undefined));
+    }, options?.publicKeyDerBase64 ?? devAssistantPublicKeyForWorker(target.workerId) ?? (target.workerId === DEV_WAKE_DELL_WORKER ? config.attestationPublicKeyDerB64 : undefined));
     if (verified) return verified;
   }
   return null;
@@ -668,6 +720,8 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
 export async function listPendingCodingBridgeResponsesForConversation(input: {
   conversationId: string;
   limit?: number;
+  /** Filter before LIMIT so transport ACK rows never crowd out terminal events. */
+  lifecycleOnly?: boolean;
 }) {
   await ensureCodingControlBridgeTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 50));
@@ -688,7 +742,8 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
       ON command.id = response.command_id
     WHERE response.acknowledged_at IS NULL
       AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-    ORDER BY response.created_at ASC
+      AND (${!input.lifecycleOnly}::boolean OR ${codingBridgeTerminalEventPredicate()})
+    ORDER BY response.created_at ASC, response.id ASC
     LIMIT ${limit}::integer
     `);
   });
@@ -721,7 +776,8 @@ export async function subscribeCodingBridgeConversation(input: {
       conversationId: input.conversationId,
       eventTypes: input.eventTypes ?? ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
       autoRenewUntilTerminal: true,
-      leasePolicy: "chatgpt-terminal-events",
+      subscriptionLifecycle: "PERSISTENT_ACTIVE",
+      leasePolicy: "signed-final-ack-gated/v1",
     },
   });
 }
@@ -733,7 +789,11 @@ export async function unsubscribeCodingBridgeConversation(
   const result = await db.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_presence
     SET lease_expires_at = NOW(),
-        metadata_json = metadata_json || jsonb_build_object('unsubscribedAt', NOW()::text),
+        metadata_json = metadata_json || jsonb_build_object(
+          'unsubscribedAt', NOW()::text,
+          'subscriptionLifecycle', 'REVOKED',
+          'closedReason', 'EXPLICIT_UNSUBSCRIBE'
+        ),
         updated_at = NOW()
     WHERE client_id = ${`chatgpt:${conversationId}`}::text
     RETURNING client_id
@@ -826,6 +886,36 @@ export async function claimCodingBridgeCommand(input: {
     claimToken,
     leaseSeconds,
   };
+}
+
+// Only a worker holding the active command claim may persist execution progress.
+export async function recordClaimedCodingBridgeProgress(input: {
+  clientId: string;
+  commandId: string;
+  claimToken: string;
+  message: string;
+}): Promise<string | null> {
+  await ensureCodingControlBridgeTables();
+  const result = await db.execute(sql`
+    INSERT INTO ai_platform.ai_coding_bridge_responses
+      (command_id, task_id, kind, message, checkpoint_json, metadata_json)
+    SELECT c.id, c.task_id, 'PROGRESS', ${input.message}::text,
+           '{}'::jsonb, jsonb_build_object('workerId', ${input.clientId}::text)
+    FROM ai_platform.ai_coding_bridge_commands AS c
+    WHERE c.id = ${input.commandId}::uuid
+      AND c.status = 'PROCESSING'
+      AND c.command_type <> 'DEV_CONTINUITY_WATCH'
+      AND c.metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+      AND c.metadata_json ->> 'claimToken' = ${input.claimToken}::text
+      AND (c.metadata_json ->> 'claimLeaseExpiresAt')::timestamptz > NOW()
+      AND NOT EXISTS (
+        SELECT 1 FROM ai_platform.ai_coding_bridge_responses AS r
+        WHERE r.command_id = c.id AND r.kind = 'PROGRESS'
+          AND r.message = ${input.message}::text
+      )
+    RETURNING id
+  `);
+  return (result.rows?.[0] as { id?: string } | undefined)?.id ?? null;
 }
 
 export async function renewCodingBridgeCommandClaim(input: {
@@ -941,6 +1031,7 @@ export async function completeCodingBridgeCommand(input: {
 }) {
   await ensureCodingControlBridgeTables();
   const details = input.details ?? {};
+  const sopCheckpointIntent = input.status === "FAILED" ? parseDevSopCheckpointIntent(input.message) : null;
   // Prevent a successful process exit from masquerading as a passed E2E.
   const verifiedStatus = input.status === "COMPLETED" &&
     hasUnverifiedExternalBrowserCompletion({ message: input.message, details })
@@ -951,7 +1042,7 @@ export async function completeCodingBridgeCommand(input: {
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
   }
-  const wakeConfig = input.clientId === DEV_WAKE_DELL_WORKER
+  const wakeConfig = (input.clientId === DEV_WAKE_DELL_WORKER || input.clientId === DEV_WAKE_DEFAULT_WORKER || input.clientId === DEV_WAKE_PCHP_WORKER || input.clientId === DEV_WAKE_PC2_WORKER || input.clientId === DEV_WAKE_VMSC_WORKER)
     ? await loadDevWakeRuntimeConfig(input.requestHost).catch(() => null) : null;
 
   // Command terminal status and durable response must commit together.
@@ -982,20 +1073,66 @@ export async function completeCodingBridgeCommand(input: {
     if (!row) return null;
     // The terminal UPDATE holds the claim row lock. Reject a forged or downgraded
     // browser receipt inside this transaction, before either completion can commit.
-    if (input.clientId === DEV_WAKE_DELL_WORKER && input.status === "COMPLETED") {
+    let verifiedCheckpointWake = false;
+    if (input.status === "COMPLETED" || sopCheckpointIntent !== null) {
       const metadata = row["metadata_json"];
-      const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
-      const owner = isRecord(metadata) ? metadata["conversationId"] : null;
-      const target = wakeConfig && typeof targetId === "string" && typeof owner === "string"
-        ? resolveConfiguredDevWakeTarget(wakeConfig, { ownerChannel: owner, targetConversationId: targetId }) : null;
-      if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
-          !target || !commandMatchesDevWakeTarget(metadata, target)) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_BINDING_INVALID");
-      const receivedAt = row["received_at"] instanceof Date ? row["received_at"].toISOString() : String(row["received_at"] ?? "");
-      const receipt = verifyDevWakeCommandReceipt({ metadata, details, notBefore: receivedAt,
-        receivedAt: new Date().toISOString(), publicKeyDerBase64: wakeConfig?.attestationPublicKeyDerB64 });
-      if (!receipt.verified) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_ATTESTATION_INVALID");
+      const wakeBinding = isRecord(metadata) ? readDevWakeBinding(metadata["wakeBinding"]) : null;
+      const mustVerifyWake = input.clientId === DEV_WAKE_DELL_WORKER || wakeBinding !== null;
+      if (sopCheckpointIntent && !mustVerifyWake) throw new Error("DEV_SOP_CHECKPOINT_WORKER_BINDING_REQUIRED");
+      if (mustVerifyWake) {
+        const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
+        const owner = isRecord(metadata) ? metadata["conversationId"] : null;
+        const target = wakeConfig && typeof targetId === "string" && typeof owner === "string"
+          ? resolveConfiguredDevWakeTarget(wakeConfig, {
+              ownerChannel: owner,
+              targetConversationId: targetId,
+              ...(wakeBinding ? { bindingFingerprint: wakeBinding.bindingFingerprint } : {}),
+            })
+          : null;
+        if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
+            !target || !commandMatchesDevWakeTarget(metadata, target)) {
+          throw new Error("DEV_CHATGPT_WAKE_CALLBACK_BINDING_INVALID");
+        }
+        const receivedAt = row["received_at"] instanceof Date ? row["received_at"].toISOString() : String(row["received_at"] ?? "");
+        const publicKeyDerBase64 = devAssistantPublicKeyForWorker(input.clientId) ||
+          (input.clientId === DEV_WAKE_DELL_WORKER ? wakeConfig?.attestationPublicKeyDerB64 : undefined);
+        const receipt = verifyDevWakeCommandReceipt({ metadata, details, notBefore: receivedAt,
+          receivedAt: new Date().toISOString(), publicKeyDerBase64 });
+        if (!receipt.verified) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_ATTESTATION_INVALID");
+        verifiedCheckpointWake = true;
+      }
     }
     const taskId=row["task_id"] ? String(row["task_id"]) : null;
+    if (sopCheckpointIntent) {
+      const commandMeta = isRecord(row["metadata_json"]) ? row["metadata_json"] as Record<string, unknown> : {};
+      if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
+          commandMeta["devOnly"] !== true || commandMeta["capability"] !== "chatgpt:wake" ||
+          typeof commandMeta["correlationId"] !== "string") {
+        throw new Error("DEV_SOP_CHECKPOINT_SOURCE_NOT_AUTHORIZED");
+      }
+      const assistantAttestation = isRecord(details["attestation"]) ? details["attestation"] : {};
+      const checkpointReceipt = issueVerifiedDevSopCheckpoint({
+        message: input.message, intent: sopCheckpointIntent, verifiedAssistantReceipt: verifiedCheckpointWake,
+        assistantResponseHash: assistantAttestation["assistantResponseHash"],
+        commandId: input.commandId, correlationId: commandMeta["correlationId"],
+        privateKeyPkcs8DerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
+      });
+      // One parent command update, checkpoint insert, and terminal insert share this transaction.
+      // A concurrent duplicate callback cannot claim the same PROCESSING command twice.
+      await tx.insert(aiCodingBridgeResponsesTable).values({
+        commandId: input.commandId, taskId, kind: "CHECKPOINT", message: "Verified DEV SOP checkpoint",
+        checkpointJson: {
+          jobId: checkpointReceipt.jobId, checkpointId: checkpointReceipt.checkpointId,
+          nextStepId: checkpointReceipt.nextStepId, sopVersion: checkpointReceipt.sopVersion,
+        },
+        metadataJson: {
+          verified: true, checkpointVerified: true, verifiedAssistantReply: true,
+          jobId: checkpointReceipt.jobId, sopVersion: checkpointReceipt.sopVersion,
+          attestation: { algorithm: "Ed25519", signature: checkpointReceipt.signature },
+          checkpointReceipt,
+        },
+      });
+    }
     const [response]=await tx.insert(aiCodingBridgeResponsesTable).values({
       commandId:input.commandId,taskId,kind:verifiedStatus,message:input.message,
       checkpointJson:{status:verifiedStatus,statusCode:evidence.statusCode,deliveryCode:evidence.deliveryCode,e2eCode:evidence.e2eCode,clientId:input.clientId},
@@ -1264,7 +1401,15 @@ export async function getAiTaskChatGptBridgeTimeline(commandId: string, correlat
     createdAt: aiCodingBridgeResponsesTable.createdAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
-    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
+    .orderBy(
+      asc(aiCodingBridgeResponsesTable.createdAt),
+      // Same-transaction checkpoint and terminal failure share the database NOW().
+      // The checkpoint must precede the FAILED response in AI Task's reducer.
+      sql`CASE WHEN ${aiCodingBridgeResponsesTable.kind} = 'CHECKPOINT' THEN 0
+               WHEN ${aiCodingBridgeResponsesTable.kind} IN ('FAILED','BLOCKER','COMPLETED') THEN 2
+               ELSE 1 END`,
+      asc(aiCodingBridgeResponsesTable.id),
+    ).limit(100);
   return {
     commandId: command.id,
     status: command.status,

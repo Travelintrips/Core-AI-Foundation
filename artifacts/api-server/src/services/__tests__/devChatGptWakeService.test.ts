@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), transaction: vi.fn(), execute: vi.fn(), rows: vi.fn(), handshakeEvidence: vi.fn() }));
+const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), transaction: vi.fn(), execute: vi.fn(), rows: vi.fn(), handshakeEvidence: vi.fn(), registry: vi.fn() }));
 vi.mock("../externalAgentDispatchService.js", () => ({ dispatchExternalAgentWork: mocks.dispatch }));
+vi.mock("../externalAgentRegistryService.js", () => ({ getExternalAgentRegistrySnapshot: mocks.registry }));
 vi.mock("../localCodingControlBridgeService.js", () => ({ getVerifiedMcpHandshakeEvidenceForConversation: mocks.handshakeEvidence }));
 vi.mock("@workspace/db", () => ({
   db: { transaction: mocks.transaction, execute: mocks.execute },
@@ -38,8 +39,13 @@ beforeEach(() => {
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CHANNELS", ownerChannel);
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_CONVERSATIONS", targetConversationId);
   vi.stubEnv("AI_CORE_DEV_DELL_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
+  vi.stubEnv("AI_CORE_DEV_ASSISTANT_ATTESTATION_PUBLIC_KEY_DER_B64", "test-public-key");
   mocks.dispatch.mockResolvedValue({ clientId: worker, command: existingCommand(), created: true });
   mocks.handshakeEvidence.mockResolvedValue(null);
+  mocks.registry.mockResolvedValue([
+    { clientId: "openclaw-dell-chatgpt-wake-dev", eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+    { clientId: "openclaw-travelintrips-dev", eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+  ]);
   mocks.execute.mockResolvedValue({ rows: [] });
   vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", "");
   mocks.rows.mockResolvedValue([existingCommand()]);
@@ -88,6 +94,21 @@ describe("shared DEV browser wake queue", () => {
         requestedInstructionHash: createHash("sha256").update(task).digest("hex"),
       }),
     });
+  });
+
+  it("accepts multiline CONTINUE_JOB while rejecting dangerous control characters", async () => {
+    const task = "AI CORE — CONTINUE_JOB\r\njobId: job-123\ncheckpointId: cp-7\n\tstepId: step-8";
+    const encoded = Buffer.from(task, "utf8").toString("base64url");
+    const command = existingCommand();
+    command.instruction = `DEV_CHATGPT_WAKE_V2 conversation=${targetConversationId} event=${eventId} challenge=${challenge} task=${encoded}`;
+    mocks.dispatch.mockResolvedValueOnce({ clientId: worker, command, created: true });
+    await queueDevBrowserWake({ ...input, instruction: task, jobAlias: "TASK107" });
+    expect(mocks.dispatch.mock.calls[0]![0].instruction).toBe(command.instruction);
+    await expect(queueDevBrowserWake({ ...input, instruction: "hello\u0000world" }))
+      .rejects.toThrow("DEV_CHATGPT_WAKE_INSTRUCTION_INVALID");
+    await expect(queueDevBrowserWake({ ...input, instruction: "hello\u001bworld" }))
+      .rejects.toThrow("DEV_CHATGPT_WAKE_INSTRUCTION_INVALID");
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
   });
 
   it("preserves every existing GPT01 owner and resolves aliases only for the exact caller", async () => {
@@ -323,8 +344,8 @@ describe("new account dispatch uses the shared exact binding", () => {
     const first = await queueDevBrowserWake(newInput);
     const request = mocks.dispatch.mock.calls[0]![0];
     expect(request.metadata.wakeBinding).toMatchObject({ accountAlias: "GPT02", browserProfile: "travelincars-dev",
-      bindingFingerprint: "4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1" });
-    expect(request.metadata.assistantAttestationChallenge).toBe("2a4c9bcdf77cb321930750a835f29cd065d70c1ea8b20f8a4c302853b6267a2a");
+      bindingFingerprint: "2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3" });
+    expect(request.metadata.assistantAttestationChallenge).toBe("668e37e7ea50f4a3fdc13b73def177651bb3b8ca12364eeb48b41a1c8e190438");
     const command = { id: first.commandId, source: request.source, commandType: "EXTERNAL_AGENT_WORK", instruction: request.instruction,
       metadataJson: { ...request.metadata, assignedClientId: request.clientId } };
     mocks.dispatch.mockResolvedValueOnce({ clientId: account.workerId, created: false, command });
@@ -333,6 +354,59 @@ describe("new account dispatch uses the shared exact binding", () => {
       command: { ...command, metadataJson: { ...command.metadataJson, wakeBinding: undefined } } });
     await expect(queueDevBrowserWake(newInput)).rejects.toThrow("DEV_CHATGPT_WAKE_RECONCILIATION_UNVERIFIED");
   });
+  it("routes the stable account identity through its newly registered runtime location", async () => {
+    const backup = { ...account, workerId: "openclaw-travelintrips-dev", browserProfile: "gpt02-travelintrips" };
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({
+      version: 1,
+      bindings: [backup],
+    }));
+    mocks.registry.mockResolvedValue([
+      { clientId: backup.workerId, eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+    ]);
+    mocks.dispatch.mockImplementation(async request => ({ clientId: request.clientId, created: true,
+      command: { id: childId, source: request.source, commandType: "EXTERNAL_AGENT_WORK", instruction: request.instruction,
+        metadataJson: { ...request.metadata, assignedClientId: request.clientId } } }));
+
+    const target = await resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel);
+    expect(target).toMatchObject({
+      ownerChannel: account.ownerChannel,
+      targetConversationId: account.targetConversationId,
+      workerId: backup.workerId,
+      wakeBinding: expect.objectContaining({
+        accountAlias: "GPT02",
+        browserProfile: backup.browserProfile,
+        bindingFingerprint: "2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3",
+      }),
+    });
+    const queued = await queueDevBrowserWake({ ...newInput,
+      expectedWorkerId: target.workerId,
+      expectedBindingFingerprint: target.wakeBinding!.bindingFingerprint,
+    });
+    expect(queued.clientId).toBe(backup.workerId);
+    expect(mocks.dispatch.mock.calls[0]![0].metadata.wakeBinding).toMatchObject({
+      accountAlias: "GPT02", workerId: backup.workerId, browserProfile: backup.browserProfile,
+    });
+  });
+
+  it("selects the explicitly requested PCHP worker without silently preferring another GPT02 session", async () => {
+    const pchp = { ...account, workerId: "openclaw-pchp-dev",
+      targetConversationId: "33333333-3333-4333-8333-333333333333", browserProfile: "openclaw" };
+    vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({
+      version: 1, bindings: [account, pchp],
+    }));
+    mocks.registry.mockResolvedValue([
+      { clientId: account.workerId, eligible: true, reportedHealth: "healthy", availableSlots: 3, activeJobs: 0 },
+      { clientId: pchp.workerId, eligible: true, reportedHealth: "healthy", availableSlots: 1, activeJobs: 0 },
+    ]);
+    const exact = await resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel, "openclaw-pchp-dev");
+    expect(exact).toMatchObject({workerId:"openclaw-pchp-dev",targetConversationId:pchp.targetConversationId,
+      wakeBinding: expect.objectContaining({browserProfile:"openclaw",workerId:"openclaw-pchp-dev"})});
+    await expect(resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel, "openclaw-pc-worker-22"))
+      .rejects.toThrow("DEV_CHATGPT_ALIAS_WORKER_MISMATCH");
+    const automatic = await resolveVerifiedDevWakeTarget("GPT02", undefined, account.ownerChannel);
+    expect(automatic.workerId).toBe(account.workerId);
+  });
+
   it("uses the exact account binding directly and rejects another OAuth owner without MCP evidence", async () => {
     configure();
     await queueDevBrowserWake(newInput);

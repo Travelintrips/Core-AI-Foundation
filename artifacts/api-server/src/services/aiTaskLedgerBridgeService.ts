@@ -14,6 +14,22 @@ export interface AiTaskLedgerJobInput {
   externalId: string;
   title: string;
   sessionId?: string | null;
+  timeline?: {
+    jobId?: string;
+    commandId?: string;
+    correlationId?: string;
+    workerId?: string;
+    ackReceived?: boolean;
+    callbackObserved?: boolean;
+    /** Verified only from a matching, acknowledged source response; not browser E2E. */
+    mcpReceiptPersisted?: boolean;
+    mcpAckAt?: string;
+    /** Set only after AI Core's original Ed25519 browser/MCP handshake verifier passes. */
+    finalE2eVerified?: true;
+    finalE2eVerifiedAt?: string;
+    finalE2eMethod?: "AI_CORE_VERIFIED_MCP_HANDSHAKE_V1";
+    sopSnapshot?: { version: string; title: string; steps: string[] };
+  };
 }
 
 export interface AiTaskLedgerResult {
@@ -93,6 +109,7 @@ export async function registerAiTaskLedgerJob(
         idempotencyKey: input.externalId,
         title: input.title,
         ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+        ...(input.timeline ? { metadata: input.timeline } : {}),
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -171,7 +188,7 @@ export async function mirrorAiTaskLedgerSourceState(input: AiTaskLedgerJobInput 
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ eventId, status: input.status }),
+      body: JSON.stringify({ eventId, status: input.status, ...(input.timeline ? { metadata: input.timeline } : {}) }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (response.status !== 200 && response.status !== 202) {

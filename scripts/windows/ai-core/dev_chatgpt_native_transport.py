@@ -40,6 +40,17 @@ READER_AFTER_GUARD_SECONDS = (4 * CLI_SECONDS + 2 * NATIVE_SECONDS +
 POST_READINESS_SECONDS = 3 * CLI_SECONDS + READER_AFTER_GUARD_SECONDS
 
 
+def openclaw_runtime_paths(local):
+    node_override = os.environ.get("AI_CORE_OPENCLAW_NODE", "").strip()
+    entry_override = os.environ.get("AI_CORE_OPENCLAW_ENTRY", "").strip()
+    if bool(node_override) != bool(entry_override):
+        raise RuntimeError("OpenClaw runtime override must provide node and entry together")
+    if node_override:
+        return Path(node_override), Path(entry_override)
+    portable = Path(local) / "OpenClaw" / "deps" / "portable-node"
+    return portable / "node.exe", portable / "node_modules" / "openclaw" / "openclaw.mjs"
+
+
 def native_submit_seconds(message):
     # Policy allowance from actual 38s/1126-character native input, with a
     # 1.51x per-character margin plus 30s for setup/guards. It is an upper
@@ -218,27 +229,31 @@ class NativeTransport:
         system = os.environ.get("SystemRoot")
         if not local or not user or not system:
             raise RuntimeError("Native Windows paths are unavailable")
-        # Match the authenticated running OpenClaw 2026.10.7 gateway: the old
-        # portable package (2026.9.9) rejects the current config migration.
-        self.node = Path(local) / "OpenClaw" / "deps" / "node24-compatible" / "node-v24.22.1-win-x64" / "node.exe"
-        self.entry = Path(local) / "OpenClaw" / "staged-update-2026.10.7" / "node_modules" / "openclaw" / "openclaw.mjs"
-        self.powershell = Path(system) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-        self.bridge = Path(__file__).with_name("dev-chatgpt-native-bridge.ps1")
-        self.cdp_snapshot = Path(__file__).with_name("dev-chatgpt-cdp-snapshot.js")
-        self.expected_user_data = str(PureWindowsPath(local) / "AI-Core" / "gateway-stable3-main" / "browser" / self.binding["browserProfile"] / "user-data")
-        # Bind the port to the named OpenClaw profile, never to another account's fixed port.
-        # Fail closed for missing/malformed configuration and preserve the PID/path/tab fences.
-        profile_config_path = Path(user) / ".openclaw" / "openclaw.json"
+        # Prefer the verified authenticated DELL runtime when installed.
+        # Explicit paired runtime overrides have priority.
+        self.node, self.entry = openclaw_runtime_paths(local)
+        if not os.environ.get('AI_CORE_OPENCLAW_NODE') and not os.environ.get('AI_CORE_OPENCLAW_ENTRY'):
+            staged_node = Path(local) / 'OpenClaw' / 'deps' / 'node24-compatible' / 'node-v24.22.1-win-x64' / 'node.exe'
+            staged_entry = Path(local) / 'OpenClaw' / 'staged-update-2026.10.7' / 'node_modules' / 'openclaw' / 'openclaw.mjs'
+            if staged_node.is_file() and staged_entry.is_file():
+                self.node, self.entry = staged_node, staged_entry
+        self.powershell = Path(system) / 'System32' / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe'
+        self.bridge = Path(__file__).with_name('dev-chatgpt-native-bridge.ps1')
+        self.cdp_snapshot = Path(__file__).with_name('dev-chatgpt-cdp-snapshot.js')
+        user_dir_override = os.environ.get('AI_CORE_OPENCLAW_EXPECTED_USER_DATA_DIR', '').strip()
+        self.expected_user_data = user_dir_override or str(
+            PureWindowsPath(local) / 'AI-Core' / 'gateway-stable3-main' / 'browser' / self.binding['browserProfile'] / 'user-data')
+        profile_config_path = Path(user) / '.openclaw' / 'openclaw.json'
         try:
             if profile_config_path.stat().st_size > 1024 * 1024:
-                raise ValueError("oversized")
-            config = json.loads(profile_config_path.read_text(encoding="utf-8-sig"))
-            profile_config = config["browser"]["profiles"][self.binding["browserProfile"]]
-            expected_port = profile_config["cdpPort"]
+                raise ValueError('oversized')
+            config = json.loads(profile_config_path.read_text(encoding='utf-8-sig'))
+            profile_config = config['browser']['profiles'][self.binding['browserProfile']]
+            expected_port = profile_config['cdpPort']
         except (OSError, UnicodeError, ValueError, KeyError, TypeError) as error:
-            raise RuntimeError("OpenClaw managed profile configuration is unavailable") from error
+            raise RuntimeError('OpenClaw managed profile configuration is unavailable') from error
         if type(expected_port) is not int or not 1024 <= expected_port <= 65535:
-            raise RuntimeError("OpenClaw managed profile CDP port is invalid")
+            raise RuntimeError('OpenClaw managed profile CDP port is invalid')
         self.expected_cdp_port = expected_port
         if not all(path.is_file() for path in (self.node, self.entry, self.powershell, self.bridge, self.cdp_snapshot,
                                                self.bridge.with_name("dev-chatgpt-native-composer.psm1"))):
@@ -504,15 +519,12 @@ class NativeTransport:
         # records its exact new raw ID. Old sidecars never grant an exclusion.
         def bound_candidates(rows):
             return [tab for tab in rows if tab.get("type") == "page" and tab.get("url") == self.page_url
-                    and tab["targetId"] != self.reader_id
-                    and not (isinstance(tab.get("suggestedTargetId"), str) and
-                             re.fullmatch(r"aicore-reader-[a-f0-9]{16}", tab["suggestedTargetId"]) and
-                             (tab.get("label") is None or tab.get("label") == tab["suggestedTargetId"]))]
+                    and tab['targetId'] != self.reader_id
+                    and not (isinstance(tab.get('suggestedTargetId'), str) and
+                             re.fullmatch(r'aicore-reader-[a-f0-9]{16}', tab['suggestedTargetId']) and
+                             (tab.get('label') is None or tab.get('label') == tab['suggestedTargetId']))]
         matching = bound_candidates(tabs)
-        # After activating a newly opened reader, the managed tab inventory can
-        # transiently omit the original bound page for one refresh cycle. This
-        # retry is read-only and only applies to zero candidates; ambiguity
-        # remains fail-closed and no target substitution is allowed.
+        # Retry only zero candidates, with reauthorization on every read.
         if self.reader_id is not None and len(matching) == 0:
             for _ in range(3):
                 self._sleep(1)
@@ -524,30 +536,35 @@ class NativeTransport:
                 if (any(not isinstance(value, str) or not RAW_TARGET.fullmatch(value) for value in retry_ids) or
                         len({value.lower() for value in retry_ids}) != len(retry_ids)):
                     raise RuntimeError("OpenClaw raw tab inventory is ambiguous")
+                owned = [tab for tab in retry_tabs if tab['targetId'] == self.reader_id]
+                if (reader_url not in ('about:blank', self.page_url) or len(owned) != 1 or
+                        owned[0].get('type') != 'page' or owned[0].get('url') != reader_url):
+                    raise RuntimeError('Owned reader changed; preserve it for reconciliation')
+                if reader_url == 'about:blank' and sum(
+                        tab.get('type') == 'page' and tab.get('url') == 'about:blank' for tab in retry_tabs) != 1:
+                    raise RuntimeError('Owned blank reader is not uniquely identifiable')
                 retry_matching = bound_candidates(retry_tabs)
                 if len(retry_matching) > 1:
-                    raise RuntimeError("Expected exactly one native bound ChatGPT tab; candidates=" + str(len(retry_matching)))
+                    raise RuntimeError('Expected exactly one native bound ChatGPT tab')
                 if len(retry_matching) == 1:
                     tabs = retry_tabs
                     matching = retry_matching
                     tabs_observed_at = time.time()
                     break
         if self.reader_id is not None and len(matching) == 0:
-            # Immediately after activating the owned reader, OpenClaw's managed
-            # inventory can transiently omit the previously pinned original tab.
-            # Never substitute another tab: accept only the exact raw IDs already
-            # bound by this execution and prove both URLs through CDP.
-            cdp_tabs = self._cdp_tab_inventory(status.get("cdpPort"))
-            original_ok = sum(tab.get("targetId") == self.context["rawTargetId"] and
-                              tab.get("type") == "page" and tab.get("url") == self.page_url
+            # Do not substitute another target for the pinned original.
+            # Check the two exact tab IDs through the CDP inventory.
+            cdp_tabs = self._cdp_tab_inventory(status.get('cdpPort'))
+            original_ok = sum(tab.get('targetId') == self.context['rawTargetId'] and
+                              tab.get('type') == 'page' and tab.get('url') == self.page_url
                               for tab in cdp_tabs) == 1
-            reader_ok = sum(tab.get("targetId") == self.reader_id and
-                            tab.get("type") == "page" and tab.get("url") == reader_url
+            reader_ok = sum(tab.get('targetId') == self.reader_id and
+                            tab.get('type') == 'page' and tab.get('url') == reader_url
                             for tab in cdp_tabs) == 1
             if original_ok and reader_ok:
-                return {"profile": status["profile"], "pid": pid, "userDataDir": user_data,
-                        "cdpPort": status.get("cdpPort"), "rawTargetId": self.context["rawTargetId"],
-                        "pageUrl": self.page_url}
+                return {'profile': status['profile'], 'pid': pid, 'userDataDir': user_data,
+                        'cdpPort': status.get('cdpPort'), 'rawTargetId': self.context['rawTargetId'],
+                        'pageUrl': self.page_url}
         if len(matching) != 1 or not isinstance(matching[0].get("targetId"), str) or not RAW_TARGET.fullmatch(matching[0]["targetId"]):
             raise RuntimeError("Expected exactly one native bound ChatGPT tab; candidates=" + str(len(matching)))
         raw_target_id = matching[0]["targetId"]

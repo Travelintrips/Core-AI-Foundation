@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from dev_chatgpt_native_transport import (NativeTransport, native_options, native_submit_seconds,
+                                         openclaw_runtime_paths,
                                          TRANSPORT_SECONDS, LISTENER_STARTUP_SECONDS,
                                          READER_AFTER_GUARD_SECONDS, POST_READINESS_SECONDS,
                                          READINESS_SECONDS, CLI_SECONDS, NATIVE_SECONDS)
@@ -53,6 +54,8 @@ class FakeTransport(NativeTransport):
         self.budget_after_requests = None
         self.visible = False
         self.duplicate = False
+        self.hide_bound_once_after_reader = False
+        self.hidden_bound_inventory_count = 0
         self.wrong_pid = False
         self.focus_ok = True
         self.drift_after_focus = False
@@ -132,7 +135,11 @@ class FakeTransport(NativeTransport):
                     "pid": 7654 if self.wrong_pid else 1234, "userDataDir": self.fake_user_data, "cdpPort": self.expected_cdp_port}
         if action == "tabs":
             tab = {"type": "page", "url": URL, "targetId": RAW, "tabId": "t1"}
-            tabs = [tab]
+            hide_bound = (self.hide_bound_once_after_reader and self.reader_tab is not None
+                          and self.hidden_bound_inventory_count == 0)
+            tabs = [] if hide_bound else [tab]
+            if hide_bound:
+                self.hidden_bound_inventory_count += 1
             if self.duplicate:
                 tabs.append({**tab, "targetId": "D" * 32})
             if self.reader_tab is not None:
@@ -365,6 +372,16 @@ class NativeTransportTests(unittest.TestCase):
                 transport.run(MESSAGE)
             self.assertEqual(transport.submissions, 0)
 
+    def test_transient_bound_tab_omission_after_reader_activation_is_retried(self):
+        self.transport.hide_bound_once_after_reader = True
+        with patch("dev_chatgpt_native_transport.time.sleep", return_value=None):
+            observed = self.transport.run(MESSAGE)
+        self.assertEqual(observed["assistantText"], FINAL)
+        self.assertEqual(self.transport.hidden_bound_inventory_count, 1)
+        self.assertEqual(self.transport.submissions, 1)
+        self.assertGreaterEqual(
+            sum(1 for action, _ in self.transport.calls if action == "tabs"), 3)
+
     def test_unknown_native_send_is_not_replayed(self):
         self.transport.send_fails = True
         with self.assertRaisesRegex(RuntimeError, "uncertain Send"):
@@ -389,6 +406,19 @@ class NativeTransportTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaises(RuntimeError):
                 self.transport.run(message)
         self.assertEqual(self.transport.calls, [])
+
+    def test_openclaw_runtime_override_requires_node_and_entry_together(self):
+        with patch.dict("os.environ", {
+            "AI_CORE_OPENCLAW_NODE": r"C:\Program Files\nodejs\node.exe",
+            "AI_CORE_OPENCLAW_ENTRY": r"C:\Users\fixture\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs",
+        }, clear=False):
+            node, entry = openclaw_runtime_paths(r"C:\Users\fixture\AppData\Local")
+        self.assertEqual(str(node), r"C:\Program Files\nodejs\node.exe")
+        self.assertEqual(str(entry), r"C:\Users\fixture\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs")
+
+        with patch.dict("os.environ", {"AI_CORE_OPENCLAW_NODE": r"C:\node.exe", "AI_CORE_OPENCLAW_ENTRY": ""}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "provide node and entry together"):
+                openclaw_runtime_paths(r"C:\Users\fixture\AppData\Local")
 
     def test_request_url_is_a_direct_node_argument_not_shell_text(self):
         self.transport._runtime()

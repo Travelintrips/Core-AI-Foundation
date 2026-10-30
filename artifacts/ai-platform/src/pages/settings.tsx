@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import HandshakeSopSettings from "@/components/HandshakeSopSettings";
 import { useListSettings } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { preflightPchpEncryption, encryptPchpWorkerToken, downloadEncryptedPchpCredential } from "@/lib/pchp-token-transport";
 
 const ADMIN_KEY = import.meta.env["VITE_ADMIN_API_KEY"] as string | undefined;
 
@@ -233,9 +235,73 @@ function ProviderAlertSettings() {
 }
 
 
+function DevPingTestPanel() {
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState("");
+  const isDev = typeof window !== "undefined" && window.location.hostname === "dev.cstlogistic.co.id";
+
+  async function sendPing() {
+    if (!isDev || pending) return;
+    if (!window.confirm("Send one read-only PING to openclaw-pc-worker on AI Core DEV?")) return;
+    setPending(true);
+    setResult("");
+    try {
+      const externalCommandId = "dev-pchp-ping-" + crypto.randomUUID();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (ADMIN_KEY) headers["x-admin-api-key"] = ADMIN_KEY;
+      const response = await fetch("/api/ai/coding/bridge/commands", {
+        method: "POST",
+        credentials: "same-origin",
+        headers,
+        body: JSON.stringify({
+          externalCommandId,
+          instruction: "PING",
+          source: "chatgpt-dev-test",
+          commandType: "EXTERNAL_AGENT_WORK",
+          assignedClientId: "openclaw-pc-worker",
+          metadata: { diagnostic: true, environment: "DEV", noProd: true },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setResult("HTTP " + response.status + ": " + (payload.error ?? "Request rejected"));
+        return;
+      }
+      const commandId = payload.command?.id ?? payload.commandId;
+      setResult("Queued: " + (commandId ?? externalCommandId) + ". Check PC HP bridge for callback_persisted.");
+    } catch (error) {
+      setResult("Request failed: " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (!isDev) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>DEV PC Worker PING Test</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">Submit one PING to openclaw-pc-worker. DEV only; does not run shell commands or modify PROD.</p>
+        <Button disabled={pending} onClick={() => void sendPing()}>
+          {pending ? "Sending..." : "Test PING DEV"}
+        </Button>
+        {result && <p role="status" className="text-sm font-mono break-all">{result}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AgentCredentialsPanel() {
   const [items, setItems] = useState<Array<{ id: string; name: string; scopes: string[]; isActive: boolean }>>([]);
   const [issued, setIssued] = useState("");
+  // Retain only the encrypted ciphertext in this page session for a direct user-initiated retry.
+  const [encryptedPchpDownload, setEncryptedPchpDownload] = useState("");
+  const [pchpTest, setPchpTest] = useState<{
+    commandId: string; correlationId: string; clientId: string; status: string;
+    callbackReceived: boolean; assistantReplyVerified: boolean;
+  } | null>(null);
+  const [pchpTestError, setPchpTestError] = useState("");
+  const [pchpTestBusy, setPchpTestBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -260,22 +326,109 @@ function AgentCredentialsPanel() {
       setRefreshing(false);
     }
   }
-  async function issue(name: "openclaw-pc-worker-3" | "openclaw-pc-worker-dev" | "openclaw-travelintrips-dev" | "openclaw-vps-dev-consumer" | "openclaw-dell-chatgpt-wake-dev") {
-    setLoading(true); setError(""); setIssued("");
+  async function issue(name: "openclaw-pc-worker-3" | "openclaw-pc-worker-dev" | "openclaw-travelintrips-dev" | "openclaw-vps-dev-consumer" | "openclaw-dell-chatgpt-wake-dev" | "openclaw-pchp-dev") {
+    setLoading(true); setError(""); setIssued(""); setEncryptedPchpDownload("");
     try {
+      // Validate encrypted delivery BEFORE issuing a one-time worker secret.
+      if (name === "openclaw-pchp-dev") await preflightPchpEncryption();
       const response = await fetch("/api/ai/agent-runtime/credentials", {
         method: "POST", headers, credentials: "same-origin",
-        body: JSON.stringify({ name, scopes: (name === "openclaw-vps-dev-consumer" || name === "openclaw-pc-worker-dev" || name === "openclaw-travelintrips-dev") ? ["agent:presence", "agent:work"] : ["agent:presence", "agent:work", "model:chat"] }),
+        body: JSON.stringify({ name, scopes: (name === "openclaw-vps-dev-consumer" || name === "openclaw-pc-worker-dev" || name === "openclaw-travelintrips-dev" || name === "openclaw-pchp-dev") ? ["agent:presence", "agent:work"] : ["agent:presence", "agent:work", "model:chat"] }),
       });
       if (!response.ok) throw new Error("Issuing credential failed (" + response.status + ")");
       const body = await response.json();
-      setIssued(body.token);
+      if (name === "openclaw-pchp-dev") {
+        const encrypted = await encryptPchpWorkerToken(body.token);
+        setEncryptedPchpDownload(encrypted);
+        // Best-effort automatic download; browser may block downloads after an async request.
+        // The manual button below uses a fresh user gesture, without exposing plaintext.
+        try { downloadEncryptedPchpCredential(encrypted); } catch {
+          setError("Automatic PCHP download was blocked. Use the manual encrypted download button below.");
+        }
+      } else {
+        setIssued(body.token);
+      }
       await refresh();
     } catch (err) { setError(String(err)); } finally { setLoading(false); }
   }
+  async function startPchpSopTest() {
+    if (pchpTestBusy || pchpTest) return;
+    setPchpTestBusy(true);
+    setPchpTestError("");
+    try {
+      if (window.location.hostname !== "dev.cstlogistic.co.id") throw new Error("Uji hanya tersedia di AI Core DEV");
+      const correlationId = "ai-task:HS_PCHP_20261025:5:" + crypto.randomUUID().replaceAll("-", "");
+      const response = await fetch("/api/ai/coding/bridge/ai-task-chatgpt-dispatch", {
+        method: "POST", credentials: "same-origin", headers, cache: "no-store",
+        body: JSON.stringify({
+          accountAlias: "GPT02",
+          targetWorkerId: "openclaw-pchp-dev",
+          jobAlias: "HS_PCHP_20261025",
+          correlationId,
+          instruction: "Uji Handshake SOP HS-PCHP-20261025 melalui AI Core DEV dan OpenClaw PCHP. Balas pada percakapan GPT02 dengan SOP_PCHP_E2E_ACK_20261025 dan satu kalimat SOP Resource-First, Human-Last. Jangan mengubah data, konfigurasi, atau melakukan deployment.",
+        }),
+      });
+      const body: unknown = await response.json().catch(() => null);
+      const reply = body && typeof body === "object" ? body as Record<string, unknown> : {};
+      if (!response.ok) throw new Error("Pengiriman uji gagal (HTTP " + response.status + "): " + String(reply.error ?? "Unknown error"));
+      if (reply.clientId !== "openclaw-pchp-dev" || typeof reply.commandId !== "string" ||
+          reply.correlationId !== correlationId) throw new Error("Worker PCHP tidak terkonfirmasi; uji tidak boleh dinyatakan PASS");
+      setPchpTest({
+        commandId: reply.commandId, correlationId, clientId: reply.clientId,
+        status: "QUEUED", callbackReceived: false, assistantReplyVerified: false,
+      });
+    } catch (err) {
+      setPchpTestError(String(err));
+    } finally {
+      setPchpTestBusy(false);
+    }
+  }
+  async function checkPchpSopTest() {
+    if (!pchpTest || pchpTestBusy) return;
+    setPchpTestBusy(true);
+    setPchpTestError("");
+    try {
+      const query = new URLSearchParams({
+        commandId: pchpTest.commandId, correlationId: pchpTest.correlationId,
+      });
+      const response = await fetch("/api/ai/coding/bridge/ai-task-chatgpt-timeline?" + query, {
+        credentials: "same-origin", headers, cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Pemeriksaan callback gagal (HTTP " + response.status + ")");
+      const body: unknown = await response.json();
+      if (!body || typeof body !== "object") throw new Error("Respons timeline tidak valid");
+      const timeline = body as Record<string, unknown>;
+      const metadata = timeline.commandMetadata as Record<string, unknown> | null;
+      if (timeline.commandId !== pchpTest.commandId || metadata?.assignedClientId !== "openclaw-pchp-dev" ||
+          metadata?.targetConversationId !== "6ada4099-af8c-83ec-9fed-8626d3ac9617") {
+        throw new Error("Binding percakapan atau worker tidak cocok; verifikasi ditolak");
+      }
+      const responses = Array.isArray(timeline.responses) ? timeline.responses : [];
+      const completed = responses.filter((r: unknown) =>
+        r && typeof r === "object" && (r as Record<string, unknown>).kind === "COMPLETED"
+      );
+      const attested = completed.some((r: unknown) => {
+        const item = r as Record<string, unknown>;
+        const evidence = item.metadata as Record<string, unknown> | null;
+        return evidence?.chatgptSubmitted === true &&
+          evidence?.verifiedAssistantReply === true &&
+          typeof item.message === "string" && item.message.includes("SOP_PCHP_E2E_ACK_20261025");
+      });
+      setPchpTest({
+        ...pchpTest,
+        status: typeof timeline.status === "string" ? timeline.status : "UNKNOWN",
+        callbackReceived: completed.length > 0,
+        assistantReplyVerified: attested,
+      });
+    } catch (err) {
+      setPchpTestError(String(err));
+    } finally {
+      setPchpTestBusy(false);
+    }
+  }
   async function revoke(id: string) {
     if (!window.confirm("Revoke this worker credential? Running workers using it will disconnect.")) return;
-    setLoading(true); setError(""); setIssued("");
+    setLoading(true); setError(""); setIssued(""); setEncryptedPchpDownload("");
     try {
       const response = await fetch("/api/ai/agent-runtime/credentials/" + encodeURIComponent(id) + "/revoke", {
         method: "POST", headers, credentials: "same-origin",
@@ -288,8 +441,32 @@ function AgentCredentialsPanel() {
     <Card>
       <CardHeader><CardTitle>Agent Credentials</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">Issue a scoped credential for PC Worker DEV, Travelintrips DEV, PC Worker 3, the isolated VPS DEV consumer, or the DELL ChatGPT wake worker. Secrets are displayed only once; store in approved secret management.</p>
-        <div className="flex gap-2">
+        <div className="space-y-3 rounded-md border p-4">
+          <p className="text-sm font-semibold">Uji Handshake SOP PCHP — tanpa Console</p>
+          <p className="text-sm text-muted-foreground">
+            Uji satu kali dari sesi admin ini. Target dikunci ke OpenClaw PCHP dan percakapan GPT02 DEV;
+            hasil antrean saja bukan bukti balasan ChatGPT.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => void startPchpSopTest()} disabled={pchpTestBusy || !!pchpTest}>
+              {pchpTestBusy && !pchpTest ? "Mengirim uji…" : "Jalankan Uji SOP PCHP"}
+            </Button>
+            {pchpTest && <Button type="button" variant="outline" onClick={() => void checkPchpSopTest()} disabled={pchpTestBusy}>
+              {pchpTestBusy ? "Memeriksa…" : "Periksa balasan SOP"}
+            </Button>}
+          </div>
+          {pchpTest && <div role="status" className="space-y-1 text-sm">
+            <p>Worker: <strong>{pchpTest.clientId}</strong></p>
+            <p>Command ID: <span className="break-all">{pchpTest.commandId}</span></p>
+            <p>Status pekerjaan: {pchpTest.status}</p>
+            <p>Callback tersimpan: {pchpTest.callbackReceived ? "Ya" : "Belum diverifikasi"}</p>
+            <p>Balasan ChatGPT terverifikasi: <strong>{pchpTest.assistantReplyVerified ? "PASS" : "BELUM PASS"}</strong></p>
+          </div>}
+          {pchpTestError && <p role="alert" className="text-sm text-destructive">{pchpTestError}</p>}
+        </div>
+        <p className="text-sm text-muted-foreground">Issue a scoped credential for PCHP DEV, PC Worker DEV, Travelintrips DEV, PC Worker 3, the isolated VPS DEV consumer, or the DELL ChatGPT wake worker. Secrets are displayed only once; store in approved secret management.</p>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3 [&>button]:h-auto [&>button]:min-h-12 [&>button]:w-full [&>button]:whitespace-normal [&>button]:px-4 [&>button]:py-3 [&>button]:text-center [&>button]:text-sm">
+          <Button className="col-span-full" onClick={() => void issue("openclaw-pchp-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pchp-dev" && item.isActive)}>Issue PCHP Wake DEV (encrypted)</Button>
           <Button onClick={() => void issue("openclaw-pc-worker-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-dev" && item.isActive)}>Issue PC DEV credential</Button>
           <Button onClick={() => void issue("openclaw-travelintrips-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-travelintrips-dev" && item.isActive)}>Issue Travelintrips DEV credential</Button>
           <Button onClick={() => void issue("openclaw-pc-worker-3")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-pc-worker-3" && item.isActive)}>Issue Worker 3 credential</Button>
@@ -297,6 +474,12 @@ function AgentCredentialsPanel() {
           <Button onClick={() => void issue("openclaw-dell-chatgpt-wake-dev")} disabled={loading || refreshing || items.some(item => item.name === "openclaw-dell-chatgpt-wake-dev" && item.isActive)}>Issue DELL Wake DEV credential</Button>
           <Button variant="outline" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh credentials"}</Button>
         </div>
+        {encryptedPchpDownload && (
+          <div role="status" className="space-y-2 rounded-md border p-3">
+            <p className="text-sm">PCHP DEV credential issued and encrypted. The plaintext is intentionally not shown. If the automatic download did not appear, download the encrypted file directly here before leaving this page.</p>
+            <Button type="button" variant="outline" onClick={() => downloadEncryptedPchpCredential(encryptedPchpDownload)}>Download PCHP encrypted credential (.b64)</Button>
+          </div>
+        )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {lastRefresh && !error && <p role="status" className="text-sm text-muted-foreground">Credentials refreshed at {lastRefresh}. {items.length} credential(s) found.</p>}
         {issued && <div className="space-y-2"><Label htmlFor="issued-worker-token">One-time token (store securely; do not send via chat)</Label><Input id="issued-worker-token" value={issued} readOnly autoComplete="off" /><Button variant="outline" onClick={() => setIssued("")}>Hide token</Button></div>}
@@ -341,6 +524,8 @@ export default function Settings() {
 
       {/* Provider Health Alert config */}
       <AgentCredentialsPanel />
+      <DevPingTestPanel />
+      <HandshakeSopSettings />
       <ProviderAlertSettings />
 
       <div className="space-y-8">

@@ -1,10 +1,14 @@
 import {
   DEV_WAKE_DELL_WORKER,
+  DEV_WAKE_DEFAULT_WORKER,
+  DEV_WAKE_PCHP_WORKER,
+  DEV_WAKE_PC2_WORKER,
+  DEV_WAKE_VMSC_WORKER,
   DEV_WAKE_BROWSER_PROFILE,
   devWakeBindingFingerprint,
   parseDevWakeAccountBindings,
-  type DevWakeBinding,
   type DevWakeTarget,
+  type DevWakeWorker,
 } from "./devChatGptWakeBindingService.js";
 
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
@@ -14,7 +18,7 @@ type StoredBindingRow = {
   accountAlias: string;
   ownerChannel: string;
   targetConversationId: string;
-  workerId: typeof DEV_WAKE_DELL_WORKER;
+  workerId: DevWakeWorker;
   browserProfile: string;
   enabled: boolean;
 };
@@ -64,13 +68,14 @@ export type StageDevChatGptAccountInput = {
   ownerChannel: string;
   targetConversationId: string;
   browserProfile?: string;
+  workerId?: DevWakeWorker;
 };
 
 export type StageDevChatGptAccountResult = {
   accountAlias: string;
   ownerChannel: string;
   targetConversationId: string;
-  workerId: typeof DEV_WAKE_DELL_WORKER;
+  workerId: DevWakeWorker;
   browserProfile: string;
   bindingFingerprint: string;
   enabled: false;
@@ -90,8 +95,12 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
 
   const existingByOwner = registry.bindings.find((row) => row.ownerChannel === ownerChannel);
   const accountAlias = normalizeAlias(input.accountAlias ?? existingByOwner?.accountAlias, registry);
+  const workerId = input.workerId ?? existingByOwner?.workerId ?? DEV_WAKE_DELL_WORKER;
+  if (workerId !== DEV_WAKE_DELL_WORKER && workerId !== DEV_WAKE_DEFAULT_WORKER && workerId !== DEV_WAKE_PCHP_WORKER && workerId !== DEV_WAKE_PC2_WORKER && workerId !== DEV_WAKE_VMSC_WORKER) {
+    throw new Error("DEV_CHATGPT_PROVISIONING_WORKER_INVALID");
+  }
   const browserProfile = (input.browserProfile?.trim() || existingByOwner?.browserProfile || ("openclaw-" + accountAlias.toLowerCase()));
-  if (!DEV_WAKE_BROWSER_PROFILE.test(browserProfile) || browserProfile.toLowerCase() === "openclaw") {
+  if (!DEV_WAKE_BROWSER_PROFILE.test(browserProfile) || (browserProfile.toLowerCase() === "openclaw" && workerId !== DEV_WAKE_PCHP_WORKER)) {
     throw new Error("DEV_CHATGPT_PROVISIONING_PROFILE_INVALID");
   }
 
@@ -99,7 +108,7 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     row.accountAlias === accountAlias &&
     row.ownerChannel === ownerChannel &&
     row.targetConversationId === targetConversationId &&
-    row.workerId === DEV_WAKE_DELL_WORKER &&
+    row.workerId === workerId &&
     row.browserProfile === browserProfile
   );
 
@@ -109,7 +118,7 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
       accountAlias,
       ownerChannel,
       targetConversationId,
-      workerId: DEV_WAKE_DELL_WORKER,
+      workerId,
       browserProfile,
     };
     return {
@@ -121,23 +130,29 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     };
   }
 
-  const next: BindingRegistry = {
-    version: 1,
-    bindings: [
-      ...registry.bindings,
-      {
-        accountAlias,
-        ownerChannel,
-        targetConversationId,
-        workerId: DEV_WAKE_DELL_WORKER,
-        browserProfile,
-        enabled: false,
-      },
-    ],
+  const replacement = {
+    accountAlias,
+    ownerChannel,
+    targetConversationId,
+    workerId,
+    browserProfile,
+    enabled: false,
   };
+  // Re-provisioning the same target moves that session, preserving migration
+  // semantics. A different target gets its own disabled session without
+  // disabling the existing DELL account binding.
+  const existingIdentityIndex = registry.bindings.findIndex((row) =>
+    row.targetConversationId === targetConversationId ||
+    (row.accountAlias === accountAlias && row.ownerChannel === ownerChannel &&
+      row.workerId === workerId && row.browserProfile === browserProfile)
+  );
+  const nextBindings = [...registry.bindings];
+  if (existingIdentityIndex >= 0) nextBindings[existingIdentityIndex] = replacement;
+  else nextBindings.push(replacement);
+  const next: BindingRegistry = { version: 1, bindings: nextBindings };
 
-  // Reuse the canonical validator so aliases, owners, conversations and Windows
-  // profile names cannot collide with GPT01 or another staged/active account.
+  // Every session is independently revalidated; a new target does not
+  // replace an already activated session for the same account.
   parseDevWakeAccountBindings(JSON.stringify(next), legacyTargets);
 
   const tuple = {
@@ -145,16 +160,12 @@ export function stageDevChatGptAccountBinding(input: StageDevChatGptAccountInput
     accountAlias,
     ownerChannel,
     targetConversationId,
-    workerId: DEV_WAKE_DELL_WORKER,
+    workerId,
     browserProfile,
   };
-  const binding: DevWakeBinding = {
+  return {
     ...tuple,
     bindingFingerprint: devWakeBindingFingerprint(tuple),
-  };
-
-  return {
-    ...binding,
     enabled: false,
     registryJson: JSON.stringify(next),
     alreadyStaged: false,

@@ -1,3 +1,4 @@
+import { readHandshakeSopSettings } from "../services/handshakeSopSettingsService.js";
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
@@ -6,6 +7,7 @@ import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
+import { readCodingBridgeSubscriptionHealth } from "../services/codingBridgeSubscriptionDiagnostics.js";
 import {
   classifyAiCoreChatDispatch,
   isSafeDirectOpenClawPcCommand,
@@ -1168,6 +1170,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         : null;
       payload = {
         protocol: "ai-core-communication/v1",
+        operationalSop: (await readHandshakeSopSettings()).operationalSop,
         authenticated: true,
         handshakeId,
         handshakeAck: { received: true, handshakeId, source: "ai_core_mcp_server" },
@@ -1580,8 +1583,14 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         conversationId: parsed.conversationId,
         instruction: command.instruction,
         payload,
-      }).catch(() => {
+      }).catch((eventError: unknown) => {
         // Preserve the completed command result so clients do not retry execution.
+        // Never log command contents or credentials.
+        req.log?.error?.({
+          errorName: eventError instanceof Error ? eventError.name : "UnknownError",
+          conversationBound: Boolean(parsed.conversationId),
+          eventStage: "mcp_terminal_result_persistence",
+        }, "[mcp-events] durable result persistence failed");
         payload = { ...(payload as Record<string, unknown>), eventDeliveryError: "The command returned, but its durable event could not be saved." };
       });
     } else if (params.name === "get_ai_core_task_progress") {
@@ -1691,7 +1700,18 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const parsed = eventChannelArgs(identity, ReadEventsArgs.parse(params.arguments ?? {}));
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
-      const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
+      // Filter lifecycle rows IN the owner-scoped query before applying LIMIT.
+      // Otherwise a large backlog of worker ACKs can starve real terminal
+      // results and indefinitely block a ChatGPT-side Final ACK.
+      const rows = await listPendingCodingBridgeResponsesForConversation({
+        ...parsed, lifecycleOnly: true,
+      });
+      const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
+        state: "UNAVAILABLE" as const,
+        renewalRequired: false,
+        expiresAt: null,
+        pendingCount: null,
+      }));
       let devEvents: unknown[] = [];
       if (identity.kind === "oauth" && devRelayEnabled()) {
         try {
@@ -1704,6 +1724,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId).catch(() => null);
       payload = {
         conversationId: parsed.conversationId,
+        subscription,
+        ...(subscription.renewalRequired ? { advisory: "SUBSCRIPTION_EXPIRED_OR_INACTIVE: authenticate via MCP and explicitly call subscribe_ai_core_events; pending events are preserved. Reading does not renew a lease or authorize an ACK." } : {}),
         handshakeEvidence,
         events: [...rows
           .map((row) => ({

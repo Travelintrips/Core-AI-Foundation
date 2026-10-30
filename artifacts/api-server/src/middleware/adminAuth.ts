@@ -62,6 +62,14 @@ function hasValidAiCoreConnectorKey(req: Request): boolean {
   return isAllowedLocalMcpServiceToken(supplied);
 }
 
+function normalizedApiPath(req: Request): string {
+  const originalUrl = typeof req.originalUrl === "string" && req.originalUrl.length
+    ? req.originalUrl
+    : req.path;
+  const originalPath = originalUrl.split("?", 1)[0] ?? originalUrl;
+  return originalPath.startsWith("/api/") ? originalPath.slice(4) : originalPath;
+}
+
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   // Short-circuit: already authenticated (e.g. by optionalSessionAuth upstream)
   if ((req as unknown as Record<string, unknown>).internalUser) {
@@ -274,11 +282,21 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
-  // This exact DEV-only route authenticates OAuth and enforces owner/allowlist
-  // inside its handler. Never let the global admin API-key gate consume its
-  // Bearer OAuth token; do not relax any other admin-protected endpoint.
-  if (process.env["APP_ENV"] === "development" &&
-      req.method === "POST" && req.path === "/ai/dev/chatgpt-wake/jobs") {
+  // DEV-only worker routes own their authentication at route level.
+  // The ChatGPT session registration routes require a DB-backed scoped agent
+  // token with agent:work and bind that credential to the exact workerId.
+  // Skip only the global admin-key guard so it does not consume the worker
+  // Bearer token before requireAgentServiceScope() can validate it.
+  const mountedPath = req.path;
+  const normalizedPath = normalizedApiPath(req);
+  const devScopedWorkerRoutes = new Set([
+    "/ai/dev/chatgpt-wake/jobs",
+    "/ai/core-chat/dev/accounts/stage",
+    "/ai/core-chat/dev/accounts/session/challenge",
+    "/ai/core-chat/dev/accounts/session/activate",
+  ]);
+  if (process.env["APP_ENV"] === "development" && req.method === "POST" &&
+      (devScopedWorkerRoutes.has(mountedPath) || devScopedWorkerRoutes.has(normalizedPath))) {
     next();
     return;
   }

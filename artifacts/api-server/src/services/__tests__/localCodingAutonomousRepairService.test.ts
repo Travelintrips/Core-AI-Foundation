@@ -86,6 +86,42 @@ vi.mock("../codingConflictRegistryService.js", () => ({
   })),
 }));
 
+describe("DEV autonomous direct-cycle allowlist", () => {
+  it("blocks another task before database or schema operations", async () => {
+    const previous = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"];
+    try {
+      process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"] = "bed2b0b6-3b9d-4241-b70f-ef56f7d7e729";
+      mockDbExecute.mockClear();
+      const { ensureCodingControlBridgeTables } = await import("../codingControlBridgeSchemaService.js");
+      vi.mocked(ensureCodingControlBridgeTables).mockClear();
+      const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+      expect(await runAutonomousCodingCycle("2d5dcda1-dfa3-404c-a7b2-02e1aacbab68")).toMatchObject({
+        status: "BLOCKED", action: "TASK_NOT_ALLOWLISTED",
+      });
+      expect(mockDbExecute).not.toHaveBeenCalled();
+      expect(ensureCodingControlBridgeTables).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"];
+      else process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"] = previous;
+    }
+  });
+  it("fails closed on a malformed task allowlist", async () => {
+    const previous = process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"];
+    try {
+      process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"] = "invalid";
+      mockDbExecute.mockClear();
+      const { runAutonomousCodingCycle } = await import("../localCodingAutonomousRepairService.js");
+      expect(await runAutonomousCodingCycle("bed2b0b6-3b9d-4241-b70f-ef56f7d7e729")).toMatchObject({
+        status: "BLOCKED", action: "TASK_NOT_ALLOWLISTED",
+      });
+      expect(mockDbExecute).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"];
+      else process.env["AI_CODING_AUTONOMOUS_ONLY_TASK_ID"] = previous;
+    }
+  });
+});
+
 describe("autonomous runtime self-heal policy", () => {
   it("attempts recovery only when configured, stopped, and outside cooldown", async () => {
     const { autonomousRuntimeSelfHealDecision } = await import(
@@ -1109,8 +1145,11 @@ describe("autonomous terminal task status", () => {
     const missingEvidenceStart = source.indexOf('state.nextAction === "DONE" && !completionVerified');
     const missingEvidenceEnd = source.indexOf("if (state.activeRun)", missingEvidenceStart);
     const missingEvidenceBlock = source.slice(missingEvidenceStart, missingEvidenceEnd);
-    expect(missingEvidenceBlock).toContain('status: "BLOCKED"');
-    expect(missingEvidenceBlock).not.toContain('status: "READY_REVIEW"');
+    // Coding tasks have no BLOCKED status in the database CHECK constraint.
+    // The autonomous record must retain the BLOCKED safety gate.
+    expect(missingEvidenceBlock).toContain('.set({ status: "READY_REVIEW", resultSummary: message })');
+    expect(missingEvidenceBlock).toContain('setState(taskId, "BLOCKED", "COMPLETION_EVIDENCE_MISSING"');
+    expect(missingEvidenceBlock).toContain('return { taskId, status: "BLOCKED", action: "COMPLETION_EVIDENCE_MISSING" }');
   });
 });
 
