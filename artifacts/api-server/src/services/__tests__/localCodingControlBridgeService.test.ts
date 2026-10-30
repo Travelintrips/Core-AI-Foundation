@@ -191,3 +191,21 @@ describe("callback PROCESSING visibility", () => {
     expect(classifyCallbackProcessingState({ status: "CANCELLED" })).toBe("FAILED");
   });
 });
+
+describe("durable reconciliation claim gate", () => {
+  it("excludes reconciliation-required commands before expired-lease reclaim", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(
+      new URL("../localCodingControlBridgeService.ts", import.meta.url), "utf8",
+    );
+    const start = source.indexOf("export async function claimCodingBridgeCommand(");
+    const end = source.indexOf("export async function renewCodingBridgeCommandClaim(", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const claim = source.slice(start, end);
+    expect(claim).toContain("COALESCE(metadata_json ->> 'reconciliationRequired', 'false') <> 'true'");
+    expect(claim).toContain("status = 'RECEIVED'");
+    expect(claim).toContain("status = 'PROCESSING'");
+    expect(claim.indexOf("reconciliationRequired")).toBeLessThan(claim.indexOf("status = 'RECEIVED'"));
+  });
+});
