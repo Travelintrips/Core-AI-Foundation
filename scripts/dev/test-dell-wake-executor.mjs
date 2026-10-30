@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { bindingFingerprint, assistantChallenge, localBindings, resolveWorkBinding, execute, workerId,
@@ -17,7 +20,7 @@ const legacy = {
 };
 const binding = {
   version: 1, accountAlias: "GPT02", ownerChannel: ownerTwo, targetConversationId: conversationTwo,
-  workerId, browserProfile: "travelincars-dev",
+  workerId, browserProfile: "gpt02-dell-dev",
 };
 binding.bindingFingerprint = bindingFingerprint(binding);
 
@@ -178,7 +181,7 @@ test("disabled, changed, malformed and conflicting local registry is fail-closed
     configurations.push(config);
   }
   const duplicate = pairings();
-  duplicate.bindings.push({ ...binding, accountAlias: "GPT03", ownerChannel: "ai-engine-oauth:" + "e".repeat(64),
+  duplicate.bindings.push({ ...binding, accountAlias: "GPT03", ownerChannel: ownerTwo,
     targetConversationId: "33333333-3333-4333-8333-333333333333", browserProfile: "TRAVELINCARS-DEV", enabled: false });
   delete duplicate.bindings[1].bindingFingerprint;
   configurations.push(duplicate, { ...pairings(), bindings: {} });
@@ -188,8 +191,8 @@ test("disabled, changed, malformed and conflicting local registry is fail-closed
     invalid.bindings[0][field] += "\n";
     configurations.push(invalid);
   }
-  for (const config of configurations) {
-    assert.throws(() => resolveWorkBinding(work(), config));
+  for (const [index, config] of configurations.entries()) {
+    assert.throws(() => resolveWorkBinding(work(), config), undefined, "invalid_registry_case_" + index);
   }
   const aliasConflict = pairings();
   aliasConflict.bindings[0].accountAlias = "GPT01";
@@ -351,8 +354,11 @@ function committedFor(job, payload) {
       metadataJson: { ...JSON.parse(JSON.stringify(payload.details)), ...evidence } } };
 }
 
+const testTempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gpt02-dell-bound-tests-"));
+process.once("exit", () => fs.rmSync(testTempRoot, { recursive: true, force: true }));
+
 function boundRuntime(clock, child, http, presence = async () => ({})) {
-  return { ...runtime(() => assert.fail("Bound jobs must not use spawnSync")),
+  return { ...runtime(() => assert.fail("Bound jobs must not use spawnSync")), root: testTempRoot,
     spawnBound: (python, args, options) => {
       assert.deepEqual(args, ["/test-only/helper.py", "--bound-lease-v1"]);
       child.options = options;

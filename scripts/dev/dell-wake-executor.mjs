@@ -656,6 +656,12 @@ async function deliverBoundAnswer(work, runtime, lease, answer) {
       }
       // A concurrent renew409 can follow this exact transaction's commit.
       // Only its matching durable response resolves that ambiguity.
+      // Durable proof only after exact server receipt verification. No response text or credentials.
+      const stageRecord = JSON.stringify({stage: "RESULT_DELIVERED", commandId: work.commandId,
+        workerId, responseId: committed.response.id, at: new Date().toISOString()}) + "\n";
+      const auditFd = fs.openSync(path.join(runtime.root, "dell-wake-delivery-evidence.jsonl"), "a", 0o600);
+      try { fs.writeSync(auditFd, stageRecord); fs.fsyncSync(auditFd); }
+      finally { fs.closeSync(auditFd); }
       lease.stop();
       return true;
     } catch (error) {
@@ -692,6 +698,16 @@ export async function executeBoundClaim(work, runtime) {
         return { delivered: false, reconciliationRequired: true, reason: "helper_termination_unconfirmed" };
       }
       answer = executionAnswer(context, run);
+    if (!answer.ok) {
+      const reason = String(answer.details?.reason || 'browser_verification_failed')
+        .replace(/[^A-Za-z0-9_:\-]/g, '_').slice(0, 100);
+      const diagnostic = { commandId: work.commandId, at: new Date().toISOString(),
+        exitCode: Number.isInteger(run.status) ? run.status : null,
+        reasonCode: reason, terminationConfirmed: run.terminationConfirmed === true,
+        cancelReason: typeof run.cancelReason === 'string' ? run.cancelReason.slice(0, 80) : null };
+      fs.appendFileSync(path.join(runtime.root, 'dell-wake-failure-diagnostics.jsonl'),
+        JSON.stringify(diagnostic) + String.fromCharCode(10), { encoding: 'utf8', mode: 0o600 });
+    }
       if (run.cancelReason) {
         answer.ok = false;
         answer.message = run.cancelReason;
@@ -709,6 +725,20 @@ export async function executeBoundClaim(work, runtime) {
 
 export async function runWorker() {
   const runtime = loadRuntime();
+  const reconciliationMarker = path.join(runtime.root, 'dell-wake-reconciliation-required.json');
+  const auditLog = path.join(runtime.root, 'dell-wake-reconciliation-audit.jsonl');
+  function recordIncident(work, reason) {
+    const event = {commandId: work.commandId, workerId, reason,
+      recordedAt: new Date().toISOString(), status: "RECONCILIATION_REQUIRED"};
+    fs.appendFileSync(auditLog, JSON.stringify(event) + "\n", { encoding: "utf8" });
+    if (!fs.existsSync(reconciliationMarker)) {
+      fs.writeFileSync(reconciliationMarker, JSON.stringify(event, null, 2) + "\n", {flag: "wx"});
+    }
+  }
+  if (fs.existsSync(reconciliationMarker)) {
+    console.error('RECONCILIATION_REQUIRED: executor will not claim work until the incident is reviewed');
+    return;
+  }
   while (true) {
     try {
       await request(runtime, "/ai/agent-runtime/presence/" + encodeURIComponent(workerId) + "/heartbeat",
@@ -720,8 +750,8 @@ export async function runWorker() {
           if (outcome.delivered) console.log("reported command " + work.commandId);
           else {
             console.log("UNDELIVERED " + work.commandId + " reconciliation required");
-            // A result/termination ambiguity must not become another claim or
-            // a replay of native input. Preserve evidence and stop this loop.
+            // Persist incident independently of process lifetime; never replay uncertain input.
+            recordIncident(work, outcome.reason || "result_delivery_unconfirmed");
             return;
           }
         } else {
@@ -745,7 +775,11 @@ export async function runWorker() {
               if (attempt < 8) await new Promise(resolve => setTimeout(resolve, Math.min(attempt * 2500, 15_000)));
             }
           }
-          if (!delivered) console.log("UNDELIVERED " + work.commandId);
+          if (!delivered) {
+  console.log("UNDELIVERED " + work.commandId + " reconciliation required");
+  recordIncident(work, "generic_result_delivery_unconfirmed");
+  return;
+}
           else console.log("reported command " + work.commandId);
         }
       }
