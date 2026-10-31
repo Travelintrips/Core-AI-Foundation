@@ -175,10 +175,17 @@ export async function mirrorAiTaskLedgerSourceState(input: AiTaskLedgerJobInput 
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (response.status !== 200 && response.status !== 202) {
+      // HTTP status is safe to log; never expose token, URL, or response body.
+      logger.warn({ externalId: input.externalId, sourceStatus: input.status, httpStatus: response.status },
+        "[ai-task-ledger] source event rejected by receiver");
       return { synced: false, reason: "remote_error" };
     }
     const body = await response.json() as Record<string, unknown>;
-    if (body["accepted"] !== true) return { synced: false, reason: "remote_error" };
+    if (body["accepted"] !== true) {
+      logger.warn({ externalId: input.externalId, sourceStatus: input.status, httpStatus: response.status },
+        "[ai-task-ledger] source event missing acceptance");
+      return { synced: false, reason: "remote_error" };
+    }
     const observedStatus = typeof body["status"] === "string" ? body["status"] : undefined;
     return {
       synced: true,
