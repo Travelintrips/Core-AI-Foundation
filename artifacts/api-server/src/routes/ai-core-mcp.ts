@@ -1751,7 +1751,15 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         }
       }
       if (!acknowledged) acknowledged = Boolean(await acknowledgeCodingBridgeResponseForConversation(parsed));
-      payload = { acknowledged, responseId: parsed.responseId };
+      const requestedConversationId = (params.arguments as { conversationId?: unknown } | undefined)?.conversationId;
+      payload = {
+        acknowledged,
+        responseId: parsed.responseId,
+        conversationId: parsed.conversationId,
+        ...(identity.kind === "oauth" && typeof requestedConversationId === "string" && requestedConversationId !== parsed.conversationId
+          ? { advisory: "OAUTH_CHANNEL_MISMATCH: the authenticated client does not own the requested channel; no cross-client ACK was authorized." }
+          : {}),
+      };
     } else if (params.name === "unsubscribe_ai_core_events") {
       const parsed = eventChannelArgs(identity, UnsubscribeEventsArgs.parse(params.arguments ?? {}));
       const unsubscribed = await unsubscribeCodingBridgeConversation(parsed.conversationId);
