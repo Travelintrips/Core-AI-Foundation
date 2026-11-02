@@ -532,6 +532,34 @@ describe("MCP command two-way routing", () => {
     expect(ack.params.name).toBe("ack_ai_core_event");
   });
 
+  it("never falls back to local ACK when an OAuth DEV relay declines the response", async () => {
+    const { verifyMcpAccessToken } = await import("../services/aiCoreMcpOAuthService.js");
+    vi.stubEnv("AI_CORE_DEV_RELAY_KEY", "scoped-dev-relay-".padEnd(64, "x"));
+    vi.stubEnv("AI_CORE_DEV_RELAY_URL", "https://dev-aicore.cstlogistic.co.id/api/ai/core-chat/mcp");
+    vi.stubEnv("AI_CORE_DEV_RELAY_ALLOWED_USER_IDS", "user-2");
+    vi.mocked(verifyMcpAccessToken).mockResolvedValue({
+      user: { id: "user-2" }, scopes: new Set(["ai_core.events"]),
+      clientId: "chatgpt-v2-client",
+    } as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      jsonrpc: "2.0", id: 71, result: {
+        content: [], structuredContent: { acknowledged: false }, isError: false,
+      },
+    }), { status: 200 })));
+    mocks.ack.mockResolvedValue(true);
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const response = await request(app).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer oauth-v2-test-token")
+      .send({ jsonrpc: "2.0", id: 71, method: "tools/call", params: {
+        name: "ack_ai_core_event", arguments: {
+          conversationId: "forged-channel",
+          responseId: "61b611e4-3fe1-4df6-a7fd-40678b5d50cd",
+        },
+      } });
+    expect(response.body.result.structuredContent.acknowledged).toBe(false);
+    expect(mocks.ack).not.toHaveBeenCalled();
+  });
+
   it("fails closed when a valid OAuth principal lacks explicit DEV environment authorization", async () => {
     const { verifyMcpAccessToken } = await import("../services/aiCoreMcpOAuthService.js");
     vi.stubEnv("TEST_AI_CORE_INTERNAL_BASE_URL", "http://ai-core-prod-api:3000");

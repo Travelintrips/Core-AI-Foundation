@@ -437,7 +437,9 @@ try {
     $finalStage = 'OWNER_FINAL_ACK_INSTRUCTION_SUBMITTED_ONLY'
     $finalStatus = 'SEND_INVOKED_OWNER_ACK_UNVERIFIED'
     Write-FinalAckMarker $finalStatus
-    $finalExitCode = 0
+    # Sending a prompt is not an OAuth-owner ACK. Fail closed until the
+    # legitimate owner consumer confirms the persisted server-side receipt.
+    $finalExitCode = 2
 } catch {
     $finalStatus = 'FAILED_FINAL_ACK_PRESERVE_ATTEMPT'
     $finalFailure = 'OWNER_FINAL_ACK_GUARD_OR_NATIVE_ACTION_FAILED'

@@ -1739,7 +1739,11 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           // An unavailable DEV relay never authorizes an ACK.
         }
       }
-      if (!acknowledged) acknowledged = Boolean(await acknowledgeCodingBridgeResponseForConversation(parsed));
+      // A DEV OAuth relay must fail closed. A local fallback could acknowledge
+      // a different environment and incorrectly report the DEV event as done.
+      if (!(identity.kind === "oauth" && devRelayEnabled()) && !acknowledged) {
+        acknowledged = Boolean(await acknowledgeCodingBridgeResponseForConversation(parsed));
+      }
       payload = { acknowledged, responseId: parsed.responseId };
     } else if (params.name === "unsubscribe_ai_core_events") {
       const parsed = eventChannelArgs(identity, UnsubscribeEventsArgs.parse(params.arguments ?? {}));

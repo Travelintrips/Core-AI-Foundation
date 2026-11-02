@@ -45,10 +45,15 @@ if(message.startsWith('CHATGPT_CONTINUE_JSON:')) {
    let receipt=null;
    try {receipt=JSON.parse(output.trim())}catch{}
    const verified=run.status===0 && receipt?.verifiedAssistantReply===true &&
-     receipt?.jobId===job.jobId && receipt?.conversationUrl===job.conversationUrl;
+     receipt?.jobId===job.jobId && receipt?.conversationUrl===job.conversationUrl &&
+     /^[a-f0-9]{64}$/.test(String(receipt?.fingerprint||'')) &&
+     receipt?.marker==='ACK_'+job.jobId;
+   // Browser reply is worker evidence, not an OAuth-owner MCP ACK.
+   // Never invent eventId from jobId or claim server-side owner acknowledgement.
    return {ok:verified,message:verified?'ChatGPT message and assistant reply verified for '+job.jobId:output||'ChatGPT browser acknowledgement failed',
      details:{runtime:'openclaw-pc2-browser',verifiedAssistantReply:verified,
-       conversationId,jobId:job.jobId,eventId:verified?job.jobId:null,chatgptSubmitted:verified,evidenceFingerprint:verified?receipt.fingerprint:null,verifiedAt:verified?receipt.verifiedAt:null,exitCode:run.status}};
+       ownerMcpAckVerified:false,conversationId,jobId:job.jobId,
+       chatgptSubmitted:verified,evidenceFingerprint:verified?receipt.fingerprint:null,verifiedAt:verified?receipt.verifiedAt:null,exitCode:run.status}};
   } finally {fs.rmSync(dir,{recursive:true,force:true})}
 }
 if (work.metadata?.monitor === true) {
