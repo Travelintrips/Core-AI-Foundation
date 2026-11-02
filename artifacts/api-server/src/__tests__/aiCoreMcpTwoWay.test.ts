@@ -11,6 +11,14 @@ const mocks = vi.hoisted(() => ({
   handshakeEvidence: vi.fn(),
   learning: vi.fn(),
 }));
+vi.mock("../services/devContinuityWatchService.js", () => ({ registerDevContinuityWatch: vi.fn(), updateDevContinuityWatch: vi.fn(), getDevContinuityWatchStatus: vi.fn() }));
+vi.mock("../services/aiCoreMcpEventWebhookService.js", () => ({ AI_CORE_TERMINAL_EVENT_NAME: "ai_core.task.terminal", McpCallbackEndpointError: class extends Error {}, subscribeAiCoreMcpEvent: vi.fn(), unsubscribeAiCoreMcpEvent: vi.fn() }));
+vi.mock("../services/externalAgentRegistryService.js", () => ({}));
+vi.mock("../services/openClawPcLeaderService.js", () => ({}));
+vi.mock("../services/aiAuditService.js", () => ({ logAudit: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../services/aiModelService.js", () => ({ getModelConfig: vi.fn(), getModelById: vi.fn(), listModels: vi.fn() }));
+vi.mock("../services/codingBridgeSubscriptionDiagnostics.js", () => ({ readCodingBridgeSubscriptionHealth: vi.fn().mockResolvedValue({ renewalRequired: false }) }));
+vi.mock("../services/handshakeSopSettingsService.js", () => ({ readHandshakeSopSettings: vi.fn().mockResolvedValue({ operationalSop: {} }) }));
 vi.mock("../services/aiCoreMcpResultEventService.js", () => ({ recordAiCoreMcpTerminalResult: mocks.record }));
 vi.mock("../services/aiCoreChatLearningService.js", () => ({ recordChatLearningEvent: mocks.learning }));
 vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
@@ -112,7 +120,7 @@ describe("MCP command two-way routing", () => {
       conversationBindingStatus: "VERIFIED_DURABLE_E2E_ATTESTATION",
       verifiedWorkerId: "openclaw-dell-chatgpt-wake-dev",
     });
-    expect(mocks.handshakeEvidence).toHaveBeenCalledWith(expect.stringMatching(/^ai-engine-oauth:[a-f0-9]{64}$/));
+    expect(mocks.handshakeEvidence).toHaveBeenCalledWith(expect.stringMatching(/^ai-engine-oauth:[a-f0-9]{64}$/), { requestHost: "127.0.0.1" });
   });
 
   it("answers MCP discovery from the live tool registry without falling through to chat or database routing", async () => {

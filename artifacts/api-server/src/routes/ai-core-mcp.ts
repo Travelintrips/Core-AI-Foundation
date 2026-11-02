@@ -1166,7 +1166,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const handshakeId = randomUUID();
       const ownerChannel = oauthEventChannel(identity);
       const verifiedEvidence = ownerChannel
-        ? await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel).catch(() => null)
+        ? await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel, { requestHost: req.hostname }).catch(() => null)
         : null;
       payload = {
         protocol: "ai-core-communication/v1",
@@ -1721,7 +1721,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           // Do not claim DEV delivery when DEV is unavailable.
         }
       }
-      const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId).catch(() => null);
+      const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId, { requestHost: req.hostname }).catch(() => null);
       payload = {
         conversationId: parsed.conversationId,
         subscription,
