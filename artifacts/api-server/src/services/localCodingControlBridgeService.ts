@@ -505,7 +505,7 @@ export async function listPendingCodingBridgeResponses(limit = 50) {
     .select()
     .from(aiCodingBridgeResponsesTable)
     .where(isNull(aiCodingBridgeResponsesTable.acknowledgedAt))
-    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt))
+    .orderBy(desc(aiCodingBridgeResponsesTable.createdAt))
     .limit(Math.max(1, Math.min(100, limit)));
 }
 
