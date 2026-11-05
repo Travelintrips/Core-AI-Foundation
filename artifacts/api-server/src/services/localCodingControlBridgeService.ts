@@ -14,6 +14,7 @@ import {
 } from "./codingWhatsappNotificationService.js";
 import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
+import { toCodingBridgeAckReadback } from "./codingBridgeResponseAckReadback.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 import { readHandshakeSopSettings } from "./handshakeSopSettingsService.js";
 import { renderReplyTemplate } from "./handshakeSopConfiguration.js";
@@ -507,6 +508,24 @@ export async function listPendingCodingBridgeResponses(limit = 50) {
     .where(isNull(aiCodingBridgeResponsesTable.acknowledgedAt))
     .orderBy(desc(aiCodingBridgeResponsesTable.createdAt))
     .limit(Math.max(1, Math.min(100, limit)));
+}
+
+/** DEV exact acknowledgement read-back, including already-ACKed rows.
+ * This query MUST remain SELECT-only; no schema bootstrap or DDL.
+ */
+export async function getCodingBridgeResponseAckReadback(id: string) {
+  const [row] = await db
+    .select({
+      id: aiCodingBridgeResponsesTable.id,
+      commandId: aiCodingBridgeResponsesTable.commandId,
+      kind: aiCodingBridgeResponsesTable.kind,
+      acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
+      metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    })
+    .from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.id, id))
+    .limit(1);
+  return row ? toCodingBridgeAckReadback(row) : null;
 }
 
 export async function acknowledgeCodingBridgeResponse(id: string) {
