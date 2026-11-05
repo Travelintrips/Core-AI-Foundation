@@ -446,7 +446,8 @@ export async function listPendingCodingBridgeResponses(limit = 50) {
  * Never modifies ACK state or leaks the response body and metadata.
  */
 export async function getCodingBridgeResponseAckReadback(id: string) {
-  await ensureCodingControlBridgeTables();
+  // Deliberately omit schema bootstrap: this GET must never trigger DDL.
+  // If the bridge table is unavailable, normal database error handling applies.
   const [row] = await db
     .select({
       id: aiCodingBridgeResponsesTable.id,
