@@ -14,6 +14,7 @@ import {
 } from "./codingWhatsappNotificationService.js";
 import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
+import { toCodingBridgeAckReadback } from "./codingBridgeResponseAckReadback.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
@@ -437,6 +438,27 @@ export async function listPendingCodingBridgeResponses(limit = 50) {
     .where(isNull(aiCodingBridgeResponsesTable.acknowledgedAt))
     .orderBy(asc(aiCodingBridgeResponsesTable.createdAt))
     .limit(Math.max(1, Math.min(100, limit)));
+}
+
+/**
+ * Exact read-only GET of the persisted ACK state. Unlike the existing pending
+ * list, this intentionally includes rows whose acknowledgedAt is already set.
+ * Never modifies ACK state or leaks the response body and metadata.
+ */
+export async function getCodingBridgeResponseAckReadback(id: string) {
+  await ensureCodingControlBridgeTables();
+  const [row] = await db
+    .select({
+      id: aiCodingBridgeResponsesTable.id,
+      commandId: aiCodingBridgeResponsesTable.commandId,
+      kind: aiCodingBridgeResponsesTable.kind,
+      acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
+      metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    })
+    .from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.id, id))
+    .limit(1);
+  return row ? toCodingBridgeAckReadback(row) : null;
 }
 
 export async function acknowledgeCodingBridgeResponse(id: string) {
