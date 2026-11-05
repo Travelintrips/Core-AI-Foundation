@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { aiAgentServiceTokensTable, db } from "@workspace/db";
 import { requireAuth, requireInternalRole } from "../middleware/internalAuth.js";
 import { hashAgentServiceToken } from "../middleware/agentServiceAuth.js";
@@ -513,6 +513,45 @@ router.get(
   async (_req, res): Promise<void> => {
     const agents = await getExternalAgentRegistrySnapshot();
     res.json({ authority: "ai-core", policyVersion: 1, agents });
+  },
+);
+
+// Read-only, bounded GPT02 health snapshot. No command payloads or credentials are exposed.
+router.get(
+  "/ai/agent-runtime/monitor/gpt02-health",
+  requireAgentServiceScope("agent:presence"),
+  async (_req, res): Promise<void> => {
+    const workerId = "openclaw-dell-chatgpt-wake-dev";
+    const presence = await db.execute(sql`
+      SELECT last_seen_at, lease_expires_at,
+             (lease_expires_at > now()) AS lease_valid,
+             extract(epoch from (now() - last_seen_at))::integer AS heartbeat_age_seconds
+      FROM ai_platform.ai_coding_bridge_presence
+      WHERE client_id = ${workerId}
+      LIMIT 1
+    `);
+    const pending = await db.execute(sql`
+      SELECT count(*)::integer AS pending_ack_over_5m
+      FROM ai_platform.ai_coding_bridge_responses
+      WHERE kind = 'COMPLETED'
+        AND acknowledged_at IS NULL
+        AND created_at < now() - interval '5 minutes'
+        AND created_at >= now() - interval '24 hours'
+    `);
+    const row = presence.rows[0] as Record<string, unknown> | undefined;
+    const count = Number((pending.rows[0] as Record<string, unknown> | undefined)?.pending_ack_over_5m ?? 0);
+    const heartbeatAgeSeconds = row?.heartbeat_age_seconds == null ? null : Number(row.heartbeat_age_seconds);
+    const leaseValid = row?.lease_valid === true;
+    const healthy = leaseValid && heartbeatAgeSeconds !== null && heartbeatAgeSeconds <= 120 && count === 0;
+    res.setHeader("Cache-Control", "no-store");
+    res.status(healthy ? 200 : 503).json({
+      status: healthy ? "ok" : "degraded",
+      workerId,
+      heartbeatAgeSeconds,
+      leaseValid,
+      pendingAckOver5m: count,
+      checkedAt: new Date().toISOString(),
+    });
   },
 );
 
