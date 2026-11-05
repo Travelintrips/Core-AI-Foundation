@@ -166,6 +166,8 @@ const PUBLIC_PATH_PREFIXES = [
  * showcase, live AI preview) and were incorrectly requiring ADMIN_API_KEY.
  */
 const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
+  // Exact DEV callback route; handler still requires agent:work token + Ed25519 proof.
+  { method: "POST", pattern: /^\/ai\/agent-runtime\/dev\/chatgpt-attestation\/final$/ },
   // Only the DEV monitor login form is public. Job data remains protected.
   { method: "GET", pattern: /^\/dev-center\/login$/ },
   { method: "GET", pattern: /^\/dev-center\/login\.js$/ },
