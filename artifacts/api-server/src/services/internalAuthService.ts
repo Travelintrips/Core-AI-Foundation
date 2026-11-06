@@ -100,7 +100,7 @@ export async function verifyPasswordResetToken(token: string): Promise<InternalU
 }
 
 export function issueMagicLoginToken(userId: number): string {
-  return jwt.sign({ sub: userId, purpose: "magic_login" } satisfies MagicLoginPayload, getSecret(), { expiresIn: "10m" });
+  return jwt.sign({ sub: userId, purpose: "magic_login" } satisfies MagicLoginPayload, getSecret(), { expiresIn: "30m" });
 }
 
 export function verifyMagicLoginToken(token: string): MagicLoginPayload | null {
