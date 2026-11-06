@@ -259,6 +259,8 @@ async function clearAlert(providerId: number, slug: string): Promise<void> {
 
 /** @internal Exported for unit testing only. */
 export async function pollOnce(): Promise<void> {
+  // DEV internal-only must never probe external provider APIs or require their secrets.
+  if (process.env.AI_CORE_DEV_EXECUTION_MODE === "internal-only") return;
   const enabled = await getSetting("provider_alert.enabled");
   if (enabled === "false") return;
 
@@ -299,6 +301,10 @@ let _pollTimer: NodeJS.Timeout | null = null;
 let _running = false;
 
 export async function start(): Promise<void> {
+  if (process.env.AI_CORE_DEV_EXECUTION_MODE === "internal-only") {
+    logger.info("[health-alerts] Provider polling disabled in DEV internal-only mode");
+    return;
+  }
   if (_running) {
     logger.warn("[health-alerts] Already running — ignoring start()");
     return;
