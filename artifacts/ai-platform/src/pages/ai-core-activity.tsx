@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowUpRight, Bot, RefreshCw, Search, Wifi } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Bot, RefreshCw, Search } from "lucide-react";
 import { format } from "date-fns";
 import { apiFetch } from "@/lib/apiFetch";
 import { useLang } from "@/lib/i18n";
@@ -40,6 +40,7 @@ export default function AiCoreActivityPage() {
   const { lang } = useLang();
   const [query, setQuery] = useState("");
   const [conversationFilter, setConversationFilter] = useState("");
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const activity = useQuery({
     queryKey: ["ai-core-activity", conversationFilter],
@@ -48,9 +49,10 @@ export default function AiCoreActivityPage() {
       if (conversationFilter.trim()) params.set("conversationId", conversationFilter.trim());
       return apiFetch<ActivityResponse>(`/api/ai/core-chat/activity?${params.toString()}`);
     },
-    refetchInterval: 2_000,
-    refetchIntervalInBackground: true,
-    staleTime: 1_000,
+    enabled: false,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const filtered = useMemo(() => {
@@ -76,11 +78,12 @@ export default function AiCoreActivityPage() {
     ? {
         eyebrow: "Monitor komunikasi internal",
         title: "ChatGPT ↔ AI Core Activity",
-        subtitle: "Lihat perintah dari ChatGPT ke AI Core dan balasan AI Core secara live dalam satu timeline.",
+        subtitle: "Lihat perintah ChatGPT dan balasan AI Core saat Anda menekan Perbarui.",
         search: "Cari isi pesan, task, route, repository…",
         conversation: "Filter conversationId (opsional)",
-        live: "Live · refresh 2 detik",
-        refresh: "Refresh",
+        live: "Manual · tanpa refresh otomatis",
+        refresh: "Perbarui",
+        notLoaded: "Klik Perbarui untuk memuat aktivitas.",
         empty: "Belum ada aktivitas yang cocok.",
         error: "Timeline aktivitas AI Core tidak dapat dimuat.",
         outbound: "ChatGPT → AI Core",
@@ -93,11 +96,12 @@ export default function AiCoreActivityPage() {
     : {
         eyebrow: "Internal communication monitor",
         title: "ChatGPT ↔ AI Core Activity",
-        subtitle: "See ChatGPT requests to AI Core and AI Core replies live in one timeline.",
+        subtitle: "View ChatGPT requests and AI Core replies when you choose to refresh.",
         search: "Search message, task, route, repository…",
         conversation: "Filter conversationId (optional)",
-        live: "Live · refresh every 2 seconds",
+        live: "Manual · no automatic refresh",
         refresh: "Refresh",
+        notLoaded: "Click Refresh to load activity.",
         empty: "No matching activity yet.",
         error: "AI Core activity timeline could not be loaded.",
         outbound: "ChatGPT → AI Core",
@@ -120,11 +124,8 @@ export default function AiCoreActivityPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="h-8 gap-2 border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
-            <Wifi className="size-3.5" />
-            {copy.live}
-          </Badge>
-          <Button variant="outline" size="sm" onClick={() => activity.refetch()} disabled={activity.isFetching}>
+          <span className="text-xs text-muted-foreground">{copy.live}</span>
+          <Button variant="outline" size="sm" onClick={() => { setHasLoaded(true); void activity.refetch(); }} disabled={activity.isFetching}>
             <RefreshCw className={`size-4 mr-2 ${activity.isFetching ? "animate-spin" : ""}`} />
             {copy.refresh}
           </Button>
@@ -149,7 +150,9 @@ export default function AiCoreActivityPage() {
         />
       </div>
 
-      {activity.isError ? (
+      {!hasLoaded ? (
+        <Card><CardContent className="py-12 text-center text-muted-foreground">{copy.notLoaded}</CardContent></Card>
+      ) : activity.isError ? (
         <Card className="border-destructive/30">
           <CardContent className="py-10 text-center text-destructive">{copy.error}</CardContent>
         </Card>
