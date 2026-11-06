@@ -822,6 +822,7 @@ export async function unsubscribeCodingBridgeConversation(
 
 export async function claimCodingBridgeCommand(input: {
   clientId: string;
+  targetCommandId?: string;
   leaseSeconds?: number;
 }) {
   await ensureCodingControlBridgeTables();
@@ -835,6 +836,7 @@ export async function claimCodingBridgeCommand(input: {
       SELECT id, metadata_json ->> 'assignedClientId' AS assigned_client_id
       FROM ai_platform.ai_coding_bridge_commands
       WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+        AND (${input.targetCommandId ?? null}::uuid IS NULL OR id = ${input.targetCommandId ?? null}::uuid)
         AND command_type <> 'DEV_CONTINUITY_WATCH'
         AND CASE WHEN command_type = 'EXTERNAL_AGENT_WORK'
           AND metadata_json ->> 'capability' = 'chatgpt:wake'

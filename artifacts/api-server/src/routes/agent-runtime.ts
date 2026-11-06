@@ -208,6 +208,7 @@ const ExternalAgentHeartbeatRequest = z.object({
 const ExternalAgentWorkClaimRequest = z.object({
   clientId: z.string().trim().min(1).max(200),
   leaseSeconds: z.number().int().min(30).max(300).optional(),
+  targetCommandId: z.string().uuid().optional(),
 }).strict();
 
 const ExternalAgentWorkResultRequest = z.object({
