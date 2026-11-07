@@ -3,6 +3,7 @@
  * It must never directly authorize outbound WhatsApp.
  */
 import { asc, eq } from "drizzle-orm";
+import { assessJobLifecycleReadiness } from "./jobLifecycleReadinessService.js";
 import { aiCodingBridgeResponsesTable, aiCodingTasksTable, db } from "@workspace/db";
 
 export async function getCodingTaskCompletionEvidence(taskId: string) {
@@ -26,6 +27,10 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
     i < terminalIndex && r.kind === "ACK" && r.commandId === terminal.commandId);
   const matchingProgress = terminal?.kind === "COMPLETED" && rows.some((r, i) =>
     i < terminalIndex && r.kind === "PROGRESS" && r.commandId === terminal.commandId);
+  const lifecycleByCommand = [...new Set(rows.map(r => r.commandId))].map(commandId => ({
+    commandId,
+    ...assessJobLifecycleReadiness(rows.filter(r => r.commandId === commandId)),
+  }));
   const kinds = new Set(rows.map(r => r.kind));
   return {
     found: true as const, taskId, status: task.status,
@@ -33,6 +38,7 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
       id: r.id, commandId: r.commandId, kind: r.kind,
       createdAt: r.createdAt, acknowledgedAt: r.acknowledgedAt,
     })),
+    lifecycleByCommand,
     hasAck: kinds.has("ACK"), hasProgress: kinds.has("PROGRESS"),
     hasCompletedEvent: kinds.has("COMPLETED"),
     hasFailedEvent: kinds.has("FAILED"),
