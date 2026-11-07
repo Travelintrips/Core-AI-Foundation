@@ -9,6 +9,12 @@ import { sql } from "drizzle-orm";
 export function codingBridgeTerminalEventPredicate() {
   return sql`(
     response.kind IN ('COMPLETED', 'FAILED', 'BLOCKER')
+    -- A candidate signed checkpoint may be read on the authenticated owner's
+    -- channel; its issuer signature is still verified in the MCP classifier.
+    OR (response.kind = 'CHECKPOINT'
+      AND response.metadata_json ->> 'checkpointVerified' = 'true'
+      AND response.metadata_json ->> 'verifiedAssistantReply' = 'true'
+      AND response.metadata_json ? 'checkpointReceipt')
     OR response.checkpoint_json ->> 'eventType' IN
       ('COMPLETED', 'FAILED', 'BLOCKED', 'MERGED', 'DEPLOYED')
     OR response.metadata_json ->> 'eventType' IN
