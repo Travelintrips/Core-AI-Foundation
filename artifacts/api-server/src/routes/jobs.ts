@@ -76,7 +76,7 @@ router.get("/dev-center/login", (_req, res): void => {
 router.get("/dev-center/login.js", (_req, res): void => {
   if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
   res.setHeader("Cache-Control", "no-store");
-  res.type("javascript").send(
+  res.type("application/javascript").send(
     'document.getElementById("login").addEventListener("submit",async function(e){e.preventDefault();' +
     'const f=e.currentTarget,m=document.getElementById("message"),b=f.querySelector("button");b.disabled=true;m.textContent="Memverifikasi...";' +
     'try{const r=await fetch("/api/internal/auth/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},' +
@@ -104,7 +104,7 @@ router.get("/dev-center/dashboard.css", (_req, res): void => {
 router.get("/dev-center/dashboard.js", (_req, res): void => {
   if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
   res.setHeader("Cache-Control", "no-store");
-  res.type("javascript").send(`(function(){"use strict";
+  res.type("application/javascript").send(`(function(){"use strict";
   const connection=document.getElementById("connection"),body=document.getElementById("jobs"),totals=document.getElementById("totals"),filter=document.getElementById("filter"),search=document.getElementById("search");let data=[];
   function cell(row,value){const td=document.createElement("td");td.textContent=String(value??"");row.append(td);return td;}
   function render(){const q=search.value.toLowerCase().trim(),mode=filter.value;body.replaceChildren();totals.replaceChildren();
