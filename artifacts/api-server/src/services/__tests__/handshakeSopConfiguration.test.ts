@@ -28,6 +28,15 @@ describe("Handshake SOP dashboard configuration", () => {
     expect(parseReplyTemplates([{ ...queued, text: "{{unclosed" }])).toBeNull();
     expect(parseReplyTemplates([{ ...queued, text: "baris\nbaru" }])).toBeNull();
   });
+  it("accepts all four lifecycle guidance stages, without allowing arbitrary execution events", () => {
+    for (const event of ["JOB_CHECKPOINT", "JOB_HELP_REQUESTED", "JOB_VERIFIED", "JOB_CLOSED"]) {
+      const template = { id: event.toLowerCase(), event, enabled: true, text: "Job {{job_id}}: {{checkpoint}} / {{blocker}}" };
+      expect(parseReplyTemplates([template])).toEqual([template]);
+      expect(renderReplyTemplate([template], event, { job_id: "TEST", checkpoint: "step-2", blocker: "auth" }))
+        .toBe("Job TEST: step-2 / auth");
+    }
+    expect(parseReplyTemplates([{ id: "unsafe", event: "EXECUTE_SHELL", enabled: true, text: "{{job_id}}" }])).toBeNull();
+  });
   it("renders only enabled known templates, values bounded", () => {
     const templates = parseReplyTemplates([
       { id: "queued", event: "JOB_QUEUED", enabled: true, text: "Job {{job_id}} untuk {{worker}}" },

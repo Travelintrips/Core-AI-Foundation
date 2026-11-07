@@ -22,7 +22,7 @@ export const DEFAULT_SOP = Object.freeze({
 
 export type EditableSop = { title: string; steps: string[] };
 export type ReplyTemplate = { id: string; event: string; enabled: boolean; text: string };
-const ALLOWED_EVENTS = new Set(["JOB_RECEIVED", "JOB_QUEUED", "JOB_BLOCKED", "JOB_RESUME_REQUESTED", "JOB_COMPLETED"]);
+const ALLOWED_EVENTS = new Set(["JOB_RECEIVED", "JOB_QUEUED", "JOB_BLOCKED", "JOB_CHECKPOINT", "JOB_RESUME_REQUESTED", "JOB_HELP_REQUESTED", "JOB_VERIFIED", "JOB_COMPLETED", "JOB_CLOSED"]);
 const ALLOWED_VARS = new Set(["job_id", "status", "worker", "blocker", "next_action", "checkpoint", "time_wib"]);
 function isSingleLine(value: unknown, limit: number): value is string {
   return typeof value === "string" && value.trim() === value &&
