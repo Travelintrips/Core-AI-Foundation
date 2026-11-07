@@ -244,6 +244,19 @@ router.patch("/ai/human-tasks/:id/reject", async (req, res): Promise<void> => {
 router.patch("/ai/human-tasks/:id/complete", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  // A generic Human Task completion must not misrepresent GPT02 lifecycle
+  // recovery as verified. A separate checkpoint/ACK-authorized flow is required.
+  try {
+    const {task}=await humanTasks.getTask(id);
+    if(task.sourceModule==="ai_core_lifecycle"){
+      res.status(409).json({error:"LIFECYCLE_RECOVERY_CANNOT_COMPLETE_GENERICALLY"});
+      return;
+    }
+  }catch(err){
+    res.status((err as {code?:string})?.code==="NOT_FOUND"?404:503)
+      .json({error:"HUMAN_TASK_READ_UNAVAILABLE"});
+    return;
+  }
   const body = CompleteHumanTaskBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
   try {

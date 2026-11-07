@@ -66,6 +66,15 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
  it('production fails closed even for assigned admin',async()=>{
   process.env.APP_ENV='production';const r=await act('admin');expect(r.status).toBe(403);expect(mocks.acceptTask).not.toHaveBeenCalled();
  });
+ it('generic Complete cannot mark GPT02 Human Review as completed',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   const r=await request(app).patch(url+'/complete').set('Host','127.0.0.1:7777')
+     .set('Origin','http://127.0.0.1:7777').set('x-isolated-test-session','admin')
+     .send({notes:'All good'});
+   expect(r.status).toBe(409);
+   expect(r.body.error).toBe('LIFECYCLE_RECOVERY_CANNOT_COMPLETE_GENERICALLY');
+   expect(mocks.completeTask).not.toHaveBeenCalled();
+ });
  it('recovery recommendation denies anonymous and unassigned admins',async()=>{
    mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
    const payload={commandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',jobId:135,
