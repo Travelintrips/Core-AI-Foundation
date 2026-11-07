@@ -157,4 +157,22 @@ if [[ "$rows" != 0 ]];then
  echo "FAIL/NO-GO: response committed first but review audit recorded stale response: rows=$rows";exit 27
 fi
 echo "PASS: terminal response committed before audit acquired lock => 0 audit rows (fresh snapshot)"
+# Fourth ordering: once the audit has committed, a new terminal response
+# may still be appended. The immutable audit is historical, not a live grant.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "DELETE FROM ai_platform.ai_coding_bridge_responses WHERE id='70c61ea0-8524-4fba-9da5-a88b2467a6a7';" > "$DIR/reset-terminal-response.out" 2>&1
+{ sed '$d' "$DIR/audit-transaction.sql"; echo 'SELECT pg_sleep(2);'; echo 'COMMIT;'; } > "$DIR/audit-before-new-response.sql"
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt < "$DIR/audit-before-new-response.sql" > "$DIR/audit-before-new-response.out" 2>&1 &
+AUDITOR4=$!
+sleep 0.4
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET lock_timeout='5s'; INSERT INTO ai_platform.ai_coding_bridge_responses(id,command_id,kind,created_at,acknowledged_at) VALUES('70c61ea0-8524-4fba-9da5-a88b2467a6a7','169a7492-cfd8-4a56-bb57-18001b6b5968','FAILED',now(),NULL);" > "$DIR/response-after-audit.out" 2>&1 &
+RESP4=$!
+wait "$AUDITOR4"
+wait "$RESP4"
+state="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT (SELECT count(*) FROM ai_platform.dev_gpt02_operator_review_intents),(SELECT count(*) FROM ai_platform.ai_coding_bridge_responses WHERE kind='FAILED');")"
+if [[ "$state" != '1|1' ]];then
+ echo "FAIL: audit-first/terminal-response-later history unexpected: $state"
+ cat "$DIR/audit-before-new-response.out" "$DIR/response-after-audit.out"
+ exit 1
+fi
+echo "PASS: audit committed first, then terminal response appended; 1 immutable historical audit (never a grant)"
 echo "NOT tested: signed native ACK, authenticated operator session, actual grant/worker dispatch"
