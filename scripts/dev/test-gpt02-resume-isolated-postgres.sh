@@ -50,8 +50,11 @@ BEGIN
 END $$;
 CREATE FUNCTION sandbox.write_result(p_command int,p_fence bigint,p_token text) RETURNS boolean LANGUAGE plpgsql AS $$
 BEGIN
- IF NOT EXISTS(SELECT 1 FROM sandbox.command_lease WHERE command_id=p_command AND fence=p_fence
- AND token=p_token AND expires_at>clock_timestamp() AND NOT released) THEN RETURN false; END IF;
+ -- Hold the command lease row lock across the fenced result write. An expired
+ -- worker cannot race with lease rotation between checking and writing.
+ PERFORM 1 FROM sandbox.command_lease WHERE command_id=p_command AND fence=p_fence
+ AND token=p_token AND expires_at>clock_timestamp() AND NOT released FOR UPDATE;
+ IF NOT FOUND THEN RETURN false; END IF;
  INSERT INTO sandbox.command_results VALUES (p_command,p_fence,p_token)
  ON CONFLICT(command_id) DO UPDATE SET fence=excluded.fence,token=excluded.token;
  RETURN true;
