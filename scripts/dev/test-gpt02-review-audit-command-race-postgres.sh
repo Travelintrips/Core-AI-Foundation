@@ -8,7 +8,16 @@ DIR="$(mktemp -d /tmp/gpt02-audit-race.XXXXXX)"
 cleanup(){ docker rm -f "$NAME" >/dev/null 2>&1 || true; rm -rf "$DIR"; }
 trap cleanup EXIT
 docker run -d --name "$NAME" --network none --tmpfs /var/lib/postgresql/data:rw,size=256m --shm-size 64m -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16-alpine >/dev/null
-for i in $(seq 1 40); do docker exec "$NAME" pg_isready -q -U postgres && break || sleep 1; done
+# The official postgres image has a short-lived initdb server before its
+# final restart. pg_isready can briefly succeed during initialization.
+for i in $(seq 1 40); do
+  if docker exec "$NAME" pg_isready -q -U postgres; then
+    sleep 2
+    if docker exec "$NAME" psql -U postgres -qAt -c "SELECT 1" 2>/dev/null | grep -qx 1; then break; fi
+  fi
+  sleep 1
+done
+docker exec "$NAME" psql -U postgres -qAt -c "SELECT 1" | grep -qx 1
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
 CREATE SCHEMA ai_platform;
 CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;
