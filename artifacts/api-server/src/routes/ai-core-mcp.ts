@@ -1724,8 +1724,8 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         ...parsed, lifecycleOnly: true,
         // Do not alter existing terminal-only reads. Signed checkpoints are
         // returned only to an ACTIVE exact-owner MCP subscription that opted in.
-        includeSignedCheckpoints: "wantsSignedCheckpoints" in subscription &&
-          subscription.wantsSignedCheckpoints === true,
+        ...( "wantsSignedCheckpoints" in subscription && subscription.wantsSignedCheckpoints === true
+          ? { includeSignedCheckpoints: true } : {}),
       });
       let devEvents: unknown[] = [];
       if (identity.kind === "oauth" && devRelayEnabled()) {
