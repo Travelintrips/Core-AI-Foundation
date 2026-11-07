@@ -13,6 +13,7 @@ vi.mock("../jobLifecycleOperatorCommandPreflight.js",()=>({getDevResumeOperatorC
 vi.mock("../jobLifecycleRecoveryReview.js",()=>({getDevCommandRecoveryReview:m.recovery}));
 import route from "../../routes/dev-resume-operator-review.js";
 const app=express();
+app.use(express.json());
 app.use(cookieParser());
 app.use(route);
 const url="/ai/core-chat/dev/resume/operator-readiness";
