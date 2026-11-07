@@ -1,6 +1,9 @@
 import {describe,expect,it,vi} from "vitest";
-const m=vi.hoisted(()=>({rows:[] as unknown[],calls:0,life:{found:true,commandStatus:"FAILED",checkpointResponseId:"cp1",checkpointAttested:true,nativeReceiverAckVerified:true}}));
-vi.mock("@workspace/db",()=>({db:{execute:async()=>({rows:m.rows})}}));
+const m=vi.hoisted(()=>({rows:[] as unknown[],calls:0,humanRows:[] as unknown[],life:{found:true,commandStatus:"FAILED",checkpointResponseId:"cp1",checkpointAttested:true,nativeReceiverAckVerified:true}}));
+vi.mock("@workspace/db",()=>({db:{execute:async()=>{
+  const call=m.calls++;
+  return {rows:call%4===3?m.humanRows:m.rows};
+}}}));
 vi.mock("../codingCommandLifecycleEvidence.js",()=>({getCodingCommandLifecycleEvidence:async()=>m.life}));
 import {assessReadonlyRecoveryFacts,getDevCommandRecoveryReview,type RecoveryRuntimeFacts} from "../jobLifecycleRecoveryReview.js";
 const now=new Date("2026-11-07T18:00:00Z");
@@ -80,6 +83,32 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   const x=assessReadonlyRecoveryFacts({...facts(),checkpointVerified:false,serverFlag:true});
   expect(x.receiverAckVerified).toBe(false);
   expect(x.reviewReason).toBe("NO_BLOCKER");
+ });
+ it("links recovered artifact evidence without granting recovery permission",async()=>{
+   m.humanRows=[{id:6,status:"accepted",completed_at:null,job_id:"135",recovered_artifact_evidence_recorded:true}];
+   try {
+     const x=await getDevCommandRecoveryReview(facts().commandId);
+     expect(x.found).toBe(true);
+     if(!x.found)return;
+     expect(x.humanReviewId).toBe(6);
+     expect(x.humanReviewStatus).toBe("accepted");
+     expect(x.humanReviewCompleted).toBe(false);
+     expect(x.recoveredArtifactEvidenceRecorded).toBe(true);
+     expect(x.linkedJobId).toBe(135);
+     expect(x.humanRecoveryAuthorizationVerified).toBe(false);
+     expect(x.commandResumeAuthorizationVerified).toBe(false);
+     expect(x.mayDispatchWorker).toBe(false);
+     expect(x.mayCloseJob).toBe(false);
+   } finally {m.humanRows=[];}
+ });
+ it("absence of Human Review must not fabricate evidence or authorization",async()=>{
+   m.humanRows=[];
+   const x=await getDevCommandRecoveryReview(facts().commandId);
+   expect(x.found).toBe(true);
+   if(!x.found)return;
+   expect(x.humanReviewId).toBeNull();
+   expect(x.recoveredArtifactEvidenceRecorded).toBe(false);
+   expect(x.humanRecoveryAuthorizationVerified).toBe(false);
  });
  it("unknown command returns not found without querying presence",async()=>{
   const prior=m.life;

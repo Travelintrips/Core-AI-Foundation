@@ -90,6 +90,20 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     SELECT value FROM ai_platform.ai_settings WHERE key='handshake.sop2.policy.v1'
       AND is_secret IS FALSE LIMIT 1
   `);
+  // Read-only, command-bound Human Review evidence. Never trust the review
+  // status as authorization to resume and never expose raw reviewer notes.
+  const humanReview=await db.execute(sql`
+    SELECT t.id, t.status, t.completed_at,
+      t.payload_json->>'taskId' AS job_id,
+      EXISTS (
+        SELECT 1 FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action='artifact_recovery_verified'
+      ) AS recovered_artifact_evidence_recorded
+    FROM ai_platform.ai_human_tasks t
+    WHERE t.source_module='ai_core_lifecycle'
+      AND t.payload_json->>'commandId'=${commandId}
+    ORDER BY t.created_at DESC, t.id DESC LIMIT 1
+  `);
   const parsedSetting=(()=>{
     const raw=settings.rows?.[0]?.["value"];
     if(typeof raw!=="string")return null;
@@ -109,5 +123,17 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     serverFlag:process.env["AI_CORE_DEV_LIFECYCLE_RECOVERY_REVIEW_ENABLED"]==="true",
     now:new Date(),
   };
-  return {found:true as const,...assessReadonlyRecoveryFacts(facts)};
+  const review=humanReview.rows?.[0];
+  const reviewId=Number(review?.["id"]);
+  const linkedJobId=Number(review?.["job_id"]);
+  return {
+    found:true as const,...assessReadonlyRecoveryFacts(facts),
+    humanReviewId:Number.isSafeInteger(reviewId)&&reviewId>0?reviewId:null,
+    humanReviewStatus:typeof review?.["status"]==="string"?review["status"]:null,
+    humanReviewCompleted:Boolean(review?.["completed_at"]),
+    recoveredArtifactEvidenceRecorded:review?.["recovered_artifact_evidence_recorded"]===true,
+    linkedJobId:Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null,
+    // Accept and evidence cannot authorize a command or create a signed checkpoint.
+    humanRecoveryAuthorizationVerified:false as const,
+  };
 }
