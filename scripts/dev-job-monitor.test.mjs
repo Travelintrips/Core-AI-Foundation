@@ -1,56 +1,48 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { Script } from 'node:vm';
 
-const routes = readFileSync(new URL('../artifacts/api-server/src/routes/jobs.ts', import.meta.url), 'utf8');
-const dashboard = readFileSync(new URL('../artifacts/ai-platform/src/pages/dashboard.tsx', import.meta.url), 'utf8');
-
+const root = new URL('../', import.meta.url);
+const get = path => readFileSync(new URL(path, root), 'utf8');
+const routes = get('artifacts/api-server/src/routes/jobs.ts');
+const middleware = get('artifacts/api-server/src/middleware/adminAuth.ts');
+const dashboard = get('artifacts/ai-platform/src/pages/dashboard.tsx');
+const monitor = get('artifacts/ai-platform/src/components/UnifiedJobMonitor.tsx');
 function route(name) {
   const start = routes.indexOf(`router.get("${name}"`);
-  assert.ok(start >= 0, `missing ${name}`);
+  assert.ok(start >= 0, `missing route ${name}`);
   const end = routes.indexOf('\n});', start);
-  assert.ok(end > start, `${name} route termination missing`);
+  assert.ok(end > start, `missing route end ${name}`);
   return routes.slice(start, end + 4);
 }
-
-test('DEV monitor stays restricted to development and behind /api auth', () => {
-  for (const path of ['/dev-center/dashboard', '/dev-center/dashboard.css', '/dev-center/dashboard.js', '/dev-center/jobs']) {
-    assert.match(route(path), /process\.env\["APP_ENV"\] !== "development"/);
-    assert.match(route(path), /res\.sendStatus\(404\)/);
+test('monitor is embedded in main dashboard, not a separate link', () => {
+  assert.match(dashboard, /<UnifiedJobMonitor \/>/);
+  assert.match(dashboard, /import\.meta\.env\.DEV/);
+  assert.doesNotMatch(dashboard, /href="\/api\/dev-center\/dashboard"/);
+  assert.match(monitor, /\/api\/dev-center\/jobs/);
+  assert.match(monitor, /credentials: "include"/);
+});
+test('legacy monitoring links redirect to the existing main UI and do not show second login', () => {
+  assert.match(route('/dev-center/dashboard'), /res\.redirect\(302, "\/"\)/);
+  assert.match(route('/dev-center/login'), /res\.redirect\(302, "\/login"\)/);
+  assert.match(middleware, /res\.redirect\(302, "\/login"\)/);
+  assert.doesNotMatch(route('/dev-center/login'), /password|<form/);
+  for (const path of ['/dev-center/login.js', '/dev-center/dashboard.js', '/dev-center/dashboard.css']) {
+    assert.match(route(path), /res\.sendStatus\(410\)/);
   }
 });
-
-test('monitor JavaScript compiles and mounts all visible controls', () => {
-  const js = route('/dev-center/dashboard.js').match(/res\.type\("application\/javascript"\)\.send\(`([\s\S]*?)`\);/);
-  assert.ok(js?.[1], 'monitor script missing');
-  assert.doesNotThrow(() => new Script(js[1]));
-  const html = route('/dev-center/dashboard');
-  for (const id of ['connection', 'totals', 'jobs', 'filter', 'search']) {
-    assert.match(html, new RegExp(`id="${id}"`));
-  }
+test('monitor data endpoint stays DEV-only and authenticated', () => {
+  const api = route('/dev-center/jobs');
+  assert.match(api, /process\.env\["APP_ENV"\] !== "development"/);
+  assert.match(api, /res\.sendStatus\(404\)/);
+  assert.doesNotMatch(middleware.match(/const PUBLIC_ROUTE_RULES[\s\S]*?for \(const rule of PUBLIC_ROUTE_RULES\)/)?.[0] ?? '', /dev-center\/jobs/);
 });
-
-test('unverified progress is never synthesized from a job status', () => {
+test('evidence-based progress, job owners, errors, and stale activity remain visible', () => {
   const api = route('/dev-center/jobs');
   assert.match(api, /progressEvidenceId/);
   assert.match(api, /final_ack_verified/);
-  assert.match(api, /verifiedProgress/);
-  assert.match(api, /FAILED/);
-  assert.doesNotMatch(api, /progress:\s*100/);
   assert.match(api, /Promise\.allSettled/);
-});
-
-test('dashboard includes authenticated DEV monitoring entry point', () => {
-  assert.match(dashboard, /href="\/api\/dev-center\/dashboard"/);
-  assert.match(dashboard, /import\.meta\.env\.DEV/);
-});
-
-test('DEV monitor login and dashboard scripts use executable MIME types under nosniff', () => {
-  for (const path of ['/dev-center/login.js', '/dev-center/dashboard.js']) {
-    const js = route(path);
-    assert.match(js, /res\.type\("application\/javascript"\)/);
-    assert.doesNotMatch(js, /res\.type\("javascript"\)/);
-  }
-  assert.match(route('/dev-center/login'), /login\.js/);
+  for (const label of ['Penanggung jawab', 'Pelaksana', 'Hambatan', 'Progres terverifikasi']) assert.ok(monitor.includes(label));
+  assert.match(monitor, /Belum terverifikasi/);
+  assert.match(monitor, /3_600_000/);
 });

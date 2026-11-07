@@ -4,6 +4,7 @@ import { Activity, Box, Database, FileText, GitMerge, Layers, Cpu, Code2 } from 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { format } from "date-fns";
 import { useLang } from "@/lib/i18n";
+import UnifiedJobMonitor from "@/components/UnifiedJobMonitor";
 
 export default function Dashboard() {
   const { t } = useLang();
@@ -19,16 +20,8 @@ export default function Dashboard() {
         <p className="text-muted-foreground mt-1">{t("pages.dashboard.subtitle")}</p>
       </div>
 
-      {(import.meta.env.DEV || (typeof window !== "undefined" && window.location.hostname.toLowerCase().includes("dev"))) && (
-        <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="text-base">Monitoring Pekerjaan Human + AI — DEV</CardTitle>
-            <CardDescription>Periksa pekerjaan aktif, pelaksana, penanggung jawab, hambatan, checkpoint, dan ACK. Persentase tanpa bukti tidak ditampilkan.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <a href="/api/dev-center/dashboard" className="text-sm font-semibold text-primary underline underline-offset-4">Buka monitoring pekerjaan terpadu</a>
-          </CardContent>
-        </Card>
+      {(import.meta.env.DEV || (typeof window !== "undefined" && window.location.hostname.toLowerCase().startsWith("dev."))) && (
+        <UnifiedJobMonitor />
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">

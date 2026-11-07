@@ -55,71 +55,19 @@ const EnqueueBody      = CreateJobBody;
 const ListJobsQuery    = ListJobsQueryParams;
 const ReprioritizeBody = ReprioritizeJobBody;
 
-// Public login FORM only: requires existing internal account credentials.
-// All dashboard, assets, and job data still use the normal /api auth middleware.
+// Legacy links now return to the existing AI Core frontend and its ordinary
+// internal session. There is no second DEV monitoring login or standalone UI.
 router.get("/dev-center/login", (_req, res): void => {
   if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
-  res.setHeader("Cache-Control", "no-store");
-  res.type("html").send(
-    '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>Login AI Core DEV Monitor</title>' +
-    '<style>body{font:16px system-ui;background:#101d31;color:#fff;display:grid;place-items:center;min-height:90vh}' +
-    'main{width:min(420px,90%);padding:28px;background:#1d304c;border-radius:12px}input,button{box-sizing:border-box;width:100%;padding:12px;margin:9px 0;border-radius:7px}' +
-    'button{cursor:pointer}#message{color:#ffe1a0}</style></head><body><main>' +
-    '<h1>AI Core DEV Monitoring</h1><p>Masuk menggunakan akun internal AI Core.</p>' +
-    '<form id="login"><label>Email<input name="email" type="email" autocomplete="username" required></label>' +
-    '<label>Password<input name="password" type="password" autocomplete="current-password" required></label>' +
-    '<button type="submit">Masuk ke Dashboard</button></form><p role="status" id="message"></p>' +
-    '<script src="/api/dev-center/login.js" defer></script></main></body></html>'
-  );
+  res.redirect(302, "/login");
 });
-router.get("/dev-center/login.js", (_req, res): void => {
-  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
-  res.setHeader("Cache-Control", "no-store");
-  res.type("application/javascript").send(
-    'document.getElementById("login").addEventListener("submit",async function(e){e.preventDefault();' +
-    'const f=e.currentTarget,m=document.getElementById("message"),b=f.querySelector("button");b.disabled=true;m.textContent="Memverifikasi...";' +
-    'try{const r=await fetch("/api/internal/auth/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},' +
-    'body:JSON.stringify({email:f.elements.email.value,password:f.elements.password.value})});' +
-    'if(!r.ok){m.textContent="Login gagal. Periksa akun internal Anda.";return;}' +
-    'window.location.assign("/api/dev-center/dashboard");' +
-    '}catch(_){m.textContent="Server login tidak dapat dihubungi.";}finally{b.disabled=false;}});'
-  );
-});
-
-// Authenticated DEV-only monitor page. Both assets and data use the same
-// global /api authentication boundary; nothing is exposed as public static HTML.
 router.get("/dev-center/dashboard", (_req, res): void => {
   if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
-  res.setHeader("Cache-Control", "no-store");
-  res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Core DEV — Monitoring Pekerjaan</title><link rel="stylesheet" href="/api/dev-center/dashboard.css"></head><body><main><header><h1>AI Core — Monitoring Pekerjaan DEV</h1><p>Status, progres terverifikasi, pelaksana, penanggung jawab, dan bukti pekerjaan. Tidak mengubah eksekusi.</p><p id="connection" role="status" aria-live="polite">Memuat...</p></header><section aria-label="Ringkasan"><div id="totals" class="totals"></div></section><section aria-label="Filter"><label>Status <select id="filter"><option value="active">Aktif / perlu perhatian</option><option value="all">Semua</option><option value="completed">Selesai</option></select></label> <label>Cari <input id="search" placeholder="ID, nama job, pelaksana"></label></section><section aria-label="Daftar pekerjaan"><div class="table-wrap"><table><thead><tr><th>Job / Sumber</th><th>Status / Tahap</th><th>Progres terverifikasi</th><th>Pelaksana</th><th>Penanggung jawab</th><th>Hambatan / Bukti</th><th>Aktivitas terakhir</th></tr></thead><tbody id="jobs"><tr><td colspan="7">Memuat job DEV...</td></tr></tbody></table></div></section><p class="note">Progres hanya muncul bila ada checkpoint yang terverifikasi. Status FAILED tidak pernah dianggap PASS meskipun semua langkah dicoba. Identitas yang belum tersedia ditampilkan sebagai Belum ditetapkan.</p></main><script src="/api/dev-center/dashboard.js" defer></script></body></html>`);
+  res.redirect(302, "/");
 });
-
-router.get("/dev-center/dashboard.css", (_req, res): void => {
-  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
-  res.setHeader("Cache-Control", "no-store");
-  res.type("css").send(`:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0d1526;color:#eef4fc}body{margin:0}main{max-width:1500px;margin:0 auto;padding:24px 18px}h1{font-size:25px}p,.note{color:#b9c8de}.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:18px 0}.metric{background:#1b2c46;border:1px solid #304a66;padding:15px;border-radius:10px}.metric strong{font-size:25px;display:block}section{margin-bottom:18px}label{margin-right:16px}input,select{padding:9px;background:#1b2c46;color:#eef4fc;border:1px solid #4a6380;border-radius:6px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#142239}th,td{text-align:left;padding:12px;border-bottom:1px solid #30425d;vertical-align:top;min-width:120px}th{color:#c4d4e7;white-space:nowrap}td:first-child{min-width:210px}small{display:block;color:#aebed1;margin-top:5px}progress{width:120px;height:12px;accent-color:#38a68a}.pill{display:inline-block;padding:3px 8px;border-radius:6px;background:#2b4463;font-size:12px}.note{font-size:13px}#connection{font-weight:600}`);
-});
-
-router.get("/dev-center/dashboard.js", (_req, res): void => {
-  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
-  res.setHeader("Cache-Control", "no-store");
-  res.type("application/javascript").send(`(function(){"use strict";
-  const connection=document.getElementById("connection"),body=document.getElementById("jobs"),totals=document.getElementById("totals"),filter=document.getElementById("filter"),search=document.getElementById("search");let data=[];
-  function cell(row,value){const td=document.createElement("td");td.textContent=String(value??"");row.append(td);return td;}
-  function render(){const q=search.value.toLowerCase().trim(),mode=filter.value;body.replaceChildren();totals.replaceChildren();
-    const counts={active:0,waiting:0,attention:0,completed:0};for(const j of data){if(["RUNNING","RETRYING","PROCESSING"].includes(j.status))counts.active++;else if(["QUEUED","WAITING","PENDING"].includes(j.status))counts.waiting++;else if(["BLOCKED","FAILED","REVIEW_REQUIRED"].includes(j.status))counts.attention++;else if(j.status==="COMPLETED")counts.completed++;}
-    for(const [label,key] of [["Sedang dikerjakan","active"],["Menunggu","waiting"],["Perlu perhatian","attention"],["Selesai","completed"]]){const d=document.createElement("div"),strong=document.createElement("strong");d.className="metric";strong.textContent=counts[key];d.append(strong,document.createTextNode(label));totals.append(d);}
-    const shown=data.filter(j=>(mode==="all"||(mode==="completed"?j.status==="COMPLETED":!["COMPLETED","CANCELLED"].includes(j.status)))&&[j.id,j.title,j.worker,j.accountable,j.source].join(" ").toLowerCase().includes(q));
-    for(const j of shown){const tr=document.createElement("tr");const first=cell(tr,j.title);const id=document.createElement("small");id.textContent=j.source+" · "+j.id;first.append(id);
-      const stat=cell(tr,j.status),stage=document.createElement("small");stage.textContent=j.stage||"Tahap belum terverifikasi";stat.append(stage);
-      const prog=document.createElement("td");if(typeof j.verifiedProgress==="number"){const bar=document.createElement("progress");bar.max=100;bar.value=j.verifiedProgress;prog.append(bar,document.createTextNode(" "+j.verifiedProgress+"%"));}else prog.textContent="Belum terverifikasi";tr.append(prog);
-      const performer=cell(tr,j.worker||"Belum ditetapkan");if(j.workerType){const kind=document.createElement("small");kind.textContent="Jenis: "+j.workerType;performer.append(kind);}cell(tr,j.accountable||"Belum ditetapkan");const evidence=cell(tr,j.blocker||"—");if(j.evidence){const sm=document.createElement("small");sm.textContent="Bukti: "+j.evidence;evidence.append(sm);}const last=cell(tr,j.updatedAt?new Date(j.updatedAt).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"}):"—");if(j.updatedAt && ["RUNNING","PROCESSING","DISPATCHING"].includes(j.status) && Date.now()-Date.parse(j.updatedAt)>3600000){const stale=document.createElement("small");stale.textContent="Perlu diperiksa: tanpa update > 60 menit";last.append(stale);}body.append(tr);}
-    if(!shown.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=7;td.textContent="Tidak ada pekerjaan sesuai filter.";tr.append(td);body.append(tr);}
-  }
-  async function refresh(){if(document.hidden)return;try{const r=await fetch("/api/dev-center/jobs",{credentials:"same-origin",cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);const payload=await r.json();if(!Array.isArray(payload.jobs))throw new Error("Format data tidak valid");data=payload.jobs;render();connection.textContent="DEV terhubung · terakhir diperbarui "+new Date().toLocaleTimeString("id-ID")+" · "+data.length+" pekerjaan"+(payload.warnings?.length?" · Data parsial: "+payload.warnings.join(", "):"");}catch(e){connection.textContent="Data monitoring tidak tersedia: "+e.message;}}
-  filter.addEventListener("change",render);search.addEventListener("input",render);refresh();setInterval(refresh,15000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});})();`);
-});
+router.get("/dev-center/login.js", (_req, res): void => { res.sendStatus(410); });
+router.get("/dev-center/dashboard.js", (_req, res): void => { res.sendStatus(410); });
+router.get("/dev-center/dashboard.css", (_req, res): void => { res.sendStatus(410); });
 
 // Read-only DEV monitoring. Values are grounded in job records; never infer a percentage
 // from status or claim that a worker/owner exists when no assignment evidence is stored.
