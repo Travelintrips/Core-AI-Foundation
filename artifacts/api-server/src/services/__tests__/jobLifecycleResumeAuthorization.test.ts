@@ -35,7 +35,7 @@ describe("DEV resume authorization review never dispatches",()=>{
   it("rejects invalid times and future approvals",()=>{
     expect(reviewResumeAuthorization({...base(),now:new Date(NaN)}).reason).toBe("INVALID_TIME");
     expect(reviewResumeAuthorization({...base(),grant:{...grant(),expiresAt:new Date(NaN)}}).reason).toBe("INVALID_TIME");
-    expect(reviewResumeAuthorization({...base(),grant:{...grant(),approvedAt:new Date(now.getTime()+1000)}}).reason).toBe("INVALID_TIME");
+    expect(reviewResumeAuthorization({...base(),grant:{...grant(),approvedAt:new Date(now.getTime()+1000)}}).reason).toBe("NOT_YET_APPROVED");
     expect(reviewResumeAuthorization({...base(),grant:{...grant(),approvedAt:new Date(now.getTime()+1000),expiresAt:new Date(now.getTime()+100000)}}).reason).toBe("NOT_YET_APPROVED");
   });
   it("rejects expiration at exact boundary",()=>{
