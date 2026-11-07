@@ -13,6 +13,7 @@ import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridg
 import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionService.js";
 import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
+import { acknowledgeNativeCheckpoint, readNativeCheckpointAck } from "../services/nativeCheckpointAckService.js";
 import { getExternalAgentRule } from "../services/externalAgentRegistryService.js";
 import { subscribeExternalAgentWork } from "../services/externalAgentWorkEventService.js";
 import { DEV_DELL_WAKE_CLIENT_ID, listDevDellQueuedWakeCommandIds } from "../services/gpt02DevQueuedWakeService.js";
@@ -768,6 +769,58 @@ router.post(
     res.json(result);
   },
 );
+
+/** Only the assigned DELL agent may submit signed native browser proof, DEV-only.
+ * Disabled by default; never reuses MCP or generic administrative ACK claims.
+ */
+const NativeAckPayload = z.object({
+  commandId:z.string().uuid(), responseId:z.string().uuid(),
+  evidence:z.object({
+    version:z.literal(1),commandId:z.string().uuid(),responseId:z.string().uuid(),
+    eventId:z.string().regex(/^[a-f0-9]{64}$/i),
+    conversationId:z.string().regex(/^ai-engine-oauth:[a-f0-9]{64}$/i),
+    workerId:z.literal("openclaw-dell-chatgpt-wake-dev"),
+    browserProfile:z.string().max(120), bindingFingerprint:z.string().regex(/^[a-f0-9]{64}$/i),
+    readerTargetId:z.string().regex(/^[a-f0-9]{32}$/i),
+    originalTargetId:z.string().regex(/^[a-f0-9]{32}$/i),
+    replySha256:z.string().regex(/^[a-f0-9]{64}$/i),
+    observedAt:z.string().datetime(),signatureBase64:z.string().min(80).max(120),
+  }).strict(),
+  readerRecord:z.object({
+    eventId:z.string(),conversationId:z.string(),originalRawTargetId:z.string(),
+    readerRawTargetId:z.string(),pageUrl:z.string(),preopenTargetIds:z.array(z.string()).max(100),
+    status:z.string(),disposition:z.string(),originalFocusRestored:z.boolean(),
+    capturedAt:z.number(),
+  }).strict(),
+  tabs:z.array(z.object({type:z.string(),url:z.string(),id:z.string()}).strict()).max(30),
+}).strict();
+router.get("/ai/agent-runtime/native-checkpoint/:commandId/:responseId/readback",
+  requireAgentServiceScope("agent:work"),async(req,res):Promise<void>=>{
+    const commandId=z.string().uuid().safeParse(req.params["commandId"]);
+    const responseId=z.string().uuid().safeParse(req.params["responseId"]);
+    if(!commandId.success||!responseId.success){res.status(400).json({nativeAckVerified:false,code:"INVALID_IDS"});return;}
+    const caller=res.locals["aiAgentService"] as {name?:string}|undefined;
+    const value=await readNativeCheckpointAck({commandId:commandId.data,responseId:responseId.data,
+      tokenOwner:caller?.name??"",requestHostname:req.hostname});
+    res.setHeader("Cache-Control","no-store");res.json(value);
+  });
+router.post("/ai/agent-runtime/native-checkpoint/:responseId/ack",
+  requireAgentServiceScope("agent:work"),async(req,res):Promise<void>=>{
+    if(req.hostname!=="dev.cstlogistic.co.id"){
+      res.status(403).json({acknowledged:false,code:"DEV_ONLY"});return;
+    }
+    const parsed=NativeAckPayload.safeParse(req.body);
+    if(!parsed.success||req.params["responseId"]!==parsed.data.responseId){
+      res.status(400).json({acknowledged:false,code:"INVALID_NATIVE_ACK"});return;
+    }
+    const caller=res.locals["aiAgentService"] as {name?:string}|undefined;
+    const result=await acknowledgeNativeCheckpoint({
+      ...parsed.data,tokenOwner:caller?.name??"",requestHostname:req.hostname,
+      enabled:process.env["AI_CORE_NATIVE_CHECKPOINT_ACK_ENABLED"]==="true",
+    });
+    res.setHeader("Cache-Control","no-store");
+    res.status(result.acknowledged?200:result.code==="NATIVE_ACK_FEATURE_OFF"?503:409).json(result);
+  });
 
 router.get(
   "/ai/agent-runtime/health",
