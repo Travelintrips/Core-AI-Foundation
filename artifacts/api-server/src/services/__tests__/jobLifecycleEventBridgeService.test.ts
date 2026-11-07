@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lifecycleEventBridgeEnabled, mapPersistedResponseToLifecycleEvent, mayDispatchJobLifecycleSubscription } from "../jobLifecycleEventBridgeService.js";
+import { lifecycleEventBridgeEnabled, mapPersistedResponseToLifecycleEvent, mayDispatchJobLifecycleSubscription, signedPersistedCheckpointEvent } from "../jobLifecycleEventBridgeService.js";
 
 describe("Job lifecycle informational event bridge", () => {
   it("defaults to off unless explicitly opted in", () => {
@@ -24,6 +24,22 @@ describe("Job lifecycle informational event bridge", () => {
     }
     expect(mayDispatchJobLifecycleSubscription("ai_core.job.lifecycle.job_closed", "audit_log")).toBe(false);
     expect(mayDispatchJobLifecycleSubscription("coding.bridge.response.created", "create_job")).toBe(true);
+  });
+
+  it("publishes only signed server-issued checkpoint event after durable persistence", () => {
+    const checkpoint = { id: "response-1", commandId: "command-1", taskId: null,
+      kind: "CHECKPOINT", metadataJson: { checkpointVerified: true, verifiedAssistantReply: true,
+        checkpointReceipt: { version: 1, commandId: "command-1" } } };
+    expect(signedPersistedCheckpointEvent({ enabled: false, checkpoint })).toBeNull();
+    expect(signedPersistedCheckpointEvent({ enabled: true, checkpoint: null })).toBeNull();
+    expect(signedPersistedCheckpointEvent({ enabled: true, checkpoint: { ...checkpoint, kind: "FAILED" } })).toBeNull();
+    expect(signedPersistedCheckpointEvent({ enabled: true, checkpoint: { ...checkpoint, metadataJson: {} } })).toBeNull();
+    expect(signedPersistedCheckpointEvent({ enabled: true, checkpoint })).toEqual({
+      eventType: "ai_core.job.lifecycle.job_checkpoint", sourceModule: "coding-control-bridge",
+      sourceId: "response-1", correlationId: "command-1",
+      payload: { lifecycleEvent: "JOB_CHECKPOINT", responseId: "response-1",
+        commandId: "command-1", taskId: null },
+    });
   });
 
   it("never synthesizes verification, closure, retry or OpenClaw help from worker claims", () => {
