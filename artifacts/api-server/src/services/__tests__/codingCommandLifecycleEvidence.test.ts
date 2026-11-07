@@ -34,6 +34,18 @@ describe("DEV GPT02 command lifecycle without AI Task association",()=>{
   expect(x.notificationAuthorized).toBe(false);
   expect(JSON.stringify(x)).not.toContain("SOP_CHECKPOINT PAUSED");
  });
+ it("denies receipt and native ACK verification when response history exceeds the review window",async()=>{
+  const base=fixture();
+  const row=base[0]!;
+  mocks.rows=[...Array.from({length:99},(_,i)=>({...row,response_id:`history-${i}`,kind:"PROGRESS"})),...base];
+  const x=await getCodingCommandLifecycleEvidence(commandId);
+  if(!x.found)throw Error("expected command");
+  expect(x.responseSnapshotComplete).toBe(false);
+  expect(x.status).toBe("RESPONSE_HISTORY_INCOMPLETE_REVIEW_REQUIRED");
+  expect(x.checkpointAttested).toBe(false);
+  expect(x.nativeReceiverAckVerified).toBe(false);
+  expect(x.mayAutoResume).toBe(false);
+ });
  it("rejects false ACK when issuer is not verified",async()=>{
   mocks.rows=fixture();mocks.issuerValid=false;const x=await getCodingCommandLifecycleEvidence(commandId);
   if(!x.found)throw Error("expected command");
