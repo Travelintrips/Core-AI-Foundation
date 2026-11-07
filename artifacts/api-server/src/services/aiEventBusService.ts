@@ -32,6 +32,7 @@ import type {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { eventHandlerRegistry } from "./eventHandlerRegistry.js";
+import { mayDispatchJobLifecycleSubscription } from "./jobLifecycleEventBridgeService.js";
 import { logger } from "../lib/logger.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -159,6 +160,10 @@ export async function dispatch(event: AiEvent): Promise<DispatchResult> {
   const results: DispatchResult["handlers"] = [];
 
   for (const sub of subscriptions) {
+    if (!mayDispatchJobLifecycleSubscription(event.eventType, sub.handlerType)) {
+      results.push({ subscriptionName: sub.subscriptionName, ok: true });
+      continue;
+    }
     const handler = eventHandlerRegistry[sub.handlerType];
     if (!handler) {
       results.push({ subscriptionName: sub.subscriptionName, ok: false, error: `Unknown handler: ${sub.handlerType}` });
