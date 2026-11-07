@@ -8,6 +8,7 @@ import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatServ
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
 import { readCodingBridgeSubscriptionHealth } from "../services/codingBridgeSubscriptionDiagnostics.js";
+import { verifiedSignedCheckpointMcpEvent } from "../services/mcpSignedCheckpointEventService.js";
 import {
   classifyAiCoreChatDispatch,
   isSafeDirectOpenClawPcCommand,
@@ -124,10 +125,10 @@ const ExternalCommandProgressArgs = z.object({
   ownerConversationId: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
-const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]);
+const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED", "CHECKPOINT"]);
 const SubscribeEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
-  eventTypes: z.array(EventTypes).min(1).max(5).default([...DEFAULT_TERMINAL_EVENT_TYPES]),
+  eventTypes: z.array(EventTypes).min(1).max(6).default([...DEFAULT_TERMINAL_EVENT_TYPES]),
   leaseSeconds: z.number().int().min(30).max(MAX_CONVERSATION_EVENT_LEASE_SECONDS)
     .default(DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS),
 }).strict();
@@ -251,10 +252,20 @@ const nativeEvents = [
 
 function classifyLifecycleEvent(input: {
   kind: string;
+  commandId: string;
   message: string;
   checkpoint: Record<string, unknown>;
   metadata: Record<string, unknown>;
-}): "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED" | null {
+}): "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED" | "CHECKPOINT" | null {
+  if (input.kind === "CHECKPOINT") {
+    // Never expose an unverified or worker-self-attested checkpoint as an MCP
+    // lifecycle event. The actual server issuer signature must match the row.
+    return verifiedSignedCheckpointMcpEvent({
+      kind: input.kind, commandId: input.commandId,
+      checkpoint: input.checkpoint, metadata: input.metadata,
+      issuerPrivateKeyDerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
+    });
+  }
   const explicit = [input.checkpoint["eventType"], input.metadata["eventType"]]
     .find((value) => typeof value === "string");
   if (
@@ -1703,15 +1714,19 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // Filter lifecycle rows IN the owner-scoped query before applying LIMIT.
       // Otherwise a large backlog of worker ACKs can starve real terminal
       // results and indefinitely block a ChatGPT-side Final ACK.
-      const rows = await listPendingCodingBridgeResponsesForConversation({
-        ...parsed, lifecycleOnly: true,
-      });
       const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
         state: "UNAVAILABLE" as const,
         renewalRequired: false,
         expiresAt: null,
         pendingCount: null,
       }));
+      const rows = await listPendingCodingBridgeResponsesForConversation({
+        ...parsed, lifecycleOnly: true,
+        // Do not alter existing terminal-only reads. Signed checkpoints are
+        // returned only to an ACTIVE exact-owner MCP subscription that opted in.
+        ...( "wantsSignedCheckpoints" in subscription && subscription.wantsSignedCheckpoints === true
+          ? { includeSignedCheckpoints: true } : {}),
+      });
       let devEvents: unknown[] = [];
       if (identity.kind === "oauth" && devRelayEnabled()) {
         try {
@@ -1732,6 +1747,7 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
             ...row,
             eventType: classifyLifecycleEvent({
               kind: row.kind,
+              commandId: row.commandId,
               message: row.message,
               checkpoint: row.checkpoint,
               metadata: row.metadata,

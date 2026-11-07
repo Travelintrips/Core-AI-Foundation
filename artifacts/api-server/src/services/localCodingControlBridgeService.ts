@@ -26,7 +26,7 @@ import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WOR
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
 import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent } from "./devSopCheckpointIssuer.js";
 import { assertNoSelfAttestedCheckpoint } from "./devCheckpointClaimGuard.js";
-import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
+import { codingBridgeTerminalEventPredicate, codingBridgeSignedCheckpointCandidatePredicate } from "./codingBridgeTerminalEventPredicate.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -762,6 +762,8 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
   limit?: number;
   /** Filter before LIMIT so transport ACK rows never crowd out terminal events. */
   lifecycleOnly?: boolean;
+  /** Opt-in only: active owner subscription explicitly includes CHECKPOINT. */
+  includeSignedCheckpoints?: boolean;
 }) {
   await ensureCodingControlBridgeTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 50));
@@ -782,7 +784,8 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
       ON command.id = response.command_id
     WHERE response.acknowledged_at IS NULL
       AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-      AND (${!input.lifecycleOnly}::boolean OR ${codingBridgeTerminalEventPredicate()})
+      AND (${!input.lifecycleOnly}::boolean OR ${codingBridgeTerminalEventPredicate()}
+        OR (${input.includeSignedCheckpoints === true}::boolean AND ${codingBridgeSignedCheckpointCandidatePredicate()}))
     ORDER BY response.created_at ASC, response.id ASC
     LIMIT ${limit}::integer
     `);

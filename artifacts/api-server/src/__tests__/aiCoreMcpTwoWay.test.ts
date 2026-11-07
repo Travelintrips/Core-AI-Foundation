@@ -351,6 +351,21 @@ describe("MCP command two-way routing", () => {
     });
   });
 
+  it("includes checkpoints only when the exact-owner subscription opted in", async () => {
+    const { readCodingBridgeSubscriptionHealth } = await import("../services/codingBridgeSubscriptionDiagnostics.js");
+    vi.mocked(readCodingBridgeSubscriptionHealth).mockResolvedValueOnce({
+      state: "ACTIVE", renewalRequired: false, expiresAt: "2026-11-08T00:00:00.000Z",
+      pendingCount: 0, wantsSignedCheckpoints: true,
+    } as never);
+    const response = await callTool("read_ai_core_events", { conversationId: "conversation-a", limit: 25 });
+    expect(response.body.result.isError).toBeFalsy();
+    expect(mocks.list).toHaveBeenCalledWith({
+      conversationId: "conversation-a", limit: 25,
+      lifecycleOnly: true, includeSignedCheckpoints: true,
+    });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
   it("returns autonomous blocker responses as BLOCKED lifecycle events", async () => {
     mocks.list.mockResolvedValueOnce([
       {

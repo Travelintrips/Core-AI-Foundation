@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { classifySubscriptionLease } from "./subscriptionLeaseHealth.js";
+import { mayReadSignedCheckpointFromMcpSubscription } from "./mcpCheckpointSubscriptionPolicy.js";
 import { codingBridgeTerminalEventPredicate } from "./codingBridgeTerminalEventPredicate.js";
 
 const OWNER_CHANNEL = /^ai-engine-oauth:[a-f0-9]{64}$/;
@@ -18,7 +19,8 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
     await tx.execute(sql`SELECT set_config('app.ai_core_mcp_channel', ${conversationId}, true)`);
     const [lease, backlog] = await Promise.all([
     tx.execute(sql`
-      SELECT lease_expires_at, metadata_json ->> 'unsubscribedAt' AS unsubscribed_at
+      SELECT lease_expires_at, metadata_json ->> 'unsubscribedAt' AS unsubscribed_at,
+        metadata_json -> 'eventTypes' AS event_types
       FROM ai_platform.ai_coding_bridge_presence
       WHERE client_id = ${"chatgpt:" + conversationId}::text
       LIMIT 1
@@ -41,7 +43,11 @@ export async function readCodingBridgeSubscriptionHealth(conversationId: string)
   });
   const count = Number(backlog.rows?.[0]?.["pending"] ?? 0);
   const terminal = Number(backlog.rows?.[0]?.["terminal_pending"] ?? 0);
+  const requestedTypes = row?.["event_types"];
   return { ...state,
+    wantsSignedCheckpoints: mayReadSignedCheckpointFromMcpSubscription({
+      state: state.state, eventTypes: requestedTypes,
+    }),
     pendingCount: Number.isFinite(count) ? count : 0,
     pendingTerminalCount: Number.isFinite(terminal) ? terminal : 0,
     pendingTransportCount: Number.isFinite(count - terminal) ? Math.max(0, count - terminal) : 0,

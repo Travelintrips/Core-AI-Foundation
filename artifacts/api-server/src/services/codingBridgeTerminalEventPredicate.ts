@@ -28,3 +28,11 @@ export function codingBridgeTerminalEventPredicate() {
     )
   )`;
 }
+
+/** Candidate only; cryptographic verification is mandatory after SELECT. */
+export function codingBridgeSignedCheckpointCandidatePredicate() {
+  return sql`(response.kind = 'CHECKPOINT'
+    AND response.metadata_json ->> 'checkpointVerified' = 'true'
+    AND response.metadata_json ->> 'verifiedAssistantReply' = 'true'
+    AND response.metadata_json ? 'checkpointReceipt')`;
+}
