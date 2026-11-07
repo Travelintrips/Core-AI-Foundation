@@ -42,6 +42,28 @@ function isAdminRequest(req: Request): boolean {
   return provided === configuredKey;
 }
 
+/**
+ * Only the six public authentication actions protected by loginLimiter may
+ * bypass the shared 200-request API bucket in isolated DEV. The dedicated
+ * login limiter still counts these requests (8/IP/15 min); other auth routes,
+ * including /me, /users, and email diagnostics, remain globally limited.
+ *
+ * Use server-owned PUBLIC_APP_URL, never a spoofable Host/X-Forwarded-Host.
+ */
+export function isDevDedicatedLoginRoute(req: Pick<Request, "method" | "path">): boolean {
+  if ((process.env["PUBLIC_APP_URL"] ?? "").replace(/\/$/, "") !== "https://dev.cstlogistic.co.id") {
+    return false;
+  }
+  const route = req.path;
+  return (req.method === "POST" && (
+    route === "/internal/auth/login" ||
+    route === "/internal/auth/dev-login" ||
+    route === "/internal/auth/request-magic-link" ||
+    route === "/internal/auth/request-password-reset" ||
+    route === "/internal/auth/reset-password"
+  )) || (req.method === "GET" && route === "/internal/auth/magic-login");
+}
+
 /** 200 req per 15 min — applied globally to all /api routes */
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -49,7 +71,7 @@ export const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: jsonHandler("Terlalu banyak permintaan untuk sementara. Silakan coba lagi dalam beberapa menit."),
-  skip: (req) => isAdminRequest(req) || req.path === "/ai/core-chat/mcp" || req.path === "/ai/core-chat/mcp-v2",
+  skip: (req) => isAdminRequest(req) || isDevDedicatedLoginRoute(req) || req.path === "/ai/core-chat/mcp" || req.path === "/ai/core-chat/mcp-v2",
 });
 
 /** Dedicated bounded MCP request bucket. No unlimited exemption. */
