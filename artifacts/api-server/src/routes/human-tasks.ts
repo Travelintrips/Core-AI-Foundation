@@ -13,6 +13,8 @@
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
+import { recordHumanRecoveryRecommendation } from "../services/humanRecoveryDecisionService.js";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
@@ -57,7 +59,10 @@ async function guardLifecycleReview(req: Request, res: Response, next: NextFunct
             catch {res.status(403).json({error:"LIFECYCLE_REVIEW_CROSS_ORIGIN"});return;}
             const body=req.body && typeof req.body==="object" && !Array.isArray(req.body) ? req.body as Record<string,unknown> : {};
             // Ignore client-provided identity even if submitted by a matching actor.
-            req.body={...body,performedBy:actor.email};
+            // The recommendation endpoint accepts a strict, actor-free body.
+            // Authentication identity is obtained from req.internalUser there.
+            req.body=req.path.endsWith("/recovery-recommendation")
+              ? body : {...body,performedBy:actor.email};
           }
           next();
         });
@@ -187,6 +192,35 @@ router.patch("/ai/human-tasks/:id/accept", async (req, res): Promise<void> => {
   }
 });
 
+// Only the assigned, authenticated DEV reviewer can record a recommendation.
+// This never changes the Human Task state or grants command resume/dispatch.
+router.post("/ai/human-tasks/:id/recovery-recommendation", async(req,res):Promise<void>=>{
+  const id=Number(req.params["id"]);
+  if(!Number.isSafeInteger(id)||id<1){res.status(400).json({error:"INVALID_HUMAN_TASK_ID"});return;}
+  const parsed=z.object({
+    commandId:z.string().uuid(),
+    jobId:z.number().int().positive(),
+    decision:z.enum(["recommend_new_attempt","deny_new_attempt"]),
+    notes:z.string().trim().min(20).max(2000),
+  }).strict().safeParse(req.body);
+  if(!parsed.success){res.status(400).json({error:"INVALID_RECOVERY_RECOMMENDATION"});return;}
+  const actor=req.internalUser?.email;
+  if(!actor){res.status(401).json({error:"SESSION_REQUIRED"});return;}
+  try{
+    const outcome=await recordHumanRecoveryRecommendation({
+      humanTaskId:id,actor,...parsed.data,
+    });
+    if(!outcome.ok){
+      res.status(outcome.error==="HUMAN_REVIEW_NOT_FOUND"?404:
+        outcome.error==="ASSIGNED_HUMAN_REVIEWER_REQUIRED"?403:409).json({error:outcome.error});
+      return;
+    }
+    res.status(201).json(outcome);
+  }catch{
+    res.status(503).json({error:"RECOVERY_RECOMMENDATION_UNAVAILABLE"});
+  }
+});
+
 // ── Reject ─────────────────────────────────────────────────────────────────────
 
 router.patch("/ai/human-tasks/:id/reject", async (req, res): Promise<void> => {
@@ -210,6 +244,19 @@ router.patch("/ai/human-tasks/:id/reject", async (req, res): Promise<void> => {
 router.patch("/ai/human-tasks/:id/complete", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  // A generic Human Task completion must not misrepresent GPT02 lifecycle
+  // recovery as verified. A separate checkpoint/ACK-authorized flow is required.
+  try {
+    const {task}=await humanTasks.getTask(id);
+    if(task.sourceModule==="ai_core_lifecycle"){
+      res.status(409).json({error:"LIFECYCLE_RECOVERY_CANNOT_COMPLETE_GENERICALLY"});
+      return;
+    }
+  }catch(err){
+    res.status((err as {code?:string})?.code==="NOT_FOUND"?404:503)
+      .json({error:"HUMAN_TASK_READ_UNAVAILABLE"});
+    return;
+  }
   const body = CompleteHumanTaskBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
   try {

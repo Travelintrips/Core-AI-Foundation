@@ -150,6 +150,9 @@ function TaskDetailDialog({
   const [notes, setNotes] = useState("");
   const [assignUser, setAssignUser] = useState("");
   const [assignRole, setAssignRole] = useState("");
+  const [recoveryNotes, setRecoveryNotes] = useState("");
+  const [recoveryPending, setRecoveryPending] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
 
   const { data, isLoading } = useGetHumanTask(taskId ?? 0, {
     query: { enabled: open && taskId !== null, queryKey: getGetHumanTaskQueryKey(taskId ?? 0) },
@@ -172,6 +175,50 @@ function TaskDetailDialog({
   const task = data?.task;
   const history = data?.history ?? [];
   const isTerminal = task && ["completed", "rejected", "cancelled", "expired"].includes(task.status);
+  const isRecoveryReview = task?.sourceModule === "ai_core_lifecycle";
+  const payload = task?.payloadJson && typeof task.payloadJson === "object" && !Array.isArray(task.payloadJson)
+    ? task.payloadJson as Record<string, unknown> : {};
+  const recoveryCommandId = typeof payload["commandId"] === "string" ? payload["commandId"] : "";
+  const recoveryJobId = typeof payload["taskId"] === "number"
+    ? payload["taskId"] : Number(payload["taskId"]);
+  const recommendationRecorded = history.some((entry) => entry.action === "human_recovery_recommendation");
+
+  async function submitRecoveryRecommendation(decision: "recommend_new_attempt" | "deny_new_attempt") {
+    if(!taskId || !recoveryCommandId || !Number.isSafeInteger(recoveryJobId) || recoveryJobId < 1) {
+      setRecoveryMessage("Command/Job belum tervalidasi. Tidak ada keputusan yang dikirim.");
+      return;
+    }
+    if(recoveryNotes.trim().length < 20) {
+      setRecoveryMessage("Tuliskan alasan review minimal 20 karakter.");
+      return;
+    }
+    const proceed = window.confirm(decision === "recommend_new_attempt"
+      ? "Rekomendasikan percobaan DEV baru? Ini TIDAK memberikan izin dispatch atau resume GPT02."
+      : "Catat penolakan percobaan baru untuk Job ini?");
+    if(!proceed)return;
+    setRecoveryPending(true);
+    setRecoveryMessage("");
+    try {
+      const response=await fetch(`/api/ai/human-tasks/${taskId}/recovery-recommendation`,{
+        method:"POST",credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          commandId:recoveryCommandId,jobId:recoveryJobId,decision,notes:recoveryNotes.trim(),
+        }),
+      });
+      const result:unknown=await response.json();
+      const parsed=result && typeof result==="object" && !Array.isArray(result)
+        ? result as Record<string,unknown> : {};
+      if(!response.ok)throw new Error(typeof parsed["error"]==="string" ? parsed["error"] : "REQUEST_FAILED");
+      if(parsed["dispatchAuthorized"]!==false || parsed["resumeAllowed"]!==false)
+        throw new Error("UNEXPECTED_RECOVERY_AUTHORIZATION");
+      setRecoveryMessage("Rekomendasi dicatat dalam audit. Resume GPT02 tetap terkunci.");
+      invalidate();
+    }catch(error){
+      setRecoveryMessage(error instanceof Error ? error.message : "Gagal menyimpan rekomendasi");
+    }finally{setRecoveryPending(false);}
+  }
+
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -258,6 +305,38 @@ function TaskDetailDialog({
               </div>
             )}
 
+            {isRecoveryReview && task.status === "accepted" && (
+              <div className="border border-amber-500/30 rounded-lg p-4 space-y-3">
+                <p className="text-sm font-semibold">Rekomendasi Pemulihan GPT02 — DEV</p>
+                <p className="text-xs text-muted-foreground">
+                  Periksa bukti artefak dan riwayat review terlebih dahulu. Rekomendasi ini
+                  bukan izin resume, checkpoint bertanda tangan, lease, atau final ACK.
+                  Hanya reviewer yang ditugaskan dapat mengirim keputusan.
+                </p>
+                <p className="text-xs font-mono break-all">
+                  Job {Number.isSafeInteger(recoveryJobId) ? recoveryJobId : "tidak valid"} ·
+                  Command {recoveryCommandId || "tidak valid"}
+                </p>
+                <Textarea placeholder="Alasan penilaian reviewer (minimal 20 karakter)"
+                  value={recoveryNotes} onChange={(event)=>setRecoveryNotes(event.target.value)}
+                  rows={3} className="text-sm" disabled={recommendationRecorded || recoveryPending}/>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm"
+                    disabled={recommendationRecorded || recoveryPending || recoveryNotes.trim().length < 20}
+                    onClick={()=>void submitRecoveryRecommendation("recommend_new_attempt")}>
+                    Rekomendasikan percobaan DEV baru
+                  </Button>
+                  <Button variant="outline" size="sm"
+                    disabled={recommendationRecorded || recoveryPending || recoveryNotes.trim().length < 20}
+                    onClick={()=>void submitRecoveryRecommendation("deny_new_attempt")}>
+                    Tolak percobaan baru
+                  </Button>
+                </div>
+                {recommendationRecorded && <p className="text-xs">Keputusan reviewer sudah tercatat. Tidak dapat dikirim dua kali.</p>}
+                {recoveryMessage && <p className="text-xs" role="status">{recoveryMessage}</p>}
+              </div>
+            )}
+
             {/* Actions */}
             {!isTerminal && (
               <div className="border border-border rounded-lg p-4 space-y-3">
@@ -279,7 +358,7 @@ function TaskDetailDialog({
                   >
                     <UserCheck className="size-3 mr-1" /> Accept
                   </Button>
-                  <Button
+                  {!isRecoveryReview && <Button
                     size="sm"
                     variant="outline"
                     className="text-green-400 border-green-500/30"
@@ -287,7 +366,7 @@ function TaskDetailDialog({
                     disabled={complete.isPending}
                   >
                     <CheckCircle2 className="size-3 mr-1" /> Complete
-                  </Button>
+                  </Button>}
                   <Button
                     size="sm"
                     variant="outline"

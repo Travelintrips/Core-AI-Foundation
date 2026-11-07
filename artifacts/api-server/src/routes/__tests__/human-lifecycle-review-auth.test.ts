@@ -7,6 +7,8 @@ const mocks=vi.hoisted(()=>({
  rejectTask:vi.fn(),assignTask:vi.fn(),listTasks:vi.fn(),getStats:vi.fn(),createTask:vi.fn(),
 }));
 vi.mock('../../services/humanTaskService.js',()=>mocks);
+const decisionMocks=vi.hoisted(()=>({recordHumanRecoveryRecommendation:vi.fn()}));
+vi.mock('../../services/humanRecoveryDecisionService.js',()=>decisionMocks);
 vi.mock('../../middleware/ssrfGuard.js',()=>({ssrfGuard:()=> (_req:unknown,_res:unknown,next:()=>void)=>next()}));
 vi.mock('../../middleware/internalAuth.js',()=>({
  requireAuth:async(req:any,res:any,next:()=>void)=>{
@@ -63,6 +65,60 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
  });
  it('production fails closed even for assigned admin',async()=>{
   process.env.APP_ENV='production';const r=await act('admin');expect(r.status).toBe(403);expect(mocks.acceptTask).not.toHaveBeenCalled();
+ });
+ it('generic Complete cannot mark GPT02 Human Review as completed',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   const r=await request(app).patch(url+'/complete').set('Host','127.0.0.1:7777')
+     .set('Origin','http://127.0.0.1:7777').set('x-isolated-test-session','admin')
+     .send({notes:'All good'});
+   expect(r.status).toBe(409);
+   expect(r.body.error).toBe('LIFECYCLE_RECOVERY_CANNOT_COMPLETE_GENERICALLY');
+   expect(mocks.completeTask).not.toHaveBeenCalled();
+ });
+ it('recovery recommendation denies anonymous and unassigned admins',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   const payload={commandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',jobId:135,
+     decision:'recommend_new_attempt',notes:'Evidence verified. Recommend a fresh guarded DEV run.'};
+   const anonymous=await request(app).post(url+'/recovery-recommendation').set('Origin','http://127.0.0.1:7777').send(payload);
+   expect(anonymous.status).toBe(401);
+   const other=await request(app).post(url+'/recovery-recommendation').set('Host','127.0.0.1:7777')
+     .set('Origin','http://127.0.0.1:7777').set('x-isolated-test-session','other-admin').send(payload);
+   expect(other.status).toBe(403);
+   expect(decisionMocks.recordHumanRecoveryRecommendation).not.toHaveBeenCalled();
+ });
+ it('recovery recommendation assigned reviewer has controlled server-side actor, no dispatch',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   decisionMocks.recordHumanRecoveryRecommendation.mockResolvedValueOnce({
+     ok:true,historyId:19,decision:'recommend_new_attempt',dispatchAuthorized:false,resumeAllowed:false,
+   });
+   const r=await request(app).post(url+'/recovery-recommendation').set('Host','127.0.0.1:7777')
+     .set('Origin','http://127.0.0.1:7777').set('x-isolated-test-session','admin')
+     .send({commandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',jobId:135,
+       decision:'recommend_new_attempt',notes:'Verified original artifact and safety limits.',performedBy:'forged'});
+   expect(r.status).toBe(400);
+   expect(decisionMocks.recordHumanRecoveryRecommendation).not.toHaveBeenCalled();
+   const valid=await request(app).post(url+'/recovery-recommendation').set('Host','127.0.0.1:7777')
+     .set('Origin','http://127.0.0.1:7777').set('x-isolated-test-session','admin')
+     .send({commandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',jobId:135,
+       decision:'recommend_new_attempt',notes:'Verified original artifact and safety limits.'});
+   expect(valid.status).toBe(201);
+   expect(valid.body).toMatchObject({dispatchAuthorized:false,resumeAllowed:false});
+   expect(decisionMocks.recordHumanRecoveryRecommendation).toHaveBeenCalledWith(expect.objectContaining({
+     actor:'admcst001@gmail.com',humanTaskId:6,jobId:135,
+   }));
+ });
+ it('recovery recommendation is blocked cross-origin and in PROD',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   const send=()=>({commandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',jobId:135,
+     decision:'deny_new_attempt',notes:'Unsafe to replay this command without proof.'});
+   const cross=await request(app).post(url+'/recovery-recommendation').set('Host','127.0.0.1:7777')
+     .set('Origin','https://other.example').set('x-isolated-test-session','admin').send(send());
+   expect(cross.status).toBe(403);
+   process.env.APP_ENV='production';
+   const prod=await request(app).post(url+'/recovery-recommendation').set('Host','127.0.0.1:7777')
+     .set('Origin','http://127.0.0.1:7777').set('x-isolated-test-session','admin').send(send());
+   expect(prod.status).toBe(403);
+   expect(decisionMocks.recordHumanRecoveryRecommendation).not.toHaveBeenCalled();
  });
  it('legacy non-lifecycle Human Task remains on existing route without extra session guard',async()=>{
   mocks.getTask.mockResolvedValue({task:{...target,id:7,sourceModule:'generic'},history:[]});
