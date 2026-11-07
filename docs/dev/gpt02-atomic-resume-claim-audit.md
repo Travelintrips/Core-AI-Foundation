@@ -35,3 +35,16 @@ Command `169a7492-cfd8-4a56-bb57-18001b6b5968` currently has `status=FAILED`, la
 
 ## Draft security hardening
 The proposed SQL now declares command/response foreign keys, enables RLS on both new DEV tables, revokes API role access, and **unconditionally denies** the claim function via `RESUME_DISPATCH_GUARD_NOT_IMPLEMENTED`. This makes accidental activation fail closed while the missing DB-side evidence / retry / rate-limit / actor authorization checks are designed and tested. The document remains an RFC; the schema has not been applied. Foreign keys alone do not establish that response IDs belong to the same command—this remains a P0 requirement.
+
+## Executed isolated PostgreSQL 16 contract tests (2026-11-08)
+On VPS `srv1792369`, a disposable `postgres:16-alpine` container was started with `--network none`, an in-memory `--tmpfs` data directory, and no host port or persistent volume. Test script: `scripts/dev/test-gpt02-resume-isolated-postgres.sh` (now wired into GitHub CI). The container is removed via shell cleanup trap.
+
+Actual readback from the **prototype** (distinct from the intentionally inert proposed SQL function):
+- `RACE PASS: 1 winner, 2 rejected` (three independent PostgreSQL client sessions)
+- `STATE PASS: one consumed grant and one lease`
+- `REPLAY PASS`
+- `ROLLBACK PASS: grant unconsumed, no partial lease` with injected PostgreSQL exception
+- `FENCE PASS: old owner denied, new owner accepted` after forced lease expiry and fencing-version increment
+- process exit 0
+
+Initial harness attempt failed rollback verification because `docker exec` was missing `-i` on SQL input and had not inserted the fixture grant; the corrected harness was rerun from an empty disposable database and passed. These are **contract tests for an isolated prototype only**. They do not prove the draft `dev_gpt02_claim_resume` is runnable (it unconditionally raises 0A000), nor that cryptographically verified checkpoint/ACK, terminal events, HTTP 429 and approval identity have been enforced transactionally. PROD was not accessed or modified.
