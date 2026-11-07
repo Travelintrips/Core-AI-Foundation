@@ -5,7 +5,7 @@ vi.mock("@workspace/db",()=>({db:{execute:async()=>{
   return {rows:call%4===3?m.humanRows:m.rows};
 }}}));
 vi.mock("../codingCommandLifecycleEvidence.js",()=>({getCodingCommandLifecycleEvidence:async()=>m.life}));
-import {assessReadonlyRecoveryFacts,getDevCommandRecoveryReview,type RecoveryRuntimeFacts} from "../jobLifecycleRecoveryReview.js";
+import {assessReadonlyRecoveryFacts,getDevCommandRecoveryReview,parseRecoveryRecommendation,type RecoveryRuntimeFacts} from "../jobLifecycleRecoveryReview.js";
 const now=new Date("2026-11-07T18:00:00Z");
 function facts():RecoveryRuntimeFacts{return {
  commandId:"169a7492-cfd8-4a56-bb57-18001b6b5968",status:"FAILED",checkpointResponseId:"cp1",checkpointVerified:true,
@@ -15,6 +15,31 @@ function facts():RecoveryRuntimeFacts{return {
  presence:{workerId:"openclaw-dell-chatgpt-wake-dev",lastSeenAt:new Date(now.getTime()-5000),leaseExpiresAt:new Date(now.getTime()+60000),reportedHealth:"healthy"},
  policy:{enabled:true,maxRetries:3,heartbeatGraceMinutes:10,requireAcknowledgement:true},serverFlag:false,now,
 };}
+const cmd="83db99f5-cbda-4e60-be71-3090fb411bbb";
+const reviewer="admcst001@gmail.com";
+const recommendation=(decision:string)=>JSON.stringify({
+  decision,commandId:cmd,jobId:135,
+  dispatchAuthorized:false,resumeAllowed:false,checkpointIssued:false,
+});
+describe("advisory recovery recommendation binding",()=>{
+ it("recognizes a valid bound reviewer recommendation",()=>{
+  expect(parseRecoveryRecommendation(recommendation("recommend_new_attempt"),reviewer,reviewer,cmd,135))
+   .toBe("recommend_new_attempt");
+  expect(parseRecoveryRecommendation(recommendation("deny_new_attempt"),reviewer,reviewer,cmd,135))
+   .toBe("deny_new_attempt");
+ });
+ it("rejects spoofed actor, wrong job or command and malformed input",()=>{
+  expect(parseRecoveryRecommendation(recommendation("recommend_new_attempt"),"attacker",reviewer,cmd,135)).toBeNull();
+  expect(parseRecoveryRecommendation(recommendation("recommend_new_attempt"),reviewer,reviewer,cmd,136)).toBeNull();
+  expect(parseRecoveryRecommendation(recommendation("recommend_new_attempt"),reviewer,reviewer,"other",135)).toBeNull();
+  expect(parseRecoveryRecommendation("invalid-json",reviewer,reviewer,cmd,135)).toBeNull();
+ });
+ it("rejects recommendation masquerading as dispatch authorization",()=>{
+  const attempt=JSON.stringify({...JSON.parse(recommendation("recommend_new_attempt")),dispatchAuthorized:true});
+  expect(parseRecoveryRecommendation(attempt,reviewer,reviewer,cmd,135)).toBeNull();
+  expect(parseRecoveryRecommendation(JSON.stringify({...JSON.parse(recommendation("new")),decision:"arbitrary"}),reviewer,reviewer,cmd,135)).toBeNull();
+ });
+});
 describe("DEV-only native GPT02 fail-closed recovery review",()=>{
  it("recognizes real ACK but never dispatches or closes",()=>{
   const x=assessReadonlyRecoveryFacts(facts());
@@ -85,7 +110,10 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   expect(x.reviewReason).toBe("NO_BLOCKER");
  });
  it("links recovered artifact evidence without granting recovery permission",async()=>{
-   m.humanRows=[{id:6,status:"accepted",completed_at:null,job_id:"135",recovered_artifact_evidence_recorded:true}];
+   m.humanRows=[{id:6,status:"accepted",completed_at:null,job_id:"135",recovered_artifact_evidence_recorded:true,
+      assigned_user:reviewer,recommendation_notes:JSON.stringify({
+        ...JSON.parse(recommendation("recommend_new_attempt")),commandId:facts().commandId,
+      }),recommendation_actor:reviewer}];
    try {
      const x=await getDevCommandRecoveryReview(facts().commandId);
      expect(x.found).toBe(true);
@@ -95,6 +123,7 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
      expect(x.humanReviewCompleted).toBe(false);
      expect(x.recoveredArtifactEvidenceRecorded).toBe(true);
      expect(x.linkedJobId).toBe(135);
+     expect(x.humanRecoveryRecommendation).toBe("recommend_new_attempt");
      expect(x.humanRecoveryAuthorizationVerified).toBe(false);
      expect(x.commandResumeAuthorizationVerified).toBe(false);
      expect(x.mayDispatchWorker).toBe(false);

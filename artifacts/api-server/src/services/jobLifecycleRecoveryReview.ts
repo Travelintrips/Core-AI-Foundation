@@ -72,6 +72,26 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
   };
 }
 
+/** A recommendation remains advisory; it cannot grant command authorization. */
+export function parseRecoveryRecommendation(
+  raw: unknown, actor: unknown, assignedReviewer: unknown,
+  commandId: string, jobId: number|null,
+): "recommend_new_attempt"|"deny_new_attempt"|null {
+  if(typeof raw!=="string" || raw.length>4000 ||
+    typeof actor!=="string" || typeof assignedReviewer!=="string" ||
+    actor.trim().toLowerCase()!==assignedReviewer.trim().toLowerCase() ||
+    !jobId) return null;
+  try{
+    const payload:unknown=JSON.parse(raw);
+    if(!isRecord(payload) ||
+      payload.commandId!==commandId || payload.jobId!==jobId ||
+      payload.dispatchAuthorized!==false || payload.resumeAllowed!==false ||
+      payload.checkpointIssued!==false) return null;
+    const choice=payload.decision;
+    return choice==="recommend_new_attempt" || choice==="deny_new_attempt" ? choice : null;
+  }catch{return null;}
+}
+
 export async function getDevCommandRecoveryReview(commandId:string) {
   const lifecycle=await getCodingCommandLifecycleEvidence(commandId);
   if(!lifecycle.found)return {found:false as const,commandId};
@@ -95,6 +115,13 @@ export async function getDevCommandRecoveryReview(commandId:string) {
   const humanReview=await db.execute(sql`
     SELECT t.id, t.status, t.completed_at,
       t.payload_json->>'taskId' AS job_id,
+      t.assigned_user,
+      (SELECT h.notes FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action='human_recovery_recommendation'
+        ORDER BY h.id DESC LIMIT 1) AS recommendation_notes,
+      (SELECT h.performed_by FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action='human_recovery_recommendation'
+        ORDER BY h.id DESC LIMIT 1) AS recommendation_actor,
       EXISTS (
         SELECT 1 FROM ai_platform.ai_human_task_history h
         WHERE h.task_id=t.id AND h.action='artifact_recovery_verified'
@@ -133,6 +160,10 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     humanReviewCompleted:Boolean(review?.["completed_at"]),
     recoveredArtifactEvidenceRecorded:review?.["recovered_artifact_evidence_recorded"]===true,
     linkedJobId:Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null,
+    humanRecoveryRecommendation:parseRecoveryRecommendation(
+      review?.["recommendation_notes"],review?.["recommendation_actor"],review?.["assigned_user"],
+      commandId,Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null,
+    ),
     // Accept and evidence cannot authorize a command or create a signed checkpoint.
     humanRecoveryAuthorizationVerified:false as const,
   };
