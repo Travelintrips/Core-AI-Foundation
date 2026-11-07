@@ -49,7 +49,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function isIdempotentCodingBridgeLifecycleKind(
   kind: "ACK" | "PROGRESS" | "CHECKPOINT" | "BLOCKER" | "COMPLETED" | "FAILED",
 ): boolean {
-  return kind === "BLOCKER" || kind === "COMPLETED" || kind === "FAILED";
+  return kind === "CHECKPOINT" || kind === "BLOCKER" || kind === "COMPLETED" || kind === "FAILED";
 }
 
 const GITHUB_REPOSITORY = "Travelintrips/Core-AI-Foundation";
