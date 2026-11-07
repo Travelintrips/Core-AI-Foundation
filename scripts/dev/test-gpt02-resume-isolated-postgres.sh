@@ -11,6 +11,14 @@ CREATE SCHEMA sandbox;
 CREATE TABLE sandbox.grant_records(id int primary key, command_id int not null, worker_id text not null, status text not null, consumed_at timestamptz);
 CREATE TABLE sandbox.command_lease(command_id int primary key, grant_id int not null, worker_id text not null, fence bigint not null, token text not null, expires_at timestamptz not null, released boolean not null default false);
 CREATE TABLE sandbox.command_results(command_id int primary key, fence bigint not null, token text not null);
+-- Persist actual command-linked response identities in this disposable test DB.
+CREATE TABLE sandbox.response_events (
+  command_id int not null, event_id text not null, kind text not null, sequence_no int not null,
+  PRIMARY KEY (command_id,event_id), UNIQUE (command_id,sequence_no)
+);
+INSERT INTO sandbox.response_events VALUES
+ (99,'cp99','CHECKPOINT',1),(99,'block99','BLOCKER',2),
+ (100,'cp100','CHECKPOINT',1),(100,'block100','BLOCKER',2);
 CREATE TABLE sandbox.command_evidence (
  command_id int primary key, command_status text not null, checkpoint_verified boolean not null,
  receiver_ack_verified boolean not null, last_kind text not null, blocker_matches boolean not null,
@@ -35,6 +43,19 @@ BEGIN
     e.retries<0 OR e.retry_limit<=0 OR e.retries>=e.retry_limit OR
     e.circuit_open OR (e.retry_after IS NOT NULL AND e.retry_after>clock_timestamp())
  THEN RAISE EXCEPTION 'RECOVERY_EVIDENCE_DENIED'; END IF;
+ -- Look up checkpoint and BLOCKER as rows belonging to the *same* command.
+ -- Reject terminal evidence anywhere in the command history, or a stale BLOCKER.
+ IF NOT EXISTS (
+   SELECT 1 FROM sandbox.response_events cp
+   JOIN sandbox.response_events bl ON bl.command_id=cp.command_id
+   WHERE cp.command_id=g.command_id AND cp.kind='CHECKPOINT'
+     AND bl.kind='BLOCKER' AND cp.sequence_no<bl.sequence_no
+     AND NOT EXISTS (SELECT 1 FROM sandbox.response_events t
+       WHERE t.command_id=g.command_id AND t.kind IN ('FAILED','COMPLETED'))
+     AND (SELECT last.kind FROM sandbox.response_events last
+          WHERE last.command_id=g.command_id
+          ORDER BY last.sequence_no DESC LIMIT 1)='BLOCKER'
+ ) THEN RAISE EXCEPTION 'RESPONSE_IDENTITY_DENIED'; END IF;
  INSERT INTO sandbox.command_lease AS x(command_id,grant_id,worker_id,fence,token,expires_at)
  VALUES(g.command_id,p_grant,p_worker,1,'token-'||p_grant,clock_timestamp()+interval '90 seconds')
  ON CONFLICT(command_id) DO UPDATE
@@ -105,17 +126,31 @@ VALUES
 (206,'PROCESSING',true,true,'BLOCKER',true,false,0,3,NULL,false),
 (207,'PROCESSING',true,true,'BLOCKER',true,true,3,3,NULL,false),
 (208,'PROCESSING',true,true,'BLOCKER',true,true,0,3,clock_timestamp()+interval '1 hour',false),
-(209,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,true);
+(209,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,true),
+(210,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,false),
+(211,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,false),
+(212,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,false),
+(213,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,false);
+INSERT INTO sandbox.response_events
+ SELECT n,'cp'||n,'CHECKPOINT',1 FROM generate_series(201,213) n;
+INSERT INTO sandbox.response_events
+ SELECT n,'block'||n,'BLOCKER',2 FROM generate_series(201,213) n;
+-- Wrong command binding, terminal before, terminal after, and stale BLOCKER.
+DELETE FROM sandbox.response_events WHERE command_id=210 AND kind='BLOCKER';
+INSERT INTO sandbox.response_events VALUES
+ (211,'earlier-failed','FAILED',0),
+ (212,'later-completed','COMPLETED',3),
+ (213,'newer-checkpoint','CHECKPOINT',3);
 INSERT INTO sandbox.grant_records
 SELECT command_id,command_id,'worker1','APPROVED',NULL FROM sandbox.command_evidence
-WHERE command_id BETWEEN 201 AND 209;
+WHERE command_id BETWEEN 201 AND 213;
 SQL
-for cmd in $(seq 201 209); do
+for cmd in $(seq 201 213); do
   if docker exec "$NAME" psql -U postgres -qAt -c "SELECT sandbox.claim($cmd,'worker1');" >"$WORK/guard$cmd.out" 2>&1; then
     echo "FAIL CLOSED GUARD $cmd permitted"; exit 1
   fi
   state="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT status,(SELECT count(*) FROM sandbox.command_lease WHERE command_id=$cmd) FROM sandbox.grant_records WHERE id=$cmd;")"
   [ "$state" = "APPROVED|0" ] || { echo "FAIL CLOSED STATE $cmd $state"; exit 1; }
 done
-echo "EVIDENCE GUARDS PASS: nine rejected, zero consumed grants or leases"
+echo "EVIDENCE GUARDS PASS: thirteen rejected (including 4 persisted-response relation checks), zero consumed grants or leases"
 echo "ISOLATED POSTGRES 16 CONTRACT TESTS PASS (prototype only; NOT production claim function)"
