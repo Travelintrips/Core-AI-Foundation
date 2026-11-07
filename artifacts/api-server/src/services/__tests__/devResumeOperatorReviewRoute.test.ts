@@ -9,7 +9,7 @@ vi.mock("../internalAuthService.js",()=>({
  getInternalUserById:async()=>m.user,
 }));
 vi.mock("../aiAuditService.js",()=>({logAudit:async()=>{}}));
-import route from "../routes/dev-resume-operator-review.js";
+import route from "../../routes/dev-resume-operator-review.js";
 const app=express();
 app.use(cookieParser());
 app.use(route);
