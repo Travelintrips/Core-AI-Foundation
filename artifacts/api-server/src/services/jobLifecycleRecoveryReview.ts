@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { parseRecoveryPolicy } from "./handshakeSopConfiguration.js";
 import { assessJobLifecycleReadiness } from "./jobLifecycleReadinessService.js";
 import { evaluateRecoveryDecision } from "./jobLifecycleRecoveryGate.js";
+import { reviewBlockerEvidence } from "./jobLifecycleBlockerEvidence.js";
 import { getCodingCommandLifecycleEvidence } from "./codingCommandLifecycleEvidence.js";
 
 const workerId = "openclaw-dell-chatgpt-wake-dev";
@@ -31,6 +32,7 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
     receiverAckVerified:r.id===facts.checkpointResponseId&&facts.checkpointVerified,
   }));
   const readiness=assessJobLifecycleReadiness(rows);
+  const blockerEvidence=reviewBlockerEvidence(facts.commandId,rows);
   const heartbeat=facts.presence?.workerId===workerId&&facts.presence.reportedHealth==="healthy"
     ?facts.presence.lastSeenAt:null;
   const workerHeartbeatFresh=Boolean(heartbeat&&p&&
@@ -54,6 +56,8 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
     checkpointAttested:readiness.latestCheckpointAttested,
     receiverAckVerified:readiness.latestCheckpointReceiverAckVerified,
     blockingResponseId:readiness.blockingResponseId,
+    blockerEvidenceValid:blockerEvidence.valid,
+    blockerEvidenceReason:blockerEvidence.reason,
     workerPresenceHealthy:workerHeartbeatFresh,
     workerPresenceLeaseActive:presenceLeaseActive,
     recoveryPolicyEnabled:p?.enabled===true,
@@ -62,7 +66,7 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
     commandExclusiveLeaseVerified:false as const,
     rateLimitClearanceVerified:false as const,
     retryBudgetVerified:false as const,
-    eligibleForAuthorizedRecoveryReview:decision.eligibleForAuthorizedRecoveryReview,
+    eligibleForAuthorizedRecoveryReview:decision.eligibleForAuthorizedRecoveryReview&&blockerEvidence.valid,
     reviewReason:decision.reason,
     mayDispatchWorker:false as const,mayCloseJob:false as const,
   };
