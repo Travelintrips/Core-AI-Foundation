@@ -20,6 +20,8 @@ export type RecoveryRuntimeFacts = {
   checkpointVerified:boolean; responseRows:readonly {id:string;kind:string;createdAt:Date|null;acknowledgedAt:Date|null}[];
   presence:{workerId:string;lastSeenAt:Date|null;leaseExpiresAt:Date|null;reportedHealth:string|null}|null;
   policy:unknown; serverFlag:boolean; now:Date;
+  /** False if the database returned too many rows or an incomplete snapshot. */
+  responseSnapshotComplete?:boolean;
 };
 
 /** No command-level resume authorization record or exclusive command lease is available.
@@ -33,6 +35,10 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
   }));
   const readiness=assessJobLifecycleReadiness(rows);
   const blockerEvidence=reviewBlockerEvidence(facts.commandId,rows);
+  // Terminal commands may retain valid historical receipts. These are evidence,
+  // never authority to reopen a FAILED/COMPLETED/CANCELLED command.
+  const commandStatusReviewable=facts.status==="RECEIVED"||facts.status==="PROCESSING";
+  const responseSnapshotComplete=facts.responseSnapshotComplete===true;
   const heartbeat=facts.presence?.workerId===workerId&&facts.presence.reportedHealth==="healthy"
     ?facts.presence.lastSeenAt:null;
   const workerHeartbeatFresh=Boolean(heartbeat&&p&&
@@ -58,6 +64,8 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
     blockingResponseId:readiness.blockingResponseId,
     blockerEvidenceValid:blockerEvidence.valid,
     blockerEvidenceReason:blockerEvidence.reason,
+    commandStatusReviewable,
+    responseSnapshotComplete,
     workerPresenceHealthy:workerHeartbeatFresh,
     workerPresenceLeaseActive:presenceLeaseActive,
     recoveryPolicyEnabled:p?.enabled===true,
@@ -66,8 +74,10 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
     commandExclusiveLeaseVerified:false as const,
     rateLimitClearanceVerified:false as const,
     retryBudgetVerified:false as const,
-    eligibleForAuthorizedRecoveryReview:decision.eligibleForAuthorizedRecoveryReview&&blockerEvidence.valid,
-    reviewReason:decision.reason,
+    eligibleForAuthorizedRecoveryReview:decision.eligibleForAuthorizedRecoveryReview&&blockerEvidence.valid&&
+      commandStatusReviewable&&responseSnapshotComplete,
+    reviewReason:!commandStatusReviewable?"TERMINAL_OR_UNKNOWN_COMMAND_STATUS":
+      !responseSnapshotComplete?"INCOMPLETE_RESPONSE_SNAPSHOT":decision.reason,
     mayDispatchWorker:false as const,mayCloseJob:false as const,
   };
 }
@@ -79,7 +89,7 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     SELECT r.id,r.kind,r.created_at,r.acknowledged_at
     FROM ai_platform.ai_coding_bridge_responses r
     WHERE r.command_id=${commandId}::uuid
-    ORDER BY r.created_at ASC,r.id ASC LIMIT 100
+    ORDER BY r.created_at ASC,r.id ASC LIMIT 101
   `);
   const presence=await db.execute(sql`
     SELECT client_id,last_seen_at,lease_expires_at,metadata_json->>'reportedHealth' AS reported_health
@@ -99,8 +109,10 @@ export async function getDevCommandRecoveryReview(commandId:string) {
   const facts:RecoveryRuntimeFacts={
     commandId,status:String(lifecycle.commandStatus),checkpointResponseId:lifecycle.checkpointResponseId,
     checkpointVerified:lifecycle.checkpointAttested&&lifecycle.nativeReceiverAckVerified,
-    responseRows:(snapshot.rows??[]).filter(r=>typeof r["id"]==="string"&&typeof r["kind"]==="string")
-      .map(r=>({id:String(r["id"]),kind:String(r["kind"]),createdAt:validDate(r["created_at"]),
+    responseSnapshotComplete:(snapshot.rows??[]).length<101,
+    // Do not silently discard malformed records: invalid IDs must fail closed.
+    responseRows:(snapshot.rows??[]).map(r=>({id:typeof r["id"]==="string"?r["id"]:"",
+      kind:typeof r["kind"]==="string"?r["kind"]:"UNKNOWN",createdAt:validDate(r["created_at"]),
         acknowledgedAt:validDate(r["acknowledged_at"])})),
     presence:pr?{workerId:String(pr["client_id"]),lastSeenAt:validDate(pr["last_seen_at"]),
       leaseExpiresAt:validDate(pr["lease_expires_at"]),reportedHealth:typeof pr["reported_health"]==="string"?pr["reported_health"]:null}:null,
