@@ -48,3 +48,12 @@ Actual readback from the **prototype** (distinct from the intentionally inert pr
 - process exit 0
 
 Initial harness attempt failed rollback verification because `docker exec` was missing `-i` on SQL input and had not inserted the fixture grant; the corrected harness was rerun from an empty disposable database and passed. These are **contract tests for an isolated prototype only**. They do not prove the draft `dev_gpt02_claim_resume` is runnable (it unconditionally raises 0A000), nor that cryptographically verified checkpoint/ACK, terminal events, HTTP 429 and approval identity have been enforced transactionally. PROD was not accessed or modified.
+
+## Additional real PostgreSQL guard-contract evidence (2026-11-08)
+The isolated PostgreSQL 16 harness was extended to enforce command-state, checkpoint verification, receiver ACK, latest BLOCKER, BLOCKER-command match, authenticated approval flag, bounded retry, Retry-After, and open-circuit conditions **inside the row-locked prototype claim transaction**. Run on disposable network-disabled container on VPS; process exit 0. Results:
+- 3 simultaneous clients: one winner, two denied
+- replay prevented; injected rollback leaves grant APPROVED and no lease
+- fencing rejects stale result writes
+- nine independent fail-closed scenarios rejected with zero grant consumption or lease creation: FAILED command; checkpoint invalid; receiver ACK invalid; latest response not BLOCKER; mismatched BLOCKER; missing approval; retry budget exhausted; HTTP 429 Retry-After pending; circuit breaker open
+
+This remains **simulated evidence flags in a self-contained sandbox**, not a cryptographic attestation integration or an approved authorization record in CST-DEV. The reviewed SQL proposal remains inert (unconditional 0A000); no migration and no GPT02 worker resume. This does not establish a PASS for production dispatch, exact signed checkpoint ownership, or full lifecycle E2E.
