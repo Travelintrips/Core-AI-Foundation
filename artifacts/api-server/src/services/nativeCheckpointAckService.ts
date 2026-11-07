@@ -86,11 +86,11 @@ export async function acknowledgeNativeCheckpoint(input: {
     const wrote = await tx.execute(sql`
       UPDATE ai_platform.ai_coding_bridge_responses
       SET acknowledged_at=NOW(), metadata_json = metadata_json || jsonb_build_object(
-        'nativeCheckpointAckResponseId', ${input.responseId},
-        'nativeCheckpointAckWorker', ${input.tokenOwner},
-        'nativeCheckpointAckEventId', ${input.evidence.eventId},
-        'nativeCheckpointAckObservedAt', ${input.evidence.observedAt},
-        'nativeCheckpointAckSignature', ${input.evidence.signatureBase64},
+        'nativeCheckpointAckResponseId', ${input.responseId}::text,
+        'nativeCheckpointAckWorker', ${input.tokenOwner}::text,
+        'nativeCheckpointAckEventId', ${input.evidence.eventId}::text,
+        'nativeCheckpointAckObservedAt', ${input.evidence.observedAt}::text,
+        'nativeCheckpointAckSignature', ${input.evidence.signatureBase64}::text,
         'nativeCheckpointAckEvidence', ${JSON.stringify(input.evidence)}::jsonb,
         'nativeCheckpointAckCode', 'NATIVE_BROWSER_ACK_VERIFIED'
       )
