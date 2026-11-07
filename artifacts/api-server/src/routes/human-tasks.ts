@@ -12,7 +12,8 @@
  * PATCH  /ai/human-tasks/:id/reassign  — reassign
  */
 
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
+import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
   CreateHumanTaskBody,
@@ -26,6 +27,50 @@ import {
 import * as humanTasks from "../services/humanTaskService.js";
 
 const router = Router();
+
+// Fail-closed for AI Core lifecycle reviews only. Never infer a reviewer from
+// performedBy in the request body or from the legacy admin API-key bypass.
+const humanLifecycleRoles = requireInternalRole("owner", "admin");
+async function guardLifecycleReview(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const id = Number(req.params["id"]);
+  if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({error:"INVALID_HUMAN_TASK_ID"}); return; }
+  try {
+    const {task} = await humanTasks.getTask(id);
+    if (task.sourceModule !== "ai_core_lifecycle") {next(); return;}
+    if (process.env.NODE_ENV !== "development" || process.env.APP_ENV === "production") {
+      res.status(403).json({error:"DEV_LIFECYCLE_REVIEW_ONLY"});return;
+    }
+    await requireAuth(req,res,()=>{
+      void humanLifecycleRoles(req,res,()=>{
+        requirePasswordChanged(req,res,()=>{
+          const actor=req.internalUser;
+          if (!actor) {res.status(401).json({error:"SESSION_REQUIRED"});return;}
+          const assigned=(task.assignedUser??"").trim().toLowerCase();
+          if (req.method !== "GET" && (!assigned || assigned!==actor.email.trim().toLowerCase())) {
+            res.status(403).json({error:"ASSIGNED_HUMAN_REVIEWER_REQUIRED"});return;
+          }
+          if (req.method !== "GET") {
+            // Browser mutation must originate from the same authenticated portal.
+            const origin=req.get("origin");
+            if (!origin) {res.status(403).json({error:"LIFECYCLE_REVIEW_ORIGIN_REQUIRED"});return;}
+            try { if(new URL(origin).host!==req.get("host")) {res.status(403).json({error:"LIFECYCLE_REVIEW_CROSS_ORIGIN"});return;} }
+            catch {res.status(403).json({error:"LIFECYCLE_REVIEW_CROSS_ORIGIN"});return;}
+            const body=req.body && typeof req.body==="object" && !Array.isArray(req.body) ? req.body as Record<string,unknown> : {};
+            // Ignore client-provided identity even if submitted by a matching actor.
+            req.body={...body,performedBy:actor.email};
+          }
+          next();
+        });
+      });
+    });
+  } catch(error){
+    const code=(error as {code?:string})?.code;
+    if(code==="NOT_FOUND") {res.sendStatus(404);return;}
+    res.status(503).json({error:"HUMAN_LIFECYCLE_REVIEW_AUTH_UNAVAILABLE"});
+  }
+}
+router.use("/ai/human-tasks/:id", guardLifecycleReview);
+
 
 // ── Stats (static route before :id) ───────────────────────────────────────────
 
