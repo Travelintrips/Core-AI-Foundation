@@ -43,8 +43,14 @@ if docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <"$WORK/valid.s
 fi
 echo "UNIQUE NONCE PASS"
 # Run independent negative transactions: each must fail and keep count=1.
+CASE_COUNTER=0
 test_deny(){
  local label="$1" statement="$2"
+ # Use a unique nonce for each negative test so uniqueness cannot mask other failures.
+ local suffix
+ CASE_COUNTER=$((CASE_COUNTER+1))
+ suffix="$(printf "%064x" "$CASE_COUNTER")"
+ statement="${statement//0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/$suffix}"
  if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$statement" >"$WORK/error" 2>&1; then
    echo "FAIL: $label accepted";exit 1
  fi
