@@ -22,7 +22,7 @@ test('DEV monitor stays restricted to development and behind /api auth', () => {
 });
 
 test('monitor JavaScript compiles and mounts all visible controls', () => {
-  const js = route('/dev-center/dashboard.js').match(/res\.type\("javascript"\)\.send\(`([\s\S]*?)`\);/);
+  const js = route('/dev-center/dashboard.js').match(/res\.type\("application\/javascript"\)\.send\(`([\s\S]*?)`\);/);
   assert.ok(js?.[1], 'monitor script missing');
   assert.doesNotThrow(() => new Script(js[1]));
   const html = route('/dev-center/dashboard');
@@ -44,4 +44,13 @@ test('unverified progress is never synthesized from a job status', () => {
 test('dashboard includes authenticated DEV monitoring entry point', () => {
   assert.match(dashboard, /href="\/api\/dev-center\/dashboard"/);
   assert.match(dashboard, /import\.meta\.env\.DEV/);
+});
+
+test('DEV monitor login and dashboard scripts use executable MIME types under nosniff', () => {
+  for (const path of ['/dev-center/login.js', '/dev-center/dashboard.js']) {
+    const js = route(path);
+    assert.match(js, /res\.type\("application\/javascript"\)/);
+    assert.doesNotMatch(js, /res\.type\("javascript"\)/);
+  }
+  assert.match(route('/dev-center/login'), /login\.js/);
 });
