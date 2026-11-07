@@ -4,6 +4,7 @@ import { z } from "zod";
 import { codingBridgeCommandSchema } from "./coding-bridge-command-schema.js";
 import { getCodingTaskCompletionEvidence } from "../services/codingTaskCompletionEvidence.js";
 import { getCodingCommandLifecycleEvidence } from "../services/codingCommandLifecycleEvidence.js";
+import { getDevCommandRecoveryReview } from "../services/jobLifecycleRecoveryReview.js";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, getCodingBridgeResponseAckReadback, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
   getCodingWhatsappConfigStatus,
@@ -347,6 +348,22 @@ router.post("/ai/coding/tasks/:id/autonomous/run-once",async(req,res):Promise<vo
  if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
  const cycle=await runAutonomousCodingCycle(id.data);
  res.json(cycle);
+});
+// Read-only recovery review: no dispatch/resume/closure and no authorization grant.
+router.get("/ai/coding/bridge/commands/:id/recovery-review",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY"});return;
+ }
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"INVALID_COMMAND_ID"});return;}
+ try {
+  const review=await getDevCommandRecoveryReview(id.data);
+  res.setHeader("Cache-Control","no-store");
+  if(!review.found){res.status(404).json({error:"DEV_COMMAND_NOT_FOUND"});return;}
+  res.json(review);
+ }catch {
+  res.status(503).json({error:"RECOVERY_REVIEW_UNAVAILABLE"});
+ }
 });
 // DEV-only native GPT02 lifecycle readback, including commands with no task_id.
 // Governed by the existing admin middleware. No secret, raw reply, or signature returned.
