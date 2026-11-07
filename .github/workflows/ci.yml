@@ -36,6 +36,8 @@ jobs:
         run: node --test scripts/ai-core-command.test.mjs
       - name: Verify DEV GPT02 resume RFC remains fail-closed
         run: node --test scripts/dev/test-gpt02-resume-rfc.mjs
+      - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
+        run: bash scripts/dev/test-gpt02-resume-isolated-postgres.sh
       - name: Verify fail-closed DEV-first production promotion
         run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
       - name: Verify GitHub event correlation contract
