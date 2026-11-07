@@ -23,12 +23,23 @@ export async function persistSignedDevOperatorReviewIntent(input:{
    now:input.now,serverPublicKeyDerBase64:input.trustedPublicKeyDerBase64});
  if(!verification.validForReview)return deny("SIGNATURE_"+verification.reason);
  try{
-   // Server-owned transaction boundary: lock command row against concurrent
-   // status changes, then verify DEV worker binding, response FKs and operator
-   // in the INSERT SELECT. Native ACK and receipt signatures are verified by
-   // the trusted backend before this statement, NOT cryptographically by SQL.
+   // Server-owned transaction boundary: lock command in one statement, then
+   // use a fresh statement snapshot for latest response, DEV worker and
+   // operator checks. Native receipt/ACK verification remains in backend,
+   // not in SQL; neither step issues a resume grant.
    // This is deliberately only an audit record with a unique nonce.
-   const result=await db.execute(sql`
+   // Two independent SQL statements in one READ COMMITTED transaction:
+   // (1) acquire row lock, possibly waiting for a concurrent response FK lock;
+   // (2) read response history with a NEW snapshot after the wait.
+   // A single INSERT ... SELECT ... FOR UPDATE can use a stale statement
+   // snapshot of responses even after waiting for the command row lock.
+   const result=await db.transaction(async tx=>{
+     const locked=await tx.execute(sql`
+       SELECT id FROM ai_platform.ai_coding_bridge_commands
+       WHERE id=${p.commandId}::uuid FOR UPDATE
+     `);
+     if((locked.rows??[]).length!==1)return {rows:[]};
+     return tx.execute(sql`
     INSERT INTO ai_platform.dev_gpt02_operator_review_intents
     (command_id,checkpoint_response_id,blocker_response_id,operator_user_id,
      operator_role,worker_id,nonce,proof_json,signed_at,expires_at)
@@ -60,7 +71,8 @@ export async function persistSignedDevOperatorReviewIntent(input:{
         WHERE terminal.command_id=c.id AND terminal.kind IN ('FAILED','COMPLETED'))
       AND clock_timestamp()<${p.expiresAt}::timestamptz
     RETURNING id
-   `);
+     `);
+   });
    const id=result.rows?.[0]?.["id"];
    if(typeof id!=="string")return deny("DATABASE_EVIDENCE_CHANGED_OR_DENIED");
    return {recorded:true,reason:"SIGNED_REVIEW_INTENT_AUDITED_NOT_A_GRANT",recordId:id,
