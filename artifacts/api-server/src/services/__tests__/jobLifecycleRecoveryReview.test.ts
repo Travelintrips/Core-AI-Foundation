@@ -30,6 +30,8 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
  it("an enabled review still requires an explicit BLOCKER",()=>{
   const x=assessReadonlyRecoveryFacts({...facts(),serverFlag:true});
   expect(x.reviewReason).toBe("NO_BLOCKER");
+  expect(x.blockerEvidenceValid).toBe(false);
+  expect(x.blockerEvidenceReason).toBe("NO_BLOCKER");
   expect(x.eligibleForAuthorizedRecoveryReview).toBe(false);
  });
  it("even with a legitimate latest blocker, exact authorization remains absent",()=>{
@@ -37,6 +39,8 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   const x=assessReadonlyRecoveryFacts({...f,serverFlag:true,responseRows:[...f.responseRows,b]});
   expect(x.phase).toBe("BLOCKED");
   expect(x.blockingResponseId).toBe("b1");
+  expect(x.blockerEvidenceValid).toBe(true);
+  expect(x.blockerEvidenceReason).toBe("BLOCKER_EVIDENCE_VALID");
   expect(x.reviewReason).toBe("AUTHORIZATION_REQUIRED");
   expect(x.mayDispatchWorker).toBe(false);
  });
