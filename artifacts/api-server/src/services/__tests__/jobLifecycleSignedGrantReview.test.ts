@@ -30,7 +30,7 @@ function fixture(){
  const grant:ResumeGrantRecord={commandId,checkpointResponseId:cp,blockerResponseId:blocker,
   workerId:worker,approvedBy:operator,approvedAt:when("21"),expiresAt:new Date("2026-11-08T00:01:30Z"),
   consumedAt:null,status:"APPROVED"};
- return {commandId,commandStatus:"PROCESSING",workerId,now,persistedRows:rows,
+ return {commandId,commandStatus:"PROCESSING",workerId:worker,now,persistedRows:rows,
   databaseSnapshotVerified:true,responseHistoryComplete:true,signedCheckpointAndNativeAckVerified:true,
   grant,grantRecordVerified:true,approvalProof:proof(),trustedApprovalPublicKey:publicKey};
 }
