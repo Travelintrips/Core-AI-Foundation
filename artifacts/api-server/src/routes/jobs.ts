@@ -160,7 +160,8 @@ router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
       const verifiedProgress=evidenceId && typeof progressValue==="number" && Number.isInteger(progressValue) && progressValue>=0 && progressValue<=100 && !["FAILED","BLOCKED","CANCELLED"].includes(status)?progressValue:status==="COMPLETED"&&row["final_ack_verified"]===true?100:null;
       items.push({id:String(row["id"]),title:str(row["title"])||"AI Task",source:str(row["source"])||"AI Tasks",status,stage:str(metadata["stage"])||null,verifiedProgress,worker:str(row["worker_id"])||str(row["assigned_client_id"])||null,accountable:str(row["assigned_to"])||null,workerType:str(row["worker_type"])||null,blocker:str(row["error_message"])||str(metadata["lastDispatchError"])||null,evidence:evidenceId|| (row["final_ack_verified"]===true?"Final ACK terverifikasi":null),updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
     }
-    items.sort((a,b)=>Date.parse(String(b["updatedAt"]??0))-Date.parse(String(a["updatedAt"]??0)));
+    const activeStatuses=new Set(["QUEUED","WAITING","RUNNING","RETRYING","RECEIVED","PROCESSING","DISPATCHING","VERIFYING","REVIEW_REQUIRED","BLOCKED"]);
+    items.sort((a,b)=>Number(activeStatuses.has(String(b["status"])))-Number(activeStatuses.has(String(a["status"]))) || (Date.parse(String(b["updatedAt"]??0))||0)-(Date.parse(String(a["updatedAt"]??0))||0));
     res.setHeader("Cache-Control","no-store");
     res.json({jobs:items.slice(0,200),warnings});
   } catch {res.status(503).json({error:"DEV_JOB_MONITOR_UNAVAILABLE"});}
