@@ -57,3 +57,6 @@ The isolated PostgreSQL 16 harness was extended to enforce command-state, checkp
 - nine independent fail-closed scenarios rejected with zero grant consumption or lease creation: FAILED command; checkpoint invalid; receiver ACK invalid; latest response not BLOCKER; mismatched BLOCKER; missing approval; retry budget exhausted; HTTP 429 Retry-After pending; circuit breaker open
 
 This remains **simulated evidence flags in a self-contained sandbox**, not a cryptographic attestation integration or an approved authorization record in CST-DEV. The reviewed SQL proposal remains inert (unconditional 0A000); no migration and no GPT02 worker resume. This does not establish a PASS for production dispatch, exact signed checkpoint ownership, or full lifecycle E2E.
+
+## Fenced result write row-lock hardening (2026-11-08)
+The sandbox prototype now acquires a PostgreSQL `FOR UPDATE` lock on the active command lease row before fenced result writing; this removes the lease-check / result-write race window relative to lease rotation. Repeated on disposable PostgreSQL 16, the complete harness returned exit 0 with race/replay/rollback/fence and 9 deny cases PASS. This is a prototype safeguard; all result writes in the real worker implementation would still need to use equivalent transactionally enforced fencing.
