@@ -3,12 +3,12 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null}));
-vi.mock("../services/internalAuthService.js",()=>({
+vi.mock("../internalAuthService.js",()=>({
  SESSION_COOKIE_NAME:"internal_session",
  verifySessionToken:(token:string)=>token==="valid-session"?{sub:7}:null,
  getInternalUserById:async()=>m.user,
 }));
-vi.mock("../services/aiAuditService.js",()=>({logAudit:async()=>{}}));
+vi.mock("../aiAuditService.js",()=>({logAudit:async()=>{}}));
 import route from "../routes/dev-resume-operator-review.js";
 const app=express();
 app.use(cookieParser());
