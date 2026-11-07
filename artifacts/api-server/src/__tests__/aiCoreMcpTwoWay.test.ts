@@ -152,6 +152,24 @@ describe("MCP command two-way routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("advertises checkpoint opt-in through MCP tool schema without changing terminal defaults", async () => {
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const discovery = await request(app).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer test-connector-key")
+      .send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const sub = discovery.body.result.tools.find((tool: { name: string }) =>
+      tool.name === "subscribe_ai_core_events");
+    expect(sub.inputSchema.properties.eventTypes.items.enum).toContain("CHECKPOINT");
+    expect(sub.inputSchema.properties.eventTypes.maxItems).toBe(6);
+    expect(sub.inputSchema.properties.eventTypes.default).not.toContain("CHECKPOINT");
+    const types = ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED", "CHECKPOINT"];
+    const accepted = await callTool("subscribe_ai_core_events", {
+      conversationId: "conversation-a", eventTypes: types,
+    });
+    expect(accepted.body.result.isError).toBeFalsy();
+    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ eventTypes: types }));
+  });
+
   it("does not report a verified conversation from an unverified subscription", async () => {
     const response = await callTool("subscribe_ai_core_events", { conversationId: "conversation-a" });
     expect(response.body.result.isError).toBeFalsy();
