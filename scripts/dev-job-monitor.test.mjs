@@ -91,3 +91,12 @@ test('dismiss endpoint requires user session and checks live source terminal sta
   assert.match(api, /ai_platform.dev_monitor_dismissed_jobs/);
   assert.doesNotMatch(api, /DELETE FROM|UPDATE ai_task_bridge.jobs|UPDATE public.ai_execution_jobs/);
 });
+
+test('statcard counts match visible filters and hidden selections cannot be removed', () => {
+  assert.match(monitor, /filter === "running" && \(!running.has\(job.status\) \|\| isStale\(job, now\)\)/);
+  assert.match(monitor, /filter === "waiting" && \(!waiting.has\(job.status\) \|\| isStale\(job, now\)\)/);
+  assert.match(monitor, /filter === "verifying" && \(!verifying.has\(job.status\) \|\| isStale\(job, now\)\)/);
+  assert.match(monitor, /const keys = shown.filter/);
+  assert.match(monitor, /const visibleChecked = eligible.filter/);
+  assert.match(monitor, /setFilter\(item.filter as JobFilter\); setSelected\(null\); setChecked\(\[\]\)/);
+});
