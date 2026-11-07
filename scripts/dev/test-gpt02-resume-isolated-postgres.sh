@@ -11,14 +11,30 @@ CREATE SCHEMA sandbox;
 CREATE TABLE sandbox.grant_records(id int primary key, command_id int not null, worker_id text not null, status text not null, consumed_at timestamptz);
 CREATE TABLE sandbox.command_lease(command_id int primary key, grant_id int not null, worker_id text not null, fence bigint not null, token text not null, expires_at timestamptz not null, released boolean not null default false);
 CREATE TABLE sandbox.command_results(command_id int primary key, fence bigint not null, token text not null);
+CREATE TABLE sandbox.command_evidence (
+ command_id int primary key, command_status text not null, checkpoint_verified boolean not null,
+ receiver_ack_verified boolean not null, last_kind text not null, blocker_matches boolean not null,
+ approved boolean not null, retries int not null, retry_limit int not null,
+ retry_after timestamptz, circuit_open boolean not null
+);
+INSERT INTO sandbox.command_evidence VALUES
+ (99,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,false),
+ (100,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,false);
 INSERT INTO sandbox.grant_records VALUES (1,99,'worker1','APPROVED',NULL);
 CREATE FUNCTION sandbox.claim(p_grant int,p_worker text,p_fail boolean DEFAULT false) RETURNS text LANGUAGE plpgsql AS $$
-DECLARE g sandbox.grant_records%ROWTYPE; l sandbox.command_lease%ROWTYPE;
+DECLARE g sandbox.grant_records%ROWTYPE; l sandbox.command_lease%ROWTYPE; e sandbox.command_evidence%ROWTYPE;
 BEGIN
  SELECT * INTO g FROM sandbox.grant_records WHERE id=p_grant FOR UPDATE;
  IF NOT FOUND OR g.status<>'APPROVED' OR g.consumed_at IS NOT NULL OR g.worker_id<>p_worker THEN
    RAISE EXCEPTION 'GRANT_DENIED';
  END IF;
+ SELECT * INTO e FROM sandbox.command_evidence WHERE command_id=g.command_id FOR UPDATE;
+ IF NOT FOUND OR e.command_status NOT IN ('RECEIVED','PROCESSING') OR
+    NOT e.checkpoint_verified OR NOT e.receiver_ack_verified OR
+    e.last_kind<>'BLOCKER' OR NOT e.blocker_matches OR NOT e.approved OR
+    e.retries<0 OR e.retry_limit<=0 OR e.retries>=e.retry_limit OR
+    e.circuit_open OR (e.retry_after IS NOT NULL AND e.retry_after>clock_timestamp())
+ THEN RAISE EXCEPTION 'RECOVERY_EVIDENCE_DENIED'; END IF;
  INSERT INTO sandbox.command_lease AS x(command_id,grant_id,worker_id,fence,token,expires_at)
  VALUES(g.command_id,p_grant,p_worker,1,'token-'||p_grant,clock_timestamp()+interval '90 seconds')
  ON CONFLICT(command_id) DO UPDATE
@@ -75,4 +91,28 @@ STALE="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT sandbox.write_resu
 CURRENT="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT sandbox.write_result(99,2,'token-3');")"
 [ "$STALE" = "f" ] && [ "$CURRENT" = "t" ] || { echo "RESULT-FENCE FAIL $STALE $CURRENT";exit 1; }
 echo "FENCE PASS: old owner denied, new owner accepted"
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
+INSERT INTO sandbox.command_evidence(command_id,command_status,checkpoint_verified,receiver_ack_verified,last_kind,blocker_matches,approved,retries,retry_limit,retry_after,circuit_open)
+VALUES
+(201,'FAILED',true,true,'BLOCKER',true,true,0,3,NULL,false),
+(202,'PROCESSING',false,true,'BLOCKER',true,true,0,3,NULL,false),
+(203,'PROCESSING',true,false,'BLOCKER',true,true,0,3,NULL,false),
+(204,'PROCESSING',true,true,'CHECKPOINT',true,true,0,3,NULL,false),
+(205,'PROCESSING',true,true,'BLOCKER',false,true,0,3,NULL,false),
+(206,'PROCESSING',true,true,'BLOCKER',true,false,0,3,NULL,false),
+(207,'PROCESSING',true,true,'BLOCKER',true,true,3,3,NULL,false),
+(208,'PROCESSING',true,true,'BLOCKER',true,true,0,3,clock_timestamp()+interval '1 hour',false),
+(209,'PROCESSING',true,true,'BLOCKER',true,true,0,3,NULL,true);
+INSERT INTO sandbox.grant_records
+SELECT command_id,command_id,'worker1','APPROVED',NULL FROM sandbox.command_evidence
+WHERE command_id BETWEEN 201 AND 209;
+SQL
+for cmd in $(seq 201 209); do
+  if docker exec "$NAME" psql -U postgres -qAt -c "SELECT sandbox.claim($cmd,'worker1');" >"$WORK/guard$cmd.out" 2>&1; then
+    echo "FAIL CLOSED GUARD $cmd permitted"; exit 1
+  fi
+  state="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT status,(SELECT count(*) FROM sandbox.command_lease WHERE command_id=$cmd) FROM sandbox.grant_records WHERE id=$cmd;")"
+  [ "$state" = "APPROVED|0" ] || { echo "FAIL CLOSED STATE $cmd $state"; exit 1; }
+done
+echo "EVIDENCE GUARDS PASS: nine rejected, zero consumed grants or leases"
 echo "ISOLATED POSTGRES 16 CONTRACT TESTS PASS (prototype only; NOT production claim function)"
