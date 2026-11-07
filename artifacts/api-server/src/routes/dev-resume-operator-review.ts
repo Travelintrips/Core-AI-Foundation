@@ -1,5 +1,5 @@
 /** DEV-only operator identity readback for GPT02 resume approval readiness.
- * No signer, grant issuer, lease acquisition, dispatch or database mutation.
+ * No signer, grant issuer, lease acquisition or dispatch; the existing\n * role middleware may write a standard access audit entry.
  * This endpoint is intentionally authenticated with the Internal Portal's
  * session cookie and re-read DB role, NOT the permissive admin API key guard.
  */
