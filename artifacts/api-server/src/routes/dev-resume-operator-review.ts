@@ -6,6 +6,8 @@
 import { Router } from "express";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { getDevResumeOperatorCommandPreflight } from "../services/jobLifecycleOperatorCommandPreflight.js";
+import { getDevCommandRecoveryReview } from "../services/jobLifecycleRecoveryReview.js";
+import { signDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewSigner.js";
 
 const router=Router();
 router.get(
@@ -54,6 +56,70 @@ router.get(
     }catch{
       res.status(503).json({error:"DEV approval preflight unavailable",
         mayIssueGrant:false,mayDispatchWorker:false});
+    }
+  },
+);
+/** Deliberately disabled unless separate DEV-only signing flag, verified
+ * same-origin request and operator acknowledgement are all present.
+ * Output is a REVIEW INTENT, NEVER an actionable grant or dispatch.
+ */
+router.post(
+  "/ai/core-chat/dev/resume/commands/:commandId/sign-review-intent",
+  requireAuth,requireInternalRole("owner","admin"),requirePasswordChanged,
+  async(req,res):Promise<void>=>{
+    if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]==="production"){
+      res.status(404).json({error:"Not found"});return;
+    }
+    if(process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"]!=="true"){
+      res.status(404).json({error:"Not found"});return;
+    }
+    const trustedOrigin=process.env["AI_CORE_DEV_OPERATOR_REVIEW_ORIGIN"]?.trim();
+    const requestOrigin=req.get("origin");
+    // Origin and non-simple custom header protect the cookie-authenticated
+    // browser endpoint against cross-site form submissions.
+    if(!trustedOrigin||!requestOrigin||requestOrigin!==trustedOrigin||
+       !req.is("application/json")||
+       req.get("x-ai-core-review-intent")!=="explicit"){
+      res.status(403).json({error:"Verified same-origin operator action required"});return;
+    }
+    const body=req.body as unknown;
+    if(!body||typeof body!=="object"||Array.isArray(body)||
+       Object.keys(body as Record<string,unknown>).sort().join(",")!=="acknowledgement"||
+       (body as Record<string,unknown>)["acknowledgement"]!=="SIGN_REVIEW_INTENT_ONLY"){
+      res.status(400).json({error:"Explicit review-only acknowledgement required"});return;
+    }
+    const commandId=String(req.params["commandId"]??"");
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(commandId)){
+      res.status(400).json({error:"Invalid command ID"});return;
+    }
+    const user=req.internalUser;
+    if(!user){res.status(401).json({error:"Not authenticated"});return;}
+    try{
+      const review=await getDevCommandRecoveryReview(commandId);
+      if(!review.found){res.status(404).json({error:"Command not found"});return;}
+      const signing=signDevOperatorReviewIntent({
+       operator:{id:user.id,role:user.role,status:user.status,
+        accountType:user.accountType,mustChangePassword:user.mustChangePassword},
+       commandId,commandStatus:review.commandStatus,
+       checkpointResponseId:review.checkpointResponseId,
+       blockerResponseId:review.blockingResponseId,
+       workerId:"openclaw-dell-chatgpt-wake-dev",
+       now:new Date(),commandEvidenceVerified:true,
+       checkpointAttested:review.checkpointAttested,
+       nativeAckVerified:review.receiverAckVerified,
+       blockerEvidenceVerified:review.blockerEvidenceValid,
+       responseSnapshotComplete:review.responseSnapshotComplete,
+       explicitReviewAcknowledgement:true,
+       appEnv:process.env["APP_ENV"],nodeEnv:process.env["NODE_ENV"],
+       enabledByServer:process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"]==="true",
+       privateKeyDerBase64:process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PRIVATE_KEY_DER_BASE64"],
+       trustedPublicKeyDerBase64:process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"],
+      });
+      res.setHeader("Cache-Control","no-store");
+      res.status(signing.signed?200:409).json(signing);
+    }catch{
+      res.status(503).json({error:"Signing review unavailable",
+       mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
     }
   },
 );
