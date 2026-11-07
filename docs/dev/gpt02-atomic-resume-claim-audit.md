@@ -29,3 +29,9 @@ Date: 2026-11-08. Scope: **CST-DEV Supabase only**, read-only catalog inspection
 
 ## Decision
 **NO-GO for migration, dispatch and E2E PASS.** PR #1660 is an RFC, not runnable production-ready migration. Keep flags OFF. Fix P0 defects and verify test results before any change to DEV DB schema.
+
+## Verified live DEV readback (2026-11-08)
+Command `169a7492-cfd8-4a56-bb57-18001b6b5968` currently has `status=FAILED`, latest response `CHECKPOINT`, latest checkpoint acknowledged, and no latest `BLOCKER`. No grant or exclusive command lease is verified. Thus `mayDispatchWorker=false`. This readback is **not** proof of native cryptographic attestation or exclusive concurrency safety.
+
+## Draft security hardening
+The proposed SQL now declares command/response foreign keys, enables RLS on both new DEV tables, revokes API role access, and **unconditionally denies** the claim function via `RESUME_DISPATCH_GUARD_NOT_IMPLEMENTED`. This makes accidental activation fail closed while the missing DB-side evidence / retry / rate-limit / actor authorization checks are designed and tested. The document remains an RFC; the schema has not been applied. Foreign keys alone do not establish that response IDs belong to the same command—this remains a P0 requirement.
