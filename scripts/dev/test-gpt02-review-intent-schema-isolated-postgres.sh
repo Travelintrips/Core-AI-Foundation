@@ -34,7 +34,7 @@ INSERT INTO ai_platform.dev_gpt02_operator_review_intents
   '08b7b237-7a16-46d0-b79d-029d0363c112',
   7,'admin','openclaw-dell-chatgpt-wake-dev',
   '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-  '{"action":"gpt02.resume.grant.review","synthetic":true}'::jsonb,
+  '{"version":1,"action":"gpt02.resume.grant.review","commandId":"169a7492-cfd8-4a56-bb57-18001b6b5968","checkpointResponseId":"822efca2-7428-428a-ac66-548c0462438e","blockerResponseId":"08b7b237-7a16-46d0-b79d-029d0363c112","workerId":"openclaw-dell-chatgpt-wake-dev","operatorId":"internal:7","operatorRole":"admin","nonce":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","issuedAt":"2026-11-08T00:00:00.000Z","expiresAt":"2026-11-08T00:01:30.000Z","signatureBase64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="}'::jsonb,
   clock_timestamp()-interval '2 seconds',clock_timestamp()+interval '60 seconds');
 SQL
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <"$WORK/valid.sql"
@@ -70,6 +70,11 @@ test_deny "MALFORMED NONCE" "$(printf '%s\n' "$base" | sed "s|0123456789abcdef01
 test_deny "EXPIRED PROOF" "$(printf '%s\n' "$base" | sed "s|clock_timestamp()+interval '60 seconds'|clock_timestamp()-interval '1 second'|")" "violates check constraint"
 test_deny "TOO LONG TTL" "$(printf '%s\n' "$base" | sed "s|clock_timestamp()+interval '60 seconds'|clock_timestamp()+interval '200 seconds'|")" "violates check constraint"
 test_deny "IDENTICAL RESPONSE IDS" "$(printf '%s\n' "$base" | sed "s|08b7b237-7a16-46d0-b79d-029d0363c112|822efca2-7428-428a-ac66-548c0462438e|")" "violates check constraint"
+# Reject cross-column tampering on an otherwise inserted audit row.
+test_deny "SIGNED NONCE BINDING" "UPDATE ai_platform.dev_gpt02_operator_review_intents SET proof_json=jsonb_set(proof_json,'{nonce}','\"00000000\"'::jsonb);" "violates check constraint"
+test_deny "SIGNED OPERATOR BINDING" "UPDATE ai_platform.dev_gpt02_operator_review_intents SET proof_json=jsonb_set(proof_json,'{operatorId}','\"internal:999\"'::jsonb);" "violates check constraint"
+test_deny "SIGNED COMMAND BINDING" "UPDATE ai_platform.dev_gpt02_operator_review_intents SET proof_json=jsonb_set(proof_json,'{commandId}','\"28e38692-73c0-470e-aaea-51894504a5f0\"'::jsonb);" "violates check constraint"
+test_deny "SIGNATURE REQUIRED" "UPDATE ai_platform.dev_gpt02_operator_review_intents SET proof_json=proof_json-'signatureBase64';" "violates check constraint"
 STATUS="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT (SELECT count(*) FROM ai_platform.dev_gpt02_operator_review_intents), (SELECT relrowsecurity FROM pg_class WHERE oid='ai_platform.dev_gpt02_operator_review_intents'::regclass), has_table_privilege('anon','ai_platform.dev_gpt02_operator_review_intents','INSERT'),has_table_privilege('authenticated','ai_platform.dev_gpt02_operator_review_intents','INSERT');")"
 [ "$STATUS" = "1|t|f|f" ] || { echo "FAIL: readback $STATUS";exit 1; }
 echo "SCHEMA SECURITY PASS: exactly one synthetic record, RLS ON, public roles INSERT denied"
