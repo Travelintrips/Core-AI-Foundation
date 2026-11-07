@@ -521,9 +521,9 @@ const tools = [
         conversationId: { type: "string", minLength: 1, maxLength: 200 },
         eventTypes: {
           type: "array",
-          items: { type: "string", enum: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"] },
+          items: { type: "string", enum: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED", "CHECKPOINT"] },
           minItems: 1,
-          maxItems: 5,
+          maxItems: 6,
           default: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
         },
         leaseSeconds: {
