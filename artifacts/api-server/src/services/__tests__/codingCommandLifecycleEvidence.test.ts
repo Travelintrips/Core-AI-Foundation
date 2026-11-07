@@ -8,9 +8,9 @@ const commandId="169a7492-cfd8-4a56-bb57-18001b6b5968";
 const responseId="822efca2-7428-428a-ac66-548c0462438e";
 function fixture(){const cmd={assignedClientId:"openclaw-dell-chatgpt-wake-dev",devOnly:true,capability:"chatgpt:wake"};return [
  {command_id:commandId,command_status:"FAILED",command_task_id:null,command_metadata:cmd,
-  response_id:"00ca0911-c717-49c4-a278-093858a226a5",kind:"FAILED",message:"SOP_CHECKPOINT PAUSED",created_at:"2026-11-07T17:18:00Z"},
+  response_id:"00ca0911-c717-49c4-a278-093858a226a5",response_command_id:commandId,kind:"FAILED",message:"SOP_CHECKPOINT PAUSED",created_at:"2026-11-07T17:18:00Z"},
  {command_id:commandId,command_status:"FAILED",command_task_id:null,command_metadata:cmd,
-  response_id:responseId,kind:"CHECKPOINT",message:null,created_at:"2026-11-07T17:18:10Z",
+  response_id:responseId,response_command_id:commandId,kind:"CHECKPOINT",message:null,created_at:"2026-11-07T17:18:10Z",
   acknowledged_at:"2026-11-07T17:19:51Z",checkpoint_json:{},response_metadata:{checkpointReceipt:{}}},
  ];}
 beforeEach(()=>{mocks.rows=[];mocks.issuerValid=true;mocks.nativeValid=true});
@@ -45,6 +45,25 @@ describe("DEV GPT02 command lifecycle without AI Task association",()=>{
   expect(x.checkpointAttested).toBe(false);
   expect(x.nativeReceiverAckVerified).toBe(false);
   expect(x.mayAutoResume).toBe(false);
+ });
+ it("rejects forged cross-command checkpoint response identity",async()=>{
+  mocks.rows=fixture().map((r,i)=>i===1?{...r,response_command_id:"different-command"}:r);
+  const x=await getCodingCommandLifecycleEvidence(commandId);
+  if(!x.found)throw Error("expected command");
+  expect(x.responseIdentityValid).toBe(false);
+  expect(x.checkpointAttested).toBe(false);
+  expect(x.nativeReceiverAckVerified).toBe(false);
+  expect(x.status).toBe("RESPONSE_IDENTITY_INVALID_REVIEW_REQUIRED");
+  expect(x.mayAutoResume).toBe(false);
+ });
+ it("rejects duplicate persisted response IDs",async()=>{
+  const base=fixture();
+  mocks.rows=[...base,{...base[0],kind:"PROGRESS"}];
+  const x=await getCodingCommandLifecycleEvidence(commandId);
+  if(!x.found)throw Error("expected command");
+  expect(x.responseIdentityValid).toBe(false);
+  expect(x.checkpointAttested).toBe(false);
+  expect(x.nativeReceiverAckVerified).toBe(false);
  });
  it("rejects false ACK when issuer is not verified",async()=>{
   mocks.rows=fixture();mocks.issuerValid=false;const x=await getCodingCommandLifecycleEvidence(commandId);
