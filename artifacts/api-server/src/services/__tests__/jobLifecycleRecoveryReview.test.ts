@@ -40,6 +40,14 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   expect(x.reviewReason).toBe("AUTHORIZATION_REQUIRED");
   expect(x.mayDispatchWorker).toBe(false);
  });
+ it("does not label a stale or future heartbeat as healthy",()=>{
+  const f=facts();
+  for(const stamp of [new Date(now.getTime()-11*60000),new Date(now.getTime()+60000)]) {
+   const x=assessReadonlyRecoveryFacts({...f,presence:{...f.presence!,lastSeenAt:stamp}});
+   expect(x.workerPresenceHealthy).toBe(false);
+   expect(x.mayDispatchWorker).toBe(false);
+  }
+ });
  it("a presence lease does not imply a command lease",()=>{
   const f=facts();const x=assessReadonlyRecoveryFacts({...f,serverFlag:true,
    responseRows:[...f.responseRows,{id:"b1",kind:"BLOCKER",createdAt:new Date(now.getTime()-1000),acknowledgedAt:null}]});

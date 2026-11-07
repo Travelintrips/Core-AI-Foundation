@@ -33,6 +33,10 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
   const readiness=assessJobLifecycleReadiness(rows);
   const heartbeat=facts.presence?.workerId===workerId&&facts.presence.reportedHealth==="healthy"
     ?facts.presence.lastSeenAt:null;
+  const workerHeartbeatFresh=Boolean(heartbeat&&p&&
+    Number.isFinite(facts.now.getTime()) &&
+    heartbeat.getTime()<=facts.now.getTime() &&
+    facts.now.getTime()-heartbeat.getTime()<=p.heartbeatGraceMinutes*60_000);
   const presenceLeaseActive=Boolean(facts.presence?.workerId===workerId&&
     facts.presence.leaseExpiresAt&&facts.presence.leaseExpiresAt.getTime()>facts.now.getTime());
   const decision=evaluateRecoveryDecision({
@@ -50,7 +54,7 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
     checkpointAttested:readiness.latestCheckpointAttested,
     receiverAckVerified:readiness.latestCheckpointReceiverAckVerified,
     blockingResponseId:readiness.blockingResponseId,
-    workerPresenceHealthy:heartbeat!==null,
+    workerPresenceHealthy:workerHeartbeatFresh,
     workerPresenceLeaseActive:presenceLeaseActive,
     recoveryPolicyEnabled:p?.enabled===true,
     recoveryFeatureEnabled:facts.serverFlag,
