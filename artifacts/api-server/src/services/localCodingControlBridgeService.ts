@@ -18,7 +18,7 @@ import { toCodingBridgeAckReadback } from "./codingBridgeResponseAckReadback.js"
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 import { readHandshakeSopSettings } from "./handshakeSopSettingsService.js";
 import { renderReplyTemplate } from "./handshakeSopConfiguration.js";
-import { lifecycleEventBridgeEnabled, mapPersistedResponseToLifecycleEvent } from "./jobLifecycleEventBridgeService.js";
+import { lifecycleEventBridgeEnabled, mapPersistedResponseToLifecycleEvent, signedPersistedCheckpointEvent } from "./jobLifecycleEventBridgeService.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
@@ -1145,6 +1145,7 @@ export async function completeCodingBridgeCommand(input: {
       }
     }
     const taskId=row["task_id"] ? String(row["task_id"]) : null;
+    let verifiedCheckpointResponse: typeof aiCodingBridgeResponsesTable.$inferSelect | null = null;
     if (sopCheckpointIntent) {
       const commandMeta = isRecord(row["metadata_json"]) ? row["metadata_json"] as Record<string, unknown> : {};
       if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
@@ -1161,7 +1162,7 @@ export async function completeCodingBridgeCommand(input: {
       });
       // One parent command update, checkpoint insert, and terminal insert share this transaction.
       // A concurrent duplicate callback cannot claim the same PROCESSING command twice.
-      await tx.insert(aiCodingBridgeResponsesTable).values({
+      const [checkpointInserted] = await tx.insert(aiCodingBridgeResponsesTable).values({
         commandId: input.commandId, taskId, kind: "CHECKPOINT", message: "Verified DEV SOP checkpoint",
         checkpointJson: {
           jobId: checkpointReceipt.jobId, checkpointId: checkpointReceipt.checkpointId,
@@ -1173,7 +1174,9 @@ export async function completeCodingBridgeCommand(input: {
           attestation: { algorithm: "Ed25519", signature: checkpointReceipt.signature },
           checkpointReceipt,
         },
-      });
+      }).returning();
+      if (!checkpointInserted) throw new Error("Failed to persist verified checkpoint");
+      verifiedCheckpointResponse = checkpointInserted;
     }
     const [response]=await tx.insert(aiCodingBridgeResponsesTable).values({
       commandId:input.commandId,taskId,kind:verifiedStatus,message:input.message,
@@ -1181,9 +1184,17 @@ export async function completeCodingBridgeCommand(input: {
       metadataJson:{...details,...evidence},
     }).returning();
     if(!response)throw new Error("Failed to persist terminal bridge response");
-    return {response,taskId,command:row};
+    return {response,taskId,command:row,verifiedCheckpointResponse};
   });
   if(!persisted)return null;
+  // This checkpoint was issued by the trusted server inside the same committed
+  // worker callback. Emit only its passive lifecycle event, and only when the
+  // DEV feature flag is on. Do not send another WhatsApp, Inbox or worker command.
+  const checkpointEvent = signedPersistedCheckpointEvent({
+    enabled: lifecycleEventBridgeEnabled(process.env["AI_CORE_JOB_LIFECYCLE_EVENT_BRIDGE_ENABLED"]),
+    checkpoint: persisted.verifiedCheckpointResponse,
+  });
+  if (checkpointEvent) publishSafe(checkpointEvent);
   const continuityResult = devContinuityResultFromCommittedCommand({
     id: persisted.command["id"], source: persisted.command["source"],
     commandType: persisted.command["command_type"], metadata: persisted.command["metadata_json"],
