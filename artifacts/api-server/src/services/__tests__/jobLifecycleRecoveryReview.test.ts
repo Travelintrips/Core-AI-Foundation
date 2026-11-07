@@ -34,15 +34,26 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   expect(x.blockerEvidenceReason).toBe("NO_BLOCKER");
   expect(x.eligibleForAuthorizedRecoveryReview).toBe(false);
  });
- it("even with a legitimate latest blocker, exact authorization remains absent",()=>{
+ it("terminal FAILED between checkpoint and blocker blocks recovery despite BLOCKER",()=>{
   const f=facts();const b={id:"b1",kind:"BLOCKER",createdAt:new Date(now.getTime()-1000),acknowledgedAt:null};
   const x=assessReadonlyRecoveryFacts({...f,serverFlag:true,responseRows:[...f.responseRows,b]});
   expect(x.phase).toBe("BLOCKED");
   expect(x.blockingResponseId).toBe("b1");
-  expect(x.blockerEvidenceValid).toBe(true);
-  expect(x.blockerEvidenceReason).toBe("BLOCKER_EVIDENCE_VALID");
+  expect(x.blockerEvidenceValid).toBe(false);
+  expect(x.blockerEvidenceReason).toBe("TERMINAL_AFTER_CHECKPOINT");
   expect(x.reviewReason).toBe("AUTHORIZATION_REQUIRED");
   expect(x.mayDispatchWorker).toBe(false);
+ });
+ it("a valid blocker still cannot grant dispatch or command authorization",()=>{
+  const f=facts();
+  const responseRows=f.responseRows.filter(r=>r.kind!=="FAILED");
+  responseRows.push({id:"b1",kind:"BLOCKER",createdAt:new Date(now.getTime()-1000),acknowledgedAt:null});
+  const x=assessReadonlyRecoveryFacts({...f,serverFlag:true,responseRows});
+  expect(x.blockerEvidenceValid).toBe(true);
+  expect(x.blockerEvidenceReason).toBe("BLOCKER_EVIDENCE_VALID");
+  expect(x.commandResumeAuthorizationVerified).toBe(false);
+  expect(x.mayDispatchWorker).toBe(false);
+  expect(x.mayCloseJob).toBe(false);
  });
  it("does not label a stale or future heartbeat as healthy",()=>{
   const f=facts();
