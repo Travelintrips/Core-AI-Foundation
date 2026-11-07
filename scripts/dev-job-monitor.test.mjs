@@ -100,3 +100,34 @@ test('statcard counts match visible filters and hidden selections cannot be remo
   assert.match(monitor, /const visibleChecked = eligible.filter/);
   assert.match(monitor, /setFilter\(item.filter as JobFilter\); setSelected\(null\); setChecked\(\[\]\)/);
 });
+
+test('DEV Human escalation requires authenticated internal user and explicit OpenClaw evidence', () => {
+  const api = routes.slice(routes.indexOf('router.post("/dev-center/jobs/human-assistance"'), routes.indexOf('router.get("/dev-center/jobs/human-assistance"'));
+  assert.match(api, /process.env\["APP_ENV"\] !== "development"/);
+  assert.match(api, /!actor \|\| actor.status !== "active"/);
+  assert.match(api, /CROSS_ORIGIN_NOT_ALLOWED/);
+  assert.match(api, /reason.trim\(\).length<20/);
+  assert.match(api, /openClawEvidence.trim\(\).length<20/);
+  assert.match(api, /ASSIGNEE_NOT_ACTIVE_INTERNAL_USER/);
+});
+
+test('Human escalation verifies live blocked status, deduplicates and never resumes worker', () => {
+  const api = routes.slice(routes.indexOf('router.post("/dev-center/jobs/human-assistance"'), routes.indexOf('router.get("/dev-center/jobs/human-assistance"'));
+  assert.match(api, /pg_advisory_xact_lock/);
+  assert.match(api, /FOR UPDATE/);
+  assert.match(api, /"BLOCKED","REVIEW_REQUIRED","FAILED"/);
+  assert.match(api, /ai_platform.ai_human_tasks/);
+  assert.match(api, /ai_platform.ai_human_task_history/);
+  assert.match(api, /ON CONFLICT DO NOTHING/);
+  assert.match(api, /resumeAllowed:false/);
+  assert.doesNotMatch(api, /UPDATE ai_task_bridge.jobs|UPDATE public.ai_execution_jobs|UPDATE ai_platform.ai_jobs|SUSPEND_USER|RESUME_USER|dispatchCommand/);
+});
+
+test('Dashboard shows Human Task assignment, blocker evidence and locked resume', () => {
+  assert.match(monitor, /Minta Bantuan Human/);
+  assert.match(monitor, /\/api\/dev-center\/jobs\/human-assistance/);
+  assert.match(monitor, /\/human-tasks/);
+  assert.match(monitor, /resume GPT02 MASIH DIKUNCI/);
+  assert.match(monitor, /openClawEvidence/);
+  assert.match(monitor, /"BLOCKED","REVIEW_REQUIRED","FAILED"/);
+});
