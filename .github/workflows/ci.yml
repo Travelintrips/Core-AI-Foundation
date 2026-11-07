@@ -42,6 +42,8 @@ jobs:
         run: bash scripts/dev/test-gpt02-issuance-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 approval nonce replay contract
         run: bash scripts/dev/test-gpt02-approval-nonce-isolated-postgres.sh
+      - name: Verify isolated PostgreSQL signed review-intent audit schema constraints
+        run: bash scripts/dev/test-gpt02-review-intent-schema-isolated-postgres.sh
       - name: Verify fail-closed DEV-first production promotion
         run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
       - name: Verify GitHub event correlation contract
