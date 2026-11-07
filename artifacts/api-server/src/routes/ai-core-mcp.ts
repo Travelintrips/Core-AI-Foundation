@@ -1714,15 +1714,19 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       // Filter lifecycle rows IN the owner-scoped query before applying LIMIT.
       // Otherwise a large backlog of worker ACKs can starve real terminal
       // results and indefinitely block a ChatGPT-side Final ACK.
-      const rows = await listPendingCodingBridgeResponsesForConversation({
-        ...parsed, lifecycleOnly: true,
-      });
       const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
         state: "UNAVAILABLE" as const,
         renewalRequired: false,
         expiresAt: null,
         pendingCount: null,
       }));
+      const rows = await listPendingCodingBridgeResponsesForConversation({
+        ...parsed, lifecycleOnly: true,
+        // Do not alter existing terminal-only reads. Signed checkpoints are
+        // returned only to an ACTIVE exact-owner MCP subscription that opted in.
+        includeSignedCheckpoints: "wantsSignedCheckpoints" in subscription &&
+          subscription.wantsSignedCheckpoints === true,
+      });
       let devEvents: unknown[] = [];
       if (identity.kind === "oauth" && devRelayEnabled()) {
         try {
