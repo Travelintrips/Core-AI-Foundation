@@ -2,11 +2,13 @@
 -- Atomic grant consume + command-exclusive lease claim in ONE database transaction.
 -- No worker dispatch, no resume enqueue, no mutations to existing command tables.
 -- This intentionally defines new DEV-only objects; production migration is forbidden.
+-- CAUTION: the claim function is deliberately INERT (always throws 0A000) until
+-- all server-owned attestation/rate-limit/authorization gates are verified.
 CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_grants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  command_id uuid NOT NULL,
-  blocker_response_id uuid NOT NULL,
-  checkpoint_response_id uuid NOT NULL,
+  command_id uuid NOT NULL REFERENCES ai_platform.ai_coding_bridge_commands(id),
+  blocker_response_id uuid NOT NULL REFERENCES ai_platform.ai_coding_bridge_responses(id),
+  checkpoint_response_id uuid NOT NULL REFERENCES ai_platform.ai_coding_bridge_responses(id),
   worker_id text NOT NULL CHECK (length(trim(worker_id)) > 0),
   status text NOT NULL CHECK (status IN ('PENDING','APPROVED','REVOKED','CONSUMED')),
   approved_by text,
@@ -22,7 +24,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS dev_gpt02_resume_grants_one_live_per_command
   ON ai_platform.dev_gpt02_resume_grants (command_id) WHERE status IN ('PENDING','APPROVED');
 
 CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_command_leases (
-  command_id uuid PRIMARY KEY,
+  command_id uuid PRIMARY KEY REFERENCES ai_platform.ai_coding_bridge_commands(id),
   grant_id uuid NOT NULL REFERENCES ai_platform.dev_gpt02_resume_grants(id),
   worker_id text NOT NULL,
   fencing_version bigint NOT NULL CHECK (fencing_version >= 1),
@@ -31,6 +33,12 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_command_leases (
   expires_at timestamptz NOT NULL CHECK (expires_at > acquired_at),
   released_at timestamptz
 );
+
+-- Restrict public-facing roles even if schema exposure changes later.
+ALTER TABLE ai_platform.dev_gpt02_resume_grants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_platform.dev_gpt02_resume_command_leases ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON ai_platform.dev_gpt02_resume_grants FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON ai_platform.dev_gpt02_resume_command_leases FROM PUBLIC, anon, authenticated;
 
 -- SECURITY INVOKER: caller must possess explicit DB privileges. No role grants here.
 -- Importantly the grant is locked FOR UPDATE, so two contenders serialize.
@@ -52,6 +60,10 @@ DECLARE
   v_now timestamptz := clock_timestamp();
   v_lease ai_platform.dev_gpt02_resume_command_leases%ROWTYPE;
 BEGIN
+  -- HARD NO-GO until trusted DB-side proof of native checkpoint attestation,
+  -- latest BLOCKER, actor authorization, retries and circuit/429 clearance is wired.
+  -- An approved grant row is insufficient to authorize resume.
+  RAISE EXCEPTION 'RESUME_DISPATCH_GUARD_NOT_IMPLEMENTED' USING ERRCODE = '0A000';
   IF p_lease_seconds IS NULL OR p_lease_seconds < 10 OR p_lease_seconds > 300 OR
      p_grant_id IS NULL OR p_command_id IS NULL OR
      p_blocker_response_id IS NULL OR p_checkpoint_response_id IS NULL OR
