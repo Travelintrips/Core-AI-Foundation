@@ -10,7 +10,7 @@ function facts():RecoveryRuntimeFacts{return {
  {id:"failed",kind:"FAILED",createdAt:new Date(now.getTime()-600000),acknowledgedAt:null},
  {id:"cp1",kind:"CHECKPOINT",createdAt:new Date(now.getTime()-600000),acknowledgedAt:new Date(now.getTime()-550000)}],
  presence:{workerId:"openclaw-dell-chatgpt-wake-dev",lastSeenAt:new Date(now.getTime()-5000),leaseExpiresAt:new Date(now.getTime()+60000),reportedHealth:"healthy"},
- policy:{enabled:true,maxRetries:3,heartbeatGraceMinutes:10,requireAcknowledgement:true},serverFlag:false,now,
+ policy:{enabled:true,maxRetries:3,heartbeatGraceMinutes:10,requireAcknowledgement:true},serverFlag:false,now,responseSnapshotComplete:true,
 };}
 describe("DEV-only native GPT02 fail-closed recovery review",()=>{
  it("recognizes real ACK but never dispatches or closes",()=>{
@@ -21,7 +21,7 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   expect(x.blockingResponseId).toBeNull();
   expect(x.workerPresenceHealthy).toBe(true);
   expect(x.workerPresenceLeaseActive).toBe(true);
-  expect(x.reviewReason).toBe("FLAG_OFF");
+  expect(x.reviewReason).toBe("TERMINAL_OR_UNKNOWN_COMMAND_STATUS");
   expect(x.commandResumeAuthorizationVerified).toBe(false);
   expect(x.commandExclusiveLeaseVerified).toBe(false);
   expect(x.mayDispatchWorker).toBe(false);
@@ -29,7 +29,7 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
  });
  it("an enabled review still requires an explicit BLOCKER",()=>{
   const x=assessReadonlyRecoveryFacts({...facts(),serverFlag:true});
-  expect(x.reviewReason).toBe("NO_BLOCKER");
+  expect(x.reviewReason).toBe("TERMINAL_OR_UNKNOWN_COMMAND_STATUS");
   expect(x.blockerEvidenceValid).toBe(false);
   expect(x.blockerEvidenceReason).toBe("NO_BLOCKER");
   expect(x.eligibleForAuthorizedRecoveryReview).toBe(false);
@@ -41,7 +41,7 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   expect(x.blockingResponseId).toBe("b1");
   expect(x.blockerEvidenceValid).toBe(false);
   expect(x.blockerEvidenceReason).toBe("TERMINAL_AFTER_CHECKPOINT");
-  expect(x.reviewReason).toBe("AUTHORIZATION_REQUIRED");
+  expect(x.reviewReason).toBe("TERMINAL_OR_UNKNOWN_COMMAND_STATUS");
   expect(x.mayDispatchWorker).toBe(false);
  });
  it("a valid blocker still cannot grant dispatch or command authorization",()=>{
@@ -54,6 +54,24 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   expect(x.commandResumeAuthorizationVerified).toBe(false);
   expect(x.mayDispatchWorker).toBe(false);
   expect(x.mayCloseJob).toBe(false);
+ });
+ it("a BLOCKER on terminal FAILED command is never recovery-review eligible",()=>{
+  const f=facts();const responseRows=f.responseRows.filter(r=>r.kind!=="FAILED");
+  responseRows.push({id:"b1",kind:"BLOCKER",createdAt:new Date(now.getTime()-1000),acknowledgedAt:null});
+  const x=assessReadonlyRecoveryFacts({...f,responseRows,serverFlag:true});
+  expect(x.blockerEvidenceValid).toBe(true);
+  expect(x.commandStatusReviewable).toBe(false);
+  expect(x.eligibleForAuthorizedRecoveryReview).toBe(false);
+  expect(x.reviewReason).toBe("TERMINAL_OR_UNKNOWN_COMMAND_STATUS");
+ });
+ it("a valid BLOCKER cannot pass review on a truncated response snapshot",()=>{
+  const f=facts();const responseRows=f.responseRows.filter(r=>r.kind!=="FAILED");
+  responseRows.push({id:"b1",kind:"BLOCKER",createdAt:new Date(now.getTime()-1000),acknowledgedAt:null});
+  const x=assessReadonlyRecoveryFacts({...f,status:"PROCESSING",responseRows,serverFlag:true,responseSnapshotComplete:false});
+  expect(x.blockerEvidenceValid).toBe(true);
+  expect(x.eligibleForAuthorizedRecoveryReview).toBe(false);
+  expect(x.reviewReason).toBe("INCOMPLETE_RESPONSE_SNAPSHOT");
+  expect(x.mayDispatchWorker).toBe(false);
  });
  it("does not label a stale or future heartbeat as healthy",()=>{
   const f=facts();
