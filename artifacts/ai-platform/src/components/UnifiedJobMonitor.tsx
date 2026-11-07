@@ -17,7 +17,7 @@ type Job = {
   updatedAt?: string | null;
 };
 type MonitorResponse = { jobs: Job[]; warnings?: string[] };
-type JobFilter = "active" | "attention" | "history" | "all" | "completed";
+type JobFilter = "active" | "attention" | "verifying" | "failed" | "history" | "all" | "completed";
 const terminal = new Set(["COMPLETED", "CANCELLED", "FAILED"]);
 // An old job status is not proof of ongoing work. Seven days is a display-only
 // cutoff; archive classification never updates a command, ACK, or DB status.
@@ -27,7 +27,8 @@ const isHistorical = (job: Job, now = Date.now()) => isStale(job, now) && !["COM
 const isCurrentAttention = (job: Job, now = Date.now()) => attention.has(job.status) && !isStale(job, now);
 const running = new Set(["RUNNING", "PROCESSING", "DISPATCHING", "RETRYING"]);
 const waiting = new Set(["QUEUED", "WAITING", "PENDING", "RECEIVED"]);
-const attention = new Set(["FAILED", "BLOCKED", "REVIEW_REQUIRED", "VERIFYING"]);
+const attention = new Set(["BLOCKED", "REVIEW_REQUIRED"]);
+const verifying = new Set(["VERIFYING"]);
 const formatWib = (value?: string | null) => {
   if (!value || Number.isNaN(Date.parse(value))) return "Belum tersedia";
   return new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -79,6 +80,8 @@ export default function UnifiedJobMonitor() {
       active: jobs.filter(job => running.has(job.status) && !isStale(job, now)).length,
       waiting: jobs.filter(job => waiting.has(job.status) && !isStale(job, now)).length,
       attention: jobs.filter(job => isCurrentAttention(job, now)).length,
+      failed: jobs.filter(job => job.status === "FAILED").length,
+      verifying: jobs.filter(job => verifying.has(job.status) && !isStale(job, now)).length,
       completed: jobs.filter(job => job.status === "COMPLETED").length,
       history: jobs.filter(job => isHistorical(job, now)).length,
     };
@@ -89,6 +92,8 @@ export default function UnifiedJobMonitor() {
       if (filter === "completed" && job.status !== "COMPLETED") return false;
       if (filter === "history" && !isHistorical(job, now)) return false;
       if (filter === "attention" && !isCurrentAttention(job, now)) return false;
+      if (filter === "failed" && job.status !== "FAILED") return false;
+      if (filter === "verifying" && !verifying.has(job.status)) return false;
       if (filter === "active" && (terminal.has(job.status) || isHistorical(job, now) || isStale(job, now))) {
         return false;
       }
@@ -104,12 +109,14 @@ export default function UnifiedJobMonitor() {
         <CardDescription>Terintegrasi di Dashboard AI Core. Menggunakan session yang sama; pembaruan otomatis setiap 15 detik. Progres hanya ditampilkan jika ada bukti resmi.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
           {([
             { label: "Sedang dikerjakan", count: summary.active, Icon: RefreshCw },
             { label: "Menunggu", count: summary.waiting, Icon: Clock3 },
-            { label: "Perlu perhatian (7 hari)", count: summary.attention, Icon: AlertTriangle },
-            { label: "Selesai", count: summary.completed, Icon: CheckCircle2 },
+            { label: "Perlu tindakan (7 hari)", count: summary.attention, Icon: AlertTriangle },
+            { label: "Dalam verifikasi (7 hari)", count: summary.verifying, Icon: Clock3 },
+            { label: "Gagal (riwayat)", count: summary.failed, Icon: AlertTriangle },
+            { label: "Status selesai (bukan PASS)", count: summary.completed, Icon: CheckCircle2 },
           ] as const).map(item => (
             <div key={item.label} className="rounded-lg border p-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground"><item.Icon className="size-4" /> {item.label}</div>
@@ -122,16 +129,18 @@ export default function UnifiedJobMonitor() {
             <label htmlFor="job-monitor-filter" className="text-sm">Status</label>
             <select id="job-monitor-filter" aria-label="Filter status pekerjaan" className="rounded-md border bg-background p-2 text-sm" value={filter} onChange={event => setFilter(event.target.value as JobFilter)}>
               <option value="active">Pekerjaan terkini (7 hari)</option>
-              <option value="attention">Perlu perhatian terkini</option>
+              <option value="attention">Perlu tindakan terkini</option>
+              <option value="verifying">Dalam verifikasi</option>
+              <option value="failed">Gagal (termasuk testing)</option>
               <option value="history">Riwayat lama (termasuk testing)</option>
-              <option value="completed">Selesai</option>
+              <option value="completed">Status selesai (belum tentu PASS)</option>
               <option value="all">Semua data yang dimuat</option>
             </select>
             <input aria-label="Cari pekerjaan" className="rounded-md border bg-background p-2 text-sm w-56" value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari job, worker, penanggung jawab" />
           </div>
           <span className="text-xs text-muted-foreground">{loading ? "Memuat…" : updated ? `Terakhir diperbarui: ${formatWib(updated)} WIB` : "Belum diperbarui"}</span>
         </div>
-        <p className="text-xs text-muted-foreground">Dari {jobs.length} record yang berhasil dimuat: {summary.history} masuk riwayat lama / testing (&gt;7 hari tanpa pembaruan). FAILED historis tidak dihitung sebagai pekerjaan aktif. Ini pengelompokan tampilan, bukan perubahan status database.</p>
+        <p className="text-xs text-muted-foreground">Dari {jobs.length} record yang berhasil dimuat: {summary.history} masuk riwayat lama / testing (&gt;7 hari tanpa pembaruan). FAILED adalah hasil terminal dan ditampilkan terpisah dari pekerjaan yang perlu tindakan. COMPLETED tidak otomatis berarti PASS. Ini pengelompokan tampilan, bukan perubahan status database.</p>
         {error && <p role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error}</p>}
         {warnings.length > 0 && <p role="status" className="text-sm text-amber-600">Data parsial: {warnings.join(", ")}</p>}
         <div className="overflow-x-auto rounded-lg border">
