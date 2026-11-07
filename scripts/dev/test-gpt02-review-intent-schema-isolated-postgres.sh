@@ -63,7 +63,7 @@ test_deny(){
 base="$(cat "$WORK/valid.sql")"
 test_deny "WRONG ROLE" "$(printf '%s\n' "$base" | sed "s|'admin'|'manager'|")" "violates check constraint"
 test_deny "WRONG WORKER" "$(printf '%s\n' "$base" | sed "s|'openclaw-dell-chatgpt-wake-dev'|'other-worker'|")" "violates check constraint"
-test_deny "WRONG OPERATOR FK" "$(printf '%s\n' "$base" | sed "s|7,'admin'|999,'admin'|")" "violates foreign key constraint"
+test_deny "WRONG OPERATOR FK" "$(printf '%s\n' "$base" | sed "s|7,'admin'|999,'admin'|" | sed 's|internal:7|internal:999|')" "violates foreign key constraint"
 test_deny "CROSS CHECKPOINT ID" "$(printf '%s\n' "$base" | sed "s|822efca2-7428-428a-ac66-548c0462438e|00000000-0000-4000-8000-000000000001|")" "violates foreign key constraint"
 test_deny "MISSING BLOCKER FK" "$(printf '%s\n' "$base" | sed "s|08b7b237-7a16-46d0-b79d-029d0363c112|00000000-0000-4000-8000-000000000002|")" "violates foreign key constraint"
 test_deny "MALFORMED NONCE" "$(printf '%s\n' "$base" | sed "s|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|not-a-nonce|")" "violates check constraint"
