@@ -34,6 +34,17 @@ describe("DEV recovery blocker evidence is fail-closed and read-only",()=>{
   it("rejects blocker before checkpoint",()=>{
     expect(reviewBlockerEvidence(id,[{...blocker(),createdAt:at(0)},cp()]).valid).toBe(false);
   });
+  it("rejects historical FAILED before a later verified checkpoint and blocker",()=>{
+    const early={...terminal(),createdAt:at(0)};
+    const x=reviewBlockerEvidence(id,[early,cp(),blocker()]);
+    expect(x.reason).toBe("TERMINAL_BEFORE_CHECKPOINT");
+    expect(x.valid).toBe(false);
+    expect(x.mayDispatchWorker).toBe(false);
+  });
+  it("rejects historical COMPLETED before a later verified checkpoint and blocker",()=>{
+    const early={...terminal(),kind:"COMPLETED",createdAt:at(0)};
+    expect(reviewBlockerEvidence(id,[early,cp(),blocker()]).reason).toBe("TERMINAL_BEFORE_CHECKPOINT");
+  });
   it("rejects terminal outcome after checkpoint, even if followed by blocker",()=>{
     expect(reviewBlockerEvidence(id,[cp(),terminal(),blocker()]).reason).toBe("TERMINAL_AFTER_CHECKPOINT");
   });
