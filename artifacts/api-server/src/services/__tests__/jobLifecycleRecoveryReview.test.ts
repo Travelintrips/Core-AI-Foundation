@@ -97,7 +97,8 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
  it("native ACK label alone cannot set verified readiness",()=>{
   const x=assessReadonlyRecoveryFacts({...facts(),checkpointVerified:false,serverFlag:true});
   expect(x.receiverAckVerified).toBe(false);
-  expect(x.reviewReason).toBe("NO_BLOCKER");
+  expect(x.reviewReason).toBe("TERMINAL_OR_UNKNOWN_COMMAND_STATUS");
+  expect(x.eligibleForAuthorizedRecoveryReview).toBe(false);
  });
  it("unknown command returns not found without querying presence",async()=>{
   const prior=m.life;
