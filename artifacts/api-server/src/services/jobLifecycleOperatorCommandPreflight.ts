@@ -27,8 +27,24 @@ export async function getDevResumeOperatorCommandPreflight(commandId:string) {
    rateLimitClearanceVerified:review.rateLimitClearanceVerified,
    retryBudgetVerified:review.retryBudgetVerified,
  };
+ const approvalBlockers=([
+   ["COMMAND_TERMINAL_OR_UNKNOWN",!prerequisites.commandNonTerminal],
+   ["RESPONSE_HISTORY_INCOMPLETE",!prerequisites.responseSnapshotComplete],
+   ["CHECKPOINT_SIGNATURE_UNVERIFIED",!prerequisites.checkpointAttested],
+   ["NATIVE_ACK_UNVERIFIED",!prerequisites.receiverAckVerified],
+   ["BLOCKER_NOT_VERIFIED",!prerequisites.blockerEvidenceValid],
+   ["WORKER_UNHEALTHY",!prerequisites.workerPresenceHealthy],
+   ["WORKER_PRESENCE_LEASE_MISSING",!prerequisites.workerPresenceLeaseActive],
+   ["RECOVERY_POLICY_DISABLED",!prerequisites.policyEnabled],
+   ["RECOVERY_REVIEW_FLAG_OFF",!prerequisites.reviewFeatureEnabled],
+   ["RESUME_GRANT_UNVERIFIED",!prerequisites.commandAuthorizationPresent],
+   ["EXCLUSIVE_COMMAND_LEASE_UNVERIFIED",!prerequisites.exclusiveLeasePresent],
+   ["RATE_LIMIT_CLEARANCE_UNVERIFIED",!prerequisites.rateLimitClearanceVerified],
+   ["RETRY_BUDGET_UNVERIFIED",!prerequisites.retryBudgetVerified],
+ ] as const).filter(([,blocked])=>blocked).map(([reason])=>reason);
  return {
    found:true as const,commandId,commandStatus:review.commandStatus,
+   approvalBlockers,
    checkpointResponseId:review.checkpointResponseId,
    blockerResponseId:review.blockingResponseId,
    prerequisites,
