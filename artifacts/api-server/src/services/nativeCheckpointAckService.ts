@@ -79,16 +79,13 @@ export async function acknowledgeNativeCheckpoint(input: {
       devHost:true,browserObservationVerified:browserValid,
     });
     if (!nativeValid) return {acknowledged:false,code:"NATIVE_RECEIPT_NOT_VERIFIED"};
+    // The DEV DELL command identity guard (20261020) deliberately freezes all
+    // command metadata except its historical terminal/MCP ACK keys. Native
+    // receiver proof belongs to its CHECKPOINT response, never the command.
+    // Write timestamp and proof atomically on the exact signed response row.
     const wrote = await tx.execute(sql`
-      UPDATE ai_platform.ai_coding_bridge_responses SET acknowledged_at=NOW()
-      WHERE id=${input.responseId}::uuid AND command_id=${input.commandId}::uuid
-        AND kind='CHECKPOINT' AND acknowledged_at IS NULL
-      RETURNING id,acknowledged_at
-    `);
-    if (wrote.rows?.length !== 1) throw new Error("NATIVE_ACK_CONCURRENT_UPDATE");
-    await tx.execute(sql`
-      UPDATE ai_platform.ai_coding_bridge_commands
-      SET metadata_json = metadata_json || jsonb_build_object(
+      UPDATE ai_platform.ai_coding_bridge_responses
+      SET acknowledged_at=NOW(), metadata_json = metadata_json || jsonb_build_object(
         'nativeCheckpointAckResponseId', ${input.responseId},
         'nativeCheckpointAckWorker', ${input.tokenOwner},
         'nativeCheckpointAckEventId', ${input.evidence.eventId},
@@ -96,9 +93,12 @@ export async function acknowledgeNativeCheckpoint(input: {
         'nativeCheckpointAckSignature', ${input.evidence.signatureBase64},
         'nativeCheckpointAckEvidence', ${JSON.stringify(input.evidence)}::jsonb,
         'nativeCheckpointAckCode', 'NATIVE_BROWSER_ACK_VERIFIED'
-      ), updated_at=NOW()
-      WHERE id=${input.commandId}::uuid
+      )
+      WHERE id=${input.responseId}::uuid AND command_id=${input.commandId}::uuid
+        AND kind='CHECKPOINT' AND acknowledged_at IS NULL
+      RETURNING id,acknowledged_at
     `);
+    if (wrote.rows?.length !== 1) throw new Error("NATIVE_ACK_CONCURRENT_UPDATE");
     return {acknowledged:true,code:"NATIVE_BROWSER_ACK_VERIFIED"};
   });
 }
@@ -126,14 +126,15 @@ export async function readNativeCheckpointAck(input: {
   if (!row || row["kind"]!=="CHECKPOINT" || !row["acknowledged_at"] ||
       !isObj(row["command_metadata"]) || !isObj(row["response_metadata"])) return denied;
   const cmd=row["command_metadata"];
-  const proof=cmd["nativeCheckpointAckEvidence"];
+  const responseMeta=row["response_metadata"];
+  const proof=responseMeta["nativeCheckpointAckEvidence"];
   const binding=cmd["wakeBinding"];
   if(!isObj(proof)||!isObj(binding)||
      cmd["assignedClientId"]!==input.tokenOwner||
-     cmd["nativeCheckpointAckResponseId"]!==input.responseId||
-     cmd["nativeCheckpointAckWorker"]!==input.tokenOwner||
-     cmd["nativeCheckpointAckEventId"]!==cmd["eventId"]||
-     cmd["nativeCheckpointAckCode"]!=="NATIVE_BROWSER_ACK_VERIFIED"||
+     responseMeta["nativeCheckpointAckResponseId"]!==input.responseId||
+     responseMeta["nativeCheckpointAckWorker"]!==input.tokenOwner||
+     responseMeta["nativeCheckpointAckEventId"]!==cmd["eventId"]||
+     responseMeta["nativeCheckpointAckCode"]!=="NATIVE_BROWSER_ACK_VERIFIED"||
      typeof row["native_reply"]!=="string" ||
      !verifyDevSopCheckpointReceipt({receipt:row["response_metadata"]["checkpointReceipt"],
        responseMetadata:row["response_metadata"],checkpoint:row["checkpoint_json"],

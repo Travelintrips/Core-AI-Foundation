@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { nativeCheckpointAckPayload, type NativeCheckpointAckEvidence } from "../nativeCheckpointAckVerifier.js";
-const mocks=vi.hoisted(()=>({ executed:[] as Array<{ rows: unknown[] }>,calls:0, directRows:[] as unknown[], issuerPass:true,publicKey:"" }));
-vi.mock("@workspace/db",()=>({db:{execute:async()=>({rows:mocks.directRows}), transaction:async(fn:(tx:{execute:()=>Promise<unknown>})=>Promise<unknown>)=>fn({execute:async()=>{mocks.calls++;return mocks.executed.shift()??{rows:[]}}})}}));
+const mocks=vi.hoisted(()=>({ executed:[] as Array<{ rows: unknown[] }>,calls:0, directRows:[] as unknown[], issuerPass:true,publicKey:"",statements:[] as unknown[] }));
+vi.mock("@workspace/db",()=>({db:{execute:async()=>({rows:mocks.directRows}), transaction:async(fn:(tx:{execute:()=>Promise<unknown>})=>Promise<unknown>)=>fn({execute:async(query:unknown)=>{mocks.calls++;mocks.statements.push(query);return mocks.executed.shift()??{rows:[]}}})}}));
 vi.mock("../devSopCheckpointIssuer.js",()=>({verifyDevSopCheckpointReceipt:()=>mocks.issuerPass}));
 vi.mock("../devAssistantAttestation.js",()=>({devAssistantPublicKeyForWorker:()=>mocks.publicKey}));
 import { acknowledgeNativeCheckpoint, readNativeCheckpointAck } from "../nativeCheckpointAckService.js";
@@ -32,7 +34,7 @@ function fixture(){
    requestHostname:"dev.cstlogistic.co.id",enabled:true};
  return {req,row};
 }
-beforeEach(()=>{mocks.calls=0;mocks.executed=[];mocks.directRows=[];mocks.issuerPass=true;
+beforeEach(()=>{mocks.calls=0;mocks.executed=[];mocks.directRows=[];mocks.statements=[];mocks.issuerPass=true;
  mocks.publicKey=keys.publicKey.export({format:"der",type:"spki"}).toString("base64")});
 describe("DEV native checkpoint ACK admission and atomic update",()=>{
  it("fails closed without flag, DEV hostname or owner worker, without reading database",async()=>{
@@ -43,9 +45,14 @@ describe("DEV native checkpoint ACK admission and atomic update",()=>{
   expect(mocks.calls).toBe(0);
  });
  it("accepts exactly signed, verified, uniquely-owned checkpoint once",async()=>{
-  const {req,row}=fixture();mocks.executed=[{rows:[row]},{rows:[{id:responseId}]},{rows:[]}];
+  const {req,row}=fixture();mocks.executed=[{rows:[row]},{rows:[{id:responseId}]}];
   expect(await acknowledgeNativeCheckpoint(req)).toEqual({acknowledged:true,code:"NATIVE_BROWSER_ACK_VERIFIED"});
-  expect(mocks.calls).toBe(3);
+  expect(mocks.calls).toBe(2);
+  const rendered=mocks.statements.map(q=>new PgDialect().sqlToQuery(q as SQL).sql);
+  expect(rendered[0]).toContain("FOR UPDATE OF c, r");
+  expect(rendered[1]).toContain("UPDATE ai_platform.ai_coding_bridge_responses");
+  expect(rendered[1]).toContain("metadata_json = metadata_json || jsonb_build_object");
+  expect(rendered.every(q=>!q.includes("UPDATE ai_platform.ai_coding_bridge_commands"))).toBe(true);
  });
  it("never rewrites a previously ACKed response",async()=>{
   const {req,row}=fixture();mocks.executed=[{rows:[{...row,acknowledged_at:new Date().toISOString()}]}];
@@ -66,12 +73,23 @@ describe("DEV native checkpoint ACK admission and atomic update",()=>{
   const {req,row}=fixture();
   expect((await readNativeCheckpointAck({commandId,responseId,tokenOwner:req.tokenOwner,requestHostname:req.requestHostname})).nativeAckVerified).toBe(false);
   mocks.directRows=[{...row,acknowledged_at:new Date().toISOString(),created_at:row.checkpoint_created_at,
-    command_metadata:{...row.command_metadata,nativeCheckpointAckResponseId:responseId,
+    response_metadata:{nativeCheckpointAckResponseId:responseId,
       nativeCheckpointAckWorker:req.tokenOwner,nativeCheckpointAckEventId:event,
       nativeCheckpointAckCode:"NATIVE_BROWSER_ACK_VERIFIED",
       nativeCheckpointAckEvidence:{...req.evidence,signatureBase64:"forged"}}}];
   expect((await readNativeCheckpointAck({commandId,responseId,tokenOwner:req.tokenOwner,requestHostname:req.requestHostname})).nativeAckVerified).toBe(false);
   expect((await readNativeCheckpointAck({commandId,responseId,tokenOwner:"other",requestHostname:req.requestHostname})).nativeAckVerified).toBe(false);
+ });
+ it("readback independently validates legitimate persisted response receipt",async()=>{
+   const {req,row}=fixture();
+   const ackAt=new Date(Date.now()+100).toISOString();
+   mocks.directRows=[{...row,acknowledged_at:ackAt,created_at:row.checkpoint_created_at,
+     response_metadata:{...row.response_metadata,nativeCheckpointAckResponseId:responseId,
+       nativeCheckpointAckWorker:req.tokenOwner,nativeCheckpointAckEventId:event,
+       nativeCheckpointAckCode:"NATIVE_BROWSER_ACK_VERIFIED",
+       nativeCheckpointAckEvidence:req.evidence}}];
+   const verified=await readNativeCheckpointAck({commandId,responseId,tokenOwner:req.tokenOwner,requestHostname:req.requestHostname});
+   expect(verified).toEqual({nativeAckVerified:true,commandId,responseId,acknowledgedAt:ackAt,code:"NATIVE_BROWSER_ACK_VERIFIED"});
  });
  it("rejects cross-worker and non-DEV command metadata",async()=>{
   for(const patch of [{assignedClientId:"other"},{devOnly:false},{capability:"unknown"}]){
