@@ -2,7 +2,7 @@ import {beforeEach,afterEach,describe,it,expect,vi} from "vitest";
 import express from "express";
 import cookieParser from "cookie-parser";
 import request from "supertest";
-const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null,preflight:vi.fn(),recovery:vi.fn()}));
+const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null,preflight:vi.fn(),recovery:vi.fn(),persist:vi.fn()}));
 vi.mock("../internalAuthService.js",()=>({
  SESSION_COOKIE_NAME:"internal_session",
  verifySessionToken:(token:string)=>token==="valid-session"?{sub:7}:null,
@@ -11,6 +11,7 @@ vi.mock("../internalAuthService.js",()=>({
 vi.mock("../aiAuditService.js",()=>({logAudit:async()=>{}}));
 vi.mock("../jobLifecycleOperatorCommandPreflight.js",()=>({getDevResumeOperatorCommandPreflight:m.preflight}));
 vi.mock("../jobLifecycleRecoveryReview.js",()=>({getDevCommandRecoveryReview:m.recovery}));
+vi.mock("../jobLifecycleOperatorReviewPersistence.js",()=>({persistSignedDevOperatorReviewIntent:m.persist}));
 import route from "../../routes/dev-resume-operator-review.js";
 const app=express();
 app.use(express.json());
@@ -19,7 +20,7 @@ app.use(route);
 const url="/ai/core-chat/dev/resume/operator-readiness";
 const valid=()=>({id:7,role:"admin",status:"active",accountType:"internal",
  email:"admin@example.test",mustChangePassword:false});
-beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();m.preflight.mockReset();m.preflight.mockResolvedValue({found:true,reason:"BLOCKED",grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.recovery.mockReset();m.recovery.mockResolvedValue({found:true,commandStatus:"FAILED",checkpointResponseId:"822efca2-7428-428a-ac66-548c0462438e",blockingResponseId:null,checkpointAttested:true,receiverAckVerified:true,blockerEvidenceValid:false,responseSnapshotComplete:true});});
+beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();m.preflight.mockReset();m.preflight.mockResolvedValue({found:true,reason:"BLOCKED",grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.persist.mockReset();m.persist.mockResolvedValue({recorded:false,reason:"TEST_AUDIT_NOT_CONFIGURED",mayIssueGrant:false,mayDispatchWorker:false});m.recovery.mockReset();m.recovery.mockResolvedValue({found:true,commandStatus:"FAILED",checkpointResponseId:"822efca2-7428-428a-ac66-548c0462438e",blockingResponseId:null,checkpointAttested:true,receiverAckVerified:true,blockerEvidenceValid:false,responseSnapshotComplete:true});});
 afterEach(()=>{delete process.env["APP_ENV"];delete process.env["NODE_ENV"];});
 describe("GPT02 DEV resume operator readiness uses real internal session and DB role guards",()=>{
  it("denies no session even with admin API key header",async()=>{
