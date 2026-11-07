@@ -5,6 +5,7 @@
 import { asc, eq } from "drizzle-orm";
 import { assessJobLifecycleReadiness } from "./jobLifecycleReadinessService.js";
 import { verifyDevSopCheckpointReceipt } from "./devSopCheckpointIssuer.js";
+import { isPersistedNativeCheckpointAckVerified } from "./nativeCheckpointAckReadiness.js";
 import { aiCodingBridgeResponsesTable, aiCodingBridgeCommandsTable, aiCodingTasksTable, db } from "@workspace/db";
 
 export async function getCodingTaskCompletionEvidence(taskId: string) {
@@ -19,6 +20,7 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
     acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
     checkpointJson: aiCodingBridgeResponsesTable.checkpointJson,
     metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    message: aiCodingBridgeResponsesTable.message,
     commandMetadata: aiCodingBridgeCommandsTable.metadataJson,
   }).from(aiCodingBridgeResponsesTable)
     .leftJoin(aiCodingBridgeCommandsTable, eq(aiCodingBridgeCommandsTable.id, aiCodingBridgeResponsesTable.commandId))
@@ -40,21 +42,31 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
         ? r.commandMetadata as Record<string, unknown> : {};
       const meta = r.metadataJson && typeof r.metadataJson === "object" && !Array.isArray(r.metadataJson)
         ? r.metadataJson as Record<string, unknown> : {};
-      return {
-        ...r,
-        checkpointAttested: verifyDevSopCheckpointReceipt({
-          receipt: meta["checkpointReceipt"], responseMetadata: meta,
-          checkpoint: r.checkpointJson, commandId: r.commandId,
-          issuerPrivateKeyDerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
-        }),
-        receiverAckVerified: r.acknowledgedAt instanceof Date &&
+      const issuerAttested = verifyDevSopCheckpointReceipt({
+        receipt: meta["checkpointReceipt"], responseMetadata: meta,
+        checkpoint: r.checkpointJson, commandId: r.commandId,
+        issuerPrivateKeyDerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
+      });
+      const failedReply = [...rows].reverse().find(f => f.commandId === r.commandId &&
+        f.kind === "FAILED" && typeof f.message === "string")?.message ?? null;
+      const mcpReceiverAckVerified = r.acknowledgedAt instanceof Date &&
           cmd["mcpAckResponseId"] === r.id &&
           cmd["e2eCode"] === "MCP_ACK_VERIFIED" &&
           cmd["deliveryCode"] === "DELIVERY_CONFIRMED" &&
           typeof cmd["mcpAcknowledgedAt"] === "string" &&
           Number.isFinite(Date.parse(cmd["mcpAcknowledgedAt"])) &&
           typeof cmd["mcpAckConversationId"] === "string" &&
-          cmd["mcpAckConversationId"].length > 0,
+          cmd["mcpAckConversationId"].length > 0;
+      const nativeReceiverAckVerified = isPersistedNativeCheckpointAckVerified({
+        commandId: r.commandId, responseId: r.id,
+        acknowledgedAt: r.acknowledgedAt, checkpointCreatedAt: r.createdAt,
+        responseMetadata: meta, commandMetadata: cmd,
+        failedReply, issuerAttested,
+      });
+      return {
+        ...r,
+        checkpointAttested: issuerAttested,
+        receiverAckVerified: mcpReceiverAckVerified || nativeReceiverAckVerified,
       };
     })),
   }));
