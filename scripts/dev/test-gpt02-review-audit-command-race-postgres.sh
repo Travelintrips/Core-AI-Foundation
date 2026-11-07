@@ -69,6 +69,12 @@ WHERE c.status='PROCESSING'
  AND clock_timestamp()<clock_timestamp()+interval '60s'
 RETURNING id;
 SQL
+# Reproduce the REAL fixed backend: one READ COMMITTED transaction with
+# command row lock in statement 1, then fresh response snapshot in statement 2.
+{ echo 'BEGIN;'; echo "SET LOCAL lock_timeout='5s';";
+  echo "SELECT id FROM ai_platform.ai_coding_bridge_commands WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968'::uuid FOR UPDATE;";
+  tail -n +2 "$DIR/insert.sql";
+  echo 'COMMIT;'; } > "$DIR/audit-transaction.sql"
 # Hold command row lock while a different backend attempts the audit insert.
 # The waiter must re-read the post-commit terminal command state and insert 0.
 cat > "$DIR/terminal.sql" <<'SQL'
@@ -81,7 +87,7 @@ SQL
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q < "$DIR/terminal.sql" > "$DIR/terminal.out" 2>&1 &
 WRITER=$!
 sleep 0.4
-docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt < "$DIR/insert.sql" > "$DIR/insert.out" 2>&1 &
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt < "$DIR/audit-transaction.sql" > "$DIR/insert.out" 2>&1 &
 REVIEW=$!
 wait "$WRITER"
 wait "$REVIEW"
@@ -96,7 +102,7 @@ echo "PASS: terminal UPDATE commits first => audit INSERT 0 rows"
 # PROCESSING, and a terminal update arrives while audit holds the row lock.
 # A historical audit row may remain, but it MUST NOT imply resume authority.
 docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.ai_coding_bridge_commands SET status='PROCESSING' WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968'::uuid;" > "$DIR/reset.out" 2>&1
-{ echo 'BEGIN;'; cat "$DIR/insert.sql"; echo 'SELECT pg_sleep(2);'; echo 'COMMIT;'; } > "$DIR/audit-first.sql"
+{ sed '$d' "$DIR/audit-transaction.sql"; echo 'SELECT pg_sleep(2);'; echo 'COMMIT;'; } > "$DIR/audit-first.sql"
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt < "$DIR/audit-first.sql" > "$DIR/audit-first.out" 2>&1 &
 AUDITOR=$!
 sleep 0.4
@@ -119,4 +125,27 @@ grep -q 'GPT02_REVIEW_INTENT_AUDIT_IMMUTABLE' "$DIR/delete.out" || {
  echo "FAIL: delete denied for the wrong reason";cat "$DIR/delete.out";exit 1;
 }
 echo "PASS: audit INSERT commits first => 1 immutable historical row; later terminal UPDATE => FAILED"
+# Terminal response INSERT can hold a parent FK KEY SHARE lock while
+# the audit tries FOR UPDATE; the subsequent INSERT must use a fresh snapshot.
+# Run against disposable synthetic rows only, never CST-DEV.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "TRUNCATE TABLE ai_platform.dev_gpt02_operator_review_intents; UPDATE ai_platform.ai_coding_bridge_commands SET status='PROCESSING' WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968'::uuid;" > "$DIR/reset-response.out" 2>&1
+cat > "$DIR/response-first.sql" <<'SQL'
+BEGIN;
+INSERT INTO ai_platform.ai_coding_bridge_responses(id,command_id,kind,created_at,acknowledged_at)
+VALUES('70c61ea0-8524-4fba-9da5-a88b2467a6a7','169a7492-cfd8-4a56-bb57-18001b6b5968','FAILED',now(),NULL);
+SELECT pg_sleep(2);
+COMMIT;
+SQL
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q < "$DIR/response-first.sql" > "$DIR/response-first.out" 2>&1 &
+RESP=$!
+sleep 0.4
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt < "$DIR/audit-transaction.sql" > "$DIR/audit-after-response.out" 2>&1 &
+AUDIT=$!
+wait "$RESP"
+wait "$AUDIT"
+rows="$(docker exec "$NAME" psql -U postgres -qAt -c 'SELECT COUNT(*) FROM ai_platform.dev_gpt02_operator_review_intents;')"
+if [[ "$rows" != 0 ]];then
+ echo "FAIL/NO-GO: response committed first but review audit recorded stale response: rows=$rows";exit 27
+fi
+echo "PASS: terminal response committed before audit acquired lock => 0 audit rows (fresh snapshot)"
 echo "NOT tested: signed native ACK, authenticated operator session, actual grant/worker dispatch"
