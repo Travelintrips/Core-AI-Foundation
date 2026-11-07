@@ -91,5 +91,32 @@ if [[ "$rows" != 0 || "$status" != FAILED ]]; then
  echo "FAIL: audit inserted despite committed terminal command: rows=$rows status=$status"
  cat "$DIR/insert.out"; exit 1
 fi
-echo "PASS: concurrent terminal status UPDATE serialized with row-locked audit INSERT; 0 audit rows"
+echo "PASS: terminal UPDATE commits first => audit INSERT 0 rows"
+# Reverse serialization order: approval audit commits while command is
+# PROCESSING, and a terminal update arrives while audit holds the row lock.
+# A historical audit row may remain, but it MUST NOT imply resume authority.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.ai_coding_bridge_commands SET status='PROCESSING' WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968'::uuid;" > "$DIR/reset.out" 2>&1
+{ echo 'BEGIN;'; cat "$DIR/insert.sql"; echo 'SELECT pg_sleep(2);'; echo 'COMMIT;'; } > "$DIR/audit-first.sql"
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt < "$DIR/audit-first.sql" > "$DIR/audit-first.out" 2>&1 &
+AUDITOR=$!
+sleep 0.4
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET lock_timeout='5s'; UPDATE ai_platform.ai_coding_bridge_commands SET status='FAILED' WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968'::uuid;" > "$DIR/terminal-second.out" 2>&1 &
+TERMINAL=$!
+wait "$AUDITOR"
+wait "$TERMINAL"
+rows="$(docker exec "$NAME" psql -U postgres -qAt -c 'SELECT COUNT(*) FROM ai_platform.dev_gpt02_operator_review_intents;')"
+status="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT status FROM ai_platform.ai_coding_bridge_commands WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968';")"
+if [[ "$rows" != 1 || "$status" != FAILED ]]; then
+ echo "FAIL: audit-first state unexpected: rows=$rows status=$status"
+ cat "$DIR/audit-first.out" "$DIR/terminal-second.out";exit 1
+fi
+# Durable review audit does not grant resume; a terminal status must stay
+# terminal, and the audit row is immutable historical evidence.
+if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "DELETE FROM ai_platform.dev_gpt02_operator_review_intents;" > "$DIR/delete.out" 2>&1;then
+ echo "FAIL: historical review audit was deletable";exit 1
+fi
+grep -q 'GPT02_REVIEW_INTENT_AUDIT_IMMUTABLE' "$DIR/delete.out" || {
+ echo "FAIL: delete denied for the wrong reason";cat "$DIR/delete.out";exit 1;
+}
+echo "PASS: audit INSERT commits first => 1 immutable historical row; later terminal UPDATE => FAILED"
 echo "NOT tested: signed native ACK, authenticated operator session, actual grant/worker dispatch"
