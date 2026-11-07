@@ -15,6 +15,7 @@ import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 import { getExternalAgentRule } from "../services/externalAgentRegistryService.js";
 import { subscribeExternalAgentWork } from "../services/externalAgentWorkEventService.js";
+import { DEV_DELL_WAKE_CLIENT_ID, listDevDellQueuedWakeCommandIds } from "../services/gpt02DevQueuedWakeService.js";
 
 const router = Router();
 
@@ -635,6 +636,20 @@ router.get(
       res.setHeader("X-Accel-Buffering", "no");
       res.flushHeaders();
       res.write(`event: ready\ndata: ${JSON.stringify({ clientId, transport: "sse" })}\n\n`);
+      // DEV DELL only: a one-shot snapshot re-emits RECEIVED IDs after reconnect.
+      // Subscribe first; racing live notifications are deduplicated client-side.
+      // No periodic DB polling, no generic queue claim, no PROCESSING replay.
+      if (clientId === DEV_DELL_WAKE_CLIENT_ID &&
+          process.env["PUBLIC_APP_URL"]?.replace(/\/$/, "") === "https://dev.cstlogistic.co.id") {
+        const queuedIds = await listDevDellQueuedWakeCommandIds(clientId);
+        for (const commandId of queuedIds) {
+          if (closed) break;
+          if (!res.write(`event: work_available\nid: ${commandId}\ndata: ${JSON.stringify({ clientId, commandId })}\n\n`)) {
+            close();
+            break;
+          }
+        }
+      }
       heartbeat = setInterval(() => { if (!res.write(": keepalive\n\n")) close(); }, 20_000);
       // Reauthenticate and reconcile durable backlog every five minutes.
       lifetime = setTimeout(close, 300_000);
