@@ -16,6 +16,18 @@ const verifiedAnswer = {
 test("verified bound pause reports FAILED to parent command", () => {
   assert.equal(statusForBoundAnswer(work, verifiedAnswer), "FAILED");
 });
+test("verified exact DIL escape wrapper preserves pause without forging a PASS", () => {
+  const text = `<escape>${message}</escape>`;
+  assert.equal(statusForBoundAnswer(work, { ok: true, message: text, details: {
+    verifiedAssistantReply: true, assistantResponseText: text,
+  } }), "FAILED");
+  for (const bad of [`<escape><escape>${message}</escape></escape>`,
+    `<escape>${message}</escape> extra`, `\`\`\`json\n${message}\n\`\`\``]) {
+    assert.equal(statusForBoundAnswer(work, { ok: true, message: bad, details: {
+      verifiedAssistantReply: true, assistantResponseText: bad,
+    } }), "COMPLETED");
+  }
+});
 test("cross-command and unverified answers never trigger SOP resume", () => {
   assert.equal(statusForBoundAnswer({ ...work, commandId: "cmd-2" }, verifiedAnswer), "COMPLETED");
   assert.equal(statusForBoundAnswer({ ...work, metadata: { correlationId: "corr-2" } }, verifiedAnswer), "COMPLETED");

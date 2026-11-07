@@ -31,6 +31,21 @@ describe("DEV checkpoint issuer", () => {
     expect(() => issue({ commandId: "cmd-2" })).toThrow();
     expect(() => issue({ privateKeyPkcs8DerBase64: undefined })).toThrow();
   });
+  it("accepts only a single exact DIL escape wrapper around attested raw JSON", () => {
+    const wrapped = `<escape>${message}</escape>`;
+    expect(parseDevSopCheckpointIntent(wrapped)?.checkpointId).toBe("cp-1");
+    const wrappedHash = createHash("sha256").update(wrapped).digest("hex");
+    const signed = issue({ message: wrapped, assistantResponseHash: wrappedHash });
+    expect(signed.commandId).toBe("cmd-1");
+    expect(() => issue({ message: wrapped, assistantResponseHash: hash })).toThrow();
+    for (const invalid of [
+      `\`\`\`json\n${message}\n\`\`\``,
+      `<escape><escape>${message}</escape></escape>`,
+      `<escape>${message}</escape>trailing`,
+      `<div>${message}</div>`,
+      `<escape>${message}</escape><escape>${message}</escape>`,
+    ]) expect(parseDevSopCheckpointIntent(invalid)).toBeNull();
+  });
   it("never extracts a checkpoint from ordinary replies", () => {
     expect(parseDevSopCheckpointIntent("completed")).toBeNull();
     expect(parseDevSopCheckpointIntent('{"kind":"COMPLETED"}')).toBeNull();

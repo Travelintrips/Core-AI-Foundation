@@ -16,9 +16,18 @@ const identifier = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
 const digest = /^[a-f0-9]{64}$/;
 
 export function parseDevSopCheckpointIntent(message: string): Record<string, unknown> | null {
-  if (message.length > 4096 || !message.startsWith("{")) return null;
+  if (message.length > 4096) return null;
+  // Native ChatGPT can render a literal JSON response inside one DIL escape
+  // wrapper. Unwrap only the exact outer pair; never accept Markdown, nested
+  // wrappers, arbitrary markup, or mutated text for attestation. The issuer
+  // still hashes/signs the *original* assistant message verbatim.
+  const wrapped = message.startsWith("<escape>{") && message.endsWith("}</escape>") &&
+    message.indexOf("<escape>", 8) === -1 &&
+    message.indexOf("</escape>") === message.length - 9;
+  const rawJson = wrapped ? message.slice(8, -9) : message;
+  if (!rawJson.startsWith("{")) return null;
   try {
-    const json: unknown = JSON.parse(message);
+    const json: unknown = JSON.parse(rawJson);
     if (!json || typeof json !== "object" || Array.isArray(json)) return null;
     const data = json as Record<string, unknown>;
     return data.kind === "SOP_CHECKPOINT" && data.status === "PAUSED" ? data : null;

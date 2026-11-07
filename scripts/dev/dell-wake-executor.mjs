@@ -614,8 +614,15 @@ export function statusForBoundAnswer(work, answer) {
   if (answer.details?.verifiedAssistantReply !== true ||
       answer.message !== answer.details?.assistantResponseText ||
       typeof meta.correlationId !== "string") return "COMPLETED";
+  // Preserve the exact signed native reply for attestation; only unwrap the
+  // single literal-DIL wrapper for parsing. Never trust arbitrary HTML/fences.
+  const text = answer.message;
+  const wrapped = text.startsWith("<escape>{") && text.endsWith("}</escape>") &&
+    text.indexOf("<escape>", 8) === -1 &&
+    text.indexOf("</escape>") === text.length - 9;
+  const jsonText = wrapped ? text.slice(8, -9) : text;
   let paused;
-  try { paused = JSON.parse(answer.message); } catch { return "COMPLETED"; }
+  try { paused = JSON.parse(jsonText); } catch { return "COMPLETED"; }
   const id = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
   if (record(paused) && paused.kind === "SOP_CHECKPOINT" && paused.status === "PAUSED" &&
       paused.commandId === work.commandId && paused.correlationId === meta.correlationId &&
