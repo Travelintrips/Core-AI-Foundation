@@ -55,3 +55,12 @@ test('old failed/review-required records are display-only history, not active al
   assert.match(monitor, /value="attention"/);
   assert.match(monitor, /Ini pengelompokan tampilan, bukan perubahan status database/);
 });
+
+test('terminal FAILED is separate from actionable blocked/review and verified PASS', () => {
+  assert.match(monitor, /const attention = new Set\(\["BLOCKED", "REVIEW_REQUIRED"\]\)/);
+  assert.match(monitor, /failed: jobs\.filter\(job => job\.status === "FAILED"\)\.length/);
+  assert.match(monitor, /value="failed"/);
+  assert.match(monitor, /value="verifying"/);
+  assert.match(monitor, /Status selesai \(bukan PASS\)/);
+  assert.doesNotMatch(monitor, /attention = new Set\(\["FAILED"/);
+});
