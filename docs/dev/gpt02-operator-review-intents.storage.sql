@@ -57,3 +57,22 @@ BEGIN
  END IF;
 END;
 $review$;
+
+-- An auditable human review intent must be append-only. Even if a privileged
+-- API role accidentally receives UPDATE/DELETE, historical proof may not be
+-- rewritten or discarded via regular DML. No SECURITY DEFINER privilege.
+CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_review_intent_immutable()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,ai_platform
+AS $immutable$
+BEGIN
+ RAISE EXCEPTION 'GPT02_REVIEW_INTENT_AUDIT_IMMUTABLE'
+   USING ERRCODE='55000';
+END;
+$immutable$;
+REVOKE ALL ON FUNCTION ai_platform.dev_gpt02_review_intent_immutable() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS dev_gpt02_review_intent_immutable_trg
+  ON ai_platform.dev_gpt02_operator_review_intents;
+CREATE TRIGGER dev_gpt02_review_intent_immutable_trg
+  BEFORE UPDATE OR DELETE ON ai_platform.dev_gpt02_operator_review_intents
+  FOR EACH ROW EXECUTE FUNCTION ai_platform.dev_gpt02_review_intent_immutable();
