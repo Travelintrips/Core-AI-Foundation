@@ -46,6 +46,8 @@ jobs:
         run: bash scripts/dev/test-gpt02-review-intent-schema-isolated-postgres.sh
       - name: Verify concurrent terminal-state review-audit gate
         run: bash scripts/dev/test-gpt02-review-audit-command-race-postgres.sh
+      - name: Verify exact GPT02 proposed claim remains inert in isolated PostgreSQL
+        run: bash scripts/dev/test-gpt02-inert-claim-exact-proposal-postgres.sh
       - name: Verify fail-closed DEV-first production promotion
         run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
       - name: Verify GitHub event correlation contract
