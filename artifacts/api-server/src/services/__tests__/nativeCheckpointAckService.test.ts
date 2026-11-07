@@ -52,6 +52,10 @@ describe("DEV native checkpoint ACK admission and atomic update",()=>{
   expect(rendered[0]).toContain("FOR UPDATE OF c, r");
   expect(rendered[1]).toContain("UPDATE ai_platform.ai_coding_bridge_responses");
   expect(rendered[1]).toContain("metadata_json = metadata_json || jsonb_build_object");
+  // PostgreSQL cannot infer unspecified bind-parameter types in the
+  // variadic jsonb_build_object(any) function; every value is explicitly cast.
+  expect((rendered[1].match(/::text/g) ?? []).length).toBe(5);
+  expect(rendered[1]).toContain("::jsonb");
   expect(rendered.every(q=>!q.includes("UPDATE ai_platform.ai_coding_bridge_commands"))).toBe(true);
  });
  it("never rewrites a previously ACKed response",async()=>{
