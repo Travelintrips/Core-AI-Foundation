@@ -17,6 +17,7 @@
  */
 
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { eq, and, inArray, desc, sql, gte } from "drizzle-orm";
 import {
   CreateJobBody,
@@ -38,6 +39,7 @@ import {
   heartbeat as workerHeartbeat,
 } from "../services/jobWorkerService.js";
 import { logAudit } from "../services/aiAuditService.js";
+import { publishSafe } from "../services/aiEventBusService.js";
 
 const router = Router();
 
@@ -163,6 +165,83 @@ router.post("/dev-center/jobs/dismiss", async (req, res): Promise<void> => {
     res.setHeader("Cache-Control","no-store");
     res.json({dismissed,rejected,note:"Job removed from this user's DEV dashboard only. Source job, events and ACK preserved."});
   } catch { res.status(503).json({error:"DEV_JOB_DISMISS_UNAVAILABLE"}); }
+});
+
+// DEV lifecycle Human-in-the-Loop bridge: persistent Human Task Center handoff.
+// Creating an assistance request must NEVER dispatch or resume an AI worker.
+// A genuine signed checkpoint, validated receiver ACK, healthy lease and
+// explicit authorization are prerequisites for any later resume integration.
+router.post("/dev-center/jobs/human-assistance", async (req, res): Promise<void> => {
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
+  const actor = req.internalUser;
+  if (!actor || actor.status !== "active" || actor.accountType !== "internal") {
+    res.status(403).json({error:"INTERNAL_SESSION_REQUIRED"}); return;
+  }
+  const origin = req.get("origin");
+  if (origin) {
+    try { if (new URL(origin).host !== req.get("host")) { res.status(403).json({error:"CROSS_ORIGIN_NOT_ALLOWED"}); return; } }
+    catch { res.status(403).json({error:"CROSS_ORIGIN_NOT_ALLOWED"}); return; }
+  }
+  const {jobKey,reason,openClawEvidence,assignedUser} = req.body ?? {};
+  if (typeof jobKey!=="string" || !/^(?:engine:[0-9]{1,16}|(?:bridge|execution):[0-9a-f-]{36})$/i.test(jobKey) ||
+      typeof reason!=="string" || reason.trim().length<20 || reason.length>2000 ||
+      typeof openClawEvidence!=="string" || openClawEvidence.trim().length<20 || openClawEvidence.length>2000 ||
+      (assignedUser!==undefined && (typeof assignedUser!=="string" || assignedUser.length>200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignedUser)))) {
+    res.status(400).json({error:"INVALID_ESCALATION_EVIDENCE"}); return;
+  }
+  try {
+    const result = await db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${jobKey}))`);
+      const [kind,id] = jobKey.split(":");
+      let source: {rows:Record<string,unknown>[]};
+      if (kind==="bridge") source=await tx.execute(sql`SELECT status FROM ai_task_bridge.jobs WHERE id=${id}::uuid`);
+      else if (kind==="execution") source=await tx.execute(sql`SELECT status FROM public.ai_execution_jobs WHERE id=${id}::uuid`);
+      else source=await tx.execute(sql`SELECT status FROM ai_platform.ai_jobs WHERE id=${Number(id)}`);
+      const status = String(source.rows[0]?.["status"] ?? "").toUpperCase();
+      if (!["BLOCKED","REVIEW_REQUIRED","FAILED"].includes(status)) return {kind:"not_blocked" as const};
+      const existing=await tx.execute(sql`SELECT id,task_code,status FROM ai_platform.ai_human_tasks WHERE source_module='ai_core_lifecycle' AND source_type='job' AND source_id=${jobKey} LIMIT 1`);
+      if (existing.rows.length) return {kind:"existing" as const, task:existing.rows[0]};
+      const requestedPic=typeof assignedUser==="string" ? assignedUser.toLowerCase() : String(actor.email).toLowerCase();
+      const user=await tx.execute(sql`SELECT email FROM ai_platform.internal_users WHERE lower(email)=${requestedPic} AND status='active' AND account_type='internal' LIMIT 1`);
+      if (!user.rows.length) return {kind:"invalid_assignee" as const};
+      const taskCode="HT-AICORE-"+randomUUID().slice(0,12).toUpperCase();
+      const payload=JSON.stringify({jobKey,sourceStatus:status,openClawEvidence:openClawEvidence.trim(),requestedBy:actor.email,resumeAllowed:false,approvalRequired:true});
+      const created=await tx.execute(sql`INSERT INTO ai_platform.ai_human_tasks
+        (task_code,source_module,source_type,source_id,assigned_user,assigned_role,priority,status,reason,instructions,payload_json)
+        VALUES (${taskCode},'ai_core_lifecycle','job',${jobKey},${requestedPic},'Administrator',80,'assigned',${reason.trim()},
+          'Bantu selesaikan hambatan job. Jangan mengeksekusi ulang command, mengubah status job atau melewati otorisasi. Lampirkan bukti hasil dan laporkan melalui Human Tasks. Resume GPT02 tetap terkunci sampai checkpoint/ACK, lease dan otorisasi diperiksa.',
+          ${payload}::jsonb)
+        ON CONFLICT DO NOTHING RETURNING id,task_code,status`);
+      if (!created.rows.length) return {kind:"existing" as const,task:(await tx.execute(sql`SELECT id,task_code,status FROM ai_platform.ai_human_tasks WHERE source_module='ai_core_lifecycle' AND source_id=${jobKey}`)).rows[0]};
+      await tx.execute(sql`INSERT INTO ai_platform.ai_human_task_history (task_id,action,performed_by,notes,new_status)
+        VALUES (${created.rows[0]?.["id"]},'created',${actor.email},'DEV lifecycle escalation; OpenClaw evidence was submitted by operator, not independently attested','assigned')`);
+      return {kind:"created" as const,task:created.rows[0]};
+    });
+    if (result.kind==="not_blocked") {res.status(409).json({error:"JOB_NOT_BLOCKED_OR_TERMINAL"});return;}
+    if (result.kind==="invalid_assignee") {res.status(400).json({error:"ASSIGNEE_NOT_ACTIVE_INTERNAL_USER"});return;}
+    if (result.kind==="created" && result.task) {
+      await Promise.allSettled([
+        publishSafe({eventType:"human.task.created",sourceModule:"human_task_center",sourceId:String(result.task["id"]),payload:{taskCode:String(result.task["task_code"]),sourceModule:"ai_core_lifecycle",sourceType:"job",status:"assigned"}}),
+        logAudit("ai_core_lifecycle","human_escalation_created",jobKey,"job","success",{humanTaskId:result.task["id"],createdBy:actor.email,resumeAllowed:false}),
+      ]);
+    }
+    res.setHeader("Cache-Control","no-store");
+    res.status(result.kind==="created"?201:200).json({task:result.task,duplicate:result.kind==="existing",resumeAllowed:false,notification:"Human Task created; resume requires independent evidence and authorization."});
+  } catch {res.status(503).json({error:"HUMAN_ESCALATION_UNAVAILABLE"});}
+});
+
+router.get("/dev-center/jobs/human-assistance", async (req,res): Promise<void> => {
+  if (process.env["APP_ENV"] !== "development") {res.sendStatus(404);return;}
+  if (!req.internalUser || req.internalUser.status!=="active" || req.internalUser.accountType!=="internal") {res.status(403).json({error:"INTERNAL_SESSION_REQUIRED"});return;}
+  try {
+    const records=await db.execute(sql`SELECT source_id AS job_key,id,task_code,status,assigned_user,reason,
+      payload_json->>'openClawEvidence' AS openclaw_evidence,created_at,completed_at
+      FROM ai_platform.ai_human_tasks WHERE source_module='ai_core_lifecycle' AND source_type='job'
+      ORDER BY created_at DESC LIMIT 200`);
+    res.setHeader("Cache-Control","no-store");
+    res.json({requests:records.rows.map(row=>({...row,resumeAllowed:false,
+      nextAction:row["status"]==="completed"?'VERIFY_CHECKPOINT_ACK_LEASE_AND_AUTHORIZATION':'HUMAN_TASK_ACTION_REQUIRED'}))});
+  } catch {res.status(503).json({error:"HUMAN_ASSISTANCE_QUERY_UNAVAILABLE"});}
 });
 
 // ── List Jobs ─────────────────────────────────────────────────────────────────
