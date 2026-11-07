@@ -32,7 +32,15 @@ const defaultReplies: Reply[] = [
 ];
 const defaultPolicy: Policy = { enabled: false, heartbeatGraceMinutes: 10, maxRetries: 3, requireAcknowledgement: true };
 const placeholders = ["job_id","status","worker","blocker","next_action","checkpoint","time_wib"];
-const supportedEvents = ["JOB_RECEIVED", "JOB_QUEUED", "JOB_BLOCKED", "JOB_RESUME_REQUESTED", "JOB_COMPLETED"];
+const supportedEvents = ["JOB_RECEIVED", "JOB_QUEUED", "JOB_BLOCKED", "JOB_CHECKPOINT", "JOB_RESUME_REQUESTED", "JOB_HELP_REQUESTED", "JOB_VERIFIED", "JOB_COMPLETED", "JOB_CLOSED"];
+// Guidance only: adding templates does not dispatch work, resume native ChatGPT,
+// authorize OpenClaw access, or override the server-owned completion gate.
+const lifecyclePresets: Reply[] = [
+  { id: "checkpoint", event: "JOB_CHECKPOINT", enabled: true, text: "Job {{job_id}} menyimpan checkpoint {{checkpoint}}. Status: {{status}}. Langkah berikutnya: {{next_action}}." },
+  { id: "help", event: "JOB_HELP_REQUESTED", enabled: true, text: "Job {{job_id}} membutuhkan bantuan worker berwenang untuk blocker {{blocker}}. Lanjutkan dari {{checkpoint}} setelah bantuan diverifikasi." },
+  { id: "verified", event: "JOB_VERIFIED", enabled: true, text: "Bukti job {{job_id}} telah diverifikasi. Status: {{status}}. Pastikan ACK resmi sebelum penutupan." },
+  { id: "closed", event: "JOB_CLOSED", enabled: true, text: "Job {{job_id}} ditutup setelah verifikasi hasil dan ACK. Status: {{status}}." },
+];
 function safeParse<T>(s: string | undefined, fallback: T): T {
   if (!s) return fallback;
   try { return JSON.parse(s) as T; } catch { return fallback; }
@@ -102,7 +110,16 @@ export default function HandshakeSopSettings() {
   return <Card>
     <CardHeader><CardTitle>Handshake Balasan & SOP Tahap 2</CardTitle><p className="text-sm text-muted-foreground">Kelola template balasan. Ini konfigurasi saja; tidak otomatis mengaktifkan wake-up ChatGPT atau routing worker.</p></CardHeader>
     <CardContent className="space-y-5">
-      <div className="flex items-center justify-between"><strong>Template balasan</strong><Button variant="outline" onClick={() => { const id = "custom_" + Date.now(); change([...replies, { id, event: "JOB_BLOCKED", enabled: false, text: "Job {{job_id}}: {{status}}" }]); setPreviewId(id); }}>Tambah template</Button></div>
+      <div className="flex items-center justify-between gap-2 flex-wrap"><strong>Template balasan</strong><div className="flex gap-2 flex-wrap">
+        <Button variant="outline" onClick={() => {
+          const existing = new Set(replies.map(reply => reply.event));
+          const additions = lifecyclePresets.filter(reply => !existing.has(reply.event));
+          if (additions.length === 0) { setMessage("Semua tahap lifecycle sudah memiliki template."); return; }
+          change([...replies, ...additions]); setMessage("Template tambahan disiapkan. Klik Simpan konfigurasi agar tersimpan.");
+        }}>Tambah 4 tahap lifecycle</Button>
+        <Button variant="outline" onClick={() => { const id = "custom_" + Date.now(); change([...replies, { id, event: "JOB_BLOCKED", enabled: false, text: "Job {{job_id}}: {{status}}" }]); setPreviewId(id); }}>Tambah template</Button>
+      </div></div>
+      <p className="text-xs text-muted-foreground">Template ini mengatur isi pesan, bukan izin eksekusi. Tahap checkpoint, bantuan OpenClaw, verifikasi PASS, dan penutupan hanya dikirim bila controller resmi menerbitkan event terkait.</p>
       {replies.map((reply, index) => <div className="grid gap-2 rounded border p-3" key={reply.id}>
         <div className="flex items-center justify-between gap-2"><span className="text-sm font-mono">{reply.id}</span><div className="flex items-center gap-3"><Label>Aktif</Label><Switch checked={reply.enabled} onCheckedChange={checked => change(replies.map((r,i) => i === index ? {...r,enabled:checked}:r))}/><Button size="sm" variant="outline" onClick={() => { change(replies.filter((_,i) => i !== index)); if (previewId === reply.id) setPreviewId(""); }}>Hapus</Button></div></div>
         <Label>Event</Label><select className="rounded border bg-background p-2 text-sm" value={reply.event} onChange={e => change(replies.map((r,i) => i === index ? {...r,event:e.target.value}:r))}>{supportedEvents.map(ev => <option key={ev} value={ev}>{ev}</option>)}</select>
