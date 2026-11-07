@@ -175,4 +175,43 @@ if [[ "$state" != '1|1' ]];then
  exit 1
 fi
 echo "PASS: audit committed first, then terminal response appended; 1 immutable historical audit (never a grant)"
+# Mutable command response evidence after audit: do not mistake an immutable
+# historical signed REVIEW INTENT for a currently valid checkpoint/BLOCKER.
+# This exercise is synthetic in disposable PostgreSQL; real grant path is absent.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "
+ UPDATE ai_platform.ai_coding_bridge_responses
+ SET kind='FAILED'
+ WHERE id='08b7b237-7a16-46d0-b79d-029d0363c112'::uuid;
+ UPDATE ai_platform.ai_coding_bridge_responses
+ SET acknowledged_at=NULL
+ WHERE id='822efca2-7428-428a-ac66-548c0462438e'::uuid;
+" > "$DIR/mutate-evidence.out" 2>&1
+state="$(docker exec "$NAME" psql -U postgres -qAt -c "
+ SELECT (SELECT count(*) FROM ai_platform.dev_gpt02_operator_review_intents),
+        (SELECT count(*) FROM ai_platform.ai_coding_bridge_responses WHERE kind='BLOCKER'),
+        (SELECT count(*) FROM ai_platform.ai_coding_bridge_responses WHERE kind='CHECKPOINT' AND acknowledged_at IS NOT NULL),
+        (SELECT count(*) FROM ai_platform.ai_coding_bridge_responses WHERE kind='FAILED');")"
+if [[ "$state" != '1|0|0|2' ]];then
+ echo "FAIL: mutated evidence does not match expected state: $state";exit 1
+fi
+# Current-evidence eligibility is denied despite one immutable audit row.
+eligible="$(docker exec "$NAME" psql -U postgres -qAt -c "
+ SELECT EXISTS (
+   SELECT 1 FROM ai_platform.dev_gpt02_operator_review_intents a
+   JOIN ai_platform.ai_coding_bridge_commands c ON c.id=a.command_id
+   JOIN ai_platform.ai_coding_bridge_responses cp ON cp.id=a.checkpoint_response_id
+     AND cp.command_id=c.id AND cp.kind='CHECKPOINT'
+     AND cp.acknowledged_at IS NOT NULL
+   JOIN ai_platform.ai_coding_bridge_responses bl ON bl.id=a.blocker_response_id
+     AND bl.command_id=c.id AND bl.kind='BLOCKER'
+   WHERE c.status='PROCESSING'
+     AND bl.id=(SELECT r.id FROM ai_platform.ai_coding_bridge_responses r
+       WHERE r.command_id=c.id ORDER BY r.created_at DESC,r.id DESC LIMIT 1)
+     AND NOT EXISTS(SELECT 1 FROM ai_platform.ai_coding_bridge_responses t
+       WHERE t.command_id=c.id AND t.kind IN ('FAILED','COMPLETED'))
+ );")"
+if [[ "$eligible" != f ]];then
+ echo "FAIL: current evidence incorrectly accepted a stale historical audit";exit 1
+fi
+echo "PASS: altered BLOCKER/ACK after review => historical audit stays, current evidence rejects resume"
 echo "NOT tested: signed native ACK, authenticated operator session, actual grant/worker dispatch"
