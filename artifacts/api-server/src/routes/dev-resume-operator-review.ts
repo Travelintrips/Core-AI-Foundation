@@ -5,6 +5,7 @@
  */
 import { Router } from "express";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
+import { getDevResumeOperatorCommandPreflight } from "../services/jobLifecycleOperatorCommandPreflight.js";
 
 const router=Router();
 router.get(
@@ -32,6 +33,28 @@ router.get(
       mayCloseJob:false,
       reason:"AUTHENTICATED_OPERATOR_ONLY_NO_SIGNER_OR_GRANT_ISSUER",
     });
+  },
+);
+// Read-only live CST-DEV command evidence. An authenticated owner/admin can
+// inspect why grant issuance is blocked; never sign, issue or resume here.
+router.get(
+  "/ai/core-chat/dev/resume/commands/:commandId/approval-preflight",
+  requireAuth,requireInternalRole("owner","admin"),requirePasswordChanged,
+  async (req,res):Promise<void>=>{
+    if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]==="production"){
+      res.status(404).json({error:"Not found"});return;
+    }
+    const commandId=String(req.params["commandId"]??"");
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(commandId)){
+      res.status(400).json({error:"Invalid command ID"});return;
+    }
+    try{
+      const result=await getDevResumeOperatorCommandPreflight(commandId);
+      res.status(result.found?200:404).json(result);
+    }catch{
+      res.status(503).json({error:"DEV approval preflight unavailable",
+        mayIssueGrant:false,mayDispatchWorker:false});
+    }
   },
 );
 export default router;
