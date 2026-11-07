@@ -90,103 +90,80 @@ router.get("/dev-center/login.js", (_req, res): void => {
 // Authenticated DEV-only monitor page. Both assets and data use the same
 // global /api authentication boundary; nothing is exposed as public static HTML.
 router.get("/dev-center/dashboard", (_req, res): void => {
-  if (process.env["APP_ENV"] !== "development") {
-    res.sendStatus(404);
-    return;
-  }
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
   res.setHeader("Cache-Control", "no-store");
-  res.type("html").send(
-    '<!doctype html><html lang="id"><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>AI Core DEV - Job Monitor</title>' +
-    '<link rel="stylesheet" href="/api/dev-center/dashboard.css"></head>' +
-    '<body><main><header><h1>AI Core DEV - Job Monitoring</h1>' +
-    '<p>Data job read-only dari database DEV. Refresh otomatis setiap 15 detik.</p>' +
-    '<p id="connection" role="status" aria-live="polite">Memuat...</p></header>' +
-    '<section aria-label="Ringkasan"><div id="totals" class="totals"></div></section>' +
-    '<section aria-label="Daftar job"><div class="table-wrap"><table>' +
-    '<thead><tr><th>Job ID</th><th>Aplikasi / Tipe</th><th>Status</th><th>Terakhir diperbarui</th></tr></thead>' +
-    '<tbody id="jobs"><tr><td colspan="4">Memuat job DEV...</td></tr></tbody>' +
-    '</table></div></section></main>' +
-    '<script src="/api/dev-center/dashboard.js" defer></script></body></html>'
-  );
+  res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Core DEV — Monitoring Pekerjaan</title><link rel="stylesheet" href="/api/dev-center/dashboard.css"></head><body><main><header><h1>AI Core — Monitoring Pekerjaan DEV</h1><p>Status, progres terverifikasi, pelaksana, penanggung jawab, dan bukti pekerjaan. Tidak mengubah eksekusi.</p><p id="connection" role="status" aria-live="polite">Memuat...</p></header><section aria-label="Ringkasan"><div id="totals" class="totals"></div></section><section aria-label="Filter"><label>Status <select id="filter"><option value="active">Aktif / perlu perhatian</option><option value="all">Semua</option><option value="completed">Selesai</option></select></label> <label>Cari <input id="search" placeholder="ID, nama job, pelaksana"></label></section><section aria-label="Daftar pekerjaan"><div class="table-wrap"><table><thead><tr><th>Job / Sumber</th><th>Status / Tahap</th><th>Progres terverifikasi</th><th>Pelaksana</th><th>Penanggung jawab</th><th>Hambatan / Bukti</th><th>Aktivitas terakhir</th></tr></thead><tbody id="jobs"><tr><td colspan="7">Memuat job DEV...</td></tr></tbody></table></div></section><p class="note">Progres hanya muncul bila ada checkpoint yang terverifikasi. Status FAILED tidak pernah dianggap PASS meskipun semua langkah dicoba. Identitas yang belum tersedia ditampilkan sebagai Belum ditetapkan.</p></main><script src="/api/dev-center/dashboard.js" defer></script></body></html>`);
 });
 
 router.get("/dev-center/dashboard.css", (_req, res): void => {
-  if (process.env["APP_ENV"] !== "development") {
-    res.sendStatus(404);
-    return;
-  }
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
   res.setHeader("Cache-Control", "no-store");
-  res.type("css").send(
-    ':root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0d1526;color:#eef4fc}' +
-    'body{margin:0}main{max-width:1160px;margin:0 auto;padding:32px 20px}' +
-    'header{margin-bottom:24px}h1{font-size:26px}p{color:#b9c8de}' +
-    '.totals{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}' +
-    '.metric{background:#1b2c46;border:1px solid #304a66;padding:14px;border-radius:10px}' +
-    '.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#142239}' +
-    'th,td{text-align:left;padding:12px;border-bottom:1px solid #30425d;white-space:nowrap}' +
-    'th{color:#c4d4e7}#connection{font-weight:600}'
-  );
+  res.type("css").send(`:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0d1526;color:#eef4fc}body{margin:0}main{max-width:1500px;margin:0 auto;padding:24px 18px}h1{font-size:25px}p,.note{color:#b9c8de}.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:18px 0}.metric{background:#1b2c46;border:1px solid #304a66;padding:15px;border-radius:10px}.metric strong{font-size:25px;display:block}section{margin-bottom:18px}label{margin-right:16px}input,select{padding:9px;background:#1b2c46;color:#eef4fc;border:1px solid #4a6380;border-radius:6px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#142239}th,td{text-align:left;padding:12px;border-bottom:1px solid #30425d;vertical-align:top;min-width:120px}th{color:#c4d4e7;white-space:nowrap}td:first-child{min-width:210px}small{display:block;color:#aebed1;margin-top:5px}progress{width:120px;height:12px;accent-color:#38a68a}.pill{display:inline-block;padding:3px 8px;border-radius:6px;background:#2b4463;font-size:12px}.note{font-size:13px}#connection{font-weight:600}`);
 });
 
 router.get("/dev-center/dashboard.js", (_req, res): void => {
-  if (process.env["APP_ENV"] !== "development") {
-    res.sendStatus(404);
-    return;
-  }
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
   res.setHeader("Cache-Control", "no-store");
-  res.type("javascript").send(
-    '(function(){"use strict";' +
-    'const status=document.getElementById("connection"),body=document.getElementById("jobs"),totals=document.getElementById("totals");' +
-    'function cell(tr,v){const el=document.createElement("td");el.textContent=String(v??"");tr.appendChild(el);}' +
-    'async function refresh(){if(document.hidden)return;' +
-    'try{const r=await fetch("/api/dev-center/jobs",{credentials:"same-origin",cache:"no-store",headers:{"Accept":"application/json"}});' +
-    'if(r.status===401||r.status===403)throw new Error("Sesi admin tidak valid. Login kembali.");' +
-    'if(!r.ok)throw new Error("API job tidak tersedia (HTTP "+r.status+").");' +
-    'const p=await r.json();if(!Array.isArray(p.jobs))throw new Error("Format respons tidak valid.");' +
-    'body.replaceChildren();totals.replaceChildren();' +
-    'const counts=new Map();for(const j of p.jobs)counts.set(j.status,(counts.get(j.status)||0)+1);' +
-    'for(const [name,n] of counts){const d=document.createElement("div");d.className="metric";d.textContent=name+": "+n;totals.append(d);}' +
-    'for(const j of p.jobs){const row=document.createElement("tr");cell(row,j.id);cell(row,j.application);cell(row,j.status);' +
-    'cell(row,j.updatedAt?new Date(j.updatedAt).toLocaleString("id-ID"):"-");body.append(row);}' +
-    'if(!p.jobs.length){const row=document.createElement("tr");const td=document.createElement("td");td.colSpan=4;td.textContent="Tidak ada job DEV.";row.append(td);body.append(row);}' +
-    'status.textContent="Terhubung ke DEV - "+new Date().toLocaleTimeString("id-ID")+" (maksimum 50 job terbaru)";' +
-    '}catch(e){status.textContent="Gagal: "+e.message;}}' +
-    'refresh();setInterval(refresh,15000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});})();'
-  );
+  res.type("javascript").send(`(function(){"use strict";
+  const connection=document.getElementById("connection"),body=document.getElementById("jobs"),totals=document.getElementById("totals"),filter=document.getElementById("filter"),search=document.getElementById("search");let data=[];
+  function cell(row,value){const td=document.createElement("td");td.textContent=String(value??"");row.append(td);return td;}
+  function render(){const q=search.value.toLowerCase().trim(),mode=filter.value;body.replaceChildren();totals.replaceChildren();
+    const counts={active:0,waiting:0,attention:0,completed:0};for(const j of data){if(["RUNNING","RETRYING","PROCESSING"].includes(j.status))counts.active++;else if(["QUEUED","WAITING","PENDING"].includes(j.status))counts.waiting++;else if(["BLOCKED","FAILED","REVIEW_REQUIRED"].includes(j.status))counts.attention++;else if(j.status==="COMPLETED")counts.completed++;}
+    for(const [label,key] of [["Sedang dikerjakan","active"],["Menunggu","waiting"],["Perlu perhatian","attention"],["Selesai","completed"]]){const d=document.createElement("div"),strong=document.createElement("strong");d.className="metric";strong.textContent=counts[key];d.append(strong,document.createTextNode(label));totals.append(d);}
+    const shown=data.filter(j=>(mode==="all"||(mode==="completed"?j.status==="COMPLETED":!["COMPLETED","CANCELLED"].includes(j.status)))&&[j.id,j.title,j.worker,j.accountable,j.source].join(" ").toLowerCase().includes(q));
+    for(const j of shown){const tr=document.createElement("tr");const first=cell(tr,j.title);const id=document.createElement("small");id.textContent=j.source+" · "+j.id;first.append(id);
+      const stat=cell(tr,j.status),stage=document.createElement("small");stage.textContent=j.stage||"Tahap belum terverifikasi";stat.append(stage);
+      const prog=document.createElement("td");if(typeof j.verifiedProgress==="number"){const bar=document.createElement("progress");bar.max=100;bar.value=j.verifiedProgress;prog.append(bar,document.createTextNode(" "+j.verifiedProgress+"%"));}else prog.textContent="Belum terverifikasi";tr.append(prog);
+      cell(tr,j.worker||"Belum ditetapkan");cell(tr,j.accountable||"Belum ditetapkan");const evidence=cell(tr,j.blocker||"—");if(j.evidence){const sm=document.createElement("small");sm.textContent="Bukti: "+j.evidence;evidence.append(sm);}cell(tr,j.updatedAt?new Date(j.updatedAt).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"}):"—");body.append(tr);}
+    if(!shown.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=7;td.textContent="Tidak ada pekerjaan sesuai filter.";tr.append(td);body.append(tr);}
+  }
+  async function refresh(){if(document.hidden)return;try{const r=await fetch("/api/dev-center/jobs",{credentials:"same-origin",cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);const payload=await r.json();if(!Array.isArray(payload.jobs))throw new Error("Format data tidak valid");data=payload.jobs;render();connection.textContent="DEV terhubung · terakhir diperbarui "+new Date().toLocaleTimeString("id-ID")+" · "+data.length+" pekerjaan"+(payload.warnings?.length?" · Data parsial: "+payload.warnings.join(", "):"");}catch(e){connection.textContent="Data monitoring tidak tersedia: "+e.message;}}
+  filter.addEventListener("change",render);search.addEventListener("input",render);refresh();setInterval(refresh,15000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});})();`);
 });
 
-// Read-only, minimal DEV Control Center monitor endpoint.
-// The global /api admin/session middleware protects this route.
+// Read-only DEV monitoring. Values are grounded in job records; never infer a percentage
+// from status or claim that a worker/owner exists when no assignment evidence is stored.
 router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
-  if (process.env["APP_ENV"] !== "development") {
-    res.sendStatus(404);
-    return;
-  }
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
   try {
-    const jobs = await db.select({
-      id: aiJobsTable.id,
-      application: aiJobsTable.jobType,
-      status: aiJobsTable.status,
-      updatedAt: aiJobsTable.updatedAt,
-    }).from(aiJobsTable).orderBy(desc(aiJobsTable.updatedAt)).limit(50);
-    const states: Record<string, string> = {
-      queued: "QUEUED", waiting: "WAITING",
-      running: "RUNNING", retrying: "RETRYING",
-      blocked: "BLOCKED", failed: "FAILED",
-      completed: "COMPLETED", cancelled: "CANCELLED",
-    };
-    res.setHeader("Cache-Control", "no-store");
-    res.json({ jobs: jobs.map((job) => ({
-      id: String(job.id),
-      application: String(job.application ?? "AI Core").slice(0, 100),
-      status: states[String(job.status)] ?? "UNKNOWN",
-      updatedAt: job.updatedAt?.toISOString() ?? null,
-    })) });
-  } catch {
-    res.status(503).json({ error: "DEV_JOB_MONITOR_UNAVAILABLE" });
-  }
+    const jobs = await db.select({id:aiJobsTable.id,jobCode:aiJobsTable.jobCode,jobType:aiJobsTable.jobType,status:aiJobsTable.status,payload:aiJobsTable.payloadJson,result:aiJobsTable.resultJson,employeeId:aiJobsTable.employeeId,departmentId:aiJobsTable.departmentId,error:aiJobsTable.errorMessage,updatedAt:aiJobsTable.updatedAt}).from(aiJobsTable).orderBy(sql`CASE WHEN ${aiJobsTable.status} IN ('queued','waiting','running','retrying','blocked') THEN 0 ELSE 1 END`,desc(aiJobsTable.updatedAt)).limit(100);
+    const states:Record<string,string>={queued:"QUEUED",waiting:"WAITING",running:"RUNNING",retrying:"RETRYING",blocked:"BLOCKED",failed:"FAILED",completed:"COMPLETED",cancelled:"CANCELLED"};
+    const read=(v:unknown):Record<string,unknown>=>v && typeof v==="object" && !Array.isArray(v)?v as Record<string,unknown>:{};
+    const str=(v:unknown):string=>typeof v==="string"?v.slice(0,180):"";
+    const [bridgeResult, executionResult] = await Promise.allSettled([
+      db.execute(sql`SELECT id::text AS id, source, external_id, title, status, owner, created_at, updated_at FROM ai_task_bridge.jobs ORDER BY CASE WHEN status IN ('QUEUED','RUNNING','REVIEW_REQUIRED') THEN 0 ELSE 1 END, updated_at DESC LIMIT 100`),
+      db.execute(sql`SELECT e.id::text AS id,e.task_id,e.external_id,e.command_id::text AS command_id,e.title,e.source,e.status,e.progress,e.worker_id,e.worker_type,e.assigned_client_id,e.error_message,e.final_ack_verified,e.metadata,e.updated_at,t.assigned_to
+        FROM public.ai_execution_jobs e LEFT JOIN public.ai_tasks t ON t.id=e.task_id ORDER BY CASE WHEN e.status IN ('received','processing','dispatching','verifying','review_required','blocked') THEN 0 ELSE 1 END, e.updated_at DESC LIMIT 100`),
+    ]);
+    const warnings:string[]=[];
+    if(bridgeResult.status==="rejected")warnings.push("AI_TASK_BRIDGE_UNAVAILABLE");
+    if(executionResult.status==="rejected")warnings.push("AI_EXECUTION_JOBS_UNAVAILABLE");
+    const bridgeRows=bridgeResult.status==="fulfilled"?bridgeResult.value.rows:[];
+    const executionRows=executionResult.status==="fulfilled"?executionResult.value.rows:[];
+    const bridgeRefs=new Set(bridgeRows.map(row=>String(row["external_id"]??"")));
+    const items:Record<string,unknown>[]=jobs.map(j=>{const p=read(j.payload),r=read(j.result);const explicitProgress=r["verifiedProgress"]??p["verifiedProgress"];
+      const evidenceId=str(r["progressEvidenceId"])||str(r["checkpointId"])||str(p["progressEvidenceId"]);
+      const verified=Boolean(evidenceId);
+      const progress=verified && typeof explicitProgress==="number" && Number.isInteger(explicitProgress) && explicitProgress>=0 && explicitProgress<=100 && j.status!=="failed" ? explicitProgress:null;
+      return {id:j.jobCode||String(j.id),title:str(p["title"])||j.jobType,source:"AI Core Engine",status:states[j.status]||"UNKNOWN",stage:str(r["stage"])||str(p["stage"])||null,verifiedProgress:progress,worker:str(r["workerName"])||str(p["workerName"])||null,accountable:str(p["accountableName"])||str(r["accountableName"])||null,workerType:str(p["workerType"])||null,blocker:j.error?String(j.error).slice(0,200):str(r["blocker"])||null,evidence:evidenceId||null,updatedAt:j.updatedAt?.toISOString()??null};
+    });
+    for(const row of bridgeRows){
+      const external=String(row["external_id"]??"");
+      items.push({id:String(row["id"]),title:str(row["title"])||external,source:str(row["source"])||"AI Task Bridge",status:String(row["status"]??"UNKNOWN").toUpperCase(),stage:null,verifiedProgress:null,worker:str(row["owner"])||null,accountable:null,workerType:null,blocker:null,evidence:null,updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
+    }
+    for(const row of executionRows){
+      const external=str(row["external_id"]),command=str(row["command_id"]);
+      if((external && bridgeRefs.has(external))||(command && bridgeRefs.has("bridge-command:"+command)))continue;
+      const metadata=read(row["metadata"]);const status=String(row["status"]??"UNKNOWN").toUpperCase();
+      const evidenceId=str(metadata["progressEvidenceId"])||str(metadata["checkpointId"]);
+      const progressValue=metadata["verifiedProgress"];
+      const verifiedProgress=evidenceId && typeof progressValue==="number" && Number.isInteger(progressValue) && progressValue>=0 && progressValue<=100 && !["FAILED","BLOCKED","CANCELLED"].includes(status)?progressValue:status==="COMPLETED"&&row["final_ack_verified"]===true?100:null;
+      items.push({id:String(row["id"]),title:str(row["title"])||"AI Task",source:str(row["source"])||"AI Tasks",status,stage:str(metadata["stage"])||null,verifiedProgress,worker:str(row["worker_id"])||str(row["assigned_client_id"])||null,accountable:str(row["assigned_to"])||null,workerType:str(row["worker_type"])||null,blocker:str(row["error_message"])||str(metadata["lastDispatchError"])||null,evidence:evidenceId|| (row["final_ack_verified"]===true?"Final ACK terverifikasi":null),updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
+    }
+    items.sort((a,b)=>Date.parse(String(b["updatedAt"]??0))-Date.parse(String(a["updatedAt"]??0)));
+    res.setHeader("Cache-Control","no-store");
+    res.json({jobs:items.slice(0,200),warnings});
+  } catch {res.status(503).json({error:"DEV_JOB_MONITOR_UNAVAILABLE"});}
 });
 
 // ── List Jobs ─────────────────────────────────────────────────────────────────
