@@ -46,3 +46,12 @@ test('evidence-based progress, job owners, errors, and stale activity remain vis
   assert.match(monitor, /Belum terverifikasi/);
   assert.match(monitor, /3_600_000/);
 });
+
+test('old failed/review-required records are display-only history, not active alerts', () => {
+  assert.match(monitor, /HISTORY_CUTOFF_MS = 7 \* 24 \* 60 \* 60 \* 1000/);
+  assert.match(monitor, /isCurrentAttention = \(job: Job, now = Date\.now\(\)\) => attention\.has\(job\.status\) && !isStale\(job, now\)/);
+  assert.match(monitor, /summary\.history/);
+  assert.match(monitor, /value="history"/);
+  assert.match(monitor, /value="attention"/);
+  assert.match(monitor, /Ini pengelompokan tampilan, bukan perubahan status database/);
+});
