@@ -8,6 +8,7 @@ import { requireAuth, requireInternalRole, requirePasswordChanged } from "../mid
 import { getDevResumeOperatorCommandPreflight } from "../services/jobLifecycleOperatorCommandPreflight.js";
 import { getDevCommandRecoveryReview } from "../services/jobLifecycleRecoveryReview.js";
 import { signDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewSigner.js";
+import { persistSignedDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewPersistence.js";
 
 const router=Router();
 router.get(
@@ -116,7 +117,21 @@ router.post(
        trustedPublicKeyDerBase64:process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"],
       });
       res.setHeader("Cache-Control","no-store");
-      res.status(signing.signed?200:409).json(signing);
+      if(!signing.signed||!signing.proof){
+        res.status(409).json(signing);return;
+      }
+      // Persist atomically before returning any signed proof. Failure refuses
+      // a success response; this is NOT a grant issuance or resume.
+      const persisted=await persistSignedDevOperatorReviewIntent({
+        proof:signing.proof,
+        trustedPublicKeyDerBase64:process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"],
+        operatorUserId:user.id,operatorRole:user.role as "owner"|"admin",now:new Date(),
+      });
+      if(!persisted.recorded){
+        res.status(409).json({signed:false,reason:persisted.reason,
+          mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});return;
+      }
+      res.status(200).json({...signing,recorded:true,recordId:persisted.recordId});
     }catch{
       res.status(503).json({error:"Signing review unavailable",
        mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
