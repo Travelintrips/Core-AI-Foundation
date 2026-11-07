@@ -194,9 +194,9 @@ router.post("/dev-center/jobs/human-assistance", async (req, res): Promise<void>
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${jobKey}))`);
       const [kind,id] = jobKey.split(":");
       let source: {rows:Record<string,unknown>[]};
-      if (kind==="bridge") source=await tx.execute(sql`SELECT status FROM ai_task_bridge.jobs WHERE id=${id}::uuid FOR UPDATE`);
-      else if (kind==="execution") source=await tx.execute(sql`SELECT status FROM public.ai_execution_jobs WHERE id=${id}::uuid FOR UPDATE`);
-      else source=await tx.execute(sql`SELECT status FROM ai_platform.ai_jobs WHERE id=${Number(id)} FOR UPDATE`);
+      if (kind==="bridge") source=await tx.execute(sql`SELECT status FROM ai_task_bridge.jobs WHERE id=${id}::uuid`);
+      else if (kind==="execution") source=await tx.execute(sql`SELECT status FROM public.ai_execution_jobs WHERE id=${id}::uuid`);
+      else source=await tx.execute(sql`SELECT status FROM ai_platform.ai_jobs WHERE id=${Number(id)}`);
       const status = String(source.rows[0]?.["status"] ?? "").toUpperCase();
       if (!["BLOCKED","REVIEW_REQUIRED","FAILED"].includes(status)) return {kind:"not_blocked" as const};
       const existing=await tx.execute(sql`SELECT id,task_code,status FROM ai_platform.ai_human_tasks WHERE source_module='ai_core_lifecycle' AND source_type='job' AND source_id=${jobKey} LIMIT 1`);

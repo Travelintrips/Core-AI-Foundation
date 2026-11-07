@@ -114,7 +114,7 @@ test('DEV Human escalation requires authenticated internal user and explicit Ope
 test('Human escalation verifies live blocked status, deduplicates and never resumes worker', () => {
   const api = routes.slice(routes.indexOf('router.post("/dev-center/jobs/human-assistance"'), routes.indexOf('router.get("/dev-center/jobs/human-assistance"'));
   assert.match(api, /pg_advisory_xact_lock/);
-  assert.match(api, /FOR UPDATE/);
+  assert.doesNotMatch(api, /FOR UPDATE/); // runtime role has read-only source permissions
   assert.match(api, /"BLOCKED","REVIEW_REQUIRED","FAILED"/);
   assert.match(api, /ai_platform.ai_human_tasks/);
   assert.match(api, /ai_platform.ai_human_task_history/);
