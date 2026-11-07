@@ -9,7 +9,7 @@ vi.mock("@workspace/db", () => ({
 vi.mock("../aiEventBusService.js", () => ({ publishSafe: vi.fn() }));
 
 describe("coding control bridge lifecycle idempotency", () => {
-  it.each(["BLOCKER", "COMPLETED", "FAILED"] as const)(
+  it.each(["CHECKPOINT", "BLOCKER", "COMPLETED", "FAILED"] as const)(
     "deduplicates %s lifecycle responses before fan-out",
     async (kind) => {
       const bridge = await import("../localCodingControlBridgeService.js");
@@ -17,7 +17,7 @@ describe("coding control bridge lifecycle idempotency", () => {
     },
   );
 
-  it.each(["ACK", "PROGRESS", "CHECKPOINT"] as const)(
+  it.each(["ACK", "PROGRESS"] as const)(
     "does not collapse ordinary %s progress responses",
     async (kind) => {
       const bridge = await import("../localCodingControlBridgeService.js");

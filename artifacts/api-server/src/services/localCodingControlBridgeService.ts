@@ -18,6 +18,7 @@ import { toCodingBridgeAckReadback } from "./codingBridgeResponseAckReadback.js"
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
 import { readHandshakeSopSettings } from "./handshakeSopSettingsService.js";
 import { renderReplyTemplate } from "./handshakeSopConfiguration.js";
+import { lifecycleEventBridgeEnabled, mapPersistedResponseToLifecycleEvent } from "./jobLifecycleEventBridgeService.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
@@ -48,7 +49,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function isIdempotentCodingBridgeLifecycleKind(
   kind: "ACK" | "PROGRESS" | "CHECKPOINT" | "BLOCKER" | "COMPLETED" | "FAILED",
 ): boolean {
-  return kind === "BLOCKER" || kind === "COMPLETED" || kind === "FAILED";
+  return kind === "CHECKPOINT" || kind === "BLOCKER" || kind === "COMPLETED" || kind === "FAILED";
 }
 
 const GITHUB_REPOSITORY = "Travelintrips/Core-AI-Foundation";
@@ -453,6 +454,26 @@ async function publishPersistedCodingBridgeResponse(response: typeof aiCodingBri
       kind: input.kind,
     },
   });
+
+  // Informational lifecycle events are emitted only for newly persisted responses.
+  // No worker dispatch, resume, help request, verification or closure occurs here.
+  if (lifecycleEventBridgeEnabled(process.env["AI_CORE_JOB_LIFECYCLE_EVENT_BRIDGE_ENABLED"])) {
+    const lifecycleEvent = mapPersistedResponseToLifecycleEvent(input.kind);
+    if (lifecycleEvent) {
+      publishSafe({
+        eventType: `ai_core.job.lifecycle.${lifecycleEvent.toLowerCase()}`,
+        sourceModule: "coding-control-bridge",
+        sourceId: response.id,
+        correlationId: input.commandId,
+        payload: {
+          lifecycleEvent,
+          responseId: response.id,
+          commandId: input.commandId,
+          taskId: input.taskId ?? null,
+        },
+      });
+    }
+  }
 
   void deliverCodingBridgeWhatsappNotification({
     responseId: response.id,
