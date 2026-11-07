@@ -7,7 +7,8 @@ describe("read-only job lifecycle readiness", () => {
   it("fails closed with no responses", () => {
     expect(assessJobLifecycleReadiness([])).toEqual({
       phase: "NO_RESPONSES", latestCheckpointResponseId: null,
-      latestCheckpointAcknowledged: false, blockingResponseId: null,
+      latestCheckpointAcknowledged: false, latestCheckpointAttested: false,
+      latestCheckpointReceiverAckVerified: false, blockingResponseId: null,
       needsWorkerHealthAndAuthorization: false, mayAutoResume: false, mayAutoClose: false,
     });
   });
@@ -18,10 +19,20 @@ describe("read-only job lifecycle readiness", () => {
     expect(result.latestCheckpointAcknowledged).toBe(false);
     expect(result.needsWorkerHealthAndAuthorization).toBe(false);
   });
-  it("marks only external review needed for ACKed same-command checkpoint", () => {
+  it("does not trust a generic ACK without issuer and receiver verification", () => {
+    const result = assessJobLifecycleReadiness([
+      row("cp", "CHECKPOINT", "c1", new Date(), 2),
+      row("b", "BLOCKER", "c1", null, 3),
+    ]);
+    expect(result.latestCheckpointAcknowledged).toBe(true);
+    expect(result.latestCheckpointAttested).toBe(false);
+    expect(result.latestCheckpointReceiverAckVerified).toBe(false);
+    expect(result.needsWorkerHealthAndAuthorization).toBe(false);
+  });
+  it("marks only external review needed for signed, receiver-ACKed same-command checkpoint", () => {
     const result = assessJobLifecycleReadiness([
       row("b", "BLOCKER", "c1", null, 3),
-      row("cp", "CHECKPOINT", "c1", new Date(), 2),
+      { ...row("cp", "CHECKPOINT", "c1", new Date(), 2), checkpointAttested: true, receiverAckVerified: true },
     ]);
     expect(result.needsWorkerHealthAndAuthorization).toBe(true);
     expect(result.mayAutoResume).toBe(false);

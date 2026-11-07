@@ -7,12 +7,18 @@ export type LifecycleEvidenceRow = {
   kind: string;
   acknowledgedAt: Date | null;
   createdAt?: Date | null;
+  /** Verified by the server against the checkpoint issuer signature. */
+  checkpointAttested?: boolean;
+  /** Exact response ID confirmed by an authenticated conversation ACK. */
+  receiverAckVerified?: boolean;
 };
 
 export type LifecycleReadiness = {
   phase: "NO_RESPONSES" | "IN_PROGRESS" | "BLOCKED" | "TERMINAL_REPORTED";
   latestCheckpointResponseId: string | null;
   latestCheckpointAcknowledged: boolean;
+  latestCheckpointAttested: boolean;
+  latestCheckpointReceiverAckVerified: boolean;
   blockingResponseId: string | null;
   needsWorkerHealthAndAuthorization: boolean;
   mayAutoResume: false;
@@ -35,11 +41,14 @@ export function assessJobLifecycleReadiness(rows: readonly LifecycleEvidenceRow[
     phase: !latest ? "NO_RESPONSES" : terminal ? "TERMINAL_REPORTED" : blocked ? "BLOCKED" : "IN_PROGRESS",
     latestCheckpointResponseId: latestCheckpoint?.id ?? null,
     latestCheckpointAcknowledged: ackedCheckpoint,
+    latestCheckpointAttested: latestCheckpoint?.checkpointAttested === true,
+    latestCheckpointReceiverAckVerified: latestCheckpoint?.receiverAckVerified === true,
     blockingResponseId: blocked?.id ?? null,
     // Even if the checkpoint was ACKed, worker health, permission, lease,
     // retry budget and human safety approval remain external requirements.
     needsWorkerHealthAndAuthorization: Boolean(blocked && latestCheckpoint &&
-      latestCheckpoint.commandId === blocked.commandId && ackedCheckpoint),
+      latestCheckpoint.commandId === blocked.commandId && ackedCheckpoint &&
+      latestCheckpoint.checkpointAttested === true && latestCheckpoint.receiverAckVerified === true),
     mayAutoResume: false,
     mayAutoClose: false,
   };

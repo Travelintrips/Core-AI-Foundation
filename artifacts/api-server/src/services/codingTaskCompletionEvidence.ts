@@ -4,7 +4,8 @@
  */
 import { asc, eq } from "drizzle-orm";
 import { assessJobLifecycleReadiness } from "./jobLifecycleReadinessService.js";
-import { aiCodingBridgeResponsesTable, aiCodingTasksTable, db } from "@workspace/db";
+import { verifyDevSopCheckpointReceipt } from "./devSopCheckpointIssuer.js";
+import { aiCodingBridgeResponsesTable, aiCodingBridgeCommandsTable, aiCodingTasksTable, db } from "@workspace/db";
 
 export async function getCodingTaskCompletionEvidence(taskId: string) {
   const [task] = await db.select({ status: aiCodingTasksTable.status })
@@ -16,7 +17,11 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
     commandId: aiCodingBridgeResponsesTable.commandId,
     createdAt: aiCodingBridgeResponsesTable.createdAt,
     acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
+    checkpointJson: aiCodingBridgeResponsesTable.checkpointJson,
+    metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    commandMetadata: aiCodingBridgeCommandsTable.metadataJson,
   }).from(aiCodingBridgeResponsesTable)
+    .leftJoin(aiCodingBridgeCommandsTable, eq(aiCodingBridgeCommandsTable.id, aiCodingBridgeResponsesTable.commandId))
     .where(eq(aiCodingBridgeResponsesTable.taskId, taskId))
     .orderBy(asc(aiCodingBridgeResponsesTable.createdAt));
   // Terminal events must belong to the same command as ACK.
@@ -29,7 +34,29 @@ export async function getCodingTaskCompletionEvidence(taskId: string) {
     i < terminalIndex && r.kind === "PROGRESS" && r.commandId === terminal.commandId);
   const lifecycleByCommand = [...new Set(rows.map(r => r.commandId))].map(commandId => ({
     commandId,
-    ...assessJobLifecycleReadiness(rows.filter(r => r.commandId === commandId)),
+    ...assessJobLifecycleReadiness(rows.filter(r => r.commandId === commandId).map(r => {
+      if (r.kind !== "CHECKPOINT") return r;
+      const cmd = r.commandMetadata && typeof r.commandMetadata === "object" && !Array.isArray(r.commandMetadata)
+        ? r.commandMetadata as Record<string, unknown> : {};
+      const meta = r.metadataJson && typeof r.metadataJson === "object" && !Array.isArray(r.metadataJson)
+        ? r.metadataJson as Record<string, unknown> : {};
+      return {
+        ...r,
+        checkpointAttested: verifyDevSopCheckpointReceipt({
+          receipt: meta["checkpointReceipt"], responseMetadata: meta,
+          checkpoint: r.checkpointJson, commandId: r.commandId,
+          issuerPrivateKeyDerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
+        }),
+        receiverAckVerified: r.acknowledgedAt instanceof Date &&
+          cmd["mcpAckResponseId"] === r.id &&
+          cmd["e2eCode"] === "MCP_ACK_VERIFIED" &&
+          cmd["deliveryCode"] === "DELIVERY_CONFIRMED" &&
+          typeof cmd["mcpAcknowledgedAt"] === "string" &&
+          Number.isFinite(Date.parse(cmd["mcpAcknowledgedAt"])) &&
+          typeof cmd["mcpAckConversationId"] === "string" &&
+          cmd["mcpAckConversationId"].length > 0,
+      };
+    })),
   }));
   const kinds = new Set(rows.map(r => r.kind));
   return {

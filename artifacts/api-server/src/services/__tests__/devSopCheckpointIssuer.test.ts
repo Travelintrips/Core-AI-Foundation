@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHash, generateKeyPairSync, verify } from "node:crypto";
-import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent } from "../devSopCheckpointIssuer.js";
+import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent, verifyDevSopCheckpointReceipt } from "../devSopCheckpointIssuer.js";
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const key = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
@@ -35,5 +35,45 @@ describe("DEV checkpoint issuer", () => {
     expect(parseDevSopCheckpointIntent("completed")).toBeNull();
     expect(parseDevSopCheckpointIntent('{"kind":"COMPLETED"}')).toBeNull();
     expect(parseDevSopCheckpointIntent(message)?.checkpointId).toBe("cp-1");
+  });
+});
+
+
+describe("DEV checkpoint signature verification for recovery", () => {
+  const sample = () => {
+    const receipt = issue();
+    return {
+      receipt, commandId: receipt.commandId,
+      issuerPrivateKeyDerBase64: key,
+      checkpoint: {
+        jobId: receipt.jobId, checkpointId: receipt.checkpointId,
+        sopVersion: receipt.sopVersion, nextStepId: receipt.nextStepId,
+      },
+      responseMetadata: {
+        verified: true, checkpointVerified: true, verifiedAssistantReply: true,
+        jobId: receipt.jobId, sopVersion: receipt.sopVersion,
+        attestation: { algorithm: "Ed25519", signature: receipt.signature },
+      },
+    };
+  };
+  it("validates the real issuer signature and exact command fields", () => {
+    expect(verifyDevSopCheckpointReceipt(sample())).toBe(true);
+  });
+  it("rejects an invalid or missing issuer key", () => {
+    expect(verifyDevSopCheckpointReceipt({ ...sample(), issuerPrivateKeyDerBase64: undefined })).toBe(false);
+    expect(verifyDevSopCheckpointReceipt({ ...sample(), issuerPrivateKeyDerBase64: "ZmFrZQ==" })).toBe(false);
+  });
+  it("rejects cross-command, tampered checkpoint and forged signature", () => {
+    const good = sample();
+    expect(verifyDevSopCheckpointReceipt({ ...good, commandId: "other-command" })).toBe(false);
+    expect(verifyDevSopCheckpointReceipt({ ...good, checkpoint: { ...good.checkpoint, checkpointId: "fake" } })).toBe(false);
+    expect(verifyDevSopCheckpointReceipt({ ...good, receipt: { ...good.receipt, nextStepId: "fake" } })).toBe(false);
+    expect(verifyDevSopCheckpointReceipt({ ...good, responseMetadata: { ...good.responseMetadata, attestation: { algorithm: "Ed25519", signature: "bogus" } } })).toBe(false);
+  });
+  it("rejects unverified worker-supplied checkpoint and malformed receipt", () => {
+    const good = sample();
+    expect(verifyDevSopCheckpointReceipt({ ...good, responseMetadata: { ...good.responseMetadata, checkpointVerified: false } })).toBe(false);
+    expect(verifyDevSopCheckpointReceipt({ ...good, receipt: {} })).toBe(false);
+    expect(verifyDevSopCheckpointReceipt({ ...good, receipt: null })).toBe(false);
   });
 });
