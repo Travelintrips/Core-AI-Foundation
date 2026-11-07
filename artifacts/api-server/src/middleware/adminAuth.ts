@@ -322,7 +322,7 @@ export function adminAuthWithExceptions(req: Request, res: Response, next: NextF
       process.env["APP_ENV"] === "development" &&
       !(req as Request & { internalUser?: unknown }).internalUser &&
       !req.headers["authorization"] && !req.headers["x-admin-key"] && !req.headers["x-admin-api-key"]) {
-    res.redirect(302, "/api/dev-center/login");
+    res.redirect(302, "/login");
     return;
   }
   adminAuth(req, res, next);
