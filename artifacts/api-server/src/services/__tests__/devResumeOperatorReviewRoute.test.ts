@@ -2,13 +2,14 @@ import {beforeEach,afterEach,describe,it,expect,vi} from "vitest";
 import express from "express";
 import cookieParser from "cookie-parser";
 import request from "supertest";
-const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null}));
+const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null,preflight:vi.fn()}));
 vi.mock("../internalAuthService.js",()=>({
  SESSION_COOKIE_NAME:"internal_session",
  verifySessionToken:(token:string)=>token==="valid-session"?{sub:7}:null,
  getInternalUserById:async()=>m.user,
 }));
 vi.mock("../aiAuditService.js",()=>({logAudit:async()=>{}}));
+vi.mock("../jobLifecycleOperatorCommandPreflight.js",()=>({getDevResumeOperatorCommandPreflight:m.preflight}));
 import route from "../../routes/dev-resume-operator-review.js";
 const app=express();
 app.use(cookieParser());
@@ -16,7 +17,7 @@ app.use(route);
 const url="/ai/core-chat/dev/resume/operator-readiness";
 const valid=()=>({id:7,role:"admin",status:"active",accountType:"internal",
  email:"admin@example.test",mustChangePassword:false});
-beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();});
+beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();m.preflight.mockReset();m.preflight.mockResolvedValue({found:true,reason:"BLOCKED",grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});});
 afterEach(()=>{delete process.env["APP_ENV"];delete process.env["NODE_ENV"];});
 describe("GPT02 DEV resume operator readiness uses real internal session and DB role guards",()=>{
  it("denies no session even with admin API key header",async()=>{
@@ -55,6 +56,43 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
   process.env["APP_ENV"]="production";
   const r=await request(app).get(url).set("Cookie","internal_session=valid-session");
   expect(r.status).toBe(404);
+ });
+ const command="169a7492-cfd8-4a56-bb57-18001b6b5968";
+ const preflightUrl="/ai/core-chat/dev/resume/commands/"+command+"/approval-preflight";
+ it("reads command evidence only for an authenticated admin",async()=>{
+  const r=await request(app).get(preflightUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(200);
+  expect(m.preflight).toHaveBeenCalledWith(command);
+  expect(r.body).toMatchObject({grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false});
+ });
+ it("denies missing session and admin key without a session before fetching DB",async()=>{
+  const r=await request(app).get(preflightUrl).set("x-admin-key","any-key");
+  expect(r.status).toBe(401);
+  expect(m.preflight).not.toHaveBeenCalled();
+ });
+ it("denies non-admin role before DB readback",async()=>{
+  m.user={...valid(),role:"manager"};
+  const r=await request(app).get(preflightUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(403);
+  expect(m.preflight).not.toHaveBeenCalled();
+ });
+ it("rejects malformed command IDs before touching DB",async()=>{
+  const r=await request(app).get("/ai/core-chat/dev/resume/commands/not-a-uuid/approval-preflight")
+    .set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(400);
+  expect(m.preflight).not.toHaveBeenCalled();
+ });
+ it("fails closed on database preflight errors",async()=>{
+  m.preflight.mockRejectedValue(new Error("connection failed"));
+  const r=await request(app).get(preflightUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(503);
+  expect(r.body).toMatchObject({mayIssueGrant:false,mayDispatchWorker:false});
+ });
+ it("hides command preflight on production settings",async()=>{
+  process.env["APP_ENV"]="production";
+  const r=await request(app).get(preflightUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(404);
+  expect(m.preflight).not.toHaveBeenCalled();
  });
  it("does not expose any write endpoint",async()=>{
   const r=await request(app).post(url).set("Cookie","internal_session=valid-session");
