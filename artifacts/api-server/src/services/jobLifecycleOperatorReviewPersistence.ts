@@ -23,8 +23,10 @@ export async function persistSignedDevOperatorReviewIntent(input:{
    now:input.now,serverPublicKeyDerBase64:input.trustedPublicKeyDerBase64});
  if(!verification.validForReview)return deny("SIGNATURE_"+verification.reason);
  try{
-   // Server-owned transaction boundary: command, both response FKs and operator
-   // are checked in the INSERT SELECT, never trusted from client request.
+   // Server-owned transaction boundary: lock command row against concurrent
+   // status changes, then verify DEV worker binding, response FKs and operator
+   // in the INSERT SELECT. Native ACK and receipt signatures are verified by
+   // the trusted backend before this statement, NOT cryptographically by SQL.
    // This is deliberately only an audit record with a unique nonce.
    const result=await db.execute(sql`
     INSERT INTO ai_platform.dev_gpt02_operator_review_intents
@@ -32,7 +34,12 @@ export async function persistSignedDevOperatorReviewIntent(input:{
      operator_role,worker_id,nonce,proof_json,signed_at,expires_at)
     SELECT c.id,cp.id,bl.id,u.id,u.role,${p.workerId},${p.nonce},
       ${JSON.stringify(p)}::jsonb,${p.issuedAt}::timestamptz,${p.expiresAt}::timestamptz
-    FROM ai_platform.ai_coding_bridge_commands c
+    FROM (
+      SELECT id,status,metadata_json
+      FROM ai_platform.ai_coding_bridge_commands
+      WHERE id=${p.commandId}::uuid
+      FOR UPDATE
+    ) c
     JOIN ai_platform.ai_coding_bridge_responses cp
        ON cp.command_id=c.id AND cp.id=${p.checkpointResponseId}::uuid AND cp.kind='CHECKPOINT'
     JOIN ai_platform.ai_coding_bridge_responses bl
@@ -42,6 +49,10 @@ export async function persistSignedDevOperatorReviewIntent(input:{
        AND u.status='active' AND u.account_type='internal'
        AND u.must_change_password IS FALSE
     WHERE c.id=${p.commandId}::uuid AND c.status='PROCESSING'
+      AND c.metadata_json->>'devOnly'='true'
+      AND c.metadata_json->>'capability'='chatgpt:wake'
+      AND c.metadata_json->>'assignedClientId'='openclaw-dell-chatgpt-wake-dev'
+      AND cp.acknowledged_at IS NOT NULL
       AND cp.created_at<bl.created_at
       AND bl.id=(SELECT r.id FROM ai_platform.ai_coding_bridge_responses r
                  WHERE r.command_id=c.id ORDER BY r.created_at DESC,r.id DESC LIMIT 1)
