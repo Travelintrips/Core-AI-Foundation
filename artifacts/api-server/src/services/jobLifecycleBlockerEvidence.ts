@@ -4,7 +4,7 @@ import { assessJobLifecycleReadiness, type LifecycleEvidenceRow } from "./jobLif
 export type BlockerEvidenceReason =
   | "COMMAND_MISMATCH" | "DUPLICATE_RESPONSE_ID" | "INVALID_EVENT_TIME"
   | "NO_BLOCKER" | "CHECKPOINT_NOT_VERIFIED" | "CHECKPOINT_AFTER_BLOCKER"
-  | "TERMINAL_AFTER_CHECKPOINT" | "BLOCKER_EVIDENCE_VALID";
+  | "TERMINAL_AFTER_CHECKPOINT" | "TERMINAL_BEFORE_CHECKPOINT" | "BLOCKER_EVIDENCE_VALID";
 
 export function reviewBlockerEvidence(commandId: string, rows: readonly LifecycleEvidenceRow[]): {
   valid: boolean; reason: BlockerEvidenceReason; checkpointResponseId: string | null;
@@ -29,6 +29,10 @@ export function reviewBlockerEvidence(commandId: string, rows: readonly Lifecycl
   const cpIndex = ordered.findIndex(r => r.id === cp);
   const blockerIndex = ordered.findIndex(r => r.id === blocker);
   if (cpIndex < 0 || blockerIndex <= cpIndex) return deny("CHECKPOINT_AFTER_BLOCKER", cp, blocker);
+  // A previous terminal outcome invalidates the whole command recovery chain.
+  // Never treat a later checkpoint and BLOCKER as permission to reopen it.
+  if (ordered.slice(0, cpIndex).some(r => r.kind === "COMPLETED" || r.kind === "FAILED"))
+    return deny("TERMINAL_BEFORE_CHECKPOINT", cp, blocker);
   if (ordered.slice(cpIndex + 1).some(r => r.kind === "COMPLETED" || r.kind === "FAILED"))
     return deny("TERMINAL_AFTER_CHECKPOINT", cp, blocker);
   return { valid: true, reason: "BLOCKER_EVIDENCE_VALID", checkpointResponseId: cp,
