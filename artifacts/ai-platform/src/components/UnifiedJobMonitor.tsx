@@ -94,13 +94,13 @@ export default function UnifiedJobMonitor() {
   const shown = useMemo(() => {
     const now = Date.now();
     return jobs.filter(job => {
-      if (filter === "running" && !running.has(job.status)) return false;
-      if (filter === "waiting" && !waiting.has(job.status)) return false;
+      if (filter === "running" && (!running.has(job.status) || isStale(job, now))) return false;
+      if (filter === "waiting" && (!waiting.has(job.status) || isStale(job, now))) return false;
       if (filter === "completed" && job.status !== "COMPLETED") return false;
       if (filter === "history" && !isHistorical(job, now)) return false;
       if (filter === "attention" && !isCurrentAttention(job, now)) return false;
       if (filter === "failed" && job.status !== "FAILED") return false;
-      if (filter === "verifying" && !verifying.has(job.status)) return false;
+      if (filter === "verifying" && (!verifying.has(job.status) || isStale(job, now))) return false;
       if (filter === "active" && (terminal.has(job.status) || isHistorical(job, now) || isStale(job, now))) {
         return false;
       }
@@ -111,11 +111,12 @@ export default function UnifiedJobMonitor() {
 
   const eligible = shown.filter(job => Boolean(job.deleteKey) && terminal.has(job.status));
   const allChecked = eligible.length > 0 && eligible.every(job => checked.includes(job.deleteKey!));
+  const visibleChecked = eligible.filter(job => checked.includes(job.deleteKey!)).length;
   const selectAll = (value: boolean) => setChecked(old => value
     ? [...new Set([...old, ...eligible.map(job => job.deleteKey!)])]
     : old.filter(key => !eligible.some(job => job.deleteKey === key)));
   const dismiss = async () => {
-    const keys = jobs.filter(job => job.deleteKey && terminal.has(job.status) && checked.includes(job.deleteKey)).map(job => job.deleteKey!);
+    const keys = shown.filter(job => job.deleteKey && terminal.has(job.status) && checked.includes(job.deleteKey)).map(job => job.deleteKey!);
     if (!keys.length || deleting) return;
     if (!window.confirm(`Hapus ${keys.length} pekerjaan terminal dari Dashboard DEV Anda?\n\nData job sumber, event, dan ACK tidak akan dihapus.`)) return;
     setDeleting(true); setFeedback(null);
@@ -147,7 +148,7 @@ export default function UnifiedJobMonitor() {
             { label: "Status selesai (bukan PASS)", count: summary.completed, Icon: CheckCircle2, filter: "completed" },
           ] as const).map(item => (
             <button type="button" key={item.label} aria-pressed={filter === item.filter}
-              onClick={() => { setFilter(item.filter as JobFilter); setSelected(null); }}
+              onClick={() => { setFilter(item.filter as JobFilter); setSelected(null); setChecked([]); }}
               className={`rounded-lg border p-3 text-left transition-colors hover:border-primary/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${filter === item.filter ? "border-primary bg-primary/10" : ""}`}>
               <div className="flex items-center gap-2 text-xs text-muted-foreground"><item.Icon className="size-4" /> {item.label}</div>
               <div className="mt-1 text-2xl font-semibold tabular-nums">{item.count}</div>
@@ -157,7 +158,7 @@ export default function UnifiedJobMonitor() {
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex flex-wrap gap-2 items-center">
             <label htmlFor="job-monitor-filter" className="text-sm">Status</label>
-            <select id="job-monitor-filter" aria-label="Filter status pekerjaan" className="rounded-md border bg-background p-2 text-sm" value={filter} onChange={event => setFilter(event.target.value as JobFilter)}>
+            <select id="job-monitor-filter" aria-label="Filter status pekerjaan" className="rounded-md border bg-background p-2 text-sm" value={filter} onChange={event => { setFilter(event.target.value as JobFilter); setChecked([]); }}>
               <option value="active">Pekerjaan terkini (7 hari)</option>
               <option value="running">Sedang dikerjakan</option>
               <option value="waiting">Menunggu</option>
@@ -168,7 +169,7 @@ export default function UnifiedJobMonitor() {
               <option value="completed">Status selesai (belum tentu PASS)</option>
               <option value="all">Semua data yang dimuat</option>
             </select>
-            <input aria-label="Cari pekerjaan" className="rounded-md border bg-background p-2 text-sm w-56" value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari job, worker, penanggung jawab" />
+            <input aria-label="Cari pekerjaan" className="rounded-md border bg-background p-2 text-sm w-56" value={query} onChange={event => { setQuery(event.target.value); setChecked([]); }} placeholder="Cari job, worker, penanggung jawab" />
           </div>
           <span className="text-xs text-muted-foreground">{loading ? "Memuat…" : updated ? `Terakhir diperbarui: ${formatWib(updated)} WIB` : "Belum diperbarui"}</span>
         </div>
@@ -179,8 +180,8 @@ export default function UnifiedJobMonitor() {
             Pilih Semua ({eligible.length} dapat dipilih pada filter ini)
           </label>
           <button type="button" className="rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground disabled:opacity-40"
-            onClick={() => void dismiss()} disabled={!checked.length || deleting}>
-            {deleting ? "Menghapus…" : `Hapus dari Dashboard (${checked.length})`}
+            onClick={() => void dismiss()} disabled={!visibleChecked || deleting}>
+            {deleting ? "Menghapus…" : `Hapus dari Dashboard (${visibleChecked})`}
           </button>
           <span className="text-xs text-muted-foreground">Hanya FAILED, COMPLETED, CANCELLED. Job aktif serta riwayat sumber/ACK tidak dihapus.</span>
         </div>
