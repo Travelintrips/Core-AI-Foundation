@@ -26,3 +26,34 @@ REVOKE ALL ON TABLE ai_platform.dev_gpt02_operator_review_intents
  FROM PUBLIC,anon,authenticated;
 -- No RLS policies. No SECURITY DEFINER, no function and no public grants.
 -- This table carries no resume authority and has no worker-executable claim path.
+
+-- Existing DEV deployments are upgraded idempotently. This validates
+-- correspondence of the stored signed fields with indexed audit columns.
+-- It is defense in depth, not database-side cryptographic verification.
+DO $review$
+BEGIN
+ IF NOT EXISTS (
+   SELECT 1 FROM pg_constraint
+   WHERE conrelid='ai_platform.dev_gpt02_operator_review_intents'::regclass
+     AND conname='dev_gpt02_review_proof_binding_ck'
+ ) THEN
+   ALTER TABLE ai_platform.dev_gpt02_operator_review_intents
+     ADD CONSTRAINT dev_gpt02_review_proof_binding_ck CHECK (
+       (
+         proof_json->>'version'='1'
+         AND proof_json->>'action'=action
+         AND proof_json->>'commandId'=command_id::text
+         AND proof_json->>'checkpointResponseId'=checkpoint_response_id::text
+         AND proof_json->>'blockerResponseId'=blocker_response_id::text
+         AND proof_json->>'workerId'=worker_id
+         AND proof_json->>'operatorId'='internal:'||operator_user_id::text
+         AND proof_json->>'operatorRole'=operator_role
+         AND proof_json->>'nonce'=nonce
+         AND proof_json->>'issuedAt' IS NOT NULL
+         AND proof_json->>'expiresAt' IS NOT NULL
+         AND proof_json->>'signatureBase64' ~ '^[A-Za-z0-9+/]{86}==$'
+       ) IS TRUE
+     );
+ END IF;
+END;
+$review$;
