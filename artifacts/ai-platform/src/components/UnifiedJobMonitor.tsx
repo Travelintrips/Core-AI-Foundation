@@ -17,8 +17,14 @@ type Job = {
   updatedAt?: string | null;
 };
 type MonitorResponse = { jobs: Job[]; warnings?: string[] };
-type JobFilter = "active" | "all" | "completed";
-const terminal = new Set(["COMPLETED", "CANCELLED"]);
+type JobFilter = "active" | "attention" | "history" | "all" | "completed";
+const terminal = new Set(["COMPLETED", "CANCELLED", "FAILED"]);
+// An old job status is not proof of ongoing work. Seven days is a display-only
+// cutoff; archive classification never updates a command, ACK, or DB status.
+const HISTORY_CUTOFF_MS = 7 * 24 * 60 * 60 * 1000;
+const isStale = (job: Job, now = Date.now()) => !job.updatedAt || !Number.isFinite(Date.parse(job.updatedAt)) || now - Date.parse(job.updatedAt) > HISTORY_CUTOFF_MS;
+const isHistorical = (job: Job, now = Date.now()) => isStale(job, now) && !["COMPLETED", "CANCELLED"].includes(job.status);
+const isCurrentAttention = (job: Job, now = Date.now()) => attention.has(job.status) && !isStale(job, now);
 const running = new Set(["RUNNING", "PROCESSING", "DISPATCHING", "RETRYING"]);
 const waiting = new Set(["QUEUED", "WAITING", "PENDING", "RECEIVED"]);
 const attention = new Set(["FAILED", "BLOCKED", "REVIEW_REQUIRED", "VERIFYING"]);
@@ -67,18 +73,29 @@ export default function UnifiedJobMonitor() {
     return () => { active = false; window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisibility); };
   }, []);
 
-  const summary = useMemo(() => ({
-    active: jobs.filter(job => running.has(job.status)).length,
-    waiting: jobs.filter(job => waiting.has(job.status)).length,
-    attention: jobs.filter(job => attention.has(job.status)).length,
-    completed: jobs.filter(job => job.status === "COMPLETED").length,
-  }), [jobs]);
-  const shown = useMemo(() => jobs.filter(job => {
-    if (filter === "completed" && job.status !== "COMPLETED") return false;
-    if (filter === "active" && terminal.has(job.status)) return false;
-    const text = [job.title, job.id, job.source, job.worker, job.accountable, job.status].join(" ").toLowerCase();
-    return text.includes(query.trim().toLowerCase());
-  }), [jobs, filter, query]);
+  const summary = useMemo(() => {
+    const now = Date.now();
+    return {
+      active: jobs.filter(job => running.has(job.status) && !isStale(job, now)).length,
+      waiting: jobs.filter(job => waiting.has(job.status) && !isStale(job, now)).length,
+      attention: jobs.filter(job => isCurrentAttention(job, now)).length,
+      completed: jobs.filter(job => job.status === "COMPLETED").length,
+      history: jobs.filter(job => isHistorical(job, now)).length,
+    };
+  }, [jobs, updated]);
+  const shown = useMemo(() => {
+    const now = Date.now();
+    return jobs.filter(job => {
+      if (filter === "completed" && job.status !== "COMPLETED") return false;
+      if (filter === "history" && !isHistorical(job, now)) return false;
+      if (filter === "attention" && !isCurrentAttention(job, now)) return false;
+      if (filter === "active" && (terminal.has(job.status) || isHistorical(job, now) || isStale(job, now))) {
+        return false;
+      }
+      const text = [job.title, job.id, job.source, job.worker, job.accountable, job.status].join(" ").toLowerCase();
+      return text.includes(query.trim().toLowerCase());
+    });
+  }, [jobs, updated, filter, query]);
 
   return (
     <Card className="border-border/60" data-testid="unified-job-monitor">
@@ -91,7 +108,7 @@ export default function UnifiedJobMonitor() {
           {([
             { label: "Sedang dikerjakan", count: summary.active, Icon: RefreshCw },
             { label: "Menunggu", count: summary.waiting, Icon: Clock3 },
-            { label: "Perlu perhatian", count: summary.attention, Icon: AlertTriangle },
+            { label: "Perlu perhatian (7 hari)", count: summary.attention, Icon: AlertTriangle },
             { label: "Selesai", count: summary.completed, Icon: CheckCircle2 },
           ] as const).map(item => (
             <div key={item.label} className="rounded-lg border p-3">
@@ -104,14 +121,17 @@ export default function UnifiedJobMonitor() {
           <div className="flex flex-wrap gap-2 items-center">
             <label htmlFor="job-monitor-filter" className="text-sm">Status</label>
             <select id="job-monitor-filter" aria-label="Filter status pekerjaan" className="rounded-md border bg-background p-2 text-sm" value={filter} onChange={event => setFilter(event.target.value as JobFilter)}>
-              <option value="active">Aktif / perlu perhatian</option>
-              <option value="all">Semua</option>
+              <option value="active">Pekerjaan terkini (7 hari)</option>
+              <option value="attention">Perlu perhatian terkini</option>
+              <option value="history">Riwayat lama (termasuk testing)</option>
               <option value="completed">Selesai</option>
+              <option value="all">Semua data yang dimuat</option>
             </select>
             <input aria-label="Cari pekerjaan" className="rounded-md border bg-background p-2 text-sm w-56" value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari job, worker, penanggung jawab" />
           </div>
           <span className="text-xs text-muted-foreground">{loading ? "Memuat…" : updated ? `Terakhir diperbarui: ${formatWib(updated)} WIB` : "Belum diperbarui"}</span>
         </div>
+        <p className="text-xs text-muted-foreground">Dari {jobs.length} record yang berhasil dimuat: {summary.history} masuk riwayat lama / testing (&gt;7 hari tanpa pembaruan). FAILED historis tidak dihitung sebagai pekerjaan aktif. Ini pengelompokan tampilan, bukan perubahan status database.</p>
         {error && <p role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error}</p>}
         {warnings.length > 0 && <p role="status" className="text-sm text-amber-600">Data parsial: {warnings.join(", ")}</p>}
         <div className="overflow-x-auto rounded-lg border">
@@ -139,7 +159,7 @@ function FragmentRow({ job, open, stale, onClick }: { job: Job; open: boolean; s
   return <>
     <tr className="border-t hover:bg-muted/20 cursor-pointer" onClick={onClick} aria-expanded={open}>
       <td className="p-3"><strong className="font-medium">{job.title}</strong><div className="text-xs text-muted-foreground break-all">{job.source} · {job.id}</div></td>
-      <td className="p-3"><span className="rounded bg-muted px-2 py-1 text-xs">{job.status}</span>{stale && <div className="mt-1 text-xs text-amber-600">Tidak diperbarui &gt;60 menit</div>}</td>
+      <td className="p-3"><span className="rounded bg-muted px-2 py-1 text-xs">{job.status}</span>{isHistorical(job) && <div className="mt-1 text-xs text-muted-foreground">Riwayat lama</div>}{stale && <div className="mt-1 text-xs text-amber-600">Tidak diperbarui &gt;60 menit</div>}</td>
       <td className="p-3">{typeof job.verifiedProgress === "number" ? <div className="flex items-center gap-2"><progress className="w-28" max={100} value={job.verifiedProgress} /><span>{job.verifiedProgress}%</span></div> : <span className="text-muted-foreground">Belum terverifikasi</span>}</td>
       <td className="p-3">{job.worker || "Belum ditetapkan"}{job.workerType && <div className="text-xs text-muted-foreground">{job.workerType}</div>}</td>
       <td className="p-3">{job.accountable || "Belum ditetapkan"}</td>
