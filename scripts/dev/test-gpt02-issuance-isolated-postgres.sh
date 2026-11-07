@@ -9,8 +9,11 @@ docker run -d --name "$NAME" --network none --tmpfs /var/lib/postgresql/data:rw,
 for i in $(seq 1 30); do if docker exec "$NAME" pg_isready -U postgres -q; then break; fi; sleep 1; done
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
 CREATE SCHEMA sandbox;
-CREATE ROLE sandbox_approver NOLOGIN;
-CREATE ROLE sandbox_worker NOLOGIN;
+CREATE ROLE sandbox_approver LOGIN;
+CREATE ROLE sandbox_worker LOGIN;
+CREATE ROLE sandbox_unlisted LOGIN;
+CREATE TABLE sandbox.operator_identity (db_principal name PRIMARY KEY, operator_id text NOT NULL);
+INSERT INTO sandbox.operator_identity VALUES ('sandbox_approver','authenticated-operator');
 CREATE TABLE sandbox.commands(id integer PRIMARY KEY,status text NOT NULL);
 CREATE TABLE sandbox.responses(id text PRIMARY KEY,command_id int NOT NULL REFERENCES sandbox.commands(id),kind text NOT NULL,seq int NOT NULL);
 CREATE TABLE sandbox.evidence(
@@ -35,15 +38,18 @@ INSERT INTO sandbox.evidence VALUES
  (1,true,true,true,0,3),(2,true,true,true,0,3),
  (3,false,true,true,0,3),(4,true,true,false,0,3),(5,true,true,true,0,3);
 CREATE FUNCTION sandbox.approve(
- p_cmd int,p_cp text,p_block text,p_worker text,p_operator text,p_seconds int
+ p_cmd int,p_cp text,p_block text,p_worker text,p_seconds int
 ) RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,sandbox AS $$
 DECLARE v_id bigint;
+  v_operator text;
 BEGIN
- -- The executor must have DB-granted permission to call this function.
- -- In this isolated test, only sandbox_approver is granted EXECUTE.
- IF p_worker IS DISTINCT FROM 'openclaw-dell-chatgpt-wake-dev' OR
-    p_operator IS DISTINCT FROM 'authenticated-operator' OR
+ -- The operator is derived from the database-authenticated login (session_user).
+ -- SECURITY DEFINER changes current_user, but not session_user. Never trust a
+ -- caller-supplied operator label or a SET ROLE-based claim.
+ SELECT operator_id INTO v_operator FROM sandbox.operator_identity WHERE db_principal=session_user;
+ IF NOT FOUND OR v_operator IS NULL OR
+    p_worker IS DISTINCT FROM 'openclaw-dell-chatgpt-wake-dev' OR
     p_seconds IS NULL OR p_seconds<30 OR p_seconds>300 THEN
    RAISE EXCEPTION 'INVALID_ISSUANCE_REQUEST';
  END IF;
@@ -63,33 +69,41 @@ BEGIN
   WHERE r.command_id=p_cmd ORDER BY r.seq DESC LIMIT 1)='BLOCKER';
  IF NOT FOUND THEN RAISE EXCEPTION 'ISSUANCE_RESPONSE_DENIED'; END IF;
  INSERT INTO sandbox.grants(command_id,checkpoint_id,blocker_id,worker_id,approved_by,approved_at,expires_at)
- VALUES(p_cmd,p_cp,p_block,p_worker,p_operator,clock_timestamp(),clock_timestamp()+make_interval(secs=>p_seconds))
+ VALUES(p_cmd,p_cp,p_block,p_worker,v_operator,clock_timestamp(),clock_timestamp()+make_interval(secs=>p_seconds))
  RETURNING id INTO v_id;
  RETURN v_id;
 END $$;
 REVOKE ALL ON SCHEMA sandbox FROM PUBLIC;
-GRANT USAGE ON SCHEMA sandbox TO sandbox_approver,sandbox_worker;
-REVOKE ALL ON FUNCTION sandbox.approve(int,text,text,text,text,int) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION sandbox.approve(int,text,text,text,text,int) TO sandbox_approver;
-REVOKE ALL ON sandbox.grants,sandbox.commands,sandbox.responses,sandbox.evidence FROM PUBLIC,sandbox_approver,sandbox_worker;
+GRANT USAGE ON SCHEMA sandbox TO sandbox_approver,sandbox_worker,sandbox_unlisted;
+REVOKE ALL ON FUNCTION sandbox.approve(int,text,text,text,int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION sandbox.approve(int,text,text,text,int) TO sandbox_approver;
+REVOKE ALL ON sandbox.grants,sandbox.commands,sandbox.responses,sandbox.evidence,sandbox.operator_identity FROM PUBLIC,sandbox_approver,sandbox_worker,sandbox_unlisted;
 SQL
 # A database worker role must not be able to mint grants.
-if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE sandbox_worker; SELECT sandbox.approve(1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev','authenticated-operator',120);" >"$WORK/worker" 2>&1; then echo "UNAUTHORIZED WORKER FAIL"; exit 1; fi
+if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET SESSION AUTHORIZATION sandbox_worker; SELECT sandbox.approve(1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev',120);" >"$WORK/worker" 2>&1; then echo "UNAUTHORIZED WORKER FAIL"; exit 1; fi
 echo "ROLE GUARD PASS: worker has no grant issuance permission"
 # Native DB role grants scope the invocation; the function verifies in-transaction data.
-GOOD="$(docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE sandbox_approver; SELECT sandbox.approve(1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev','authenticated-operator',120);")"
+GOOD="$(docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET SESSION AUTHORIZATION sandbox_approver; SELECT sandbox.approve(1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev',120);")"
 [ "$GOOD" = "1" ] || { echo "AUTHENTICATED APPROVAL FAIL";exit 1; }
-echo "APPROVAL PASS: one approved grant issued by permitted DB role"
+echo "APPROVAL PASS: grant issued by allowed login and operator ID derived from protected DB mapping"
+AUDIT="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT approved_by FROM sandbox.grants WHERE id=1;")"
+[ "$AUDIT" = "authenticated-operator" ] || { echo "AUDIT ATTRIBUTION FAIL";exit 1; }
+# An unrelated login granted SQL EXECUTE still cannot appear as a verified operator.
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
+GRANT EXECUTE ON FUNCTION sandbox.approve(int,text,text,text,int) TO sandbox_unlisted;
+SQL
+if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET SESSION AUTHORIZATION sandbox_unlisted; SELECT sandbox.approve(1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev',120);" >"$WORK/unknown-operator" 2>&1; then echo "UNLISTED OPERATOR FAIL";exit 1; fi
+echo "PRINCIPAL GUARD PASS: EXECUTE privilege alone cannot fake operator identity"
 for case in "1|cp1|bl1" "2|cp2|bl2" "3|cp3|bl3" "4|cp4|bl4" "5|cp5|bl5" "1|cp2|bl1" "1|cp1|bl2"; do
  IFS='|' read -r cmd cp bl <<<"$case"
- if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE sandbox_approver; SELECT sandbox.approve($cmd,'$cp','$bl','openclaw-dell-chatgpt-wake-dev','authenticated-operator',120);" >"$WORK/reject" 2>&1; then
+ if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET SESSION AUTHORIZATION sandbox_approver; SELECT sandbox.approve($cmd,'$cp','$bl','openclaw-dell-chatgpt-wake-dev',120);" >"$WORK/reject" 2>&1; then
  echo "INVALID ISSUANCE PERMITTED $case";exit 1;fi
 done
 # Additional identity/TTL failures.
-for params in "1,'cp1','bl1','other-worker','authenticated-operator',120" "1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev','unverified',120" "1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev','authenticated-operator',3600"; do
- if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE sandbox_approver; SELECT sandbox.approve($params);" >"$WORK/reject" 2>&1; then echo "INVALID ISSUANCE PERMITTED $params";exit 1;fi
+for params in "1,'cp1','bl1','other-worker',120" "1,'cp1','bl1','openclaw-dell-chatgpt-wake-dev',3600"; do
+ if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET SESSION AUTHORIZATION sandbox_approver; SELECT sandbox.approve($params);" >"$WORK/reject" 2>&1; then echo "INVALID ISSUANCE PERMITTED $params";exit 1;fi
 done
 COUNT="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT count(*) FROM sandbox.grants;")"
 [ "$COUNT" = "1" ] || { echo "GRANT DRIFT FAIL count=$COUNT"; exit 1; }
-echo "DENIAL PASS: duplicate, terminal, unsigned, rate-limited, mismatched response, wrong worker/operator and TTL denied; count=1"
+echo "DENIAL PASS: duplicate, terminal, unsigned, rate-limited, mismatched response, wrong worker and TTL denied; protected operator identity verified; count=1"
 echo "ISOLATED ISSUANCE CONTRACT PASS (synthetic identities; NOT production issuer)"
