@@ -64,3 +64,30 @@ test('terminal FAILED is separate from actionable blocked/review and verified PA
   assert.match(monitor, /Status selesai \(bukan PASS\)/);
   assert.doesNotMatch(monitor, /attention = new Set\(\["FAILED"/);
 });
+
+test('all six stat cards are real filter controls and support single-click selection', () => {
+  assert.match(monitor, /<button type="button" key=\{item.label\} aria-pressed=\{filter === item.filter\}/);
+  for (const f of ['running','waiting','attention','verifying','failed','completed']) assert.ok(monitor.includes(`filter: "${f}"`));
+  assert.match(monitor, /setFilter\(item.filter as JobFilter\)/);
+});
+
+test('checkbox, select all and removal are limited to terminal jobs', () => {
+  assert.match(monitor, /const eligible = shown.filter\(job => Boolean\(job.deleteKey\) && terminal.has\(job.status\)\)/);
+  assert.match(monitor, /const allChecked = eligible.length > 0/);
+  assert.match(monitor, /aria-label="Pilih semua pekerjaan terminal yang tampil"/);
+  assert.match(monitor, /disabled=\{!terminal.has\(job.status\) \|\| !job.deleteKey\}/);
+  assert.match(monitor, /\/api\/dev-center\/jobs\/dismiss/);
+  assert.match(monitor, /window.confirm/);
+});
+
+test('dismiss endpoint requires user session and checks live source terminal status before saving', () => {
+  const api=routes.slice(routes.indexOf('router.post("/dev-center/jobs/dismiss"'),routes.indexOf('// ── List Jobs ──'));
+  assert.match(api, /process.env\["APP_ENV"\] !== "development"/);
+  assert.match(api, /!req.internalUser/);
+  assert.match(api, /CROSS_ORIGIN_NOT_ALLOWED/);
+  assert.match(api, /keys.length>100/);
+  assert.match(api, /status IN \('FAILED','COMPLETED','CANCELLED'\)/);
+  assert.match(api, /status IN \('failed','completed','cancelled'\)/);
+  assert.match(api, /ai_platform.dev_monitor_dismissed_jobs/);
+  assert.doesNotMatch(api, /DELETE FROM|UPDATE ai_task_bridge.jobs|UPDATE public.ai_execution_jobs/);
+});

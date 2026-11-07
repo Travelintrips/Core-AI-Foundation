@@ -71,7 +71,7 @@ router.get("/dev-center/dashboard.css", (_req, res): void => { res.sendStatus(41
 
 // Read-only DEV monitoring. Values are grounded in job records; never infer a percentage
 // from status or claim that a worker/owner exists when no assignment evidence is stored.
-router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
+router.get("/dev-center/jobs", async (req, res): Promise<void> => {
   if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
   try {
     const jobs = await db.select({id:aiJobsTable.id,jobCode:aiJobsTable.jobCode,jobType:aiJobsTable.jobType,status:aiJobsTable.status,payload:aiJobsTable.payloadJson,result:aiJobsTable.resultJson,employeeId:aiJobsTable.employeeId,departmentId:aiJobsTable.departmentId,error:aiJobsTable.errorMessage,updatedAt:aiJobsTable.updatedAt}).from(aiJobsTable).orderBy(sql`CASE WHEN ${aiJobsTable.status} IN ('queued','waiting','running','retrying','blocked') THEN 0 ELSE 1 END`,desc(aiJobsTable.updatedAt)).limit(100);
@@ -93,11 +93,11 @@ router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
       const evidenceId=str(r["progressEvidenceId"])||str(r["checkpointId"])||str(p["progressEvidenceId"]);
       const verified=Boolean(evidenceId);
       const progress=verified && typeof explicitProgress==="number" && Number.isInteger(explicitProgress) && explicitProgress>=0 && explicitProgress<=100 && j.status!=="failed" ? explicitProgress:null;
-      return {id:j.jobCode||String(j.id),title:str(p["title"])||j.jobType,source:"AI Core Engine",status:states[j.status]||"UNKNOWN",stage:str(r["stage"])||str(p["stage"])||null,verifiedProgress:progress,worker:str(r["workerName"])||str(p["workerName"])||null,accountable:str(p["accountableName"])||str(r["accountableName"])||null,workerType:str(p["workerType"])||null,blocker:j.error?String(j.error).slice(0,200):str(r["blocker"])||null,evidence:evidenceId||null,updatedAt:j.updatedAt?.toISOString()??null};
+      return {id:j.jobCode||String(j.id),deleteKey:"engine:"+j.id,title:str(p["title"])||j.jobType,source:"AI Core Engine",status:states[j.status]||"UNKNOWN",stage:str(r["stage"])||str(p["stage"])||null,verifiedProgress:progress,worker:str(r["workerName"])||str(p["workerName"])||null,accountable:str(p["accountableName"])||str(r["accountableName"])||null,workerType:str(p["workerType"])||null,blocker:j.error?String(j.error).slice(0,200):str(r["blocker"])||null,evidence:evidenceId||null,updatedAt:j.updatedAt?.toISOString()??null};
     });
     for(const row of bridgeRows){
       const external=String(row["external_id"]??"");
-      items.push({id:String(row["id"]),title:str(row["title"])||external,source:str(row["source"])||"AI Task Bridge",status:String(row["status"]??"UNKNOWN").toUpperCase(),stage:null,verifiedProgress:null,worker:str(row["owner"])||null,accountable:null,workerType:null,blocker:null,evidence:null,updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
+      items.push({id:String(row["id"]),deleteKey:"bridge:"+String(row["id"]),title:str(row["title"])||external,source:str(row["source"])||"AI Task Bridge",status:String(row["status"]??"UNKNOWN").toUpperCase(),stage:null,verifiedProgress:null,worker:str(row["owner"])||null,accountable:null,workerType:null,blocker:null,evidence:null,updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
     }
     for(const row of executionRows){
       const external=str(row["external_id"]),command=str(row["command_id"]);
@@ -106,13 +106,63 @@ router.get("/dev-center/jobs", async (_req, res): Promise<void> => {
       const evidenceId=str(metadata["progressEvidenceId"])||str(metadata["checkpointId"]);
       const progressValue=metadata["verifiedProgress"];
       const verifiedProgress=evidenceId && typeof progressValue==="number" && Number.isInteger(progressValue) && progressValue>=0 && progressValue<=100 && !["FAILED","BLOCKED","CANCELLED"].includes(status)?progressValue:status==="COMPLETED"&&row["final_ack_verified"]===true?100:null;
-      items.push({id:String(row["id"]),title:str(row["title"])||"AI Task",source:str(row["source"])||"AI Tasks",status,stage:str(metadata["stage"])||null,verifiedProgress,worker:str(row["worker_id"])||str(row["assigned_client_id"])||null,accountable:str(row["assigned_to"])||null,workerType:str(row["worker_type"])||null,blocker:str(row["error_message"])||str(metadata["lastDispatchError"])||null,evidence:evidenceId|| (row["final_ack_verified"]===true?"Final ACK terverifikasi":null),updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
+      items.push({id:String(row["id"]),deleteKey:"execution:"+String(row["id"]),title:str(row["title"])||"AI Task",source:str(row["source"])||"AI Tasks",status,stage:str(metadata["stage"])||null,verifiedProgress,worker:str(row["worker_id"])||str(row["assigned_client_id"])||null,accountable:str(row["assigned_to"])||null,workerType:str(row["worker_type"])||null,blocker:str(row["error_message"])||str(metadata["lastDispatchError"])||null,evidence:evidenceId|| (row["final_ack_verified"]===true?"Final ACK terverifikasi":null),updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
     }
+    const viewerId = req.internalUser?.id;
+    const hiddenRows = viewerId ? (await db.execute(sql`SELECT job_key FROM ai_platform.dev_monitor_dismissed_jobs WHERE user_id = ${viewerId}`)).rows : [];
+    const hiddenKeys = new Set(hiddenRows.map(row => String(row["job_key"])));
     const activeStatuses=new Set(["QUEUED","WAITING","RUNNING","RETRYING","RECEIVED","PROCESSING","DISPATCHING","VERIFYING","REVIEW_REQUIRED","BLOCKED"]);
     items.sort((a,b)=>Number(activeStatuses.has(String(b["status"])))-Number(activeStatuses.has(String(a["status"]))) || (Date.parse(String(b["updatedAt"]??0))||0)-(Date.parse(String(a["updatedAt"]??0))||0));
     res.setHeader("Cache-Control","no-store");
-    res.json({jobs:items.slice(0,200),warnings});
+    res.json({jobs:items.filter(item => !hiddenKeys.has(String(item["deleteKey"]))).slice(0,200),warnings});
   } catch {res.status(503).json({error:"DEV_JOB_MONITOR_UNAVAILABLE"});}
+});
+
+// DEV-only user-specific dashboard cleanup. NEVER delete jobs, commands, events or ACKs.
+// Only terminal rows may be dismissed. Each INSERT selects a live terminal row,
+// so client-supplied statuses cannot authorize dismissal or race with workers.
+router.post("/dev-center/jobs/dismiss", async (req, res): Promise<void> => {
+  if (process.env["APP_ENV"] !== "development") { res.sendStatus(404); return; }
+  if (!req.internalUser || req.internalUser.status !== "active" || req.internalUser.accountType !== "internal") {
+    res.status(403).json({error:"INTERNAL_SESSION_REQUIRED"}); return;
+  }
+  const origin = req.get("origin");
+  if (origin && (() => { try { return new URL(origin).host !== req.get("host"); } catch { return true; } })()) {
+    res.status(403).json({error:"CROSS_ORIGIN_NOT_ALLOWED"}); return;
+  }
+  const keys:unknown = req.body?.keys;
+  if (!Array.isArray(keys) || keys.length===0 || keys.length>100 ||
+      keys.some(k => typeof k!=="string" || !/^(engine:[0-9]{1,16}|(?:bridge|execution):[0-9a-f-]{36})$/i.test(k)) ||
+      new Set(keys).size !== keys.length) {
+    res.status(400).json({error:"INVALID_JOB_SELECTION"}); return;
+  }
+  const userId = req.internalUser.id;
+  const dismissed:string[]=[]; const rejected:string[]=[];
+  try {
+    for (const key of keys as string[]) {
+      const [kind,id] = key.split(":");
+      let inserted:{rows:Record<string,unknown>[]};
+      if (kind==="bridge") {
+        inserted=await db.execute(sql`INSERT INTO ai_platform.dev_monitor_dismissed_jobs(user_id,job_key)
+          SELECT ${userId}, ${key} FROM ai_task_bridge.jobs
+          WHERE id = ${id}::uuid AND status IN ('FAILED','COMPLETED','CANCELLED')
+          ON CONFLICT DO NOTHING RETURNING job_key`);
+      } else if (kind==="execution") {
+        inserted=await db.execute(sql`INSERT INTO ai_platform.dev_monitor_dismissed_jobs(user_id,job_key)
+          SELECT ${userId}, ${key} FROM public.ai_execution_jobs
+          WHERE id = ${id}::uuid AND status IN ('failed','completed','cancelled')
+          ON CONFLICT DO NOTHING RETURNING job_key`);
+      } else {
+        inserted=await db.execute(sql`INSERT INTO ai_platform.dev_monitor_dismissed_jobs(user_id,job_key)
+          SELECT ${userId}, ${key} FROM ai_platform.ai_jobs
+          WHERE id = ${Number(id)} AND status IN ('failed','completed','cancelled')
+          ON CONFLICT DO NOTHING RETURNING job_key`);
+      }
+      if (inserted.rows.length) dismissed.push(key); else rejected.push(key);
+    }
+    res.setHeader("Cache-Control","no-store");
+    res.json({dismissed,rejected,note:"Job removed from this user's DEV dashboard only. Source job, events and ACK preserved."});
+  } catch { res.status(503).json({error:"DEV_JOB_DISMISS_UNAVAILABLE"}); }
 });
 
 // ── List Jobs ─────────────────────────────────────────────────────────────────
