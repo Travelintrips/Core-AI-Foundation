@@ -4,7 +4,7 @@ vi.mock("@workspace/db",()=>({db:{execute:async()=>{mocks.calls++;return {rows:m
 import {getGpt02Job135CrossLedgerReadback,interpretGpt02CrossLedgerCounts}
   from "../gpt02Job135CrossLedgerReadback.js";
 const input=()=>({humanReviewId:6,jobId:135,parentCommandId:"83db99f5-cbda-4e60-be71-3090fb411bbb"});
-const row={parent_event_count:1,job_event_count:0,tagged_child_count:0,review_record_count:2};
+const row={subject_bound:true,parent_event_count:1,job_event_count:0,tagged_child_count:0,review_record_count:2};
 describe("job 135 cross-ledger facts are never execution authority",()=>{
  const app=process.env["APP_ENV"],node=process.env["NODE_ENV"];
  beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="development";
@@ -26,6 +26,17 @@ describe("job 135 cross-ledger facts are never execution authority",()=>{
    expect(await getGpt02Job135CrossLedgerReadback({...input(),parentCommandId:"bad"}))
      .toMatchObject({valid:false,reason:"INVALID_CROSS_LEDGER_SUBJECT"});
    expect(mocks.calls).toBe(0);
+ });
+ it("missing exact Human Review binding is not a valid zero-count census",()=>{
+   expect(interpretGpt02CrossLedgerCounts({...row,subject_bound:false,
+      parent_event_count:0,job_event_count:0,tagged_child_count:0,
+      review_record_count:0})).toMatchObject({
+     valid:false,reason:"CROSS_LEDGER_REVIEW_SUBJECT_NOT_BOUND",
+     legacyUntaggedAttemptsExcluded:false,mayDispatchWorker:false});
+   expect(interpretGpt02CrossLedgerCounts({
+      parent_event_count:0,job_event_count:0,tagged_child_count:0,
+      review_record_count:0})).toMatchObject({
+     valid:false,reason:"CROSS_LEDGER_BINDING_UNVERIFIED"});
  });
  it("absent or malformed counts cannot claim evidence",()=>{
    expect(interpretGpt02CrossLedgerCounts(undefined)).toMatchObject({

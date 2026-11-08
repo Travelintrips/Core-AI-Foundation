@@ -15,6 +15,9 @@ const deny=(reason:string)=>({
 });
 export function interpretGpt02CrossLedgerCounts(row: Record<string,unknown>|undefined) {
   if(!row)return deny("CROSS_LEDGER_SNAPSHOT_MISSING");
+  if(row["subject_bound"]!==true)
+    return deny(row["subject_bound"]===false?
+      "CROSS_LEDGER_REVIEW_SUBJECT_NOT_BOUND":"CROSS_LEDGER_BINDING_UNVERIFIED");
   const keys=["parent_event_count","job_event_count","tagged_child_count","review_record_count"] as const;
   const values=keys.map(k=>row[k]);
   if(values.some(v=>typeof v!=="number"||!Number.isSafeInteger(v)||v<0))
@@ -44,7 +47,7 @@ export async function getGpt02Job135CrossLedgerReadback(x:Input) {
         AND payload_json->>'commandId'=${x.parentCommandId}
         AND payload_json->>'taskId'=${String(x.jobId)}
     )
-    SELECT
+    SELECT EXISTS(SELECT 1 FROM bound) AS subject_bound,
       (SELECT count(*)::integer FROM ai_platform.ai_events e
         WHERE EXISTS(SELECT 1 FROM bound)
          AND (e.correlation_id=${x.parentCommandId} OR
