@@ -9,6 +9,7 @@ import { getDevResumeOperatorCommandPreflight } from "../services/jobLifecycleOp
 import { getDevCommandRecoveryReview } from "../services/jobLifecycleRecoveryReview.js";
 import { signDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewSigner.js";
 import { persistSignedDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewPersistence.js";
+import { getDevStoredReviewReadback } from "../services/jobLifecycleStoredReviewReadback.js";
 
 const router=Router();
 router.get(
@@ -57,6 +58,34 @@ router.get(
     }catch{
       res.status(503).json({error:"DEV approval preflight unavailable",
         mayIssueGrant:false,mayDispatchWorker:false});
+    }
+  },
+);
+/** Diagnostic verification of an existing review, never grant issuance.
+ * Session + current DB role are enforced by the existing middleware.
+ * No signing flag required because this endpoint is strictly read-only.
+ */
+router.get(
+  "/ai/core-chat/dev/resume/reviews/:reviewId/verification",
+  requireAuth,requireInternalRole("owner","admin"),requirePasswordChanged,
+  async(req,res):Promise<void>=>{
+    res.setHeader("Cache-Control","no-store");
+    if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]==="production"){
+      res.status(404).json({error:"Not found"});return;
+    }
+    const reviewId=String(req.params["reviewId"]??"");
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reviewId)){
+      res.status(400).json({error:"Invalid review ID",mayIssueGrant:false,mayDispatchWorker:false});return;
+    }
+    try {
+      const result=await getDevStoredReviewReadback({
+        reviewId,trustedPublicKeyDerBase64:
+          process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"],
+      });
+      res.status(result.reason==="STORED_REVIEW_NOT_FOUND"?404:200).json(result);
+    }catch{
+      res.status(503).json({verified:false,reason:"STORED_REVIEW_VERIFICATION_UNAVAILABLE",
+        mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
     }
   },
 );
