@@ -64,6 +64,10 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_AI_TASK_RECEIVER_READBACK_OPT_IN','AI Task bridge receiver GET is DEV-only, exact identity matched and cannot grant',
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('AI_TASK_LEDGER_READBACK_ENABLED') &&
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('RECEIVER_CORRELATION_MISMATCH') &&
+  file('artifacts/api-server/src/services/jobLifecycleDevEvidenceSummary.ts').includes('releaseDecision:"NO_GO"')),
  check('AUTHENTICATED_DEV_EVIDENCE_SUMMARY','Real read-only DEV command evidence endpoint uses internal operator authentication and cannot grant',
   file('artifacts/api-server/src/routes/dev-resume-operator-review.ts').includes('/evidence-summary') &&
   file('artifacts/api-server/src/routes/dev-resume-operator-review.ts').includes('getDevCommandEvidenceSummary(commandId)') &&

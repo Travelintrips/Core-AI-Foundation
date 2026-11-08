@@ -5,12 +5,17 @@
  * This is diagnostic and NEVER an authority to sign, grant, resume or close.
  */
 import {getDevCommandRecoveryReview} from "./jobLifecycleRecoveryReview.js";
+import {readDevAiTaskJob} from "./jobLifecycleAiTaskReadback.js";
 export type EvidenceState="OBSERVED"|"BLOCKED"|"NOT_VERIFIED";
 export type EvidenceCheck={id:string;state:EvidenceState;reason:string};
 export type RecoverySummary={found:boolean;commandId:string;commandStatus?:string;
   sourceTaskId:string|null;sourceTaskIdVerifiedAsAiTaskJob:false;
   expectedAiTaskLedgerExternalId:string|null;
-  aiTaskLedgerReadbackVerified:false;
+  aiTaskLedgerReadbackVerified:boolean;
+  aiTaskLedgerReadbackReason:string;
+  aiTaskLedgerReceiverJobId?:string;
+  aiTaskLedgerReceiverStatus?:string;
+  aiTaskLedgerReceiverProgress?:number;
   releaseDecision:"NO_GO";snapshotAtomic:false;maySign:false;mayIssueGrant:false;
   mayDispatchWorker:false;mayCloseJob:false;checks:EvidenceCheck[]};
 function check(id:string,pass:boolean,positive:string,negative:string):EvidenceCheck{
@@ -54,6 +59,7 @@ export function summarizeDevRecoveryEvidence(commandId:string,source:{
   // this stable source ID; this value is a lookup key, NOT evidence of sync.
   expectedAiTaskLedgerExternalId:source.found?"bridge-command:"+commandId:null,
   aiTaskLedgerReadbackVerified:false,
+  aiTaskLedgerReadbackReason:"INDEPENDENT_RECEIVER_READBACK_NOT_PERFORMED",
   releaseDecision:"NO_GO",snapshotAtomic:false,maySign:false,mayIssueGrant:false,
   mayDispatchWorker:false,mayCloseJob:false,checks};
 }
@@ -62,5 +68,18 @@ export async function getDevCommandEvidenceSummary(commandId:string):Promise<Rec
   return summarizeDevRecoveryEvidence(commandId,{found:false});
  }
  const evidence=await getDevCommandRecoveryReview(commandId);
- return summarizeDevRecoveryEvidence(commandId,evidence);
+ const base=summarizeDevRecoveryEvidence(commandId,evidence);
+ if(!base.found)return base;
+ const receiver=await readDevAiTaskJob(commandId);
+ return {...base,aiTaskLedgerReadbackVerified:receiver.verified,
+  aiTaskLedgerReadbackReason:receiver.reason,
+  ...(receiver.verified?{
+    aiTaskLedgerReceiverJobId:receiver.receiverJobId,
+    aiTaskLedgerReceiverStatus:receiver.receiverStatus,
+    ...(receiver.receiverProgress!==undefined?{aiTaskLedgerReceiverProgress:receiver.receiverProgress}:{})
+  }:{}),
+  // A matched receiver ID is not a native ACK, approval, attempt lineage,
+  // terminal E2E verification, nor an authorization for anything.
+  releaseDecision:"NO_GO" as const,maySign:false as const,
+  mayIssueGrant:false as const,mayDispatchWorker:false as const,mayCloseJob:false as const};
 }
