@@ -62,19 +62,27 @@ BEGIN
  IF OLD.status IN ('REVOKED','CONSUMED') THEN
   RAISE EXCEPTION 'GPT02_GRANT_TERMINAL_IMMUTABLE' USING ERRCODE='55000';
  END IF;
+ -- Until there is a server-authenticated grant issuer, direct promotion of
+ -- a PENDING grant to APPROVED is intentionally NOT supported by this proposal.
+ IF OLD.status='PENDING' AND NEW.status IS DISTINCT FROM 'REVOKED' THEN
+  RAISE EXCEPTION 'GPT02_GRANT_PENDING_PROMOTION_DISABLED' USING ERRCODE='55000';
+ END IF;
  IF OLD.status='APPROVED' THEN
   IF NEW.status NOT IN ('REVOKED','CONSUMED') THEN
    RAISE EXCEPTION 'GPT02_GRANT_APPROVED_IMMUTABLE' USING ERRCODE='55000';
   END IF;
-  IF (NEW.id,NEW.command_id,NEW.review_intent_id,NEW.operator_user_id,
-      NEW.checkpoint_response_id,NEW.blocker_response_id,NEW.worker_id,
-      NEW.approved_by,NEW.approved_at,NEW.expires_at,NEW.created_at)
-   IS DISTINCT FROM
-     (OLD.id,OLD.command_id,OLD.review_intent_id,OLD.operator_user_id,
-      OLD.checkpoint_response_id,OLD.blocker_response_id,OLD.worker_id,
-      OLD.approved_by,OLD.approved_at,OLD.expires_at,OLD.created_at) THEN
-   RAISE EXCEPTION 'GPT02_GRANT_BINDING_IMMUTABLE' USING ERRCODE='55000';
-  END IF;
+ END IF;
+ IF (NEW.id,NEW.command_id,NEW.review_intent_id,NEW.operator_user_id,
+     NEW.checkpoint_response_id,NEW.blocker_response_id,NEW.worker_id,
+     NEW.approved_by,NEW.approved_at,NEW.expires_at,NEW.created_at)
+  IS DISTINCT FROM
+    (OLD.id,OLD.command_id,OLD.review_intent_id,OLD.operator_user_id,
+     OLD.checkpoint_response_id,OLD.blocker_response_id,OLD.worker_id,
+     OLD.approved_by,OLD.approved_at,OLD.expires_at,OLD.created_at) THEN
+  RAISE EXCEPTION 'GPT02_GRANT_BINDING_IMMUTABLE' USING ERRCODE='55000';
+ END IF;
+ IF NEW.status='REVOKED' AND NEW.consumed_at IS DISTINCT FROM OLD.consumed_at THEN
+  RAISE EXCEPTION 'GPT02_GRANT_REVOKE_CANNOT_CONSUME' USING ERRCODE='55000';
  END IF;
  RETURN NEW;
 END;
