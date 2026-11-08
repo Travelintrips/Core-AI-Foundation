@@ -43,32 +43,41 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
   `);
   const row=subject.rows?.[0];
   if(!row)return denied("HUMAN_REVIEW_JOB_BINDING_NOT_FOUND");
+  // No broad SELECT grant. Narrow reader is optional and fails closed.
   const schema=await db.execute(sql`
     SELECT to_regclass('ai_platform.gpt02_dev_recovery_reservations') IS NOT NULL
       AS reservations_present,
-      CASE WHEN to_regclass('ai_platform.gpt02_dev_recovery_reservations') IS NOT NULL
-        THEN has_table_privilege(current_user,
-          'ai_platform.gpt02_dev_recovery_reservations','SELECT')
-        ELSE false END AS reservations_readable
+      to_regprocedure('ai_platform.gpt02_dev_timeline_candidate_reader(integer,integer,uuid)')
+        IS NOT NULL AS candidate_reader_present
   `);
-  if(typeof schema.rows?.[0]?.["reservations_present"]!=="boolean" ||
-     typeof schema.rows?.[0]?.["reservations_readable"]!=="boolean")
+  const schemaRow=schema.rows?.[0];
+  if(typeof schemaRow?.["reservations_present"]!=="boolean" ||
+     typeof schemaRow?.["candidate_reader_present"]!=="boolean")
     return denied("RESERVATION_SCHEMA_READBACK_UNAVAILABLE");
-  const reservationsPresent=schema.rows[0]["reservations_present"]===true;
-  const reservationsReadable=schema.rows[0]["reservations_readable"]===true;
+  const reservationsPresent=schemaRow["reservations_present"]===true;
+  const readerPresent=schemaRow["candidate_reader_present"]===true;
   let candidate:string|null=null;
-  if(reservationsPresent && reservationsReadable){
-    const reservation=await db.execute(sql`
-      SELECT r.candidate_command_id
-      FROM ai_platform.gpt02_dev_recovery_reservations r
-      WHERE r.human_review_id=${x.humanReviewId} AND r.job_id=${x.jobId}
-        AND r.parent_command_id=${x.parentCommandId}::uuid
-      LIMIT 1
+  let readerExecutable=false;
+  if(reservationsPresent && readerPresent){
+    const permission=await db.execute(sql`
+      SELECT has_function_privilege(current_user,
+        'ai_platform.gpt02_dev_timeline_candidate_reader(integer,integer,uuid)',
+        'EXECUTE') AS can_execute
     `);
-    const item=reservation.rows?.[0]?.["candidate_command_id"];
-    if(item!==undefined && item!==null && (typeof item!=="string" || !uuid.test(item)))
-      return denied("RECOVERY_CANDIDATE_IDENTITY_INVALID");
-    candidate=typeof item==="string"?item:null;
+    if(typeof permission.rows?.[0]?.["can_execute"]!=="boolean")
+      return denied("CANDIDATE_READER_PRIVILEGE_UNVERIFIED");
+    readerExecutable=permission.rows[0]["can_execute"]===true;
+    if(readerExecutable){
+      const reservation=await db.execute(sql`
+        SELECT candidate_command_id FROM ai_platform.gpt02_dev_timeline_candidate_reader(
+          ${x.humanReviewId}::integer,${x.jobId}::integer,${x.parentCommandId}::uuid)
+      `);
+      if((reservation.rows?.length??0)>1)return denied("AMBIGUOUS_CANDIDATE_READER_RESULT");
+      const item=reservation.rows?.[0]?.["candidate_command_id"];
+      if(item!==undefined && item!==null && (typeof item!=="string" || !uuid.test(item)))
+        return denied("RECOVERY_CANDIDATE_IDENTITY_INVALID");
+      candidate=typeof item==="string"?item:null;
+    }
   }
   const commandIds=[x.parentCommandId,...(candidate?[candidate]:[])];
   const history=await db.execute(sql`
@@ -116,8 +125,9 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
     mayCreateCommand:false as const,
     reservationSchemaAvailable:reservationsPresent,
     reservationReadbackStatus:!reservationsPresent?"MIGRATION_MISSING":
-      !reservationsReadable?"SELECT_PERMISSION_DENIED":
+      !readerPresent?"CANDIDATE_READER_NOT_INSTALLED":
+      !readerExecutable?"CANDIDATE_READER_EXECUTE_DENIED":
       candidate===null?"NO_RESERVATION_FOR_REVIEW":"CANDIDATE_ID_READ_ONLY",
-    reservationEvidenceVerified:reservationsPresent && reservationsReadable && candidate!==null,
+    reservationEvidenceVerified:reservationsPresent && readerExecutable && candidate!==null,
     ...projection,mayDispatchWorker:false as const,mayCloseJob:false as const};
 }

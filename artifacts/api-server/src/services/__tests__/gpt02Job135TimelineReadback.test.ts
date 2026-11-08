@@ -29,7 +29,7 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
   const oldApp=process.env["APP_ENV"],oldNode=process.env["NODE_ENV"];
   beforeEach(()=>{
     process.env["APP_ENV"]="development";process.env["NODE_ENV"]="development";
-    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,reservations_readable:true}],[{candidate_command_id:child}],[response("COMPLETED","completed-1")]];
+    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("COMPLETED","completed-1")]];
     mock.proof.mockImplementation(async(cmd:string)=>proof(cmd));
   });
   afterEach(()=>{
@@ -52,7 +52,7 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
       ok:false,reason:"HUMAN_REVIEW_JOB_BINDING_NOT_FOUND"});
   });
   it("missing reservation migration reads baseline parent without mutation",async()=>{
-    mock.plan=[[task(null)],[{reservations_present:false,reservations_readable:false}],
+    mock.plan=[[task(null)],[{reservations_present:false,candidate_reader_present:false}],
       [response("FAILED","failed-1",parent)]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,reservationSchemaAvailable:false,reservationEvidenceVerified:false,
@@ -60,15 +60,23 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
       mayDispatchWorker:false,mayCloseJob:false});
     expect(mock.calls).toBe(3);
   });
-  it("DEV schema exists but runtime SELECT denied: parent timeline remains visible, no candidate assumed",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,reservations_readable:false}],
+  it("DEV schema exists but narrow reader absent: parent timeline remains visible, no candidate assumed",async()=>{
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:false}],
       [response("FAILED","failed-1",parent)]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,reservationSchemaAvailable:true,
-      reservationReadbackStatus:"SELECT_PERMISSION_DENIED",
+      reservationReadbackStatus:"CANDIDATE_READER_NOT_INSTALLED",
       reservationEvidenceVerified:false,status:"ISSUER_NOT_VERIFIED",
       mayDispatchWorker:false,mayCloseJob:false});
     expect(mock.calls).toBe(3);
+  });
+  it("narrow reader installed but execution denied remains blocked",async()=>{
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],
+      [{can_execute:false}],[response("FAILED","failed-1",parent)]];
+    expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
+      ok:true,reservationReadbackStatus:"CANDIDATE_READER_EXECUTE_DENIED",
+      reservationEvidenceVerified:false,status:"ISSUER_NOT_VERIFIED",
+      mayDispatchWorker:false,mayCloseJob:false});
   });
   it("missing schema probe must not be inferred as no reservation",async()=>{
     mock.plan=[[task()],[]];
@@ -76,7 +84,7 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
       ok:false,reason:"RESERVATION_SCHEMA_READBACK_UNAVAILABLE"});
   });
   it("candidate absent remains issuer-unverified",async()=>{
-    mock.plan=[[task(null)],[{reservations_present:false,reservations_readable:false}],[]];
+    mock.plan=[[task(null)],[{reservations_present:false,candidate_reader_present:false}],[]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,status:"ISSUER_NOT_VERIFIED",progressPercent:null,
       mayDispatchWorker:false,mayCloseJob:false});
@@ -89,22 +97,22 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
     expect(mock.proof).toHaveBeenCalledTimes(2);
   });
   it("signed checkpoint evidence can show native ACK but never final completion",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,reservations_readable:true}],[{candidate_command_id:child}],[response("CHECKPOINT","checkpoint-1")]];
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("CHECKPOINT","checkpoint-1")]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,lastEventKind:"CHECKPOINT",lastNativeAckVerified:true,
       eligibleForCompletionReview:false,mayCloseJob:false});
   });
   it("101 rows fail closed rather than silently truncate timeline",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,reservations_readable:true}],[{candidate_command_id:child}],Array.from({length:101},(_,i)=>response("PROGRESS","r-"+i))];
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],Array.from({length:101},(_,i)=>response("PROGRESS","r-"+i))];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:false,reason:"TIMELINE_RESPONSE_LIMIT_REACHED"});
     expect(mock.proof).not.toHaveBeenCalled();
   });
   it("invalid kind and command mismatch fail closed",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,reservations_readable:true}],[{candidate_command_id:child}],[response("FORGED_PASS","fake")]];
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("FORGED_PASS","fake")]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:false,reason:"TIMELINE_RESPONSE_INVALID"});
-    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,reservations_readable:true}],[{candidate_command_id:child}],[response("ACK","wrong", "a1aa961d-ac1e-4e12-a2c8-28ed07ff97cc")]];
+    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("ACK","wrong", "a1aa961d-ac1e-4e12-a2c8-28ed07ff97cc")]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:false,reason:"TIMELINE_RESPONSE_INVALID"});
   });
