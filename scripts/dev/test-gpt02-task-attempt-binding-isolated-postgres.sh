@@ -5,9 +5,18 @@ NAME="gpt02-binding-test-$$"
 cleanup(){ docker rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker run --rm -d --name "$NAME" -e POSTGRES_PASSWORD=test-only -e POSTGRES_DB=isolated postgres:16-alpine >/dev/null
+# During initdb the official image briefly starts a temporary UNIX-socket
+# server, then shuts it down before starting the final TCP listener. Merely
+# using pg_isready without -h races that shutdown on GitHub Actions runners.
 ready=0
-for _ in $(seq 1 35); do if docker exec "$NAME" pg_isready -U postgres -d isolated >/dev/null 2>&1; then ready=1; break; fi; sleep 1; done
-[ "$ready" = 1 ] || { echo "DISPOSABLE_POSTGRES_NOT_READY"; exit 2; }
+for _ in $(seq 1 45); do
+ if docker exec "$NAME" psql -X -h 127.0.0.1 -U postgres -d isolated \
+    -v ON_ERROR_STOP=1 -Atqc 'SELECT 1' 2>/dev/null | grep -qx 1; then
+  ready=1; break
+ fi
+ sleep 1
+done
+[ "$ready" = 1 ] || { echo "DISPOSABLE_POSTGRES_TCP_NOT_READY"; exit 2; }
 docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$ROOT/docs/dev/gpt02-task-attempt-binding.proposed.sql" >/dev/null
 # Script is idempotent for schema and trigger (no rows yet).
 docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$ROOT/docs/dev/gpt02-task-attempt-binding.proposed.sql" >/dev/null
