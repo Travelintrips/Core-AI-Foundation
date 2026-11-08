@@ -119,7 +119,7 @@ echo 'PASS: exact proposed claim is inert (0A000 guard); approved synthetic gran
 # Replay protection survives a grant's REVOKED status. One review must never
 # back a second grant, even when the one-live-per-command index no longer applies.
 docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.dev_gpt02_resume_grants SET status='REVOKED';" > "$DIR/revoked" 2>&1
-if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',now(),now()+interval '90 seconds');" > "$DIR/replay" 2>&1;then
+if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','PENDING',now()+interval '90 seconds');" > "$DIR/replay" 2>&1;then
  echo 'NO-GO: same review reused after revoked grant';exit 1
 fi
 grep -F 'dev_gpt02_grants_review_one_time' "$DIR/replay" >/dev/null || { echo 'NO-GO: replay rejected for unexpected reason';cat "$DIR/replay";exit 1; }
