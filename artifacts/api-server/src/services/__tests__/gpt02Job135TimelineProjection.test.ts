@@ -24,9 +24,31 @@ describe("GPT02 read-only timeline never grants dispatch or completion",()=>{
     expect(x).toMatchObject({observedEventCount:2,progressPercent:null,
       eligibleForCompletionReview:false,mayCloseJob:false});
   });
+  it("candidate activity is recorded without assuming a live running worker",()=>{
+    for(const kind of ["ACK","PROGRESS","CHECKPOINT"] as const){
+      expect(projectGpt02Job135Timeline(input([event(kind,1)]))).toMatchObject({
+        status:"ACTIVITY_RECORDED_UNVERIFIED",progressPercent:null,
+        eligibleForCompletionReview:false,mayDispatchWorker:false,mayCloseJob:false,
+      });
+    }
+  });
+  it("parent-only and parent failure never impersonate child progress",()=>{
+    const x={...event("FAILED",3),commandId:parent};
+    expect(projectGpt02Job135Timeline({...input([x]),candidateCommandId:null}))
+      .toMatchObject({status:"ISSUER_NOT_VERIFIED",lastEventKind:"FAILED",
+        mayDispatchWorker:false,mayCloseJob:false});
+    expect(projectGpt02Job135Timeline(input([x])))
+      .toMatchObject({status:"BLOCKED_OR_UNVERIFIED",lastEventKind:"FAILED"});
+  });
   it("blocker is displayed with exact response",()=>{
     expect(projectGpt02Job135Timeline(input([event("CHECKPOINT",1),event("BLOCKER",2)])))
       .toMatchObject({blockerResponseId:"response-2",status:"BLOCKED_OR_UNVERIFIED"});
+  });
+  it("unverified COMPLETED is not activity or a proven result",()=>{
+    expect(projectGpt02Job135Timeline(input([event("COMPLETED",9)]))).toMatchObject({
+      status:"BLOCKED_OR_UNVERIFIED",eligibleForCompletionReview:false,
+      mayDispatchWorker:false,mayCloseJob:false,
+    });
   });
   it("COMPLETED reported without native and result proof never closes",()=>{
     expect(projectGpt02Job135Timeline(input([event("COMPLETED",3)])))

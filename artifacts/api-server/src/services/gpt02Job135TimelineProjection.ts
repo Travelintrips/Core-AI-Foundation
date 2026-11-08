@@ -47,8 +47,14 @@ export function projectGpt02Job135Timeline(input: JobTimelineInput) {
   const finalProof = validChild && last?.commandId.toLowerCase() === target.toLowerCase() &&
     last?.kind === "COMPLETED" && last.nativeAttestationVerified &&
     last.receiverAckVerified && last.resultVerified;
+  // Worker activity is evidence of a persisted response, NOT proof that a
+  // process is currently running. Only an independently verified terminal
+  // result can clear the final-result gate.
+  const candidateHasNonterminalActivity = validChild &&
+    last?.commandId.toLowerCase() === target.toLowerCase() &&
+    (last.kind === "ACK" || last.kind === "PROGRESS" || last.kind === "CHECKPOINT");
   const blocked = !valid || !validChild || Boolean(blocker && !terminal) ||
-    last?.kind === "FAILED" || !finalProof;
+    last?.kind === "FAILED" || last?.kind === "COMPLETED";
 
   return {
     jobId: input.jobId,
@@ -72,7 +78,9 @@ export function projectGpt02Job135Timeline(input: JobTimelineInput) {
     status: !valid ? "EVIDENCE_INVALID" as const :
       !validChild ? "ISSUER_NOT_VERIFIED" as const :
       finalProof ? "RESULT_EVIDENCE_RECORDED" as const :
-      blocked ? "BLOCKED_OR_UNVERIFIED" as const : "IN_PROGRESS" as const,
+      blocked ? "BLOCKED_OR_UNVERIFIED" as const :
+      candidateHasNonterminalActivity ? "ACTIVITY_RECORDED_UNVERIFIED" as const :
+      "BLOCKED_OR_UNVERIFIED" as const,
     // A read-only projection cannot grant completion. Even the strongest
     // observed proof still requires a separate authorized finalization.
     eligibleForCompletionReview: Boolean(finalProof && input.reviewAccepted),

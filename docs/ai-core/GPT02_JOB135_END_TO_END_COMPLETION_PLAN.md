@@ -125,3 +125,8 @@ Verified with unauthenticated GETs against the currently deployed systems:
 - The panel in this PR is embedded in AI Core's Human Tasks page, **not** in the separately deployed AI Task Center application. A cross-app panel or proxy needs an explicit integration design and authenticated endpoint, and cannot be assumed from URL similarity.
 
 Operational rollout remains blocked until authorized branch promotion, approved owner-role narrow-reader migration, exact-sha DEV deployment, and authenticated human browser GET. Do NOT deploy the PR directly to main/PROD. No live service changed by these HTTP inspections.
+
+## No false live-progress status
+Audit found that the previous timeline projection included `!finalProof` in its blocker predicate, which made `IN_PROGRESS` unreachable for any nonterminal candidate response. A persisted candidate ACK, PROGRESS or CHECKPOINT now yields `ACTIVITY_RECORDED_UNVERIFIED` only when it is the latest matching response and there is no unresolved blocker or failure. This means **a recorded response exists**, not a live-running worker or percentage complete. A FAILED response or unverified COMPLETED remains blocked; parent-only Job 135 stays `ISSUER_NOT_VERIFIED` even when the parent has failed. Dispatcher, completion, percentage and lease permissions remain denied. New unit regressions cover parent-only, failed, unverified completed, and candidate nonterminal evidence.
+
+The live DEV database read-only SQL shape probe additionally confirmed exact Review 6/Job 135 binding, parent UUID, two response UUIDs (ACK and FAILED, neither acknowledged), reservation table present, narrow reader function absent. Runtime image remains at ff1d1299, not the PR commit.
