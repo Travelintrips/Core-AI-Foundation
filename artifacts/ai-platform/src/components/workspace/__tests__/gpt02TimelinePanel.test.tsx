@@ -29,6 +29,17 @@ describe("GPT02 DEV manual timeline UI",()=>{
     expect(screen.getByRole("button",{name:/Periksa timeline/})).toBeTruthy();
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
+  it("renders a full-width, named action below the heading for narrow dialogs",()=>{
+    render(<Gpt02DevTimelinePanel {...props}/>);
+    const section=screen.getByRole("region",{name:"GPT02 DEV timeline"});
+    const title=screen.getByText("Timeline aktivitas GPT02 — DEV");
+    const button=screen.getByRole("button",{name:"Periksa timeline GPT02 DEV"});
+    expect(section.contains(button)).toBe(true);
+    expect(section.contains(title)).toBe(true);
+    expect(button.className).toContain("w-full");
+    expect(button.className).toContain("min-h-10");
+    expect(title.compareDocumentPosition(button)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
   it("invalid parent disables read and never queries",()=>{
     render(<Gpt02DevTimelinePanel {...props} parentCommandId="invalid"/>);
     expect((screen.getByRole("button",{name:/Periksa timeline/}) as HTMLButtonElement).disabled).toBe(true);
