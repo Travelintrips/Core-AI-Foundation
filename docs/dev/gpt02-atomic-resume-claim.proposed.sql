@@ -48,6 +48,45 @@ CREATE UNIQUE INDEX IF NOT EXISTS dev_gpt02_grants_review_one_time
  ON ai_platform.dev_gpt02_resume_grants(review_intent_id)
  WHERE review_intent_id IS NOT NULL;
 
+-- Proposed append-only grant history. A terminal grant must never be
+-- resurrected through UPDATE. APPROVED evidence binding is immutable, including
+-- when revoking or consuming it. DELETE would defeat lifetime review uniqueness.
+-- SECURITY INVOKER; this is NOT an issuer or a dispatch authorization.
+CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_grant_transition_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
+SET search_path=pg_catalog,ai_platform AS $grant_guard$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  RAISE EXCEPTION 'GPT02_GRANT_DELETE_FORBIDDEN' USING ERRCODE='55000';
+ END IF;
+ IF OLD.status IN ('REVOKED','CONSUMED') THEN
+  RAISE EXCEPTION 'GPT02_GRANT_TERMINAL_IMMUTABLE' USING ERRCODE='55000';
+ END IF;
+ IF OLD.status='APPROVED' THEN
+  IF NEW.status NOT IN ('REVOKED','CONSUMED') THEN
+   RAISE EXCEPTION 'GPT02_GRANT_APPROVED_IMMUTABLE' USING ERRCODE='55000';
+  END IF;
+  IF (NEW.id,NEW.command_id,NEW.review_intent_id,NEW.operator_user_id,
+      NEW.checkpoint_response_id,NEW.blocker_response_id,NEW.worker_id,
+      NEW.approved_by,NEW.approved_at,NEW.expires_at,NEW.created_at)
+   IS DISTINCT FROM
+     (OLD.id,OLD.command_id,OLD.review_intent_id,OLD.operator_user_id,
+      OLD.checkpoint_response_id,OLD.blocker_response_id,OLD.worker_id,
+      OLD.approved_by,OLD.approved_at,OLD.expires_at,OLD.created_at) THEN
+   RAISE EXCEPTION 'GPT02_GRANT_BINDING_IMMUTABLE' USING ERRCODE='55000';
+  END IF;
+ END IF;
+ RETURN NEW;
+END;
+$grant_guard$;
+REVOKE ALL ON FUNCTION ai_platform.dev_gpt02_grant_transition_guard()
+ FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS dev_gpt02_grant_transition_guard_trg
+ ON ai_platform.dev_gpt02_resume_grants;
+CREATE TRIGGER dev_gpt02_grant_transition_guard_trg
+ BEFORE UPDATE OR DELETE ON ai_platform.dev_gpt02_resume_grants
+ FOR EACH ROW EXECUTE FUNCTION ai_platform.dev_gpt02_grant_transition_guard();
+
 CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_command_leases (
   command_id uuid PRIMARY KEY REFERENCES ai_platform.ai_coding_bridge_commands(id),
   grant_id uuid NOT NULL REFERENCES ai_platform.dev_gpt02_resume_grants(id),
