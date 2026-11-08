@@ -12,9 +12,10 @@ for i in $(seq 1 40); do
 done
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
 CREATE ROLE writer NOLOGIN NOINHERIT NOBYPASSRLS;
+CREATE ROLE verified_service NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE runtime NOLOGIN;
 CREATE SCHEMA isolated;
-GRANT USAGE ON SCHEMA isolated TO writer,runtime;
+GRANT USAGE ON SCHEMA isolated TO writer,runtime,verified_service;
 CREATE TABLE isolated.commands(id integer PRIMARY KEY,status text NOT NULL);
 CREATE TABLE isolated.responses(id integer PRIMARY KEY, command_id integer NOT NULL REFERENCES isolated.commands(id),
  kind text NOT NULL, created_at integer NOT NULL, acknowledged boolean NOT NULL DEFAULT false);
@@ -63,12 +64,12 @@ BEGIN
  RETURN v_inserted IS NOT NULL;
 END $$;
 REVOKE ALL ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb) TO writer;
+GRANT EXECUTE ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb) TO verified_service;
 SQL
 test_case() {
  local label="$1" expect="$2" json_b64="$3"
  local got
- got="$(docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE writer; SELECT isolated.try_append(1,7,10,11,convert_from(decode('$json_b64','base64'),'UTF8')::jsonb)")"
+ got="$(docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE verified_service; SELECT isolated.try_append(1,7,10,11,convert_from(decode('$json_b64','base64'),'UTF8')::jsonb)")"
  got="$(printf '%s\n' "$got" | tail -n 1)"
  [ "$got" = "$expect" ] || { echo "FAIL $label actual=$got wanted=$expect"; exit 1; }
  echo "$label PASS"
@@ -91,11 +92,17 @@ done
 # even when bypassing the application verifier. Signature itself is not checked.
 bad_bind="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys,base64; p=json.load(sys.stdin); p["operatorId"]="internal:8"; print(base64.b64encode(json.dumps(p).encode()).decode())')"
 test_case "DATABASE PROOF IDENTITY BINDING REJECTION" f "$bad_bind"
-# This intentionally shows the unsigned bypass still exists on the SQL
-# prototype: changing the nonce with a stale signature passes shape checks.
-# Do NOT grant access to this procedure in real deployments.
+# The generic writer role has no EXECUTE; direct signature reuse by that
+# identity fails even while the command is PROCESSING.
 forged="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys,base64; p=json.load(sys.stdin); p["nonce"]="a"*64; print(base64.b64encode(json.dumps(p).encode()).decode())')"
-test_case "UNSIGNED SIGNATURE REUSE STILL ACCEPTED IN SYNTHETIC SQL" t "$forged"
+if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q \
+ -c "SET ROLE writer; SELECT isolated.try_append(1,7,10,11,convert_from(decode('$forged','base64'),'UTF8')::jsonb)" >/dev/null 2>&1; then
+ echo "FAIL generic writer invoked privileged append"; exit 1
+fi
+echo "GENERIC WRITER DIRECT SQL FORGERY DENIED PASS"
+# CRITICAL: a compromised verified_service credential still bypasses Ed25519;
+# this is the outstanding proof that process isolation is required.
+test_case "COMPROMISED VERIFIED SERVICE STILL ACCEPTS REUSED SIGNATURE" t "$forged"
 count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
 [ "$count" = 2 ] || { echo "FAIL expected synthetic bypass demonstration";exit 1; }
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='suspended' WHERE id=7" >/dev/null
@@ -117,4 +124,7 @@ if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET ROLE runti
  echo "FAIL ordinary runtime executed trusted-writer procedure";exit 1
 fi
 echo "RUNTIME EXECUTE DENIED PASS"
+privileges="$(docker exec "$name" psql -U postgres -qAt -c "SELECT has_function_privilege('writer','isolated.try_append(integer,integer,integer,integer,jsonb)','EXECUTE'),has_function_privilege('runtime','isolated.try_append(integer,integer,integer,integer,jsonb)','EXECUTE'),has_function_privilege('verified_service','isolated.try_append(integer,integer,integer,integer,jsonb)','EXECUTE')")"
+[ "$privileges" = 'f|f|t' ] || { echo "FAIL privilege boundary $privileges"; exit 1; }
+echo "THREE-ROLE EXECUTE ISOLATION PASS"
 echo "EVIDENCE FENCING PROTOTYPE PASS — unsigned synthetic inputs, NOT a real approval"
