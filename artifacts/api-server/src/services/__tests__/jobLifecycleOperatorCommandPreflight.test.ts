@@ -48,8 +48,6 @@ describe("real database-backed operator preflight fails closed before approval",
   expect(x.diagnosticStage).toBe("ISSUER_NOT_IMPLEMENTED");
   expect(x.issuanceBlockedReason).toBe("TRUSTED_GRANT_ISSUER_NOT_IMPLEMENTED");
   expect(x.reviewEvidenceBlockers).toEqual([]);
-  expect(x.diagnosticStage).toBe("EXECUTION_GATES_BLOCKED");
-  expect(x.issuanceBlockedReason).toBe("TRUSTED_GRANT_ISSUER_NOT_IMPLEMENTED");
   expect(x.executionAdditionalBlockers).toEqual([]);
   expect(x.grantIssuanceEnabled).toBe(false);
   expect(x.mayIssueGrant).toBe(false);
@@ -68,6 +66,9 @@ describe("real database-backed operator preflight fails closed before approval",
   expect(x.found).toBe(true);
   if(!x.found)return;
   expect(x.reviewEvidenceBlockers).toEqual([]);
+  expect(x.reviewEvidenceReady).toBe(true);
+  expect(x.diagnosticStage).toBe("EXECUTION_GATES_BLOCKED");
+  expect(x.issuanceBlockedReason).toBe("TRUSTED_GRANT_ISSUER_NOT_IMPLEMENTED");
   expect(x.executionAdditionalBlockers).toEqual([
    "RESUME_GRANT_UNVERIFIED","EXCLUSIVE_COMMAND_LEASE_UNVERIFIED",
    "RATE_LIMIT_CLEARANCE_UNVERIFIED","RETRY_BUDGET_UNVERIFIED"]);
