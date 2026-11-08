@@ -41,6 +41,19 @@ describe("DEV evidence summary never escalates observation to authority",()=>{
   expect([merged.maySign,merged.mayIssueGrant,merged.mayDispatchWorker,merged.mayCloseJob]).toEqual([false,false,false,false]);
   expect(base.checks.some(x=>x.id==="ai_task_ledger_identity")).toBe(false);
  });
+ it("receiver reporting 100 percent and completed cannot complete GPT02",()=>{
+  const base=summarizeDevRecoveryEvidence(id,{found:true,commandStatus:"PROCESSING",commandStatusReviewable:true,
+   responseSnapshotComplete:true,checkpointResponseId:"cp",checkpointAttested:true,
+   receiverAckVerified:true,blockingResponseId:"block",blockerEvidenceValid:true,workerPresenceHealthy:true});
+  const merged=attachDevAiTaskReadback(base,{verified:true,reason:"DEV_RECEIVER_IDENTITY_OBSERVED_NOT_EXECUTION_AUTHORITY",
+   receiverJobId:"238e0ad4-3c74-4469-908a-cd49ac6515f2",receiverStatus:"completed",receiverProgress:100});
+  expect(merged.aiTaskLedgerReceiverProgress).toBe(100);
+  expect(merged.aiTaskLedgerStatusAndProgressAuthoritative).toBe(false);
+  expect(merged.checks.find(x=>x.id==="worker_completion")?.state).toBe("NOT_VERIFIED");
+  expect(merged.checks.find(x=>x.id==="task_center_monitoring")?.state).toBe("NOT_VERIFIED");
+  expect(merged.releaseDecision).toBe("NO_GO");
+  expect([merged.maySign,merged.mayIssueGrant,merged.mayDispatchWorker,merged.mayCloseJob]).toEqual([false,false,false,false]);
+ });
  it("missing receiver job ID or failed readback never claims correlation",()=>{
   const base=summarizeDevRecoveryEvidence(id,{found:true});
   const missing=attachDevAiTaskReadback(base,{verified:true,reason:"MISCONFIGURED"});

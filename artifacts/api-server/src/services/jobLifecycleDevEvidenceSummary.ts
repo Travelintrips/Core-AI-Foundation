@@ -16,6 +16,8 @@ export type RecoverySummary={found:boolean;commandId:string;commandStatus?:strin
   aiTaskLedgerReceiverJobId?:string;
   aiTaskLedgerReceiverStatus?:string;
   aiTaskLedgerReceiverProgress?:number;
+  // Receiver-reported job status/progress are NOT native worker completion.
+  aiTaskLedgerStatusAndProgressAuthoritative:false;
   releaseDecision:"NO_GO";snapshotAtomic:false;maySign:false;mayIssueGrant:false;
   mayDispatchWorker:false;mayCloseJob:false;checks:EvidenceCheck[]};
 function check(id:string,pass:boolean,positive:string,negative:string):EvidenceCheck{
@@ -60,6 +62,7 @@ export function summarizeDevRecoveryEvidence(commandId:string,source:{
   expectedAiTaskLedgerExternalId:source.found?"bridge-command:"+commandId:null,
   aiTaskLedgerReadbackVerified:false,
   aiTaskLedgerReadbackReason:"INDEPENDENT_RECEIVER_READBACK_NOT_PERFORMED",
+  aiTaskLedgerStatusAndProgressAuthoritative:false,
   releaseDecision:"NO_GO",snapshotAtomic:false,maySign:false,mayIssueGrant:false,
   mayDispatchWorker:false,mayCloseJob:false,checks};
 }
@@ -70,6 +73,7 @@ export function attachDevAiTaskReadback(base:RecoverySummary,receiver:Awaited<Re
    typeof receiver.receiverJobId==="string"&&receiver.receiverJobId.length>0;
  return {...base,
   aiTaskLedgerReadbackVerified:observed,
+  aiTaskLedgerStatusAndProgressAuthoritative:false,
   aiTaskLedgerReadbackReason:observed?receiver.reason:
    receiver.verified?"RECEIVER_ID_MISSING":receiver.reason,
   ...(observed?{
