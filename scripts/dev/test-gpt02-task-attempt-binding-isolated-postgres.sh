@@ -168,3 +168,44 @@ SQL
 cat /tmp/gpt02-task-binding-$$.log | grep -E 'PASS|NOTICE' || true
 rm -f /tmp/gpt02-task-binding-$$.log
 printf 'DISPOSABLE_POSTGRES_BINDING_TEST_PASS\n'
+# Race test: distinct sessions compete for one command key. Only a single claim
+# can commit, even if a losing session starts while the winner holds its lock.
+RACE_SQL=$(mktemp)
+RACE_FIRST=$(mktemp)
+RACE_SECOND=$(mktemp)
+trap 'rm -f "$RACE_SQL" "$RACE_FIRST" "$RACE_SECOND"; cleanup' EXIT
+cat > "$RACE_SQL" <<'SQL'
+\set ON_ERROR_STOP on
+BEGIN;
+INSERT INTO ai_platform.dev_gpt02_task_attempt_binding_claims
+(tenant_id,core_command_id,core_coding_task_id,hub_execution_job_id,hub_ai_task_id,
+ attempt_id,attempt_number,worker_id,assignee_namespace,assignee_id,owner_namespace,
+ accountable_owner_id,evidence_sha256,evidence_source,recorded_by,
+ source_observed_at,receiver_observed_at)
+VALUES ('default','fa2ac381-7ee7-44bf-801f-2d57c9e017e6',
+ '965604aa-9e6b-478b-8e33-cc52a8f0b8ca',gen_random_uuid(),77,
+ gen_random_uuid(),1,'openclaw-dell-chatgpt-wake-dev',
+ 'ai_task_hub.public.ai_tasks.assigned_to_id',7,'ai_task_hub.accountable_owner',
+ 'race-test-owner',encode(gen_random_bytes(32),'hex'),'independent_dev_attestation',
+ 'internal:301',now(),now());
+SELECT pg_sleep(2);
+COMMIT;
+SQL
+# pgcrypto is preinstalled in PostgreSQL 16 stock image on the disposable DB.
+docker exec "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated -c 'CREATE EXTENSION IF NOT EXISTS pgcrypto;' >/dev/null
+docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$RACE_SQL" > "$RACE_FIRST" 2>&1 &
+P1=$!
+sleep 0.4
+docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$RACE_SQL" > "$RACE_SECOND" 2>&1 &
+P2=$!
+set +e
+wait "$P1"; R1=$?
+wait "$P2"; R2=$?
+set -e
+if [[ $R1 -ne 0 || $R2 -eq 0 ]] || ! grep -q 'duplicate key value violates unique constraint "claim_core_command_once"' "$RACE_SECOND"; then
+ echo 'CONCURRENT_CLAIM_EXPECTED_ONE_WINNER_FAILED' >&2
+ tail -12 "$RACE_FIRST" >&2; tail -12 "$RACE_SECOND" >&2; exit 2
+fi
+N=$(docker exec "$NAME" psql -At -v ON_ERROR_STOP=1 -U postgres -d isolated -c "SELECT COUNT(*) FROM ai_platform.dev_gpt02_task_attempt_binding_claims WHERE core_command_id='fa2ac381-7ee7-44bf-801f-2d57c9e017e6'")
+[[ "$N" = 1 ]] || { echo "CONCURRENT_CLAIM_ROW_COUNT_INVALID:$N" >&2; exit 2; }
+echo 'CONCURRENT_ONE_WINNER_ONE_DUPLICATE_DENIED_PASS'

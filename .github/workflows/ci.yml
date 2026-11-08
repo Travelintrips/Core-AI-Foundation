@@ -42,6 +42,8 @@ jobs:
         run: node --test scripts/dev/gpt02-cross-ledger-readonly-evidence.test.mjs
       - name: Verify independent task namespaces and assignment evidence remain non-authorizing
         run: node --test scripts/dev/gpt02-task-lineage-ownership.test.mjs
+      - name: Verify GPT02 binding writer preflight cannot self-attest or persist
+        run: node --test scripts/dev/gpt02-binding-writer-preflight.test.mjs
       - name: Verify GPT02 live evidence requires independent authenticated readback
         run: node --test scripts/dev/gpt02-live-evidence-gate.test.mjs
       - name: Verify isolated PostgreSQL task-attempt binding claims are immutable and non-authorizing
