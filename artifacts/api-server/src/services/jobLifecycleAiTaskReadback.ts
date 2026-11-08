@@ -58,6 +58,9 @@ export async function readDevAiTaskJob(commandId:string,
   // explicit negative authority flags, not just a plausible job identity.
   // An upgraded/misconfigured receiver that claims execution authority
   // is never accepted as a GPT02 approval or monitoring certificate.
+  // Require positive indication that this is the passive, tenant-scoped
+  // ledger projection, never an active execution record.
+  if(row["passiveLedger"]!==true)return deny("RECEIVER_NOT_PASSIVE_LEDGER");
   if(row["verifiedExecution"]!==false||row["mayIssueGrant"]!==false||
     row["mayDispatchWorker"]!==false)return deny("RECEIVER_AUTHORITY_CONTRACT_MISMATCH");
   // The passive ledger reconciler can supply the originally assigned

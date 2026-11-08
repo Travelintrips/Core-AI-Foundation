@@ -5,7 +5,7 @@ const job="238e0ad4-3c74-4469-908a-cd49ac6515f2";
 const env={APP_ENV:"development",NODE_ENV:"test",AI_TASK_LEDGER_READBACK_ENABLED:"true",
  AI_TASK_LEDGER_URL:"https://dev-ai-task.cstlogistic.co.id",AI_TASK_BRIDGE_TOKEN:"synthetic-bridge-key-for-offline-tests"};
 const body={found:true,source:"AI_CORE",external_id:"bridge-command:"+id,
- id:job,status:"processing",progress:34,timeline:{commandId:id},readOnly:true,
+ id:job,status:"processing",progress:34,timeline:{commandId:id},readOnly:true,passiveLedger:true,
  verifiedExecution:false,mayIssueGrant:false,mayDispatchWorker:false};
 const mock=(value:unknown,status=200)=>vi.fn(async()=>new Response(JSON.stringify(value),{
  status,headers:{"Content-Type":"application/json"},
@@ -32,6 +32,12 @@ it("wrong worker attribution fails without upgrading absent worker identity",asy
  expect(legitimate.verified).toBe(true);
  const absent=await readDevAiTaskJob(id,env,mock(body));
  expect(absent.verified).toBe(true);
+});
+it("non-passive or omitted provenance is rejected",async()=>{
+ for(const passiveLedger of [false,undefined,null,"true"]){
+  expect(await readDevAiTaskJob(id,env,mock({...body,passiveLedger}))).toEqual({
+   verified:false,reason:"RECEIVER_NOT_PASSIVE_LEDGER"});
+ }
 });
 it("receiver cannot promote ledger identity into execution approval",async()=>{
  for(const changed of [{verifiedExecution:true},{mayIssueGrant:true},{mayDispatchWorker:true},

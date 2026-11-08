@@ -64,6 +64,10 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_RECEIVER_PASSIVE_ORIGIN_REQUIRED','Receiver must explicitly attest passive ledger provenance, not an active execution record',
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('RECEIVER_NOT_PASSIVE_LEDGER') &&
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('row["passiveLedger"]!==true') &&
+  file('artifacts/api-server/src/services/__tests__/jobLifecycleAiTaskReadback.test.ts').includes('non-passive or omitted provenance')),
  check('DEV_RECEIVER_BOUNDED_JSON_STREAM','DEV ledger readback bounds streamed payload to 32 KiB and requires JSON',
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('MAX_LEDGER_BYTES=32*1024') &&
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('response.body.getReader()') &&

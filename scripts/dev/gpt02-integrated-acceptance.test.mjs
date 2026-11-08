@@ -13,7 +13,7 @@ test('source checks pass but explicitly deny real release',()=>{
  assert.equal(status.testGate,'PASS');
  assert.equal(status.releaseDecision,'NO_GO');
  assert.equal(status.noLiveChanges,true);
- assert.equal(status.checks.length,24);
+ assert.equal(status.checks.length,25);
  assert.ok(status.checks.every(g=>g.ok),JSON.stringify(status.checks));
  assert.equal(status.unresolvedBlockers.length,8);
  assert.ok(status.unresolvedBlockers.every(b=>b.id.startsWith('P0_')));
