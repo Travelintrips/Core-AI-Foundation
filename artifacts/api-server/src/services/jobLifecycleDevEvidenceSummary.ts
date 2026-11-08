@@ -63,6 +63,31 @@ export function summarizeDevRecoveryEvidence(commandId:string,source:{
   releaseDecision:"NO_GO",snapshotAtomic:false,maySign:false,mayIssueGrant:false,
   mayDispatchWorker:false,mayCloseJob:false,checks};
 }
+/** Receiver ledger match is observational only, never a worker attestation,
+ * complete lifecycle trace, or grant/dispatch authorization. */
+export function attachDevAiTaskReadback(base:RecoverySummary,receiver:Awaited<ReturnType<typeof readDevAiTaskJob>>):RecoverySummary{
+ const observed=base.found&&receiver.verified===true&&
+   typeof receiver.receiverJobId==="string"&&receiver.receiverJobId.length>0;
+ return {...base,
+  aiTaskLedgerReadbackVerified:observed,
+  aiTaskLedgerReadbackReason:observed?receiver.reason:
+   receiver.verified?"RECEIVER_ID_MISSING":receiver.reason,
+  ...(observed?{
+   aiTaskLedgerReceiverJobId:receiver.receiverJobId,
+   aiTaskLedgerReceiverStatus:receiver.receiverStatus,
+   ...(receiver.receiverProgress!==undefined?{aiTaskLedgerReceiverProgress:receiver.receiverProgress}:{})
+  }:{}),
+  checks:[...base.checks,{
+   id:"ai_task_ledger_identity",state:observed?"OBSERVED" as const:"NOT_VERIFIED" as const,
+   reason:observed?"CORRELATED_DEV_RECEIVER_JOB_OBSERVED_NOT_E2E":
+    receiver.verified?"RECEIVER_ID_MISSING":receiver.reason,
+  }],
+  // Ledger metadata does not prove operator approval, latest blocker,
+  // native worker completion, owner/assignee or progress event history.
+  releaseDecision:"NO_GO" as const,snapshotAtomic:false as const,
+  maySign:false as const,mayIssueGrant:false as const,
+  mayDispatchWorker:false as const,mayCloseJob:false as const};
+}
 export async function getDevCommandEvidenceSummary(commandId:string):Promise<RecoverySummary>{
  if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]==="production"){
   return summarizeDevRecoveryEvidence(commandId,{found:false});
@@ -71,15 +96,5 @@ export async function getDevCommandEvidenceSummary(commandId:string):Promise<Rec
  const base=summarizeDevRecoveryEvidence(commandId,evidence);
  if(!base.found)return base;
  const receiver=await readDevAiTaskJob(commandId);
- return {...base,aiTaskLedgerReadbackVerified:receiver.verified,
-  aiTaskLedgerReadbackReason:receiver.reason,
-  ...(receiver.verified?{
-    aiTaskLedgerReceiverJobId:receiver.receiverJobId,
-    aiTaskLedgerReceiverStatus:receiver.receiverStatus,
-    ...(receiver.receiverProgress!==undefined?{aiTaskLedgerReceiverProgress:receiver.receiverProgress}:{})
-  }:{}),
-  // A matched receiver ID is not a native ACK, approval, attempt lineage,
-  // terminal E2E verification, nor an authorization for anything.
-  releaseDecision:"NO_GO" as const,maySign:false as const,
-  mayIssueGrant:false as const,mayDispatchWorker:false as const,mayCloseJob:false as const};
+ return attachDevAiTaskReadback(base,receiver);
 }
