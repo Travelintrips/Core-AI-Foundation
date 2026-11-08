@@ -48,3 +48,6 @@ The checked-in role-only SQL RFC now throws an unconditional SQLSTATE 0A000 befo
 
 ## Actual readiness module regression (2026-11-08)
 An additional focused Vitest imports the **actual** `isTrustedDevReviewWriterReady()` implementation (not the route's mock) and checks that DEV, test, and production environments remain false even if signing is enabled. The full route suite and actual-readiness suite passed 36/36 locally. This prevents a purely environment-driven activation from being mistaken for a trusted writer.
+
+## Defense-in-depth check at persistence service boundary — 2026-11-08
+The exported application persistence service now independently checks the actual trusted-writer readiness gate **before signature parsing or starting any database transaction**. A future internal caller cannot bypass the route's HTTP readiness guard merely by invoking the persistence service with the signing flag enabled. Existing isolated signer/persistence tests mock only that gate for hypothetical positive paths; an explicit new negative test proves direct service invocation returns TRUSTED_REVIEW_WRITER_NOT_IMPLEMENTED with zero transactions. Three focused Vitest suites passed 54/54 locally. The live readiness implementation remains hard false. This does not implement or authorize a real writer.

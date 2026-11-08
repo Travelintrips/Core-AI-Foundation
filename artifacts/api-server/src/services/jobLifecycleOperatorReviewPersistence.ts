@@ -5,6 +5,7 @@
 import {sql} from "drizzle-orm";
 import {db} from "@workspace/db";
 import {verifyOperatorApprovalProof,type OperatorApprovalProof} from "./jobLifecycleOperatorApprovalProof.js";
+import {isTrustedDevReviewWriterReady} from "./jobLifecycleReviewWriterReadiness.js";
 
 export async function persistSignedDevOperatorReviewIntent(input:{
  proof:OperatorApprovalProof;trustedPublicKeyDerBase64:string|undefined;
@@ -13,6 +14,8 @@ export async function persistSignedDevOperatorReviewIntent(input:{
  const deny=(reason:string)=>({recorded:false,reason,mayIssueGrant:false as const,mayDispatchWorker:false as const});
  if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]==="production"||
     process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"]!=="true")return deny("DEV_DISABLED");
+ // Defense in depth: direct service calls cannot bypass the HTTP route gate.
+ if(!isTrustedDevReviewWriterReady())return deny("TRUSTED_REVIEW_WRITER_NOT_IMPLEMENTED");
  const p=input.proof;
  if(!Number.isSafeInteger(input.operatorUserId)||input.operatorUserId<1||
     p.operatorId!=="internal:"+input.operatorUserId||p.operatorRole!==input.operatorRole)

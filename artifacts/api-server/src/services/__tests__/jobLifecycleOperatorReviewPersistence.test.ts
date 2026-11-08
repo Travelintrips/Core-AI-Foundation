@@ -4,6 +4,8 @@ import {operatorApprovalProofPayload,type OperatorApprovalProof} from "../jobLif
 import {signDevOperatorReviewIntent} from "../jobLifecycleOperatorReviewSigner.js";
 const fake=vi.hoisted(()=>({execute:vi.fn(),transaction:vi.fn()}));
 vi.mock("@workspace/db",()=>({db:{execute:fake.execute,transaction:fake.transaction}}));
+const writer=vi.hoisted(()=>({ready:vi.fn()}));
+vi.mock("../jobLifecycleReviewWriterReadiness.js",()=>({isTrustedDevReviewWriterReady:writer.ready}));
 import {persistSignedDevOperatorReviewIntent} from "../jobLifecycleOperatorReviewPersistence.js";
 const keys=generateKeyPairSync("ed25519");
 const trustedPublicKeyDerBase64=keys.publicKey.export({format:"der",type:"spki"}).toString("base64");
@@ -27,6 +29,7 @@ function invoke(proof:OperatorApprovalProof=makeProof(),user=7){
 }
 beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";
  process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"]="true";
+ writer.ready.mockReset();writer.ready.mockReturnValue(true); // Mock a hypothetical future writer ONLY in isolated tests.
  fake.execute.mockReset();fake.transaction.mockReset();
  fake.transaction.mockImplementation(async (fn:(tx:{execute:typeof fake.execute})=>unknown)=>fn({execute:fake.execute}));});
 afterEach(()=>{delete process.env["APP_ENV"];delete process.env["NODE_ENV"];
@@ -68,6 +71,13 @@ describe("durable review intent audit, never actionable grant",()=>{
   const tampered={...signed.proof!,blockerResponseId:cp};
   const persisted=await invoke(tampered);
   expect(persisted).toMatchObject({recorded:false,reason:"SIGNATURE_INVALID_SIGNATURE",
+   mayIssueGrant:false,mayDispatchWorker:false});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
+ it("refuses direct persistence invocation if trusted writer is unavailable even with valid signed proof",async()=>{
+  writer.ready.mockReturnValue(false);
+  const x=await invoke();
+  expect(x).toMatchObject({recorded:false,reason:"TRUSTED_REVIEW_WRITER_NOT_IMPLEMENTED",
    mayIssueGrant:false,mayDispatchWorker:false});
   expect(fake.transaction).not.toHaveBeenCalled();
  });
