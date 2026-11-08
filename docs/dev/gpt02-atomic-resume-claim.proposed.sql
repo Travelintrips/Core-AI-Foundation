@@ -35,6 +35,13 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_grants (
 CREATE UNIQUE INDEX IF NOT EXISTS dev_gpt02_resume_grants_one_live_per_command
   ON ai_platform.dev_gpt02_resume_grants (command_id) WHERE status IN ('PENDING','APPROVED');
 
+-- A single signed human review may back at most ONE grant for its lifetime.
+-- Unlike one-live-grant-per-command, this blocks replay even after a grant is
+-- REVOKED or CONSUMED. A new request requires a new signed human review.
+CREATE UNIQUE INDEX IF NOT EXISTS dev_gpt02_grants_review_one_time
+ ON ai_platform.dev_gpt02_resume_grants(review_intent_id)
+ WHERE review_intent_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_command_leases (
   command_id uuid PRIMARY KEY REFERENCES ai_platform.ai_coding_bridge_commands(id),
   grant_id uuid NOT NULL REFERENCES ai_platform.dev_gpt02_resume_grants(id),
