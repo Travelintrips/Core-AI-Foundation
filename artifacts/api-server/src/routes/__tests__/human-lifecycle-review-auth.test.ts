@@ -268,6 +268,26 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
      .set('x-isolated-test-session','admin')).status).toBe(400);
    expect(timelineMocks.getGpt02Job135TimelineReadback).not.toHaveBeenCalled();
  });
+ it('timeline cannot bypass session and admin role with a non-lifecycle Human Task ID',async()=>{
+   mocks.getTask.mockResolvedValue({
+     task:{...target,sourceModule:'legacy_backoffice',status:'accepted'},history:[],
+   });
+   const path=url+'/gpt02-timeline?parentCommandId=83db99f5-cbda-4e60-be71-3090fb411bbb&jobId=135';
+   const anon=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id');
+   expect(anon.status).toBe(401);
+   const viewer=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id')
+     .set('x-isolated-test-session','viewer');
+   expect(viewer.status).toBe(403);
+   expect(timelineMocks.getGpt02Job135TimelineReadback).not.toHaveBeenCalled();
+   timelineMocks.getGpt02Job135TimelineReadback.mockResolvedValueOnce({
+      ok:false,reason:'HUMAN_REVIEW_JOB_BINDING_NOT_FOUND',
+      mayDispatchWorker:false,mayCloseJob:false,
+   });
+   const admin=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id')
+     .set('x-isolated-test-session','admin');
+   expect(admin.status).toBe(404);
+   expect(admin.body.reason).toBe('HUMAN_REVIEW_JOB_BINDING_NOT_FOUND');
+ });
  it('DEV GPT02 timeline uses server readback and never grants dispatch',async()=>{
    mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
    timelineMocks.getGpt02Job135TimelineReadback.mockResolvedValueOnce({

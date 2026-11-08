@@ -42,7 +42,14 @@ async function guardLifecycleReview(req: Request, res: Response, next: NextFunct
   if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({error:"INVALID_HUMAN_TASK_ID"}); return; }
   try {
     const {task} = await humanTasks.getTask(id);
-    if (task.sourceModule !== "ai_core_lifecycle") {next(); return;}
+    // Timeline access is always session- and role-protected, even if a
+    // caller supplies the ID of a non-lifecycle Human Task. The readback
+    // service separately validates exact review/job/parent binding.
+    const isTimelineReadback=req.method==="GET" &&
+      req.path.endsWith("/gpt02-timeline");
+    if (task.sourceModule !== "ai_core_lifecycle" && !isTimelineReadback) {
+      next(); return;
+    }
     if (process.env.NODE_ENV !== "development" || process.env.APP_ENV === "production") {
       res.status(403).json({error:"DEV_LIFECYCLE_REVIEW_ONLY"});return;
     }
