@@ -9,11 +9,12 @@
 -- This is a DDL proposal ONLY; not an issuer or authorization to execute.
 CREATE UNIQUE INDEX IF NOT EXISTS dev_gpt02_review_intent_binding_key
  ON ai_platform.dev_gpt02_operator_review_intents
- (id,command_id,checkpoint_response_id,blocker_response_id,worker_id);
+ (id,command_id,checkpoint_response_id,blocker_response_id,worker_id,operator_user_id);
 CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_grants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   command_id uuid NOT NULL REFERENCES ai_platform.ai_coding_bridge_commands(id),
   review_intent_id uuid,
+  operator_user_id integer,
   blocker_response_id uuid NOT NULL REFERENCES ai_platform.ai_coding_bridge_responses(id),
   checkpoint_response_id uuid NOT NULL REFERENCES ai_platform.ai_coding_bridge_responses(id),
   worker_id text NOT NULL CHECK (length(trim(worker_id)) > 0),
@@ -24,10 +25,13 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_grants (
   consumed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT dev_gpt02_grant_review_binding_fk FOREIGN KEY
-   (review_intent_id,command_id,checkpoint_response_id,blocker_response_id,worker_id)
+   (review_intent_id,command_id,checkpoint_response_id,blocker_response_id,worker_id,operator_user_id)
    REFERENCES ai_platform.dev_gpt02_operator_review_intents
-   (id,command_id,checkpoint_response_id,blocker_response_id,worker_id),
-  CHECK (status NOT IN ('APPROVED','CONSUMED') OR review_intent_id IS NOT NULL),
+   (id,command_id,checkpoint_response_id,blocker_response_id,worker_id,operator_user_id),
+  CHECK (status NOT IN ('APPROVED','CONSUMED') OR (review_intent_id IS NOT NULL AND operator_user_id IS NOT NULL)),
+  CHECK (status NOT IN ('APPROVED','CONSUMED') OR approved_by = 'internal:' || operator_user_id::text),
+  CHECK (status NOT IN ('APPROVED','CONSUMED') OR (approved_at IS NOT NULL AND expires_at <= approved_at + interval '120 seconds')),
+  CHECK (approved_at IS NULL OR approved_at >= created_at - interval '5 seconds'),
   CHECK (status <> 'APPROVED' OR (approved_by IS NOT NULL AND length(trim(approved_by)) > 0 AND approved_at IS NOT NULL)),
   CHECK (approved_at IS NULL OR expires_at > approved_at),
   CHECK (status <> 'CONSUMED' OR consumed_at IS NOT NULL)
