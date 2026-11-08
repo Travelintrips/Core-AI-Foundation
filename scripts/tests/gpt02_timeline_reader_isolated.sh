@@ -13,6 +13,12 @@ for i in $(seq 1 120); do
  sleep .25
 done
 if [ "$ready" != true ]; then echo "ISOLATED_POSTGRES_NOT_READY";exit 1;fi
+# Initial postgres bootstrap may briefly return pg_isready before server restart.
+for i in $(seq 1 30); do
+ if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -Atc "SELECT 1" >/dev/null 2>&1; then break;fi
+ sleep .25
+done
+sleep .8
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
 CREATE SCHEMA ai_platform;
 CREATE ROLE aicore_dev_runtime NOLOGIN;
@@ -36,6 +42,16 @@ if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/20261108_gpt0
 fi
 grep -q 'GPT02_DEV_MIGRATION_AUTHORIZATION_REQUIRED' "$tmp/negative.log"
 docker exec "$name" sh -c "psql -U postgres -v ON_ERROR_STOP=1 -c 'SET ai_core.dev_migration_authorized=true' -f /tmp/20261108_gpt02_dev_recovery_reservations.sql -f /tmp/20261108_gpt02_dev_timeline_candidate_reader.sql -f /tmp/20261108_gpt02_dev_timeline_candidate_reader.sql" > "$tmp/positive.log" 2>&1 || { cat "$tmp/positive.log";exit 1; }
+# An attacker with schema CREATE but no table ownership cannot create the
+# SECURITY DEFINER reader, even if they set the migration session flag.
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+CREATE ROLE rogue_migrator NOLOGIN;
+GRANT USAGE, CREATE ON SCHEMA ai_platform TO rogue_migrator;
+SQL
+if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1  -c "SET ROLE rogue_migrator; SET ai_core.dev_migration_authorized=true"  -f /tmp/20261108_gpt02_dev_timeline_candidate_reader.sql > "$tmp/rogue.log" 2>&1; then
+ echo 'FAIL: nonowner migration passed';exit 1
+fi
+grep -q 'GPT02_TIMELINE_MIGRATION_OWNER_OR_RLS_MISMATCH' "$tmp/rogue.log" || { tail -18 "$tmp/rogue.log";exit 1; }
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 <<'SQL' > "$tmp/check.log"
 INSERT INTO ai_platform.gpt02_dev_recovery_reservations
  (parent_command_id,candidate_command_id,human_review_id,job_id,idempotency_key,artifact_sha256)
@@ -76,4 +92,4 @@ BEGIN
  IF n<>0 THEN RAISE EXCEPTION 'CROSS_PARENT_LEAK'; END IF;
 END $verify$;
 SQL
-echo 'PASS: isolated migration twice, unauthorized guard denied, runtime SELECT denied, bound candidate available, cross-review/job/parent and browser roles denied'
+echo 'PASS: isolated migration twice, unauthorized and nonowner guards denied, runtime SELECT denied, bound candidate available, cross-review/job/parent and browser roles denied'

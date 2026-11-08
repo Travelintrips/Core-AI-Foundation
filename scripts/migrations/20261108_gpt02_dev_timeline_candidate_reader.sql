@@ -12,6 +12,22 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='aicore_dev_runtime') THEN
   RAISE EXCEPTION 'GPT02_DEV_RUNTIME_ROLE_MISSING';
  END IF;
+ -- SECURITY DEFINER must execute under the owner of the reservation table.
+ -- That ownership is verified in the actual DEV database before migration:
+ -- postgres owns the table, runtime does not. A separate schema CREATE grant
+ -- must not be sufficient to install a privileged reader.
+ IF NOT EXISTS (
+  SELECT 1 FROM pg_class c
+  WHERE c.oid='ai_platform.gpt02_dev_recovery_reservations'::regclass
+    AND c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user)
+    AND c.relrowsecurity IS TRUE AND c.relforcerowsecurity IS FALSE
+ ) THEN
+  RAISE EXCEPTION 'GPT02_TIMELINE_MIGRATION_OWNER_OR_RLS_MISMATCH';
+ END IF;
+ IF has_table_privilege('aicore_dev_runtime',
+     'ai_platform.gpt02_dev_recovery_reservations','SELECT') THEN
+   RAISE EXCEPTION 'GPT02_TIMELINE_RUNTIME_BROAD_SELECT_DRIFT';
+ END IF;
 END $guard$;
 CREATE OR REPLACE FUNCTION ai_platform.gpt02_dev_timeline_candidate_reader(
  p_review_id integer,p_job_id integer,p_parent_id uuid)
