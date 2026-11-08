@@ -116,6 +116,28 @@ for bad in "UPDATE ai_platform.dev_gpt02_resume_grants SET status='APPROVED';" "
  }
 done
 echo 'PASS: revoked grant cannot be restored or deleted'
+# A PENDING grant may be cancelled, but cannot be promoted to APPROVED
+# via direct DML while the authenticated issuance path does not exist.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,checkpoint_response_id,blocker_response_id,worker_id,status,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','PENDING',clock_timestamp()+interval '90 seconds');" > "$DIR/pending" 2>&1
+for case in pending_to_approved pending_identity_mutation;do
+ if [[ "$case" == pending_to_approved ]];then
+  statement="UPDATE ai_platform.dev_gpt02_resume_grants SET status='APPROVED',review_intent_id='2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',operator_user_id=7,approved_by='internal:7',approved_at=clock_timestamp() WHERE status='PENDING';"
+  reason='GPT02_GRANT_PENDING_PROMOTION_DISABLED'
+ else
+  statement="UPDATE ai_platform.dev_gpt02_resume_grants SET worker_id='other-worker',status='REVOKED' WHERE status='PENDING';"
+  reason='GPT02_GRANT_BINDING_IMMUTABLE'
+ fi
+ if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$statement" > "$DIR/$case" 2>&1;then
+  echo "NO-GO: unsafe PENDING grant transition permitted $case";exit 1
+ fi
+ grep -F "$reason" "$DIR/$case" >/dev/null || {
+  echo "NO-GO: unexpected PENDING grant denial reason ($case)";cat "$DIR/$case";exit 1;
+ }
+done
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.dev_gpt02_resume_grants SET status='REVOKED' WHERE status='PENDING';" > "$DIR/pending_revoke" 2>&1
+pstate="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT COUNT(*) FROM ai_platform.dev_gpt02_resume_grants WHERE status='REVOKED';")"
+[[ "$pstate" == 2 ]] || { echo "NO-GO: pending revoke state $pstate";exit 1; }
+echo 'PASS: PENDING grant cannot self-approve or alter identity; safe revoke remains allowed'
 # Three independent concurrent connections race to mint from the SAME review.
 # Reset ONLY the disposable synthetic fixture using TRUNCATE. This is superuser
 # test setup, never an application API operation; row-level DELETE is guarded.
