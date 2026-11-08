@@ -313,6 +313,19 @@ function TaskDetailDialog({
                   bukan izin resume, checkpoint bertanda tangan, lease, atau final ACK.
                   Hanya reviewer yang ditugaskan dapat mengirim keputusan.
                 </p>
+                <div className="space-y-1 rounded-md border border-border bg-muted/30 p-3 text-xs">
+                  <p className="font-medium">Pemeriksaan sebelum rekomendasi</p>
+                  <p>
+                    {history.some((entry) => entry.action==="artifact_recovery_verified")
+                      ? "Audit pemulihan artefak tercatat. Periksa rincian audit di Riwayat."
+                      : "Bukti pemulihan artefak belum tercatat di riwayat."}
+                  </p>
+                  <p className="text-amber-400">
+                    Prototipe dashboard bukan bukti streaming CCTV nyata, WhatsApp,
+                    checkpoint tertandatangani, ataupun final ACK.
+                  </p>
+                  <p>Status rekomendasi: {recommendationRecorded ? "Sudah dicatat" : "Belum diputuskan"}</p>
+                </div>
                 <p className="text-xs font-mono break-all">
                   Job {Number.isSafeInteger(recoveryJobId) ? recoveryJobId : "tidak valid"} ·
                   Command {recoveryCommandId || "tidak valid"}
@@ -485,11 +498,31 @@ function TaskDetailDialog({
   );
 }
 
+/** Optional direct link to one authorized Human Review; API auth still governs reads. */
+export function parseHumanReviewQuery(search: string): number | null {
+  const value=new URLSearchParams(search).get("review");
+  if(!value || !/^[1-9]\d{0,8}$/.test(value))return null;
+  const id=Number(value);
+  return Number.isSafeInteger(id)&&id>0?id:null;
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function HumanTasksPage() {
   const qc = useQueryClient();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(
+    () => typeof window==="undefined" ? null : parseHumanReviewQuery(window.location.search)
+  );
+  function closeSelectedReview() {
+    setSelectedId(null);
+    if(typeof window!=="undefined") {
+      const url=new URL(window.location.href);
+      if(url.searchParams.has("review")) {
+        url.searchParams.delete("review");
+        window.history.replaceState(window.history.state,"",url.pathname+url.search+url.hash);
+      }
+    }
+  }
   const [filters, setFilters] = useState<ListHumanTasksParams>({ limit: 50, offset: 0 });
   const [statusFilter, setStatusFilter] = useState("__all__");
   const [deptFilter, setDeptFilter] = useState("__all__");
@@ -772,7 +805,7 @@ export default function HumanTasksPage() {
       <TaskDetailDialog
         taskId={selectedId}
         open={selectedId !== null}
-        onClose={() => setSelectedId(null)}
+        onClose={closeSelectedReview}
       />
     </div>
   );
