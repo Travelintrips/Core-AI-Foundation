@@ -49,12 +49,13 @@ SQL
 # Execute exact checked-in proposal (no copied/reimplemented function).
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q < docs/dev/gpt02-atomic-resume-claim.proposed.sql
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
+-- Keep fixture TTL below 120s: separate clock_timestamp() evaluations are not identical.
 INSERT INTO ai_platform.dev_gpt02_resume_grants
 (command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at)
 VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,
 '822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112',
 'openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',clock_timestamp(),
-clock_timestamp()+interval '2 minutes');
+clock_timestamp()+interval '90 seconds');
 SQL
 # Missing review must fail, and an unrelated response/worker must not
 # satisfy the composite FK even with a valid review ID.
