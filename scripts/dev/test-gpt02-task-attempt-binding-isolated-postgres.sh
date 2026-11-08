@@ -11,6 +11,45 @@ for _ in $(seq 1 35); do if docker exec "$NAME" pg_isready -U postgres -d isolat
 docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$ROOT/docs/dev/gpt02-task-attempt-binding.proposed.sql" >/dev/null
 # Script is idempotent for schema and trigger (no rows yet).
 docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$ROOT/docs/dev/gpt02-task-attempt-binding.proposed.sql" >/dev/null
+# Real catalog drift is checked separately; rerunning CREATE IF NOT EXISTS alone
+# must never turn a schema mismatch into a passing verification.
+GUARD="$ROOT/scripts/dev/gpt02-task-binding-schema-drift-guard.sql"
+docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$GUARD" >/dev/null
+assert_guard_rejects(){
+ local patch="$1" label="$2" log
+ log=$(mktemp)
+ # A failed patch is NOT a passing drift test: require explicit proof that
+ # the patch applied, followed by the guard's specific drift error.
+ if {
+  printf 'BEGIN;\n%s\n' "$patch"
+  printf "SELECT 'GPT02_DRIFT_PATCH_APPLIED' AS marker;\n"
+  cat "$GUARD"
+ } | docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated >"$log" 2>&1; then
+  cat "$log" >&2; rm -f "$log"
+  echo "DRIFT_NOT_DETECTED:$label" >&2; exit 2
+ fi
+ if ! grep -q 'GPT02_DRIFT_PATCH_APPLIED' "$log" || ! grep -Eq 'ERROR:.*GPT02_BINDING_.*DRIFT' "$log"; then
+  cat "$log" >&2; rm -f "$log"
+  echo "PATCH_OR_GUARD_FAILED_UNEXPECTEDLY:$label" >&2; exit 2
+ fi
+ rm -f "$log"
+ echo "${label}_DRIFT_DENIED_PASS"
+}
+
+assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT claim_core_command_once;' 'UNIQUE_COMMAND'
+assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT claim_attempt_once;' 'UNIQUE_ATTEMPT'
+assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT dev_gpt02_task_attempt_binding_claims_binding_verified_check;' 'SELF_ATTESTATION'
+assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT dev_gpt02_task_attempt_binding_claims_may_dispatch_worker_check;' 'DISPATCH'
+assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DISABLE TRIGGER dev_gpt02_task_binding_immutable_trg;' 'IMMUTABLE_TRIGGER'
+assert_guard_rejects 'GRANT INSERT ON ai_platform.dev_gpt02_task_attempt_binding_claims TO PUBLIC;' 'PUBLIC_INSERT'
+# A new role must not bypass the no-runtime-writer policy.
+docker exec "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated -c 'CREATE ROLE unauthorized_new_writer;' >/dev/null
+assert_guard_rejects 'GRANT INSERT ON ai_platform.dev_gpt02_task_attempt_binding_claims TO unauthorized_new_writer;' 'UNKNOWN_WRITER'
+assert_guard_rejects 'CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_task_binding_immutable() RETURNS trigger LANGUAGE plpgsql AS $body$ BEGIN RETURN NEW; END; $body$;' 'FUNCTION_BODY'
+assert_guard_rejects 'CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_task_binding_immutable() RETURNS trigger LANGUAGE plpgsql AS $body$ BEGIN /* RAISE EXCEPTION ''GPT02_TASK_BINDING_IMMUTABLE'' */ RETURN NEW; END; $body$;' 'FUNCTION_COMMENT_SPOOF'
+
+# Ensure every attempted drift remained isolated to an aborted transaction.
+docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated < "$GUARD" >/dev/null
 cat <<'SQL' | docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d isolated >/tmp/gpt02-task-binding-$$.log
 DO $test$
 DECLARE

@@ -64,6 +64,11 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_BINDING_SCHEMA_DRIFT_GUARD','Independent catalog inspection rejects altered schema, trigger, grants and function spoofing',
+  file('scripts/dev/gpt02-task-binding-schema-drift-guard.sql').includes('GPT02_BINDING_SCHEMA_DRIFT_GUARD_PASS') &&
+  file('scripts/dev/gpt02-task-binding-schema-drift-guard.sql').includes('GPT02_BINDING_UNAUTHORIZED_WRITE_GRANT_DRIFT') &&
+  file('scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh').includes('FUNCTION_COMMENT_SPOOF') &&
+  file('scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh').includes('GPT02_DRIFT_PATCH_APPLIED')),
  check('DEV_BINDING_CLAIM_PROTOTYPE_INERT','Proposed task-attempt binding has strict uniqueness and cannot authorize execution',
   file('docs/dev/gpt02-task-attempt-binding.proposed.sql').includes('binding_verified boolean NOT NULL DEFAULT false CHECK (binding_verified=false)') &&
   file('docs/dev/gpt02-task-attempt-binding.proposed.sql').includes('may_dispatch_worker boolean NOT NULL DEFAULT false CHECK (may_dispatch_worker=false)') &&
