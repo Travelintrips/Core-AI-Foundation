@@ -73,6 +73,10 @@ const gates=[
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('VALID_SIGNATURE_BUT_NO_INDEPENDENT_RUNTIME_ATTESTOR') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('independentAttestationVerified:false') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.test.mjs').includes('wrong key or edited payload fails')),
+ check('DEV_BINDING_SERVER_OPERATOR_BOUNDARY','Only server-reloaded internal principal may be considered for offline binding review',
+  file('scripts/dev/gpt02-binding-trusted-operator-boundary.mjs').includes('SERVER_PRINCIPAL_SHAPE_OBSERVED_NOT_TRUSTED_WRITER') &&
+  file('scripts/dev/gpt02-binding-trusted-operator-boundary.mjs').includes('REQUEST_FIELDS_NOT_ALLOWLISTED') &&
+  file('scripts/dev/gpt02-binding-trusted-operator-boundary.mjs').includes('mayPersistBinding:false')),
  check('DEV_BINDING_WRITER_FAIL_CLOSED','Binding writer preview cannot persist without independent attestor and session',
   file('scripts/dev/gpt02-binding-writer-preflight.mjs').includes('authorizedWriterReady=false') &&
   file('scripts/dev/gpt02-binding-writer-preflight.mjs').includes('independentAttestationVerified=false') &&
