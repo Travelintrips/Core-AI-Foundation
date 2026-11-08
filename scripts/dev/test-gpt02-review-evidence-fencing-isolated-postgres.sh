@@ -20,12 +20,15 @@ CREATE ROLE writer NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE verified_service NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE runtime NOLOGIN;
 CREATE ROLE issuer NOLOGIN NOINHERIT NOBYPASSRLS;
+CREATE ROLE attestor NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE lease_worker NOLOGIN NOINHERIT NOBYPASSRLS;
 -- Disposable real login identities with unique test-only credentials. All
 -- connections are to the networkless PostgreSQL container via loopback.
 CREATE ROLE runtime_login LOGIN PASSWORD 'isolated-runtime-credential';
 CREATE ROLE writer_login LOGIN PASSWORD 'isolated-writer-credential';
 CREATE ROLE verifier_login LOGIN PASSWORD 'isolated-verifier-credential';
+CREATE ROLE attestor_login LOGIN PASSWORD 'isolated-attestor-credential';
+GRANT attestor TO attestor_login;
 CREATE ROLE issuer_login LOGIN PASSWORD 'isolated-issuer-credential';
 CREATE ROLE lease_worker_login LOGIN PASSWORD 'isolated-worker-credential';
 GRANT issuer TO issuer_login;
@@ -34,7 +37,7 @@ GRANT runtime TO runtime_login;
 GRANT writer TO writer_login;
 GRANT verified_service TO verifier_login;
 CREATE SCHEMA isolated;
-GRANT USAGE ON SCHEMA isolated TO writer,runtime,verified_service,issuer,lease_worker;
+GRANT USAGE ON SCHEMA isolated TO writer,runtime,verified_service,issuer,lease_worker,attestor;
 CREATE TABLE isolated.commands(id integer PRIMARY KEY,status text NOT NULL);
 CREATE TABLE isolated.responses(id integer PRIMARY KEY, command_id integer NOT NULL REFERENCES isolated.commands(id),
  kind text NOT NULL, created_at integer NOT NULL, acknowledged boolean NOT NULL DEFAULT false);
@@ -99,6 +102,24 @@ REVOKE ALL ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb
 GRANT EXECUTE ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb) TO verified_service;
 -- ONE disposable database now exercises the review -> grant -> lease ->
 -- fenced completion chain. This does not authenticate Ed25519 in PostgreSQL.
+CREATE TABLE isolated.review_attestations(
+ audit_id integer PRIMARY KEY REFERENCES isolated.audit(id),
+ proof_digest text NOT NULL,
+ attested_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE FUNCTION isolated.attest_review(p_audit integer,p_digest text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,isolated AS $$
+DECLARE v_inserted integer;
+BEGIN
+ INSERT INTO isolated.review_attestations(audit_id,proof_digest)
+ SELECT a.id,p_digest FROM isolated.audit a
+ WHERE a.id=p_audit AND p_digest=md5(a.proof_json::text)
+   AND (a.proof_json->>'expiresAt')::timestamptz > clock_timestamp()
+ ON CONFLICT (audit_id) DO NOTHING RETURNING audit_id INTO v_inserted;
+ RETURN v_inserted IS NOT NULL;
+END $$;
+REVOKE ALL ON FUNCTION isolated.attest_review(integer,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION isolated.attest_review(integer,text) TO attestor;
 CREATE TABLE isolated.grants(
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
  command_id integer NOT NULL REFERENCES isolated.commands(id),
@@ -131,7 +152,10 @@ BEGIN
  IF NOT FOUND THEN RETURN NULL; END IF;
  -- Source audit must be the actual, latest verified synthetic review proof.
  -- The SQL audit alone does NOT cryptographically authenticate the signature.
- IF v_audit.proof_json->>'operatorId' IS DISTINCT FROM 'internal:7'
+ IF NOT EXISTS (
+  SELECT 1 FROM isolated.review_attestations a
+  WHERE a.audit_id=v_audit.id AND a.proof_digest=md5(v_audit.proof_json::text)
+ ) OR v_audit.proof_json->>'operatorId' IS DISTINCT FROM 'internal:7'
    OR v_audit.proof_json->>'workerId' IS DISTINCT FROM p_worker
    OR (v_audit.proof_json->>'expiresAt')::timestamptz <= clock_timestamp()
    OR NOT EXISTS(
@@ -204,7 +228,9 @@ test_case() {
 # The actual app verifies a freshly signed Ed25519 proof before the isolated
 # SQL routine is invoked. Database checks proof identity and column bindings
 # but cannot cryptographically verify the signature itself.
-signed_proof_b64="$(cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts valid)"
+bundle_b64="$(cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts bundle)"
+signed_proof_b64="$(printf '%s' "$bundle_b64" | base64 -d | python3 -c 'import json,sys,base64; b=json.load(sys.stdin); print(base64.b64encode(json.dumps(b["proof"]).encode()).decode())')"
+trusted_pub_b64="$(printf '%s' "$bundle_b64" | base64 -d | python3 -c 'import json,sys; print(json.load(sys.stdin)["publicKeyDerBase64"])')"
 [[ "$signed_proof_b64" =~ ^[a-zA-Z0-9+/]+={0,2}$ ]] || { echo "FAIL verified proof encoding";exit 1; }
 test_case "REAL ED25519 VERIFIED BEFORE PROOF-BOUND SYNTHETIC APPEND" t "$signed_proof_b64"
 test_case "SIGNED NONCE REPLAY DENIED WITHOUT SECOND AUDIT" f "$signed_proof_b64"
@@ -275,7 +301,34 @@ if issuer_sql "SELECT isolated.claim_grant(1,'openclaw-dell-chatgpt-wake-dev')" 
  echo "FAIL issuer claimed a worker lease";exit 1
 fi
 echo "END-TO-END ROLE SEPARATION PASS"
-audit_id="$(docker exec "$name" psql -U postgres -qAt -c "SELECT id FROM isolated.audit WHERE nonce=(SELECT proof_json->>'nonce' FROM isolated.audit ORDER BY id DESC LIMIT 1) ORDER BY id DESC LIMIT 1")"
+forged_id="$(docker exec "$name" psql -U postgres -qAt -c "SELECT id FROM isolated.audit WHERE nonce=repeat('a',64)")"
+[ -n "$forged_id" ] || { echo "FAIL synthetic forged audit not found"; exit 1; }
+[ "$(issuer_sql "SELECT isolated.issue_grant($forged_id,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL un-attested forged audit issued grant"; exit 1; }
+if issuer_sql "SELECT isolated.attest_review($forged_id,'incorrect')" >/dev/null 2>&1; then echo "FAIL issuer could self-attest";exit 1;fi
+if docker exec -e PGPASSWORD=isolated-verifier-credential "$name" psql -h 127.0.0.1 -U verifier_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "SELECT isolated.attest_review($forged_id,'incorrect')" >/dev/null 2>&1; then echo "FAIL verifier could self-attest";exit 1;fi
+echo "FORGED AUDIT ISSUANCE AND SELF-ATTESTATION DENIED PASS"
+signed_nonce="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys; print(json.load(sys.stdin)["nonce"])')"
+[[ "$signed_nonce" =~ ^[a-f0-9]{64}$ ]] || { echo "FAIL verified nonce format";exit 1; }
+audit_id="$(docker exec "$name" psql -U postgres -qAt -c "SELECT id FROM isolated.audit WHERE nonce='$signed_nonce'")"
+[ "$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL un-attested valid audit issued grant"; exit 1; }
+# A second process reads persisted audit bytes and cryptographically checks
+# them with the pinned ephemeral test trust key BEFORE the attestor DB call.
+for audit_to_check in "$audit_id" "$forged_id"; do
+ proof_from_db="$(docker exec "$name" psql -U postgres -qAt -c "SELECT replace(encode(convert_to(proof_json::text,'UTF8'),'base64'),chr(10),'') FROM isolated.audit WHERE id=$audit_to_check")"
+ if [ "$audit_to_check" = "$audit_id" ]; then
+   (cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewAuditProofCheck.ts "$trusted_pub_b64" "$proof_from_db")
+ else
+   if (cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewAuditProofCheck.ts "$trusted_pub_b64" "$proof_from_db") >/dev/null 2>&1; then
+    echo "FAIL forged persisted audit passed independent Ed25519 check"; exit 1
+   fi
+   echo "FORGED PERSISTED AUDIT ED25519 DENIED PASS"
+ fi
+done
+attestor_sql() { docker exec -e PGPASSWORD=isolated-attestor-credential "$name" psql -h 127.0.0.1 -U attestor_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "$1"; }
+digest="$(docker exec "$name" psql -U postgres -qAt -c "SELECT md5(proof_json::text) FROM isolated.audit WHERE id=$audit_id")"
+[ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest')")" = t ] || { echo "FAIL attestor cannot attest";exit 1; }
+[ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest')")" = f ] || { echo "FAIL attestation replay";exit 1; }
+[ "$(attestor_sql "SELECT isolated.attest_review($forged_id,'bad-digest')")" = f ] || { echo "FAIL invalid audit digest attested";exit 1; }
 grant="$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")"
 [[ "$grant" =~ ^[0-9]+$ ]] || { echo "FAIL signed audit did not yield synthetic grant";exit 1; }
 [ "$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL replay grant issuance";exit 1; }

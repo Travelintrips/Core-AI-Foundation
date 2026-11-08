@@ -15,7 +15,7 @@ const isContractMode=mode?.startsWith("contract-")??false;
 const isChildMode=mode?.startsWith("child-")??false;
 const variant=isContractMode?mode!.slice("contract-".length):
  isChildMode?mode!.slice("child-".length):mode;
-if(variant!=="valid"&&variant!=="tampered"&&variant!=="expired"&&variant!=="injected"){
+if(variant!=="valid"&&variant!=="tampered"&&variant!=="expired"&&variant!=="injected"&&variant!=="bundle"){
   process.stderr.write("INVALID_TEST_MODE\n");process.exit(2);
 }
 const {privateKey,publicKey}=generateKeyPairSync("ed25519");
@@ -113,5 +113,8 @@ const verified=verifyOperatorApprovalProof({
 if(!verified.validForReview){
  process.stderr.write("PROOF_DENIED:"+verified.reason+"\n");process.exit(3);
 }
-if(variant!=="valid"){process.stderr.write("UNEXPECTED_PROOF_ACCEPTANCE\n");process.exit(4);}
-process.stdout.write(Buffer.from(JSON.stringify(proof),"utf8").toString("base64")+"\n");
+if(variant!=="valid"&&variant!=="bundle"){process.stderr.write("UNEXPECTED_PROOF_ACCEPTANCE\n");process.exit(4);}
+const output=variant==="bundle"?{
+ proof, publicKeyDerBase64:publicKey.export({format:"der",type:"spki"}).toString("base64")
+}:proof;
+process.stdout.write(Buffer.from(JSON.stringify(output),"utf8").toString("base64")+"\n");

@@ -39,6 +39,11 @@ const gates=[
   existsSync(resolve(root,'scripts/dev/test-gpt02-resume-isolated-postgres.sh'))),
  check('GRANT_ISSUANCE_CONTRACT','Isolated grant issuance test exists',
   existsSync(resolve(root,'scripts/dev/test-gpt02-issuance-isolated-postgres.sh'))),
+ check('CRYPTO_ATTESTATION_CHAIN_PROTOTYPE','Persisted audit Ed25519 reverified before separate role attestation and grant',
+  file('artifacts/api-server/src/scripts/devReviewAuditProofCheck.ts').includes('verifyOperatorApprovalProof(') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('devReviewAuditProofCheck.ts') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('FORGED PERSISTED AUDIT ED25519 DENIED PASS') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('FORGED AUDIT ISSUANCE AND SELF-ATTESTATION DENIED PASS')),
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
