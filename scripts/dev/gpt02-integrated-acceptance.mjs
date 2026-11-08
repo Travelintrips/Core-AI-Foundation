@@ -73,6 +73,11 @@ const gates=[
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('VALID_SIGNATURE_BUT_NO_INDEPENDENT_RUNTIME_ATTESTOR') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('independentAttestationVerified:false') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.test.mjs').includes('wrong key or edited payload fails')),
+ check('DEV_BINDING_SCOPED_DATABASE_ROLES','Disposable nonowner writer and independent reader have mutually exclusive permissions',
+  file('scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh').includes('SCOPED_NONOWNER_WRITER_COMMIT_PASS') &&
+  file('scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh').includes('INDEPENDENT_SCOPED_READBACK_PASS') &&
+  file('scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh').includes("assert_denied 'RUNTIME_INSERT'") &&
+  file('scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh').includes("assert_denied 'WRITER_UPDATE'")),
  check('DEV_BINDING_OFFLINE_INTEGRATION_DENIES_WRITER','Operator, two snapshots and signed evidence form no write authority without trusted runtime',
   file('scripts/dev/gpt02-binding-integrated-evidence-gate.mjs').includes('OFFLINE_CORRELATION_ONLY_NO_TRUSTED_WRITER') &&
   file('scripts/dev/gpt02-binding-integrated-evidence-gate.mjs').includes('mayPersistBinding:false') &&

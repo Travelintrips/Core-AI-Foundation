@@ -56,6 +56,8 @@ jobs:
         run: bash scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh
       - name: Verify atomic nonce reservation and binding replay denial in isolated PostgreSQL
         run: bash scripts/dev/test-gpt02-binding-nonce-atomic-isolated-postgres.sh
+      - name: Verify scoped database writer, separate reader and runtime role denial
+        run: bash scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
         run: bash scripts/dev/test-gpt02-resume-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 operator grant issuance contract
