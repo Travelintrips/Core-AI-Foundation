@@ -12,6 +12,19 @@ for _ in $(seq 1 45); do
  sleep 1
 done
 [[ "$ready" == 1 ]] || { echo 'ISOLATED_NONCE_POSTGRES_UNAVAILABLE'; exit 2; }
+# Exercise the live-facing preflight in a disposable database only.
+# Keep its relative psql includes together inside the disposable container.
+docker exec "$NAME" mkdir -p /tmp/gpt02-schema-preflight
+for guard in gpt02-live-dev-migration-preflight.sql gpt02-task-binding-schema-drift-guard.sql gpt02-binding-nonce-schema-drift-guard.sql; do
+ docker cp "$ROOT/scripts/dev/$guard" "$NAME:/tmp/gpt02-schema-preflight/$guard" >/dev/null
+done
+if docker exec "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated -f /tmp/gpt02-schema-preflight/gpt02-live-dev-migration-preflight.sql > "$TMPDIR_TEST/absent-preflight.log" 2>&1; then
+ echo 'ABSENT_SCHEMA_PREFLIGHT_UNEXPECTED_PASS' >&2; exit 2
+fi
+grep -q 'GPT02_DEV_SCHEMA_NOT_INSTALLED_REQUIRES_SEPARATE_APPROVED_MIGRATION' "$TMPDIR_TEST/absent-preflight.log" || {
+ cat "$TMPDIR_TEST/absent-preflight.log" >&2; echo 'ABSENT_SCHEMA_PREFLIGHT_WRONG_REASON' >&2; exit 2;
+}
+echo 'ABSENT_SCHEMA_PREFLIGHT_FAIL_CLOSED_PASS'
 for sql in "$ROOT/docs/dev/gpt02-task-attempt-binding.proposed.sql" "$ROOT/docs/dev/gpt02-binding-attestation-nonces.proposed.sql"; do
  docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$sql" >/dev/null
 done
@@ -40,6 +53,14 @@ assert_nonce_drift_denied GRANT 'GRANT INSERT ON ai_platform.dev_gpt02_binding_a
 assert_nonce_drift_denied DENIAL 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DROP CONSTRAINT dev_gpt02_binding_attestation_nonces_may_issue_grant_check;'
 # All rejected mutations must have rolled back.
 docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$NONCE_GUARD" >/dev/null
+# Once both inert proposal tables exist, catalog readback must pass.
+docker exec "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated -f /tmp/gpt02-schema-preflight/gpt02-live-dev-migration-preflight.sql > "$TMPDIR_TEST/present-preflight.log" 2>&1 || {
+ cat "$TMPDIR_TEST/present-preflight.log" >&2; echo 'PRESENT_SCHEMA_PREFLIGHT_FAILED' >&2; exit 2;
+}
+grep -q 'GPT02_DEV_INERT_SCHEMA_PREFLIGHT_PASS_NOT_RELEASE_AUTHORIZATION' "$TMPDIR_TEST/present-preflight.log" || {
+ echo 'PREFLIGHT_SUCCESS_MARKER_MISSING' >&2; exit 2;
+}
+echo 'PRESENT_INERT_SCHEMA_PREFLIGHT_PASS'
 cat > "$TMPDIR_TEST/race.sql" <<'SQL'
 \set ON_ERROR_STOP on
 BEGIN;
