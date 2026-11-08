@@ -5,6 +5,14 @@
 -- authenticated DEV-only review writer service.
 -- Never attach the writer role to aicore_dev_runtime or to public roles.
 BEGIN;
+-- Deliberate unconditional stop. The role-only RFC permits unsigned INSERT
+-- and is NOT a security-reviewed writer implementation. Do not execute it.
+DO $rfc_disabled$
+BEGIN
+ RAISE EXCEPTION 'GPT02_REVIEW_WRITER_RFC_UNSAFE_NOT_DEPLOYABLE'
+ USING ERRCODE='0A000';
+END
+$rfc_disabled$;
 DO $guard$
 BEGIN
  IF to_regclass('ai_platform.dev_gpt02_operator_review_intents') IS NULL

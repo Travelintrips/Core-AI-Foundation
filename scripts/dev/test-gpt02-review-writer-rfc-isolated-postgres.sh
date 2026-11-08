@@ -23,7 +23,27 @@ GRANT SELECT ON ai_platform.dev_gpt02_operator_review_intents TO aicore_dev_runt
 CREATE POLICY dev_gpt02_review_runtime_select
  ON ai_platform.dev_gpt02_operator_review_intents FOR SELECT TO aicore_dev_runtime USING (true);
 SQL
-docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q < docs/dev/gpt02-review-writer-rfc.proposed.sql
+# The exact checked-in RFC must refuse direct execution and rollback.
+if docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q < docs/dev/gpt02-review-writer-rfc.proposed.sql > /dev/null 2>&1; then
+ echo "FAIL: unsafe RFC applied without review";exit 1
+fi
+role_count="$(docker exec "$name" psql -U postgres -qAt -c "SELECT count(*) FROM pg_roles WHERE rolname='gpt02_dev_review_writer'")"
+[ "$role_count" = 0 ] || { echo "FAIL: RFC created writer role despite refusal";exit 1; }
+echo "EXACT SQL RFC FAIL-CLOSED PASS"
+# Only within this disposable networkless DB, strip the explicit blocker to
+# exercise the intentionally unsafe model; never produce a deployable artifact.
+work="$(mktemp /tmp/gpt02-rfc-synthetic.XXXXXX)"
+trap 'docker rm -f "$name" >/dev/null 2>&1 || :; rm -f "$work"' EXIT
+python3 - "$work" <<'INTERNAL'
+from pathlib import Path
+import sys
+s=Path('docs/dev/gpt02-review-writer-rfc.proposed.sql').read_text()
+start=s.index('DO $rfc_disabled$')
+end=s.index('$rfc_disabled$;',start)+len('$rfc_disabled$;')
+assert s.count('DO $rfc_disabled$')==1
+Path(sys.argv[1]).write_text(s[:start]+s[end:])
+INTERNAL
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q < "$work"
 rights="$(docker exec "$name" psql -U postgres -qAt -c "SELECT
 has_table_privilege('aicore_dev_runtime','ai_platform.dev_gpt02_operator_review_intents','INSERT'),
 has_table_privilege('gpt02_dev_review_writer','ai_platform.dev_gpt02_operator_review_intents','INSERT'),
@@ -58,7 +78,7 @@ if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET ROLE aicor
  echo "FAIL: ordinary runtime gained INSERT";exit 1
 fi
 echo "MAIN RUNTIME INSERT DENIED PASS"
-if docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q < docs/dev/gpt02-review-writer-rfc.proposed.sql >/dev/null 2>&1; then
+if docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q < "$work" >/dev/null 2>&1; then
  echo "FAIL: review-required policy replay not refused";exit 1
 fi
 echo "POLICY REPLAY FAIL-CLOSED PASS"
