@@ -29,5 +29,6 @@ jobs:
         with:
           node-version: '22'
       - run: node --test scripts/windows/ai-core/work-event-stream.test.mjs
+      - run: node --test scripts/windows/ai-core/test-gpt02-job135-native-history-census.mjs
       - run: node --check scripts/windows/ai-core/openclaw-dell-role-consumer.mjs
       - run: python -m unittest discover -s scripts/windows -p 'test_openclaw_pc_model_free.py' -v
