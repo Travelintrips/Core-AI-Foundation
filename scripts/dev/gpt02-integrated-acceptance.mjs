@@ -73,6 +73,10 @@ const gates=[
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('VALID_SIGNATURE_BUT_NO_INDEPENDENT_RUNTIME_ATTESTOR') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('independentAttestationVerified:false') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.test.mjs').includes('wrong key or edited payload fails')),
+ check('DEV_BINDING_OFFLINE_INTEGRATION_DENIES_WRITER','Operator, two snapshots and signed evidence form no write authority without trusted runtime',
+  file('scripts/dev/gpt02-binding-integrated-evidence-gate.mjs').includes('OFFLINE_CORRELATION_ONLY_NO_TRUSTED_WRITER') &&
+  file('scripts/dev/gpt02-binding-integrated-evidence-gate.mjs').includes('mayPersistBinding:false') &&
+  file('scripts/dev/gpt02-binding-integrated-evidence-gate.test.mjs').includes('full synthetic signed operator/source/receiver/attempt correlation still NO-GO')),
  check('DEV_BINDING_SERVER_OPERATOR_BOUNDARY','Only server-reloaded internal principal may be considered for offline binding review',
   file('scripts/dev/gpt02-binding-trusted-operator-boundary.mjs').includes('SERVER_PRINCIPAL_SHAPE_OBSERVED_NOT_TRUSTED_WRITER') &&
   file('scripts/dev/gpt02-binding-trusted-operator-boundary.mjs').includes('REQUEST_FIELDS_NOT_ALLOWLISTED') &&

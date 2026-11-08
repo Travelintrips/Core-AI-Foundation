@@ -46,6 +46,8 @@ jobs:
         run: node --test scripts/dev/gpt02-binding-writer-preflight.test.mjs
       - name: Verify GPT02 binding operator trust boundary denies client-supplied identity
         run: node --test scripts/dev/gpt02-binding-trusted-operator-boundary.test.mjs
+      - name: Verify integrated offline GPT02 operator-readback-attestation chain remains non-authorizing
+        run: node --test scripts/dev/gpt02-binding-integrated-evidence-gate.test.mjs
       - name: Verify offline binding Ed25519 evidence remains non-authorizing
         run: node --test scripts/dev/gpt02-binding-attestation-verifier.test.mjs
       - name: Verify GPT02 live evidence requires independent authenticated readback
