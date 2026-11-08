@@ -3,7 +3,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 import {generateKeyPairSync} from "node:crypto";
-const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null,preflight:vi.fn(),recovery:vi.fn(),persist:vi.fn(),verifyStored:vi.fn()}));
+const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null,preflight:vi.fn(),recovery:vi.fn(),persist:vi.fn(),verifyStored:vi.fn(),writerReady:vi.fn()}));
 vi.mock("../internalAuthService.js",()=>({
  SESSION_COOKIE_NAME:"internal_session",
  verifySessionToken:(token:string)=>token==="valid-session"?{sub:7}:null,
@@ -14,6 +14,7 @@ vi.mock("../jobLifecycleOperatorCommandPreflight.js",()=>({getDevResumeOperatorC
 vi.mock("../jobLifecycleRecoveryReview.js",()=>({getDevCommandRecoveryReview:m.recovery}));
 vi.mock("../jobLifecycleStoredReviewReadback.js",()=>({getDevStoredReviewReadback:m.verifyStored}));
 vi.mock("../jobLifecycleOperatorReviewPersistence.js",()=>({persistSignedDevOperatorReviewIntent:m.persist}));
+vi.mock("../jobLifecycleReviewWriterReadiness.js",()=>({isTrustedDevReviewWriterReady:m.writerReady}));
 import route from "../../routes/dev-resume-operator-review.js";
 import {adminAuthWithExceptions,optionalSessionAuth} from "../../middleware/adminAuth.js";
 const app=express();
@@ -23,7 +24,7 @@ app.use(route);
 const url="/ai/core-chat/dev/resume/operator-readiness";
 const valid=()=>({id:7,role:"admin",status:"active",accountType:"internal",
  email:"admin@example.test",mustChangePassword:false});
-beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();m.preflight.mockReset();m.preflight.mockResolvedValue({found:true,reason:"BLOCKED",grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.verifyStored.mockReset();m.verifyStored.mockResolvedValue({verified:false,reason:"STORED_REVIEW_NOT_FOUND",mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.persist.mockReset();m.persist.mockResolvedValue({recorded:false,reason:"TEST_AUDIT_NOT_CONFIGURED",mayIssueGrant:false,mayDispatchWorker:false});m.recovery.mockReset();m.recovery.mockResolvedValue({found:true,commandStatus:"FAILED",checkpointResponseId:"822efca2-7428-428a-ac66-548c0462438e",blockingResponseId:null,checkpointAttested:true,receiverAckVerified:true,blockerEvidenceValid:false,responseSnapshotComplete:true});});
+beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();m.writerReady.mockReset();m.writerReady.mockReturnValue(false);m.preflight.mockReset();m.preflight.mockResolvedValue({found:true,reason:"BLOCKED",grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.verifyStored.mockReset();m.verifyStored.mockResolvedValue({verified:false,reason:"STORED_REVIEW_NOT_FOUND",mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.persist.mockReset();m.persist.mockResolvedValue({recorded:false,reason:"TEST_AUDIT_NOT_CONFIGURED",mayIssueGrant:false,mayDispatchWorker:false});m.recovery.mockReset();m.recovery.mockResolvedValue({found:true,commandStatus:"FAILED",checkpointResponseId:"822efca2-7428-428a-ac66-548c0462438e",blockingResponseId:null,checkpointAttested:true,receiverAckVerified:true,blockerEvidenceValid:false,responseSnapshotComplete:true});});
 afterEach(()=>{for(const key of ["APP_ENV","NODE_ENV","AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED","AI_CORE_DEV_OPERATOR_REVIEW_ORIGIN","AI_CORE_DEV_OPERATOR_APPROVAL_PRIVATE_KEY_DER_BASE64","AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"]) delete process.env[key];});
 describe("GPT02 DEV resume operator readiness uses real internal session and DB role guards",()=>{
  it("denies no session even with admin API key header",async()=>{
@@ -187,6 +188,7 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
  const signingKeys=generateKeyPairSync("ed25519");
  const cpId="822efca2-7428-428a-ac66-548c0462438e",blockId="08b7b237-7a16-46d0-b79d-029d0363c112";
  const setValidSigningEnvironment=()=>{
+  m.writerReady.mockReturnValue(true); // mock only: real writer remains unavailable
   process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"]="true";
   process.env["AI_CORE_DEV_OPERATOR_REVIEW_ORIGIN"]="https://dev-operator.example.test";
   process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PRIVATE_KEY_DER_BASE64"]=
@@ -201,6 +203,17 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
  const postReview=()=>request(app).post(signUrl).set("Cookie","internal_session=valid-session")
   .set("Origin","https://dev-operator.example.test").set("x-ai-core-review-intent","explicit")
   .send({acknowledgement:"SIGN_REVIEW_INTENT_ONLY"});
+ it("fails closed when only the signing feature flag is enabled without trusted writer",async()=>{
+  process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"]="true";
+  process.env["AI_CORE_DEV_OPERATOR_REVIEW_ORIGIN"]="https://dev-operator.example.test";
+  const r=await postReview();
+  expect(r.status).toBe(503);
+  expect(r.body).toMatchObject({signed:false,reason:"TRUSTED_REVIEW_WRITER_NOT_IMPLEMENTED",
+   mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
+  expect(m.recovery).not.toHaveBeenCalled();
+  expect(m.persist).not.toHaveBeenCalled();
+  expect(r.body.proof).toBeUndefined();
+ });
  it("does not return signed proof when durable audit insert rejects it",async()=>{
   setValidSigningEnvironment();
   const r=await postReview();
@@ -279,6 +292,7 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
   delete process.env["AI_CORE_DEV_OPERATOR_REVIEW_ORIGIN"];
  });
  it("denies historical FAILED command on properly authenticated review-sign request",async()=>{
+  m.writerReady.mockReturnValue(true); // simulate only: never live
   process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"]="true";
   process.env["AI_CORE_DEV_OPERATOR_REVIEW_ORIGIN"]="https://dev-operator.example.test";
   const r=await request(app).post(signUrl).set("Cookie","internal_session=valid-session")

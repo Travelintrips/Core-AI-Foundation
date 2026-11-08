@@ -9,6 +9,7 @@ import { getDevResumeOperatorCommandPreflight } from "../services/jobLifecycleOp
 import { getDevCommandRecoveryReview } from "../services/jobLifecycleRecoveryReview.js";
 import { signDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewSigner.js";
 import { persistSignedDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewPersistence.js";
+import { isTrustedDevReviewWriterReady } from "../services/jobLifecycleReviewWriterReadiness.js";
 import { getDevStoredReviewReadback } from "../services/jobLifecycleStoredReviewReadback.js";
 
 const router=Router();
@@ -124,6 +125,12 @@ router.post(
     }
     const user=req.internalUser;
     if(!user){res.status(401).json({error:"Not authenticated"});return;}
+    // Hard fail-closed until a separate, proof-bound, atomic writer exists.
+    // Do not let an env flag alone activate review signing or persistence.
+    if(!isTrustedDevReviewWriterReady()){
+      res.status(503).json({signed:false,reason:"TRUSTED_REVIEW_WRITER_NOT_IMPLEMENTED",
+        mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});return;
+    }
     try{
       const review=await getDevCommandRecoveryReview(commandId);
       if(!review.found){res.status(404).json({error:"Command not found"});return;}
