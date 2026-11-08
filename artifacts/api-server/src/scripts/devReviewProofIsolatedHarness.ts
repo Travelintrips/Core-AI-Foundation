@@ -49,9 +49,9 @@ if(isContractMode){
    const serialized=Buffer.from(JSON.stringify(verifiedProof),"utf8").toString("base64");
    if(!/^[a-zA-Z0-9+/=]+$/.test(serialized))throw new Error("INVALID_PROOF_ENCODING");
    // The harness is local test code, not an API. The request includes no SQL.
-   const sql="SET ROLE verified_service; SELECT isolated.try_append(1,7,10,11,convert_from(decode('"+
+   const sql="SELECT isolated.try_append(1,7,10,11,convert_from(decode('"+
     serialized+"','base64'),'UTF8')::jsonb)";
-   const result=execFileSync("docker",["exec",container,"psql","-U","postgres","-qAt","-v","ON_ERROR_STOP=1","-c",sql],
+   const result=execFileSync("docker",["exec","-e","PGPASSWORD=isolated-verifier-credential",container,"psql","-h","127.0.0.1","-U","verifier_login","-d","postgres","-qAt","-v","ON_ERROR_STOP=1","-c",sql],
      {encoding:"utf8",timeout:15_000});
    return result.trim().split("\n").at(-1)==="t";
   },
