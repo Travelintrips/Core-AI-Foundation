@@ -64,6 +64,10 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_TASK_NAMESPACE_AND_OWNERSHIP_GUARD','Core UUID tasks and AI Task integer tasks cannot prove ownership from matching values',
+  file('scripts/dev/gpt02-task-lineage-ownership.mjs').includes('taskBindingVerified=false') &&
+  file('scripts/dev/gpt02-task-lineage-ownership.mjs').includes('accountableOwnerVerified=false') &&
+  file('scripts/dev/gpt02-task-lineage-ownership.test.mjs').includes('cannot self-certify cross-system linkage')),
  check('DEV_CROSS_LEDGER_LIVE_READONLY_ANALYZER','Independent DEV source and receiver snapshots cannot assert owner, ACK or completion',
   file('scripts/dev/gpt02-cross-ledger-readonly-evidence.mjs').includes("releaseDecision:'NO_GO'") &&
   file('scripts/dev/gpt02-cross-ledger-readonly-evidence.mjs').includes('ownerAndAssigneeVerified:false') &&

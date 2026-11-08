@@ -40,6 +40,8 @@ jobs:
         run: node --test scripts/dev/gpt02-integrated-acceptance.test.mjs
       - name: Verify cross-system read-only DEV evidence cannot authorize GPT02
         run: node --test scripts/dev/gpt02-cross-ledger-readonly-evidence.test.mjs
+      - name: Verify independent task namespaces and assignment evidence remain non-authorizing
+        run: node --test scripts/dev/gpt02-task-lineage-ownership.test.mjs
       - name: Verify GPT02 live evidence requires independent authenticated readback
         run: node --test scripts/dev/gpt02-live-evidence-gate.test.mjs
       - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
