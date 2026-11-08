@@ -16,3 +16,9 @@
 
 ## Decision
 The proposed role-only SQL is NOT a complete writer implementation: its permissive INSERT RLS policy accepts an unsigned synthetic row in isolated testing. Do not deploy it, issue writer credentials, or activate signing until a signature-bound atomic writer design is implemented and verified.
+
+## Isolated command-lock prototype (2026-11-08)
+
+The new synthetic PostgreSQL 16 prototype demonstrates a narrow SECURITY DEFINER function with fixed search_path, explicit EXECUTE restriction, command row lock and historical append. The main runtime lacks EXECUTE; a dedicated NOLOGIN writer role can execute it without direct command UPDATE or audit INSERT. Concurrent terminal-first status changes prevent append, while append-first then terminal produces only an immutable historical fact with no authority. Tests use synthetic table names and a disposable network-isolated container.
+
+**Not production-ready:** the synthetic function accepts a caller-supplied nonce without verifying a real signed proof, operator authority, response history, ACK, BLOCKER or expiry. Do not transplant this function into a live database. An untrusted client with access to that writer credential could otherwise forge audit rows. Before implementing the real trusted writer, review a credential boundary, signature verification and fresh native evidence validation, plus concurrency and replay tests. PR is Draft and auto-resume remains NO-GO.
