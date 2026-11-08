@@ -86,3 +86,26 @@ grep -F 'RESUME_DISPATCH_GUARD_NOT_IMPLEMENTED' "$DIR/err" >/dev/null || { cat "
 rows="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT (SELECT COUNT(*) FROM ai_platform.dev_gpt02_resume_grants WHERE status='APPROVED' AND consumed_at IS NULL),(SELECT COUNT(*) FROM ai_platform.dev_gpt02_resume_command_leases),has_function_privilege('anon','ai_platform.dev_gpt02_claim_resume(uuid,uuid,uuid,uuid,text,integer)','EXECUTE'),has_function_privilege('authenticated','ai_platform.dev_gpt02_claim_resume(uuid,uuid,uuid,uuid,text,integer)','EXECUTE');")"
 [[ "$rows" == '1|0|f|f' ]] || { echo "NO-GO: unexpected readback $rows";exit 1; }
 echo 'PASS: exact proposed claim is inert (0A000 guard); approved synthetic grant unconsumed; no lease; no anon/authenticated EXECUTE'
+
+# Three independent concurrent connections race to mint from the SAME review.
+# Remove only the SYNTHETIC fixture grant inside disposable PostgreSQL.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c 'DELETE FROM ai_platform.dev_gpt02_resume_grants;' > "$DIR/clear" 2>&1
+race_sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0','822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','synthetic-concurrent',clock_timestamp(),clock_timestamp()+interval '90 seconds');"
+for i in 1 2 3; do
+ (
+  if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$race_sql" > "$DIR/race$i.out" 2>&1;then
+   echo success > "$DIR/race$i.status"
+  else
+   echo denied > "$DIR/race$i.status"
+  fi
+ ) &
+done
+wait
+winners="$(grep -l '^success$' "$DIR"/race*.status | wc -l)"
+denied="$(grep -l '^denied$' "$DIR"/race*.status | wc -l)"
+state="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT (SELECT count(*) FROM ai_platform.dev_gpt02_resume_grants),(SELECT count(*) FROM ai_platform.dev_gpt02_resume_command_leases);")"
+if [[ "$winners" -ne 1 || "$denied" -ne 2 || "$state" != '1|0' ]];then
+ echo "NO-GO: review race winners=$winners denied=$denied state=$state"
+ cat "$DIR"/race*.out;exit 1
+fi
+echo 'PASS: three concurrent reviewers using one synthetic review => exactly one grant, two rejected, no lease'
