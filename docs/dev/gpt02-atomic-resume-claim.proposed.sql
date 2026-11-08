@@ -29,8 +29,10 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_grants (
    REFERENCES ai_platform.dev_gpt02_operator_review_intents
    (id,command_id,checkpoint_response_id,blocker_response_id,worker_id,operator_user_id),
   CHECK (status NOT IN ('APPROVED','CONSUMED') OR (review_intent_id IS NOT NULL AND operator_user_id IS NOT NULL)),
-  CHECK (status NOT IN ('APPROVED','CONSUMED') OR approved_by = 'internal:' || operator_user_id::text),
-  CHECK (status NOT IN ('APPROVED','CONSUMED') OR (approved_at IS NOT NULL AND expires_at <= approved_at + interval '120 seconds')),
+  CHECK (status NOT IN ('APPROVED','CONSUMED') OR
+    (approved_by IS NOT NULL AND approved_by = 'internal:' || operator_user_id::text) IS TRUE),
+  CHECK (status NOT IN ('APPROVED','CONSUMED') OR
+    (approved_at IS NOT NULL AND expires_at <= approved_at + interval '120 seconds') IS TRUE),
   CHECK (approved_at IS NULL OR approved_at >= created_at - interval '5 seconds'),
   CHECK (status <> 'APPROVED' OR (approved_by IS NOT NULL AND length(trim(approved_by)) > 0 AND approved_at IS NOT NULL)),
   CHECK (approved_at IS NULL OR expires_at > approved_at),
