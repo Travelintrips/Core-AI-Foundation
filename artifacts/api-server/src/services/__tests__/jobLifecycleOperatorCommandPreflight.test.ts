@@ -20,6 +20,10 @@ describe("real database-backed operator preflight fails closed before approval",
   expect(x.approvalBlockers).toContain("COMMAND_TERMINAL_OR_UNKNOWN");
   expect(x.approvalBlockers).toContain("BLOCKER_NOT_VERIFIED");
   expect(x.approvalBlockers).toContain("RESUME_GRANT_UNVERIFIED");
+  expect(x.reviewEvidenceBlockers).toContain("COMMAND_TERMINAL_OR_UNKNOWN");
+  expect(x.reviewEvidenceBlockers).toContain("BLOCKER_NOT_VERIFIED");
+  expect(x.reviewEvidenceBlockers).not.toContain("RESUME_GRANT_UNVERIFIED");
+  expect(x.executionAdditionalBlockers).toContain("RESUME_GRANT_UNVERIFIED");
   expect(x.grantIssuanceEnabled).toBe(false);
   expect(x.mayIssueGrant).toBe(false);
   expect(x.mayDispatchWorker).toBe(false);
@@ -38,8 +42,30 @@ describe("real database-backed operator preflight fails closed before approval",
   expect(x.found).toBe(true);
   if(!x.found)return;
   expect(x.approvalBlockers).toEqual([]);
+  expect(x.reviewEvidenceBlockers).toEqual([]);
+  expect(x.executionAdditionalBlockers).toEqual([]);
   expect(x.grantIssuanceEnabled).toBe(false);
   expect(x.mayIssueGrant).toBe(false);
+  expect(x.mayDispatchWorker).toBe(false);
+ });
+ it("reports verified review evidence separately from blocked execution",async()=>{
+  mock.read.mockResolvedValue({found:true,commandStatus:"PROCESSING",
+   commandStatusReviewable:true,responseSnapshotComplete:true,
+   checkpointAttested:true,receiverAckVerified:true,blockerEvidenceValid:true,
+   workerPresenceHealthy:true,workerPresenceLeaseActive:true,
+   recoveryPolicyEnabled:true,recoveryFeatureEnabled:true,
+   commandResumeAuthorizationVerified:false,commandExclusiveLeaseVerified:false,
+   rateLimitClearanceVerified:false,retryBudgetVerified:false,
+   checkpointResponseId:"cp",blockingResponseId:"block",reviewReason:"AUTHORIZATION_REQUIRED"});
+  const x=await getDevResumeOperatorCommandPreflight(cmd);
+  expect(x.found).toBe(true);
+  if(!x.found)return;
+  expect(x.reviewEvidenceBlockers).toEqual([]);
+  expect(x.executionAdditionalBlockers).toEqual([
+   "RESUME_GRANT_UNVERIFIED","EXCLUSIVE_COMMAND_LEASE_UNVERIFIED",
+   "RATE_LIMIT_CLEARANCE_UNVERIFIED","RETRY_BUDGET_UNVERIFIED"]);
+  expect(x.approvalBlockers).toEqual(x.executionAdditionalBlockers);
+  expect(x.grantIssuanceEnabled).toBe(false);
   expect(x.mayDispatchWorker).toBe(false);
  });
  it("rejects malformed command IDs without reading DB",async()=>{
