@@ -74,6 +74,28 @@ describe("DB-backed stored review readback is non-authorizing",()=>{
    verified:false,reason:"INVALID_REVIEW_ID"});
   expect(mock.execute).not.toHaveBeenCalled();
  });
+ it("does not query any record without a server-trusted Ed25519 key",async()=>{
+  const x=await getDevStoredReviewReadback({...request(),trustedPublicKeyDerBase64:undefined});
+  expect(x).toMatchObject({verified:false,reason:"STORED_REVIEW_TRUST_KEY_UNCONFIGURED",
+   mayIssueGrant:false,mayDispatchWorker:false});
+  expect(mock.execute).not.toHaveBeenCalled();
+  expect(mock.readCommand).not.toHaveBeenCalled();
+ });
+ it("rejects expired stored review before looking up operator or command",async()=>{
+  mock.execute.mockResolvedValueOnce({rows:[{
+   id:reviewId,command_id:commandId,checkpoint_response_id:checkpoint,
+   blocker_response_id:blocker,worker_id:"openclaw-dell-chatgpt-wake-dev",
+   operator_user_id:7,operator_role:"admin",nonce:"f".repeat(64),
+   signed_at:new Date("2026-11-08T00:00:30.000Z"),
+   expires_at:new Date("2026-11-08T00:00:44.000Z"),proof_json:{version:1},
+  }]});
+  const x=await getDevStoredReviewReadback(request());
+  expect(x).toMatchObject({verified:false,reason:"STORED_REVIEW_EXPIRED_OR_INVALID",
+   mayIssueGrant:false,mayDispatchWorker:false});
+  expect(mock.execute).toHaveBeenCalledTimes(1);
+  expect(mock.readCommand).not.toHaveBeenCalled();
+  expect(mock.assess).not.toHaveBeenCalled();
+ });
  it("even assessor rejection never grants execution",async()=>{
   seed();mock.assess.mockReturnValue({reviewVerified:false,reason:"STORED_PROOF_INVALID_SIGNATURE",
    mayIssueGrant:false,mayDispatchWorker:false});
