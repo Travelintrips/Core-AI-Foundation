@@ -3,7 +3,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 import {generateKeyPairSync} from "node:crypto";
-const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null,preflight:vi.fn(),recovery:vi.fn(),persist:vi.fn()}));
+const m=vi.hoisted(()=>({user:null as Record<string,unknown>|null,preflight:vi.fn(),recovery:vi.fn(),persist:vi.fn(),verifyStored:vi.fn()}));
 vi.mock("../internalAuthService.js",()=>({
  SESSION_COOKIE_NAME:"internal_session",
  verifySessionToken:(token:string)=>token==="valid-session"?{sub:7}:null,
@@ -12,6 +12,7 @@ vi.mock("../internalAuthService.js",()=>({
 vi.mock("../aiAuditService.js",()=>({logAudit:async()=>{}}));
 vi.mock("../jobLifecycleOperatorCommandPreflight.js",()=>({getDevResumeOperatorCommandPreflight:m.preflight}));
 vi.mock("../jobLifecycleRecoveryReview.js",()=>({getDevCommandRecoveryReview:m.recovery}));
+vi.mock("../jobLifecycleStoredReviewReadback.js",()=>({getDevStoredReviewReadback:m.verifyStored}));
 vi.mock("../jobLifecycleOperatorReviewPersistence.js",()=>({persistSignedDevOperatorReviewIntent:m.persist}));
 import route from "../../routes/dev-resume-operator-review.js";
 const app=express();
@@ -21,7 +22,7 @@ app.use(route);
 const url="/ai/core-chat/dev/resume/operator-readiness";
 const valid=()=>({id:7,role:"admin",status:"active",accountType:"internal",
  email:"admin@example.test",mustChangePassword:false});
-beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();m.preflight.mockReset();m.preflight.mockResolvedValue({found:true,reason:"BLOCKED",grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.persist.mockReset();m.persist.mockResolvedValue({recorded:false,reason:"TEST_AUDIT_NOT_CONFIGURED",mayIssueGrant:false,mayDispatchWorker:false});m.recovery.mockReset();m.recovery.mockResolvedValue({found:true,commandStatus:"FAILED",checkpointResponseId:"822efca2-7428-428a-ac66-548c0462438e",blockingResponseId:null,checkpointAttested:true,receiverAckVerified:true,blockerEvidenceValid:false,responseSnapshotComplete:true});});
+beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="test";m.user=valid();m.preflight.mockReset();m.preflight.mockResolvedValue({found:true,reason:"BLOCKED",grantIssuanceEnabled:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.verifyStored.mockReset();m.verifyStored.mockResolvedValue({verified:false,reason:"STORED_REVIEW_NOT_FOUND",mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});m.persist.mockReset();m.persist.mockResolvedValue({recorded:false,reason:"TEST_AUDIT_NOT_CONFIGURED",mayIssueGrant:false,mayDispatchWorker:false});m.recovery.mockReset();m.recovery.mockResolvedValue({found:true,commandStatus:"FAILED",checkpointResponseId:"822efca2-7428-428a-ac66-548c0462438e",blockingResponseId:null,checkpointAttested:true,receiverAckVerified:true,blockerEvidenceValid:false,responseSnapshotComplete:true});});
 afterEach(()=>{for(const key of ["APP_ENV","NODE_ENV","AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED","AI_CORE_DEV_OPERATOR_REVIEW_ORIGIN","AI_CORE_DEV_OPERATOR_APPROVAL_PRIVATE_KEY_DER_BASE64","AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"]) delete process.env[key];});
 describe("GPT02 DEV resume operator readiness uses real internal session and DB role guards",()=>{
  it("denies no session even with admin API key header",async()=>{
@@ -60,6 +61,56 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
   process.env["APP_ENV"]="production";
   const r=await request(app).get(url).set("Cookie","internal_session=valid-session");
   expect(r.status).toBe(404);
+ });
+ const reviewId="2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0";
+ const verificationUrl="/ai/core-chat/dev/resume/reviews/"+reviewId+"/verification";
+ it("verification endpoint refuses unauthorized session before touching verification service",async()=>{
+  const r=await request(app).get(verificationUrl).set("x-admin-key","test-admin-key");
+  expect(r.status).toBe(401);
+  expect(m.verifyStored).not.toHaveBeenCalled();
+ });
+ it("verification endpoint denies non-admin operator before readback",async()=>{
+  m.user={...valid(),role:"manager"};
+  const r=await request(app).get(verificationUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(403);
+  expect(m.verifyStored).not.toHaveBeenCalled();
+ });
+ it("verification endpoint refuses non-DEV environment",async()=>{
+  process.env["APP_ENV"]="production";
+  const r=await request(app).get(verificationUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(404);
+  expect(m.verifyStored).not.toHaveBeenCalled();
+ });
+ it("verification endpoint rejects invalid UUID without readback",async()=>{
+  const r=await request(app).get("/ai/core-chat/dev/resume/reviews/invalid/verification")
+   .set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(400);
+  expect(r.body).toMatchObject({mayIssueGrant:false,mayDispatchWorker:false});
+  expect(m.verifyStored).not.toHaveBeenCalled();
+ });
+ it("verification endpoint uses server trusted key and never authorizes work",async()=>{
+  process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"]="synthetic-test-public-key";
+  m.verifyStored.mockResolvedValue({verified:true,reason:"SIGNED_STORED_REVIEW_VERIFIED_NOT_A_GRANT",
+   snapshotAtomic:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
+  const r=await request(app).get(verificationUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(200);
+  expect(r.headers["cache-control"]).toBe("no-store");
+  expect(m.verifyStored).toHaveBeenCalledWith(expect.objectContaining({
+   reviewId,trustedPublicKeyDerBase64:"synthetic-test-public-key"}));
+  expect(r.body).toMatchObject({verified:true,mayIssueGrant:false,
+   mayDispatchWorker:false,mayCloseJob:false});
+ });
+ it("verification endpoint denies unavailable service without execution authority",async()=>{
+  m.verifyStored.mockRejectedValue(new Error("DB unavailable"));
+  const r=await request(app).get(verificationUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(503);
+  expect(r.body).toMatchObject({verified:false,mayIssueGrant:false,mayDispatchWorker:false,
+   mayCloseJob:false});
+ });
+ it("verification endpoint returns 404 for nonexistent stored review",async()=>{
+  const r=await request(app).get(verificationUrl).set("Cookie","internal_session=valid-session");
+  expect(r.status).toBe(404);
+  expect(r.body).toMatchObject({verified:false,mayIssueGrant:false,mayDispatchWorker:false});
  });
  const command="169a7492-cfd8-4a56-bb57-18001b6b5968";
  const preflightUrl="/ai/core-chat/dev/resume/commands/"+command+"/approval-preflight";
