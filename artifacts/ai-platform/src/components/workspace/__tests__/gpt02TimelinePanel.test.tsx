@@ -16,7 +16,9 @@ const success={
     reviewRecordCount:2,legacyUntaggedAttemptsExcluded:false,
     mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false},
 };
-const reply=(status:number,body:unknown)=>({ok:status>=200&&status<300,status,
+const reply=(status:number,body:unknown,contentType="application/json")=>({
+  ok:status>=200&&status<300,status,
+  headers:{get:(key:string)=>key.toLowerCase()==="content-type"?contentType:null},
   json:async()=>body}) as Response;
 describe("GPT02 DEV manual timeline UI",()=>{
   const originalFetch=globalThis.fetch;
@@ -57,6 +59,14 @@ describe("GPT02 DEV manual timeline UI",()=>{
     await waitFor(()=>expect(screen.getByRole("alert").textContent)
       .toContain("CROSS_LEDGER_READBACK_UNAVAILABLE"));
     expect(screen.getByText(/Event terkait parent:/).textContent).toContain("Belum terbaca");
+  });
+  it("rejects HTML SPA fallback returned as HTTP 200 instead of timeline JSON",async()=>{
+    vi.mocked(globalThis.fetch).mockResolvedValue(reply(200,"<!DOCTYPE html>","text/html; charset=utf-8"));
+    render(<Gpt02DevTimelinePanel {...props}/>);
+    fireEvent.click(screen.getByRole("button",{name:/Periksa timeline/}));
+    await waitFor(()=>expect(screen.getByRole("alert").textContent)
+      .toContain("GPT02_TIMELINE_API_NOT_JSON_CHECK_DEV_ROUTE"));
+    expect(screen.queryByText("ISSUER_NOT_VERIFIED")).toBeNull();
   });
   it("permission failure is explicit and never paints success",async()=>{
     vi.mocked(globalThis.fetch).mockResolvedValue(reply(403,{reason:"DEV_ONLY"}));

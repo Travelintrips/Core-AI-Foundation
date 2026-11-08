@@ -116,3 +116,12 @@ The generic Human Task handler previously bypassed the lifecycle session guard f
 
 ## Optional ledger failure does not fabricate a clean audit
 The authenticated timeline can still show existing parent command responses when the optional cross-ledger census query encounters a permissions or availability error. This is explicitly returned as `valid=false, reason=CROSS_LEDGER_READBACK_UNAVAILABLE`; the panel presents a visible failure and unknown counts, never synthetic zeros. Legacy attempts remain unexcluded, and command creation, dispatch, and close remain prohibited. New backend and DOM tests cover this degraded read-only state.
+
+## Actual 2026-11-09 WIB browser/API route proof (correcting earlier hostname assumption)
+Verified with unauthenticated GETs against the currently deployed systems:
+- `https://dev.cstlogistic.co.id/api/healthz` returns 200 and SHA `ff1d12992196...`.
+- `https://dev.cstlogistic.co.id/api/ai/human-tasks/6/gpt02-timeline` returns 401 JSON `Unauthorized: invalid or missing admin API key` without a cookie. This is **expected** from the global admin middleware; with a valid internal session, the middleware accepts the session and the route performs a separate owner/admin authorization check. An anonymous 401 is NOT proof that a cookie-backed request will fail. Newly authored timeline route is not yet deployed to this SHA.
+- `https://dev-ai-task.cstlogistic.co.id/api/ai/human-tasks/6/gpt02-timeline` returns 200 **text/html** (AI Task Center SPA fallback), NOT a JSON timeline service. Therefore that separate hostname is not an established AI Core API endpoint. The timeline route now allows only the canonical `dev.cstlogistic.co.id` host, while the panel rejects non-JSON responses with a specific error rather than treating HTML 200 as valid monitoring. Earlier claims that dev-ai-task was a supported host are superseded.
+- The panel in this PR is embedded in AI Core's Human Tasks page, **not** in the separately deployed AI Task Center application. A cross-app panel or proxy needs an explicit integration design and authenticated endpoint, and cannot be assumed from URL similarity.
+
+Operational rollout remains blocked until authorized branch promotion, approved owner-role narrow-reader migration, exact-sha DEV deployment, and authenticated human browser GET. Do NOT deploy the PR directly to main/PROD. No live service changed by these HTTP inspections.

@@ -273,9 +273,9 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
      task:{...target,sourceModule:'legacy_backoffice',status:'accepted'},history:[],
    });
    const path=url+'/gpt02-timeline?parentCommandId=83db99f5-cbda-4e60-be71-3090fb411bbb&jobId=135';
-   const anon=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id');
+   const anon=await request(app).get(path).set('Host','dev.cstlogistic.co.id');
    expect(anon.status).toBe(401);
-   const viewer=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id')
+   const viewer=await request(app).get(path).set('Host','dev.cstlogistic.co.id')
      .set('x-isolated-test-session','viewer');
    expect(viewer.status).toBe(403);
    expect(timelineMocks.getGpt02Job135TimelineReadback).not.toHaveBeenCalled();
@@ -283,7 +283,7 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
       ok:false,reason:'HUMAN_REVIEW_JOB_BINDING_NOT_FOUND',
       mayDispatchWorker:false,mayCloseJob:false,
    });
-   const admin=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id')
+   const admin=await request(app).get(path).set('Host','dev.cstlogistic.co.id')
      .set('x-isolated-test-session','admin');
    expect(admin.status).toBe(404);
    expect(admin.body.reason).toBe('HUMAN_REVIEW_JOB_BINDING_NOT_FOUND');
@@ -304,12 +304,11 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
    expect(timelineMocks.getGpt02Job135TimelineReadback).toHaveBeenCalledWith({
      humanReviewId:6,jobId:135,parentCommandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
    });
-   timelineMocks.getGpt02Job135TimelineReadback.mockResolvedValueOnce({
-     ok:true,reviewOnly:true,mayDispatchWorker:false,mayCloseJob:false,
-   });
+   // dev-ai-task is a separate application that currently answers this URL
+   // with an HTML SPA fallback. Do not claim it hosts the AI Core timeline API.
    const taskCenter=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id')
      .set('x-isolated-test-session','admin');
-   expect(taskCenter.status).toBe(200);
+   expect(taskCenter.status).toBe(403);
 
  });
  it('legacy non-lifecycle Human Task remains on existing route without extra session guard',async()=>{

@@ -40,6 +40,9 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
       const response=await fetch(`/api/ai/human-tasks/${humanReviewId}/gpt02-timeline?${search}`,{
         method:"GET",credentials:"include",cache:"no-store",
       });
+      const contentType=response.headers.get("content-type")?.toLowerCase()??"";
+      if(!contentType.includes("application/json"))
+        throw new Error("GPT02_TIMELINE_API_NOT_JSON_CHECK_DEV_ROUTE");
       const raw:unknown=await response.json();
       const body=raw&&typeof raw==="object"&&!Array.isArray(raw)
         ? raw as Gpt02TimelineReadback : null;
