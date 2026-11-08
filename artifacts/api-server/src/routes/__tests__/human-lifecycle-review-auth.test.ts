@@ -284,6 +284,13 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
    expect(timelineMocks.getGpt02Job135TimelineReadback).toHaveBeenCalledWith({
      humanReviewId:6,jobId:135,parentCommandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
    });
+   timelineMocks.getGpt02Job135TimelineReadback.mockResolvedValueOnce({
+     ok:true,reviewOnly:true,mayDispatchWorker:false,mayCloseJob:false,
+   });
+   const taskCenter=await request(app).get(path).set('Host','dev-ai-task.cstlogistic.co.id')
+     .set('x-isolated-test-session','admin');
+   expect(taskCenter.status).toBe(200);
+
  });
  it('legacy non-lifecycle Human Task remains on existing route without extra session guard',async()=>{
   mocks.getTask.mockResolvedValue({task:{...target,id:7,sourceModule:'generic'},history:[]});

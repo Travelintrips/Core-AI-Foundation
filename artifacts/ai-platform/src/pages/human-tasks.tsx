@@ -33,6 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { Gpt02DevTimelinePanel } from "@/components/Gpt02DevTimelinePanel";
 import {
   ClipboardCheck,
   Clock,
@@ -539,6 +540,12 @@ function TaskDetailDialog({
                   </div>
                 )}
               </div>
+            )}
+
+            {isRecoveryReview && taskId !== null && (
+              <Gpt02DevTimelinePanel key={taskId}
+                humanReviewId={taskId} jobId={recoveryJobId}
+                parentCommandId={recoveryCommandId}/>
             )}
 
             {/* History / Timeline */}

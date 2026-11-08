@@ -283,7 +283,7 @@ router.get("/ai/human-tasks/:id/gpt02-timeline",async(req,res):Promise<void>=>{
   res.setHeader("Cache-Control","no-store");
   if(process.env["NODE_ENV"]!=="development"||
     process.env["APP_ENV"]==="production"||
-    req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+    !["dev.cstlogistic.co.id","dev-ai-task.cstlogistic.co.id"].includes(req.hostname.toLowerCase())){
     res.status(403).json({error:"DEV_ONLY_GPT02_TIMELINE"});return;
   }
   const parsed=z.object({
