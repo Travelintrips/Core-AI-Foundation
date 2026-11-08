@@ -61,6 +61,10 @@ assert_nonce_drift_denied FK 'ALTER TABLE ai_platform.dev_gpt02_binding_attestat
 assert_nonce_drift_denied TRIGGER 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DISABLE TRIGGER dev_gpt02_nonce_immutable_trg;'
 assert_nonce_drift_denied GRANT 'GRANT INSERT ON ai_platform.dev_gpt02_binding_attestation_nonces TO PUBLIC;'
 assert_nonce_drift_denied DENIAL 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DROP CONSTRAINT dev_gpt02_binding_attestation_nonces_may_issue_grant_check;'
+# A substitute check cannot mask a missing freshness invariant.
+assert_nonce_drift_denied FRESHNESS 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DROP CONSTRAINT dev_gpt02_nonce_expiry; ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces ADD CONSTRAINT misleading_expiry CHECK (operator_user_id > 0);'
+# Same number of matching CHECK constraints does not imply the correct denial guard.
+assert_nonce_drift_denied COUNT_SPOOF 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DROP CONSTRAINT dev_gpt02_binding_attestation_nonces_may_dispatch_worker_check; ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces ADD CONSTRAINT spoofed_dispatch_guard CHECK (may_issue_grant=false);'
 # All rejected mutations must have rolled back.
 docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$NONCE_GUARD" >/dev/null
 # Once both inert proposal tables exist, catalog readback must pass.
