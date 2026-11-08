@@ -44,3 +44,14 @@
 ## Release decision
 
 **NO-GO** until the eight blocked E2E requirements have direct measured DEV evidence and an independent security review. PR remains Draft, SQL RFC throws deliberately, `isTrustedDevReviewWriterReady()` remains hard-false. No PROD edits.
+
+## Combined synthetic review → grant → lease → fenced result regression (2026-11-08)
+
+The disposable evidence-fencing PostgreSQL 16 CI harness now executes the **whole sequence within one instance**, instead of claiming full integration from four disjoint databases:
+
+- Isolated verifier child, actual application Ed25519 proof verifier and authenticated synthetic PostgreSQL login append a fresh review audit; invalid proof, expiry and extra SQL fields are refused before the adapter.
+- A separate `issuer_login` can create a one-shot grant bound to an existing audit, currently authorized command/operator, latest CHECKPOINT/ACK and BLOCKER. Nonexistent audit is rejected; ordinary worker cannot issue and issuer cannot claim. Duplicate issuance fails.
+- Three independent `lease_worker_login` sessions concurrently claim the same grant. Exactly one acquires a lease; replay fails. A stale fence cannot commit the synthetic worker result, while the current fence can.
+- Previously verified invalid operator, stale ACK/BLOCKER, terminal command, wrong DB password, replay and expired/future proof tests continue to pass.
+
+**Critical outstanding vulnerability (NO-GO):** the test intentionally proves a compromised `verified_service` database login can insert an audit with a reused Ed25519 signature and different nonce. Since the synthetic issuer checks the audit row but **cannot cryptographically distinguish that forged audit from a valid one**, this is NOT an approved or deployable grant issuance path. Production work must separate and constrain the writer process/secret, add a reviewed authentic audit-to-issuance trust binding and protect issuer credentials and API authentication. The synthetic checks do not establish a native real worker ACK, real attempt correlation, or AI Task Center E2E monitoring.

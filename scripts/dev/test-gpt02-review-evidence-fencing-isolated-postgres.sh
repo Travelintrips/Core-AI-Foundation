@@ -19,16 +19,22 @@ docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
 CREATE ROLE writer NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE verified_service NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE runtime NOLOGIN;
+CREATE ROLE issuer NOLOGIN NOINHERIT NOBYPASSRLS;
+CREATE ROLE lease_worker NOLOGIN NOINHERIT NOBYPASSRLS;
 -- Disposable real login identities with unique test-only credentials. All
 -- connections are to the networkless PostgreSQL container via loopback.
 CREATE ROLE runtime_login LOGIN PASSWORD 'isolated-runtime-credential';
 CREATE ROLE writer_login LOGIN PASSWORD 'isolated-writer-credential';
 CREATE ROLE verifier_login LOGIN PASSWORD 'isolated-verifier-credential';
+CREATE ROLE issuer_login LOGIN PASSWORD 'isolated-issuer-credential';
+CREATE ROLE lease_worker_login LOGIN PASSWORD 'isolated-worker-credential';
+GRANT issuer TO issuer_login;
+GRANT lease_worker TO lease_worker_login;
 GRANT runtime TO runtime_login;
 GRANT writer TO writer_login;
 GRANT verified_service TO verifier_login;
 CREATE SCHEMA isolated;
-GRANT USAGE ON SCHEMA isolated TO writer,runtime,verified_service;
+GRANT USAGE ON SCHEMA isolated TO writer,runtime,verified_service,issuer,lease_worker;
 CREATE TABLE isolated.commands(id integer PRIMARY KEY,status text NOT NULL);
 CREATE TABLE isolated.responses(id integer PRIMARY KEY, command_id integer NOT NULL REFERENCES isolated.commands(id),
  kind text NOT NULL, created_at integer NOT NULL, acknowledged boolean NOT NULL DEFAULT false);
@@ -91,6 +97,101 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb) TO verified_service;
+-- ONE disposable database now exercises the review -> grant -> lease ->
+-- fenced completion chain. This does not authenticate Ed25519 in PostgreSQL.
+CREATE TABLE isolated.grants(
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ command_id integer NOT NULL REFERENCES isolated.commands(id),
+ review_audit_id integer NOT NULL UNIQUE REFERENCES isolated.audit(id),
+ worker_id text NOT NULL,
+ state text NOT NULL DEFAULT 'APPROVED',
+ consumed_at timestamptz,
+ expires_at timestamptz NOT NULL
+);
+CREATE TABLE isolated.leases(
+ command_id integer PRIMARY KEY REFERENCES isolated.commands(id),
+ grant_id bigint NOT NULL REFERENCES isolated.grants(id),
+ worker_id text NOT NULL,
+ fence bigint NOT NULL,
+ lease_token text NOT NULL,
+ expires_at timestamptz NOT NULL
+);
+CREATE TABLE isolated.worker_results(
+ command_id integer PRIMARY KEY REFERENCES isolated.commands(id),
+ fence bigint NOT NULL, lease_token text NOT NULL);
+CREATE FUNCTION isolated.issue_grant(p_audit integer,p_worker text)
+RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,isolated AS $$
+DECLARE v_audit isolated.audit%ROWTYPE; v_grant bigint;
+BEGIN
+ IF p_worker IS DISTINCT FROM 'openclaw-dell-chatgpt-wake-dev' THEN RETURN NULL; END IF;
+ SELECT * INTO v_audit FROM isolated.audit WHERE id=p_audit FOR UPDATE;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ PERFORM 1 FROM isolated.commands c WHERE c.id=v_audit.command_id
+ AND c.status='PROCESSING' FOR UPDATE;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ -- Source audit must be the actual, latest verified synthetic review proof.
+ -- The SQL audit alone does NOT cryptographically authenticate the signature.
+ IF v_audit.proof_json->>'operatorId' IS DISTINCT FROM 'internal:7'
+   OR v_audit.proof_json->>'workerId' IS DISTINCT FROM p_worker
+   OR (v_audit.proof_json->>'expiresAt')::timestamptz <= clock_timestamp()
+   OR NOT EXISTS(
+    SELECT 1 FROM isolated.operators u
+    WHERE u.id=7 AND u.status='active' AND u.role IN ('admin','owner')
+   ) OR NOT EXISTS(
+    SELECT 1 FROM isolated.responses cp
+    JOIN isolated.responses bl ON bl.command_id=cp.command_id
+    WHERE cp.id=10 AND cp.command_id=v_audit.command_id
+      AND cp.kind='CHECKPOINT' AND cp.acknowledged
+      AND bl.id=11 AND bl.kind='BLOCKER' AND bl.created_at>cp.created_at
+      AND bl.id=(SELECT r.id FROM isolated.responses r WHERE
+       r.command_id=v_audit.command_id ORDER BY r.created_at DESC,r.id DESC LIMIT 1)
+   ) THEN RETURN NULL; END IF;
+ INSERT INTO isolated.grants(command_id,review_audit_id,worker_id,expires_at)
+ VALUES(v_audit.command_id,v_audit.id,p_worker,clock_timestamp()+interval '90 seconds')
+ ON CONFLICT(review_audit_id) DO NOTHING RETURNING id INTO v_grant;
+ RETURN v_grant;
+END $$;
+CREATE FUNCTION isolated.claim_grant(p_grant bigint,p_worker text)
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,isolated AS $$
+DECLARE v_grant isolated.grants%ROWTYPE; v_fence bigint;
+BEGIN
+ SELECT * INTO v_grant FROM isolated.grants WHERE id=p_grant FOR UPDATE;
+ IF NOT FOUND OR v_grant.state<>'APPROVED'
+  OR v_grant.consumed_at IS NOT NULL OR v_grant.expires_at<=clock_timestamp()
+  OR v_grant.worker_id IS DISTINCT FROM p_worker THEN RETURN NULL; END IF;
+ PERFORM 1 FROM isolated.commands c WHERE c.id=v_grant.command_id
+  AND c.status='PROCESSING' FOR UPDATE;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ INSERT INTO isolated.leases AS l(command_id,grant_id,worker_id,fence,lease_token,expires_at)
+ VALUES(v_grant.command_id,v_grant.id,p_worker,1,'token-'||p_grant::text,clock_timestamp()+interval '60 seconds')
+ ON CONFLICT(command_id) DO UPDATE SET grant_id=excluded.grant_id,
+ worker_id=excluded.worker_id, fence=l.fence+1, lease_token=excluded.lease_token,
+ expires_at=excluded.expires_at
+ WHERE l.expires_at<=clock_timestamp()
+ RETURNING fence INTO v_fence;
+ IF v_fence IS NULL THEN RETURN NULL; END IF;
+ UPDATE isolated.grants SET state='CONSUMED',consumed_at=clock_timestamp() WHERE id=p_grant;
+ PERFORM pg_sleep(0.1);
+ RETURN 'token-'||p_grant::text||':'||v_fence::text;
+END $$;
+CREATE FUNCTION isolated.write_worker_result(p_command integer,p_fence bigint,p_token text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,isolated AS $$
+BEGIN
+ PERFORM 1 FROM isolated.leases l WHERE l.command_id=p_command AND
+ l.fence=p_fence AND l.lease_token=p_token AND
+ l.expires_at>clock_timestamp() FOR UPDATE;
+ IF NOT FOUND THEN RETURN false; END IF;
+ INSERT INTO isolated.worker_results(command_id,fence,lease_token)
+ VALUES(p_command,p_fence,p_token)
+ ON CONFLICT(command_id) DO UPDATE SET fence=excluded.fence,lease_token=excluded.lease_token;
+ RETURN true;
+END $$;
+REVOKE ALL ON FUNCTION isolated.issue_grant(integer,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION isolated.claim_grant(bigint,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION isolated.write_worker_result(integer,bigint,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION isolated.issue_grant(integer,text) TO issuer;
+GRANT EXECUTE ON FUNCTION isolated.claim_grant(bigint,text) TO lease_worker;
+GRANT EXECUTE ON FUNCTION isolated.write_worker_result(integer,bigint,text) TO lease_worker;
 SQL
 test_case() {
  local label="$1" expect="$2" json_b64="$3"
@@ -161,6 +262,38 @@ done
 count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
 [ "$count" = 4 ] || { echo "FAIL subprocess isolation audit count: $count";exit 1; }
 echo "PRIVATE PROCESS AUDIT COUNT PASS"
+# Cross-component integration, all inside this same transient PostgreSQL DB:
+# no review -> no grant; issuer cannot write audit; worker cannot issue grant;
+# grant one-shot, lease one winner under concurrency, fenced worker result.
+issuer_sql() { docker exec -e PGPASSWORD=isolated-issuer-credential "$name" psql -h 127.0.0.1 -U issuer_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "$1"; }
+worker_sql() { docker exec -e PGPASSWORD=isolated-worker-credential "$name" psql -h 127.0.0.1 -U lease_worker_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "$1"; }
+[ "$(issuer_sql "SELECT isolated.issue_grant(999,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL nonexistent audit allowed grant";exit 1; }
+if worker_sql "SELECT isolated.issue_grant(1,'openclaw-dell-chatgpt-wake-dev')" > /dev/null 2>&1; then
+ echo "FAIL worker issued a grant";exit 1
+fi
+if issuer_sql "SELECT isolated.claim_grant(1,'openclaw-dell-chatgpt-wake-dev')" >/dev/null 2>&1; then
+ echo "FAIL issuer claimed a worker lease";exit 1
+fi
+echo "END-TO-END ROLE SEPARATION PASS"
+audit_id="$(docker exec "$name" psql -U postgres -qAt -c "SELECT id FROM isolated.audit WHERE nonce=(SELECT proof_json->>'nonce' FROM isolated.audit ORDER BY id DESC LIMIT 1) ORDER BY id DESC LIMIT 1")"
+grant="$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")"
+[[ "$grant" =~ ^[0-9]+$ ]] || { echo "FAIL signed audit did not yield synthetic grant";exit 1; }
+[ "$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL replay grant issuance";exit 1; }
+echo "SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS"
+workdir="$(mktemp -d /tmp/gpt02-unified-race.XXXXXX)"
+for i in 1 2 3; do
+ (worker_sql "SELECT isolated.claim_grant($grant,'openclaw-dell-chatgpt-wake-dev')" > "$workdir/$i" 2> "$workdir/$i.err" || exit 0) &
+done
+wait
+winners="$(grep -l '^token-[0-9]*:1$' "$workdir"/[123] | wc -l)"
+[ "$winners" = 1 ] || { echo "FAIL grant race winners=$winners"; rm -rf "$workdir";exit 1; }
+rm -rf "$workdir"
+state="$(docker exec "$name" psql -U postgres -qAt -c "SELECT (SELECT count(*) FROM isolated.grants WHERE state='CONSUMED'),(SELECT count(*) FROM isolated.leases)")"
+[ "$state" = '1|1' ] || { echo "FAIL consumed state $state";exit 1; }
+[ "$(worker_sql "SELECT isolated.claim_grant($grant,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL second worker claim";exit 1; }
+[ "$(worker_sql "SELECT isolated.write_worker_result(1,0,'wrong')")" = f ] || { echo "FAIL stale fence accepted";exit 1; }
+[ "$(worker_sql "SELECT isolated.write_worker_result(1,1,'token-$grant')")" = t ] || { echo "FAIL current fence rejected";exit 1; }
+echo "SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS"
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='suspended' WHERE id=7" >/dev/null
 test_case "OPERATOR REVOKED" f "$signed_proof_b64"
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='active',role='viewer' WHERE id=7" >/dev/null

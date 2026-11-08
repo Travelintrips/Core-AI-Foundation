@@ -39,6 +39,9 @@ const gates=[
   existsSync(resolve(root,'scripts/dev/test-gpt02-resume-isolated-postgres.sh'))),
  check('GRANT_ISSUANCE_CONTRACT','Isolated grant issuance test exists',
   existsSync(resolve(root,'scripts/dev/test-gpt02-issuance-isolated-postgres.sh'))),
+ check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
  check('API_NO_GRANT_ESCALATION','Review contract cannot issue grant or dispatch work',
   file('artifacts/api-server/src/services/jobLifecycleReviewWriterServiceContract.ts').includes('mayIssueGrant:false') &&
   file('artifacts/api-server/src/services/jobLifecycleReviewWriterServiceContract.ts').includes('mayDispatchWorker:false')),
