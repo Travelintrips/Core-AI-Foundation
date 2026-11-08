@@ -326,7 +326,11 @@ for audit_to_check in "$audit_id" "$forged_id"; do
 done
 attestor_sql() { docker exec -e PGPASSWORD=isolated-attestor-credential "$name" psql -h 127.0.0.1 -U attestor_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "$1"; }
 digest="$(docker exec "$name" psql -U postgres -qAt -c "SELECT md5(proof_json::text) FROM isolated.audit WHERE id=$audit_id")"
-[ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest')")" = t ] || { echo "FAIL attestor cannot attest";exit 1; }
+(cd artifacts/api-server && env -i PATH="$PATH" HOME="${HOME:-/tmp}" APP_ENV=development NODE_ENV=test GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY=true GPT02_SYNTHETIC_WRITER_CONTAINER="$name" GPT02_SYNTHETIC_WRITER_PUBLIC_KEY="$trusted_pub_b64" pnpm exec tsx src/scripts/devReviewAttestorChild.ts <<< "$audit_id")
+if (cd artifacts/api-server && env -i PATH="$PATH" HOME="${HOME:-/tmp}" APP_ENV=development NODE_ENV=test GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY=true GPT02_SYNTHETIC_WRITER_CONTAINER="$name" GPT02_SYNTHETIC_WRITER_PUBLIC_KEY="$trusted_pub_b64" pnpm exec tsx src/scripts/devReviewAttestorChild.ts <<< "$forged_id") >/dev/null 2>&1; then
+ echo "FAIL compromised audit independently attested"; exit 1
+fi
+echo "INDEPENDENT PROCESS FORGED AUDIT ATTESTATION DENIED PASS"
 [ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest')")" = f ] || { echo "FAIL attestation replay";exit 1; }
 [ "$(attestor_sql "SELECT isolated.attest_review($forged_id,'bad-digest')")" = f ] || { echo "FAIL invalid audit digest attested";exit 1; }
 grant="$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")"

@@ -39,6 +39,11 @@ const gates=[
   existsSync(resolve(root,'scripts/dev/test-gpt02-resume-isolated-postgres.sh'))),
  check('GRANT_ISSUANCE_CONTRACT','Isolated grant issuance test exists',
   existsSync(resolve(root,'scripts/dev/test-gpt02-issuance-isolated-postgres.sh'))),
+ check('INDEPENDENT_ATTESTOR_SUBPROCESS','A separate child independently reads audit, verifies Ed25519 before attestor SQL and denies forged audit',
+  file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('verifyOperatorApprovalProof({') &&
+  file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').indexOf('verifyOperatorApprovalProof({') <
+    file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').indexOf('attest_review(') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('INDEPENDENT PROCESS FORGED AUDIT ATTESTATION DENIED PASS')),
  check('CRYPTO_ATTESTATION_CHAIN_PROTOTYPE','Persisted audit Ed25519 reverified before separate role attestation and grant',
   file('artifacts/api-server/src/scripts/devReviewAuditProofCheck.ts').includes('verifyOperatorApprovalProof(') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('devReviewAuditProofCheck.ts') &&
