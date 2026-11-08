@@ -5,7 +5,8 @@ const job="238e0ad4-3c74-4469-908a-cd49ac6515f2";
 const env={APP_ENV:"development",NODE_ENV:"test",AI_TASK_LEDGER_READBACK_ENABLED:"true",
  AI_TASK_LEDGER_URL:"https://dev-ai-task.cstlogistic.co.id",AI_TASK_BRIDGE_TOKEN:"synthetic-bridge-key-for-offline-tests"};
 const body={found:true,source:"AI_CORE",external_id:"bridge-command:"+id,
- id:job,status:"processing",progress:34,timeline:{commandId:id},readOnly:true};
+ id:job,status:"processing",progress:34,timeline:{commandId:id},readOnly:true,
+ verifiedExecution:false,mayIssueGrant:false,mayDispatchWorker:false};
 const mock=(value:unknown,status=200)=>vi.fn(async()=>({status,ok:status===200,json:async()=>value})) as unknown as typeof fetch;
 it("matching DEV ledger response is only identity evidence",async()=>{
  const fetcher=mock(body);
@@ -17,6 +18,13 @@ it("wrong source and correlation are denied",async()=>{
  for(const changed of [{source:"OTHER"},{external_id:"wrong"},{timeline:{commandId:"wrong"}},{readOnly:false}]){
   const result=await readDevAiTaskJob(id,env,mock({...body,...changed}));
   expect(result.verified).toBe(false);
+ }
+});
+it("receiver cannot promote ledger identity into execution approval",async()=>{
+ for(const changed of [{verifiedExecution:true},{mayIssueGrant:true},{mayDispatchWorker:true},
+  {verifiedExecution:undefined},{mayIssueGrant:undefined},{mayDispatchWorker:undefined}]){
+  const result=await readDevAiTaskJob(id,env,mock({...body,...changed}));
+  expect(result).toEqual({verified:false,reason:"RECEIVER_AUTHORITY_CONTRACT_MISMATCH"});
  }
 });
 it("release defaults cannot contact PROD or unconfigured endpoint",async()=>{

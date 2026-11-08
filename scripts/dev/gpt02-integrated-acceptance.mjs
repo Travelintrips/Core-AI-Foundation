@@ -64,6 +64,11 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_RECEIVER_CANNOT_CLAIM_EXECUTION_AUTHORITY','AI Task receiver is accepted only when explicit execution/grant/dispatch flags all deny authority',
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('RECEIVER_AUTHORITY_CONTRACT_MISMATCH') &&
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('row["verifiedExecution"]!==false') &&
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('row["mayIssueGrant"]!==false') &&
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('row["mayDispatchWorker"]!==false')),
  check('DEV_AI_TASK_RECEIVER_READBACK_OPT_IN','AI Task bridge receiver GET is DEV-only, exact identity matched and cannot grant',
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('AI_TASK_LEDGER_READBACK_ENABLED') &&
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('RECEIVER_CORRELATION_MISMATCH') &&

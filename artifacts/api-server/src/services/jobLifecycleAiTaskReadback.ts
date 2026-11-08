@@ -26,6 +26,12 @@ export async function readDevAiTaskJob(commandId:string,
   const row=payload as Record<string,unknown>;
   const timeline=row["timeline"];
   const meta=timeline&&typeof timeline==="object"&&!Array.isArray(timeline)?timeline as Record<string,unknown>:null;
+  // AI-Task-Hub DEV PR #155 promises an observational GET only. Require
+  // explicit negative authority flags, not just a plausible job identity.
+  // An upgraded/misconfigured receiver that claims execution authority
+  // is never accepted as a GPT02 approval or monitoring certificate.
+  if(row["verifiedExecution"]!==false||row["mayIssueGrant"]!==false||
+    row["mayDispatchWorker"]!==false)return deny("RECEIVER_AUTHORITY_CONTRACT_MISMATCH");
   if(row["found"]!==true||row["readOnly"]!==true||row["source"]!=="AI_CORE"||
     row["external_id"]!==externalId||meta?.["commandId"]!==commandId||
     typeof row["id"]!=="string"||!uuid.test(row["id"])||
