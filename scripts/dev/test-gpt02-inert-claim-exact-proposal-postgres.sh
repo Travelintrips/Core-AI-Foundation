@@ -48,6 +48,23 @@ clock_timestamp()-interval '2 seconds',clock_timestamp()+interval '90 seconds');
 SQL
 # Execute exact checked-in proposal (no copied/reimplemented function).
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q < docs/dev/gpt02-atomic-resume-claim.proposed.sql
+# Prove the exact proposed schema denies direct APPROVED INSERT.
+if docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q > "$DIR/approve-insert-denied.out" 2>&1 <<'SQL'
+-- Keep fixture TTL below 120s: separate clock_timestamp() evaluations are not identical.
+INSERT INTO ai_platform.dev_gpt02_resume_grants
+(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at)
+VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,
+'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112',
+'openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',clock_timestamp(),
+clock_timestamp()+interval '90 seconds');
+SQL
+then
+ echo 'NO-GO: runtime direct APPROVED INSERT succeeded';exit 1
+fi
+grep -F 'GPT02_GRANT_DIRECT_APPROVAL_DISABLED' "$DIR/approve-insert-denied.out" >/dev/null || { cat "$DIR/approve-insert-denied.out";exit 1; }
+echo 'PASS: direct APPROVED grant INSERT refused'
+# Disposable superuser fixture injection only, not a runtime authorization.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c 'ALTER TABLE ai_platform.dev_gpt02_resume_grants DISABLE TRIGGER dev_gpt02_grant_transition_guard_trg;' > "$DIR/disable.out" 2>&1
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
 -- Keep fixture TTL below 120s: separate clock_timestamp() evaluations are not identical.
 INSERT INTO ai_platform.dev_gpt02_resume_grants
@@ -57,6 +74,7 @@ VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4
 'openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',clock_timestamp(),
 clock_timestamp()+interval '90 seconds');
 SQL
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c 'ALTER TABLE ai_platform.dev_gpt02_resume_grants ENABLE TRIGGER dev_gpt02_grant_transition_guard_trg;' > "$DIR/enable.out" 2>&1
 # Missing review must fail, and an unrelated response/worker must not
 # satisfy the composite FK even with a valid review ID.
 for mismatch in no_review wrong_worker; do
@@ -142,7 +160,7 @@ echo 'PASS: PENDING grant cannot self-approve or alter identity; safe revoke rem
 # Reset ONLY the disposable synthetic fixture using TRUNCATE. This is superuser
 # test setup, never an application API operation; row-level DELETE is guarded.
 docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c 'TRUNCATE ai_platform.dev_gpt02_resume_grants CASCADE;' > "$DIR/clear" 2>&1
-race_sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',clock_timestamp(),clock_timestamp()+interval '90 seconds');"
+race_sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev', 'PENDING',clock_timestamp()+interval '90 seconds');"
 for i in 1 2 3; do
  (
   if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$race_sql" > "$DIR/race$i.out" 2>&1;then
@@ -172,4 +190,4 @@ if [[ "$winners" -ne 1 || "$denied" -ne 2 || "$state" != '1|0' ]];then
  echo "NO-GO: review race winners=$winners denied=$denied state=$state"
  cat "$DIR"/race*.out;exit 1
 fi
-echo 'PASS: three concurrent reviewers using one synthetic review => exactly one grant, two rejected, no lease'
+echo 'PASS: three concurrent PENDING grant attempts => one winner, two unique denials, no lease'
