@@ -64,6 +64,11 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('AUTHENTICATED_DEV_EVIDENCE_SUMMARY','Real read-only DEV command evidence endpoint uses internal operator authentication and cannot grant',
+  file('artifacts/api-server/src/routes/dev-resume-operator-review.ts').includes('/evidence-summary') &&
+  file('artifacts/api-server/src/routes/dev-resume-operator-review.ts').includes('getDevCommandEvidenceSummary(commandId)') &&
+  file('artifacts/api-server/src/services/jobLifecycleDevEvidenceSummary.ts').includes('getDevCommandRecoveryReview(commandId)') &&
+  file('artifacts/api-server/src/services/jobLifecycleDevEvidenceSummary.ts').includes('releaseDecision:"NO_GO"')),
  check('REAL_DEV_EVIDENCE_CANNOT_BE_SELF_ATTESTED','Separate DEV E2E gate rejects self-authored approval and requires independent readback',
   file('scripts/dev/gpt02-live-evidence-gate.mjs').includes("'INDEPENDENT_LIVE_VERIFIER_NOT_IMPLEMENTED'") &&
   file('scripts/dev/gpt02-live-evidence-gate.mjs').includes("releaseDecision:'NO_GO'") &&

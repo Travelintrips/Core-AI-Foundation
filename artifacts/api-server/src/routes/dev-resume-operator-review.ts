@@ -11,6 +11,7 @@ import { signDevOperatorReviewIntent } from "../services/jobLifecycleOperatorRev
 import { persistSignedDevOperatorReviewIntent } from "../services/jobLifecycleOperatorReviewPersistence.js";
 import { isTrustedDevReviewWriterReady } from "../services/jobLifecycleReviewWriterReadiness.js";
 import { getDevStoredReviewReadback } from "../services/jobLifecycleStoredReviewReadback.js";
+import { getDevCommandEvidenceSummary } from "../services/jobLifecycleDevEvidenceSummary.js";
 
 const router=Router();
 router.get(
@@ -59,6 +60,29 @@ router.get(
     }catch{
       res.status(503).json({error:"DEV approval preflight unavailable",
         mayIssueGrant:false,mayDispatchWorker:false});
+    }
+  },
+);
+/** Read-only consolidated DEV command evidence. Not a release permit. */
+router.get(
+  "/ai/core-chat/dev/resume/commands/:commandId/evidence-summary",
+  requireAuth,requireInternalRole("owner","admin"),requirePasswordChanged,
+  async(req,res):Promise<void>=>{
+    res.setHeader("Cache-Control","no-store");
+    if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]==="production"){
+      res.status(404).json({error:"Not found"});return;
+    }
+    const commandId=String(req.params["commandId"]??"");
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(commandId)){
+      res.status(400).json({error:"Invalid command ID",releaseDecision:"NO_GO",
+        maySign:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});return;
+    }
+    try{
+      const summary=await getDevCommandEvidenceSummary(commandId);
+      res.status(summary.found?200:404).json(summary);
+    }catch{
+      res.status(503).json({error:"DEV evidence summary unavailable",releaseDecision:"NO_GO",
+        maySign:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
     }
   },
 );
