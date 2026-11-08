@@ -56,3 +56,12 @@ Build a **single integrated DEV release candidate** containing (a) typed lifecyc
 Each job must show owner, responsible human, AI worker, last native event, actual progress backed by events, current blocker, next action and whether human approval is needed. Unknown progress is **unknown**, not a fabricated percentage.
 
 **Job 135 may be marked final PASS only when all 12 gates have independent authoritative evidence, a real native ACK, verified output, and no pending blocker.**
+
+
+## Implemented lease service in this candidate
+`gpt02DevRecoveryLease.ts` implements disabled-by-default backend CAS acquire, heartbeat and release, with ownership and current fencing token checks. A verified durable child link and RECEIVED child state are required for acquisition; no HTTP routes expose these methods. The separate `AI_CORE_DEV_GPT02_LEASE_MUTATIONS_ENABLED` flag remains OFF and is effective **only** under `APP_ENV=development`. Every response explicitly denies command issuance, dispatch and job closing.
+
+**Remaining lease blocker:** idempotent release cannot safely attest the *previous owner* using the current lease schema after the owner is cleared. Duplicate release therefore fails closed until an append-only owner-bound release receipt is introduced and tested. Do not relax this check based on token alone. This module is not wired into any worker and does not imply lifecycle readiness.
+
+## Rate-limit and circuit evidence guard in this candidate
+`gpt02LifecycleRateLimitGate.ts` evaluates a persisted health/circuit/rate-limit observation, including HTTP 429 Retry-After delta-seconds and HTTP-date. Unknown history, unhealthy workers and OPEN/HALF_OPEN circuits fail closed. It does not retry, poll, queue, or dispatch. The future state machine must source those observations from authenticated server-owned records, not client-supplied booleans.
