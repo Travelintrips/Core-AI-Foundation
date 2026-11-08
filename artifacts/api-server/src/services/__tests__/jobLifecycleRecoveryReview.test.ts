@@ -5,7 +5,7 @@ vi.mock("../codingCommandLifecycleEvidence.js",()=>({getCodingCommandLifecycleEv
 import {assessReadonlyRecoveryFacts,getDevCommandRecoveryReview,type RecoveryRuntimeFacts} from "../jobLifecycleRecoveryReview.js";
 const now=new Date("2026-11-07T18:00:00Z");
 function facts():RecoveryRuntimeFacts{return {
- commandId:"169a7492-cfd8-4a56-bb57-18001b6b5968",status:"FAILED",checkpointResponseId:"cp1",checkpointVerified:true,
+ commandId:"169a7492-cfd8-4a56-bb57-18001b6b5968",status:"FAILED",checkpointResponseId:"cp1",checkpointAttested:true,nativeReceiverAckVerified:true,
  responseRows:[{id:"ack1",kind:"ACK",createdAt:new Date(now.getTime()-900000),acknowledgedAt:null},
  {id:"failed",kind:"FAILED",createdAt:new Date(now.getTime()-600000),acknowledgedAt:null},
  {id:"cp1",kind:"CHECKPOINT",createdAt:new Date(now.getTime()-600000),acknowledgedAt:new Date(now.getTime()-550000)}],
@@ -95,10 +95,24 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
   }
  });
  it("native ACK label alone cannot set verified readiness",()=>{
-  const x=assessReadonlyRecoveryFacts({...facts(),checkpointVerified:false,serverFlag:true});
+  const x=assessReadonlyRecoveryFacts({...facts(),checkpointAttested:false,nativeReceiverAckVerified:false,serverFlag:true});
   expect(x.receiverAckVerified).toBe(false);
   expect(x.reviewReason).toBe("TERMINAL_OR_UNKNOWN_COMMAND_STATUS");
   expect(x.eligibleForAuthorizedRecoveryReview).toBe(false);
+ });
+ it("separates verified issuer receipt from missing native receiver ACK",()=>{
+  const x=assessReadonlyRecoveryFacts({...facts(),status:"PROCESSING",serverFlag:true,
+    checkpointAttested:true,nativeReceiverAckVerified:false});
+  expect(x.checkpointAttested).toBe(true);
+  expect(x.receiverAckVerified).toBe(false);
+  expect(x.mayDispatchWorker).toBe(false);
+ });
+ it("cannot treat ACK-only claim as a signed checkpoint",()=>{
+  const x=assessReadonlyRecoveryFacts({...facts(),status:"PROCESSING",serverFlag:true,
+    checkpointAttested:false,nativeReceiverAckVerified:true});
+  expect(x.checkpointAttested).toBe(false);
+  expect(x.receiverAckVerified).toBe(false);
+  expect(x.mayDispatchWorker).toBe(false);
  });
  it("unknown command returns not found without querying presence",async()=>{
   const prior=m.life;
