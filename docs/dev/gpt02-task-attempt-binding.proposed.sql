@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_task_attempt_binding_claims (
  CONSTRAINT claim_hub_execution_once UNIQUE(hub_execution_job_id),
  CONSTRAINT claim_attempt_once UNIQUE(attempt_id),
  CONSTRAINT claim_task_attempt_once UNIQUE(tenant_id,hub_ai_task_id,attempt_number),
- CONSTRAINT claim_evidence_digest_once UNIQUE(evidence_sha256)
+ CONSTRAINT claim_evidence_digest_once UNIQUE(evidence_sha256),
+ -- Redundant as a unique key, but required for composite FK provenance binding.
+ CONSTRAINT claim_nonce_provenance_tuple_once UNIQUE
+  (core_command_id,hub_execution_job_id,attempt_id,evidence_sha256)
 );
 -- Existing tables could predate this proposal: permissions and triggers must not drift.
 CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_task_binding_immutable()

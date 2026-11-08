@@ -20,7 +20,14 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_binding_attestation_nonces (
  CONSTRAINT dev_gpt02_nonce_expiry CHECK (expires_at>recorded_at),
  CONSTRAINT dev_gpt02_nonce_attempt_once UNIQUE(attempt_id),
  CONSTRAINT dev_gpt02_nonce_command_once UNIQUE(core_command_id),
- CONSTRAINT dev_gpt02_nonce_receiver_once UNIQUE(hub_execution_job_id)
+ CONSTRAINT dev_gpt02_nonce_receiver_once UNIQUE(hub_execution_job_id),
+ -- A reserved nonce cannot COMMIT without a matching binding claim, even if
+ -- the nonce INSERT comes before the claim INSERT inside one transaction.
+ CONSTRAINT dev_gpt02_nonce_binding_provenance_fk FOREIGN KEY
+  (core_command_id,hub_execution_job_id,attempt_id,evidence_sha256)
+  REFERENCES ai_platform.dev_gpt02_task_attempt_binding_claims
+  (core_command_id,hub_execution_job_id,attempt_id,evidence_sha256)
+  DEFERRABLE INITIALLY DEFERRED
 );
 CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_nonce_immutable()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER

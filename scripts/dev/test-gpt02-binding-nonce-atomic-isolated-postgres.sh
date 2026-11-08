@@ -77,3 +77,49 @@ SQL
 if docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$TMPDIR_TEST/immutability.sql" > "$TMPDIR_TEST/immutable.log" 2>&1; then echo 'NONCE_MUTATION_ACCEPTED'; exit 2; fi
 grep -q 'GPT02_NONCE_IMMUTABLE' "$TMPDIR_TEST/immutable.log" || { echo 'NONCE_IMMUTABILITY_ERROR_MISMATCH'; exit 2; }
 echo 'NONCE_IMMUTABILITY_PASS'
+# Read-back is relational, not an assertion from the request body.
+READBACK=$(docker exec "$NAME" psql -X -At -v ON_ERROR_STOP=1 -U postgres -d isolated -c "SELECT count(*) FROM ai_platform.dev_gpt02_binding_attestation_nonces n JOIN ai_platform.dev_gpt02_task_attempt_binding_claims b ON b.core_command_id=n.core_command_id AND b.hub_execution_job_id=n.hub_execution_job_id AND b.attempt_id=n.attempt_id AND b.evidence_sha256=n.evidence_sha256 WHERE n.tenant_id=b.tenant_id AND b.binding_verified=false AND b.may_dispatch_worker=false AND b.may_close_job=false AND n.may_issue_grant=false AND n.may_dispatch_worker=false")
+[[ "$READBACK" == 1 ]] || { echo "BOUND_READBACK_FAILED:$READBACK"; exit 2; }
+echo 'POST_COMMIT_INDEPENDENT_RELATIONAL_READBACK_PASS'
+# A nonce-only transaction must fail at COMMIT (DEFERRABLE foreign key).
+cat > "$TMPDIR_TEST/orphan.sql" <<'SQL'
+\set ON_ERROR_STOP on
+BEGIN;
+INSERT INTO ai_platform.dev_gpt02_binding_attestation_nonces
+(nonce,tenant_id,core_command_id,hub_execution_job_id,attempt_id,operator_user_id,evidence_sha256,attestation_sha256,issued_at,expires_at)
+VALUES (gen_random_uuid(),'default',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),301,
+repeat('d',64),repeat('e',64),now(),now()+interval '60 seconds');
+COMMIT;
+SQL
+if docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$TMPDIR_TEST/orphan.sql" > "$TMPDIR_TEST/orphan.log" 2>&1; then echo 'ORPHAN_NONCE_COMMITTED'; exit 2; fi
+grep -q 'violates foreign key constraint "dev_gpt02_nonce_binding_provenance_fk"' "$TMPDIR_TEST/orphan.log" || { echo 'ORPHAN_WRONG_ERROR'; tail -10 "$TMPDIR_TEST/orphan.log"; exit 2; }
+echo 'ORPHAN_NONCE_COMMIT_DENIED_PASS'
+# A real binding with same command/receiver/attempt but different evidence must
+# not satisfy the FK. Run in a rollback-only transaction with fresh identity.
+cat > "$TMPDIR_TEST/mismatch.sql" <<'SQL'
+\set ON_ERROR_STOP on
+BEGIN;
+INSERT INTO ai_platform.dev_gpt02_task_attempt_binding_claims
+(tenant_id,core_command_id,core_coding_task_id,hub_execution_job_id,hub_ai_task_id,
+ attempt_id,attempt_number,worker_id,assignee_namespace,assignee_id,owner_namespace,
+ accountable_owner_id,evidence_sha256,evidence_source,recorded_by,source_observed_at,receiver_observed_at)
+VALUES ('default','5688248a-4d6c-4ea1-a8fb-0b42a9c67140',gen_random_uuid(),
+ 'b4601db8-e92f-4ab2-a9ad-b676966e7e40',49,
+ '3d4600d7-840e-43c0-a48c-93807d351546',1,'openclaw-dell-chatgpt-wake-dev',
+ 'ai_task_hub.public.ai_tasks.assigned_to_id',8,'ai_task_hub.accountable_owner',
+ 'synthetic-owner-2',repeat('c',64),'independent_dev_attestation','internal:301',now(),now());
+INSERT INTO ai_platform.dev_gpt02_binding_attestation_nonces
+(nonce,tenant_id,core_command_id,hub_execution_job_id,attempt_id,operator_user_id,evidence_sha256,attestation_sha256,issued_at,expires_at)
+VALUES (gen_random_uuid(),'default','5688248a-4d6c-4ea1-a8fb-0b42a9c67140',
+ 'b4601db8-e92f-4ab2-a9ad-b676966e7e40',
+ '3d4600d7-840e-43c0-a48c-93807d351546',301,
+ repeat('f',64),repeat('e',64),now(),now()+interval '60 seconds');
+COMMIT;
+SQL
+if docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$TMPDIR_TEST/mismatch.sql" > "$TMPDIR_TEST/mismatch.log" 2>&1; then echo 'MISMATCHED_EVIDENCE_COMMITTED'; exit 2; fi
+grep -q 'violates foreign key constraint "dev_gpt02_nonce_binding_provenance_fk"' "$TMPDIR_TEST/mismatch.log" || { echo 'MISMATCHED_EVIDENCE_WRONG_ERROR'; tail -10 "$TMPDIR_TEST/mismatch.log"; exit 2; }
+echo 'MISMATCHED_NONCE_PROVENANCE_DENIED_PASS'
+# The rejected transaction must not leave the second claim behind.
+N=$(docker exec "$NAME" psql -X -At -v ON_ERROR_STOP=1 -U postgres -d isolated -c "SELECT (SELECT count(*) FROM ai_platform.dev_gpt02_task_attempt_binding_claims),(SELECT count(*) FROM ai_platform.dev_gpt02_binding_attestation_nonces)")
+[[ "$N" == '1|1' ]] || { echo "REJECTED_TRANSACTION_LEFT_ROWS:$N"; exit 2; }
+echo 'REJECTED_PROVENANCE_TRANSACTION_ATOMIC_ROLLBACK_PASS'

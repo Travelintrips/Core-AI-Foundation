@@ -9,7 +9,7 @@ DECLARE
  expected text[]:=ARRAY[
   'claim_core_command_once','claim_hub_execution_once','claim_attempt_once',
   'claim_task_attempt_once','claim_evidence_digest_once',
-  'dev_gpt02_task_attempt_binding_claims_pkey'];
+  'dev_gpt02_task_attempt_binding_claims_pkey','claim_nonce_provenance_tuple_once'];
 BEGIN
  IF rel IS NULL THEN RAISE EXCEPTION 'GPT02_BINDING_TABLE_MISSING' USING ERRCODE='55000'; END IF;
  SELECT string_agg(x,',') INTO missing FROM unnest(expected) AS x
