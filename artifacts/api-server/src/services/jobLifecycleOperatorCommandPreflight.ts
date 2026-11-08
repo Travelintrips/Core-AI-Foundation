@@ -27,12 +27,19 @@ export async function getDevResumeOperatorCommandPreflight(commandId:string) {
    rateLimitClearanceVerified:review.rateLimitClearanceVerified,
    retryBudgetVerified:review.retryBudgetVerified,
  };
- const approvalBlockers=([
+ // Stage 1: facts needed to review an operator's signed intent. This is
+ // evidence readiness ONLY; authenticated session, origin and signer flags
+ // remain enforced by the separate signing endpoint.
+ const evidenceBlockers=([
    ["COMMAND_TERMINAL_OR_UNKNOWN",!prerequisites.commandNonTerminal],
    ["RESPONSE_HISTORY_INCOMPLETE",!prerequisites.responseSnapshotComplete],
    ["CHECKPOINT_SIGNATURE_UNVERIFIED",!prerequisites.checkpointAttested],
    ["NATIVE_ACK_UNVERIFIED",!prerequisites.receiverAckVerified],
    ["BLOCKER_NOT_VERIFIED",!prerequisites.blockerEvidenceValid],
+ ] as const).filter(([,blocked])=>blocked).map(([reason])=>reason);
+ // Stage 2: extra conditions required for actual execution. These are
+ // deliberately distinct from review intent; none are authority on their own.
+ const executionBlockers=([
    ["WORKER_UNHEALTHY",!prerequisites.workerPresenceHealthy],
    ["WORKER_PRESENCE_LEASE_MISSING",!prerequisites.workerPresenceLeaseActive],
    ["RECOVERY_POLICY_DISABLED",!prerequisites.policyEnabled],
@@ -42,9 +49,12 @@ export async function getDevResumeOperatorCommandPreflight(commandId:string) {
    ["RATE_LIMIT_CLEARANCE_UNVERIFIED",!prerequisites.rateLimitClearanceVerified],
    ["RETRY_BUDGET_UNVERIFIED",!prerequisites.retryBudgetVerified],
  ] as const).filter(([,blocked])=>blocked).map(([reason])=>reason);
+ const approvalBlockers=[...evidenceBlockers,...executionBlockers];
  return {
    found:true as const,commandId,commandStatus:review.commandStatus,
    approvalBlockers,
+   reviewEvidenceBlockers:evidenceBlockers,
+   executionAdditionalBlockers:executionBlockers,
    checkpointResponseId:review.checkpointResponseId,
    blockerResponseId:review.blockingResponseId,
    prerequisites,
