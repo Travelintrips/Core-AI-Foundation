@@ -1,3 +1,4 @@
+import {readGpt02Job135ArchiveCensus} from "./gpt02Job135ArchiveCensus.js";
 /**
  * Server-owned DEV read-only timeline from bridge tables.
  * All evidence labels originate from database rows and independent verifier;
@@ -143,9 +144,10 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
     assignedWorkerId:null, // worker claim requires independent verified assignment
     reviewAccepted:row["status"]==="accepted",responses:evidence,
   });
+  const archiveCensus=await readGpt02Job135ArchiveCensus();
   const crossLedger=await getGpt02Job135CrossLedgerReadback(x);
   return {ok:true as const,reviewOnly:true as const,
-    crossLedger,infrastructure,
+    crossLedger,archiveCensus,infrastructure,
     mayCreateCommand:false as const,
     reservationSchemaAvailable:reservationsPresent,
     reservationReadbackStatus:!reservationsPresent?"MIGRATION_MISSING":

@@ -12,6 +12,10 @@ const crossLedgerMock=vi.hoisted(()=>({read:vi.fn()}));
 vi.mock("../gpt02Job135CrossLedgerReadback.js",()=>({
   getGpt02Job135CrossLedgerReadback:crossLedgerMock.read,
 }));
+const archiveMock=vi.hoisted(()=>({read:vi.fn()}));
+vi.mock("../gpt02Job135ArchiveCensus.js",()=>({
+  readGpt02Job135ArchiveCensus:archiveMock.read,
+}));
 import {getGpt02Job135TimelineReadback,validateGpt02TimelineReadbackInput}
   from "../gpt02Job135TimelineReadback.js";
 const parent="83db99f5-cbda-4e60-be71-3090fb411bbb";
@@ -36,6 +40,11 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
     mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true,
        command_links_present:true,leases_present:true,receipts_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("COMPLETED","completed-1")]];
     mock.proof.mockImplementation(async(cmd:string)=>proof(cmd));
+    archiveMock.read.mockResolvedValue({available:true,
+      legacyArchiveCommands:12,priorDevArchiveCommands:86,legacyArchiveResponses:11,
+      explicitParentArchiveMatches:0,archivedAfterParentCount:0,
+      legacyUntaggedAttemptsExcluded:false,mayCreateCommand:false,
+      mayDispatchWorker:false,mayCloseJob:false});
     crossLedgerMock.read.mockResolvedValue({
       valid:true,reason:"LEGACY_UNTAGGED_HISTORY_NOT_EXCLUDED",
       parentEventCount:1,explicitJobEventCount:0,taggedChildCount:0,
@@ -48,6 +57,7 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
     if(oldNode===undefined)delete process.env["NODE_ENV"];else process.env["NODE_ENV"]=oldNode;
     mock.proof.mockReset();
     crossLedgerMock.read.mockReset();
+    archiveMock.read.mockReset();
   });
   it("rejects production or bad identity before querying DB",async()=>{
     process.env["APP_ENV"]="production";

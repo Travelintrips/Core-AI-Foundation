@@ -24,6 +24,13 @@ export type Gpt02TimelineReadback = {
     nativeAckVerified:false;mayCreateCommand:false;
     mayDispatchWorker:false;mayCloseJob:false;
   };
+  archiveCensus?:{
+    available:boolean;reason:string;priorDevArchiveCommands?:number;
+    legacyArchiveCommands?:number;legacyArchiveResponses?:number;
+    explicitParentArchiveMatches?:number;archivedAfterParentCount?:number;
+    historicalSourcesCovered?:number;legacyUntaggedAttemptsExcluded:false;
+    mayCreateCommand:false;mayDispatchWorker:false;mayCloseJob:false;
+  };
   crossLedger?:{valid:boolean;reason:string;parentEventCount?:number;
     explicitJobEventCount?:number;taggedChildCount?:number;
     reviewRecordCount?:number;legacyUntaggedAttemptsExcluded:false;
@@ -124,6 +131,16 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
         <p>Event bertag Job: {result.crossLedger?.valid?result.crossLedger.explicitJobEventCount:"Belum terbaca"}</p>
         <p>Child command bertag: {result.crossLedger?.valid?result.crossLedger.taggedChildCount:"Belum terbaca"}</p>
         <p className="text-amber-400">Riwayat command legacy tanpa tag belum dapat dikesampingkan. Tidak ada izin retry atau dispatch.</p>
+      </div>
+      <div className="sm:col-span-2 border-t border-border pt-2 space-y-1">
+        <p className="font-semibold">Sensus arsip legacy Job 135 (read-only)</p>
+        {result.archiveCensus?.available ? <>
+          <p>Arsip DEV lama: {result.archiveCensus.priorDevArchiveCommands} command</p>
+          <p>Arsip legacy: {result.archiveCensus.legacyArchiveCommands} command, {result.archiveCensus.legacyArchiveResponses} respons</p>
+          <p>Kecocokan parent eksplisit: {result.archiveCensus.explicitParentArchiveMatches}</p>
+          <p>Rekaman arsip setelah parent: {result.archiveCensus.archivedAfterParentCount}</p>
+        </> : <p className="text-amber-400">Sensus arsip belum tersedia: {result.archiveCensus?.reason??"READBACK_UNAVAILABLE"}. Jangan asumsikan nol.</p>}
+        <p className="text-amber-400">Eksekusi legacy eksternal tanpa penanda belum dapat dikesampingkan; issuer tetap diblokir.</p>
       </div>
       <p className="sm:col-span-2 text-muted-foreground">Finalisasi: tetap memerlukan persetujuan serta bukti hasil independen. Tampilan ini bukan otorisasi.</p>
     </div>}
