@@ -15,6 +15,9 @@ const reservationMocks=vi.hoisted(()=>({reserveGpt02DevRecoveryAttempt:vi.fn()})
 vi.mock('../../services/gpt02DevRecoveryReservation.js',()=>reservationMocks);
 const preflightMocks=vi.hoisted(()=>({getGpt02DevReservationPreflight:vi.fn()}));
 vi.mock('../../services/gpt02DevReservationPreflight.js',()=>preflightMocks);
+const timelineMocks=vi.hoisted(()=>({getGpt02Job135TimelineReadback:vi.fn()}));
+vi.mock('../../services/gpt02Job135TimelineReadback.js',()=>timelineMocks);
+
 vi.mock('../../middleware/ssrfGuard.js',()=>({ssrfGuard:()=> (_req:unknown,_res:unknown,next:()=>void)=>next()}));
 vi.mock('../../middleware/internalAuth.js',()=>({
  requireAuth:async(req:any,res:any,next:()=>void)=>{
@@ -252,6 +255,35 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
    expect(r.status).toBe(200);
    expect(r.body).toMatchObject({reservationCreated:false,mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false});
    expect(preflightMocks.getGpt02DevReservationPreflight).toHaveBeenCalledWith(expect.objectContaining({actor:'admcst001@gmail.com',humanReviewId:6,jobId:135}));
+ });
+ it('DEV GPT02 timeline readback is authenticated, role guarded and host restricted',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   const path=url+'/gpt02-timeline?parentCommandId=83db99f5-cbda-4e60-be71-3090fb411bbb&jobId=135';
+   expect((await request(app).get(path).set('Host','dev.cstlogistic.co.id')).status).toBe(401);
+   expect((await request(app).get(path).set('Host','dev.cstlogistic.co.id')
+     .set('x-isolated-test-session','viewer')).status).toBe(403);
+   expect((await request(app).get(path).set('Host','other.example')
+     .set('x-isolated-test-session','admin')).status).toBe(403);
+   expect((await request(app).get(path+'&issuer=true').set('Host','dev.cstlogistic.co.id')
+     .set('x-isolated-test-session','admin')).status).toBe(400);
+   expect(timelineMocks.getGpt02Job135TimelineReadback).not.toHaveBeenCalled();
+ });
+ it('DEV GPT02 timeline uses server readback and never grants dispatch',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   timelineMocks.getGpt02Job135TimelineReadback.mockResolvedValueOnce({
+     ok:true,reviewOnly:true,jobId:135,progressPercent:null,
+     mayDispatchWorker:false,mayCloseJob:false,
+   });
+   const path=url+'/gpt02-timeline?parentCommandId=83db99f5-cbda-4e60-be71-3090fb411bbb&jobId=135';
+   const response=await request(app).get(path).set('Host','dev.cstlogistic.co.id')
+     .set('x-isolated-test-session','admin');
+   expect(response.status).toBe(200);
+   expect(response.headers['cache-control']).toBe('no-store');
+   expect(response.body).toMatchObject({progressPercent:null,mayDispatchWorker:false,
+     mayCloseJob:false});
+   expect(timelineMocks.getGpt02Job135TimelineReadback).toHaveBeenCalledWith({
+     humanReviewId:6,jobId:135,parentCommandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
+   });
  });
  it('legacy non-lifecycle Human Task remains on existing route without extra session guard',async()=>{
   mocks.getTask.mockResolvedValue({task:{...target,id:7,sourceModule:'generic'},history:[]});

@@ -18,6 +18,7 @@ import { recordHumanRecoveryRecommendation } from "../services/humanRecoveryDeci
 import { recordGpt02PrototypeIntegrity } from "../services/gpt02PrototypeEvidenceAudit.js";
 import { reserveGpt02DevRecoveryAttempt } from "../services/gpt02DevRecoveryReservation.js";
 import { getGpt02DevReservationPreflight } from "../services/gpt02DevReservationPreflight.js";
+import { getGpt02Job135TimelineReadback } from "../services/gpt02Job135TimelineReadback.js";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
@@ -272,6 +273,31 @@ router.get("/ai/human-tasks/:id/recovery-reservation-preflight",async(req,res):P
     res.status(result.ok?200:400).json(result);
   }catch{
     res.status(503).json({error:"RESERVATION_PREFLIGHT_UNAVAILABLE"});
+  }
+});
+
+// Authenticated internal DEV-only timeline readback for an AI Core Human Review.
+// The existing guardLifecycleReview enforces session and admin/owner role.
+// This is NOT a dispatch or completion endpoint.
+router.get("/ai/human-tasks/:id/gpt02-timeline",async(req,res):Promise<void>=>{
+  res.setHeader("Cache-Control","no-store");
+  if(process.env["NODE_ENV"]!=="development"||
+    process.env["APP_ENV"]==="production"||
+    req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+    res.status(403).json({error:"DEV_ONLY_GPT02_TIMELINE"});return;
+  }
+  const parsed=z.object({
+    parentCommandId:z.string().uuid(),jobId:z.coerce.number().int().positive(),
+  }).strict().safeParse(req.query);
+  const humanReviewId=Number(req.params["id"]);
+  if(!parsed.success||!Number.isSafeInteger(humanReviewId)||humanReviewId<1){
+    res.status(400).json({error:"INVALID_GPT02_TIMELINE_REQUEST"});return;
+  }
+  try{
+    const result=await getGpt02Job135TimelineReadback({...parsed.data,humanReviewId});
+    res.status(result.ok?200:404).json(result);
+  }catch{
+    res.status(503).json({error:"GPT02_TIMELINE_READBACK_UNAVAILABLE"});
   }
 });
 
