@@ -7,11 +7,18 @@ tmp="$(mktemp -d)"
 cleanup(){ docker rm -f "$name" >/dev/null 2>&1 || true; rm -rf "$tmp"; }
 trap cleanup EXIT
 docker run -d --rm --network none --name "$name" -e POSTGRES_PASSWORD=isolated_only postgres:16-alpine >/dev/null
-for i in $(seq 1 50); do docker exec "$name" pg_isready -U postgres >/dev/null 2>&1 && break; sleep .2; done
+ready=false
+for i in $(seq 1 120); do
+ if docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; then ready=true;break;fi
+ sleep .25
+done
+if [ "$ready" != true ]; then echo "ISOLATED_POSTGRES_NOT_READY";exit 1;fi
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
 CREATE SCHEMA ai_platform;
 CREATE ROLE aicore_dev_runtime NOLOGIN;
-GRANT USAGE ON SCHEMA ai_platform TO aicore_dev_runtime;
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+GRANT USAGE ON SCHEMA ai_platform TO aicore_dev_runtime,anon,authenticated;
 CREATE TABLE ai_platform.ai_coding_bridge_commands(id uuid PRIMARY KEY);
 CREATE TABLE ai_platform.ai_human_tasks(id integer PRIMARY KEY,source_module text,payload_json jsonb);
 INSERT INTO ai_platform.ai_coding_bridge_commands(id) VALUES
@@ -35,6 +42,17 @@ INSERT INTO ai_platform.gpt02_dev_recovery_reservations
 VALUES ('83db99f5-cbda-4e60-be71-3090fb411bbb',
  '41aa961d-ac1e-4e12-a2c8-28ed07ff97cc',6,135,
  '2ba38abd-33bb-4459-9f3c-1fc280752a83',repeat('f',64));
+DO $priv$
+BEGIN
+ IF has_function_privilege('anon',
+  'ai_platform.gpt02_dev_timeline_candidate_reader(integer,integer,uuid)','EXECUTE')
+  OR has_function_privilege('authenticated',
+  'ai_platform.gpt02_dev_timeline_candidate_reader(integer,integer,uuid)','EXECUTE')
+ THEN RAISE EXCEPTION 'PUBLIC_OR_BROWSER_READER_GRANT'; END IF;
+ IF NOT (SELECT relrowsecurity FROM pg_class
+  WHERE oid='ai_platform.gpt02_dev_recovery_reservations'::regclass)
+ THEN RAISE EXCEPTION 'RESERVATION_RLS_DISABLED'; END IF;
+END $priv$;
 SET ROLE aicore_dev_runtime;
 DO $verify$
 DECLARE n integer;
@@ -58,4 +76,4 @@ BEGIN
  IF n<>0 THEN RAISE EXCEPTION 'CROSS_PARENT_LEAK'; END IF;
 END $verify$;
 SQL
-echo 'PASS: isolated migration twice, unauthorized guard denied, runtime SELECT denied, bound candidate available, cross-review/job/parent denied'
+echo 'PASS: isolated migration twice, unauthorized guard denied, runtime SELECT denied, bound candidate available, cross-review/job/parent and browser roles denied'
