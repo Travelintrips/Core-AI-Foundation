@@ -50,29 +50,45 @@ SQL
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q < docs/dev/gpt02-atomic-resume-claim.proposed.sql
 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
 INSERT INTO ai_platform.dev_gpt02_resume_grants
-(command_id,review_intent_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at)
-VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',
+(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at)
+VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,
 '822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112',
-'openclaw-dell-chatgpt-wake-dev','APPROVED','synthetic-operator',clock_timestamp(),
+'openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',clock_timestamp(),
 clock_timestamp()+interval '2 minutes');
 SQL
 # Missing review must fail, and an unrelated response/worker must not
 # satisfy the composite FK even with a valid review ID.
 for mismatch in no_review wrong_worker; do
  if [[ "$mismatch" == no_review ]]; then
-   sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','synthetic',now(),now()+interval '90 seconds');"
+   sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',now(),now()+interval '90 seconds');"
  else
-   sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0','822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','other-worker','APPROVED','synthetic',now(),now()+interval '90 seconds');"
+   sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','other-worker','APPROVED','internal:7',now(),now()+interval '90 seconds');"
  fi
  if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$sql" > "$DIR/$mismatch" 2>&1;then
   echo "NO-GO: grant accepted $mismatch";exit 1
  fi
 done
 echo 'PASS: missing review ID and mismatched review identity both denied'
+# A privileged SQL caller must not invent a different human approver,
+# nor backdate approval / create an excessively long-lived grant.
+for case in bad_approver long_ttl old_approval;do
+ if [[ "$case" == bad_approver ]];then
+  query="UPDATE ai_platform.dev_gpt02_resume_grants SET approved_by='internal:8';"
+ elif [[ "$case" == long_ttl ]];then
+  query="UPDATE ai_platform.dev_gpt02_resume_grants SET expires_at=approved_at + interval '10 minutes';"
+ else
+  query="UPDATE ai_platform.dev_gpt02_resume_grants SET approved_at=created_at - interval '1 day';"
+ fi
+ if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$query" > "$DIR/$case" 2>&1;then
+  echo "NO-GO: unsafe grant UPDATE allowed $case";exit 1
+ fi
+done
+echo 'PASS: wrong approver identity, excessive grant TTL and backdated approval all denied'
+
 # Replay protection survives a grant's REVOKED status. One review must never
 # back a second grant, even when the one-live-per-command index no longer applies.
 docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.dev_gpt02_resume_grants SET status='REVOKED';" > "$DIR/revoked" 2>&1
-if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0','822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','synthetic',now(),now()+interval '90 seconds');" > "$DIR/replay" 2>&1;then
+if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',now(),now()+interval '90 seconds');" > "$DIR/replay" 2>&1;then
  echo 'NO-GO: same review reused after revoked grant';exit 1
 fi
 grep -F 'dev_gpt02_grants_review_one_time' "$DIR/replay" >/dev/null || { echo 'NO-GO: replay rejected for unexpected reason';cat "$DIR/replay";exit 1; }
@@ -90,7 +106,7 @@ echo 'PASS: exact proposed claim is inert (0A000 guard); approved synthetic gran
 # Three independent concurrent connections race to mint from the SAME review.
 # Remove only the SYNTHETIC fixture grant inside disposable PostgreSQL.
 docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c 'DELETE FROM ai_platform.dev_gpt02_resume_grants;' > "$DIR/clear" 2>&1
-race_sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0','822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','synthetic-concurrent',clock_timestamp(),clock_timestamp()+interval '90 seconds');"
+race_sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',clock_timestamp(),clock_timestamp()+interval '90 seconds');"
 for i in 1 2 3; do
  (
   if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$race_sql" > "$DIR/race$i.out" 2>&1;then
