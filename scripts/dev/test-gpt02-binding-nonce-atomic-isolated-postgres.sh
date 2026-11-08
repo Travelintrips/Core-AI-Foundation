@@ -15,6 +15,31 @@ done
 for sql in "$ROOT/docs/dev/gpt02-task-attempt-binding.proposed.sql" "$ROOT/docs/dev/gpt02-binding-attestation-nonces.proposed.sql"; do
  docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$sql" >/dev/null
 done
+# Verify complete catalog invariants before using synthetic data.
+NONCE_GUARD="$ROOT/scripts/dev/gpt02-binding-nonce-schema-drift-guard.sql"
+docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$NONCE_GUARD" >/dev/null
+assert_nonce_drift_denied(){
+ local label="$1" patch="$2" logfile="$TMPDIR_TEST/drift-$1.log"
+ # Changes are intentionally rolled back when the guard raises.
+ if {
+   printf 'BEGIN;\\n%s\\n' "$patch"
+   printf "SELECT 'GPT02_NONCE_PATCH_APPLIED' AS marker;\\n"
+   cat "$NONCE_GUARD"
+ } | docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated >"$logfile" 2>&1; then
+   echo "NONCE_DRIFT_NOT_DETECTED:$label" >&2; exit 2
+ fi
+ if ! grep -q GPT02_NONCE_PATCH_APPLIED "$logfile" || ! grep -Eq 'ERROR:.*GPT02_NONCE_.*DRIFT' "$logfile"; then
+   cat "$logfile" >&2; echo "NONCE_DRIFT_TEST_INVALID:$label" >&2; exit 2
+ fi
+ echo "NONCE_${label}_DRIFT_DENIED_PASS"
+}
+assert_nonce_drift_denied UNIQUE 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DROP CONSTRAINT dev_gpt02_nonce_attempt_once;'
+assert_nonce_drift_denied FK 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DROP CONSTRAINT dev_gpt02_nonce_binding_provenance_fk;'
+assert_nonce_drift_denied TRIGGER 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DISABLE TRIGGER dev_gpt02_nonce_immutable_trg;'
+assert_nonce_drift_denied GRANT 'GRANT INSERT ON ai_platform.dev_gpt02_binding_attestation_nonces TO PUBLIC;'
+assert_nonce_drift_denied DENIAL 'ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces DROP CONSTRAINT dev_gpt02_binding_attestation_nonces_may_issue_grant_check;'
+# All rejected mutations must have rolled back.
+docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$NONCE_GUARD" >/dev/null
 cat > "$TMPDIR_TEST/race.sql" <<'SQL'
 \set ON_ERROR_STOP on
 BEGIN;
