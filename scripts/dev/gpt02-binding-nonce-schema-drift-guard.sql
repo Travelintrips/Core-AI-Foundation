@@ -38,14 +38,26 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'GPT02_NONCE_PROVENANCE_FK_DRIFT' USING ERRCODE='55000';
   END IF;
-  IF (SELECT count(*) FROM pg_catalog.pg_constraint c
-      WHERE c.conrelid=rel AND c.contype='c' AND c.convalidated
-        AND (
-          pg_get_constraintdef(c.oid) LIKE '%may_issue_grant = false%'
-          OR pg_get_constraintdef(c.oid) LIKE '%may_dispatch_worker = false%'
-          OR c.conname IN ('dev_gpt02_nonce_window','dev_gpt02_nonce_recency','dev_gpt02_nonce_expiry')
-        )) <> 5 THEN
-    RAISE EXCEPTION 'GPT02_NONCE_DENIAL_OR_FRESHNESS_DRIFT' USING ERRCODE='55000';
+  -- Verify each named CHECK independently: a replacement check must not
+  -- compensate for a missing freshness/authorization constraint by count.
+  SELECT string_agg(required.conname, ',') INTO missing
+  FROM (VALUES
+    ('dev_gpt02_nonce_window', ''),
+    ('dev_gpt02_nonce_recency', ''),
+    ('dev_gpt02_nonce_expiry', ''),
+    ('dev_gpt02_binding_attestation_nonces_may_issue_grant_check', 'may_issue_grant = false'),
+    ('dev_gpt02_binding_attestation_nonces_may_dispatch_worker_check', 'may_dispatch_worker = false')
+  ) AS required(conname, required_expression)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_constraint c
+    WHERE c.conrelid=rel AND c.conname=required.conname
+      AND c.contype='c' AND c.convalidated
+      AND (required.required_expression=''
+        OR pg_get_constraintdef(c.oid) LIKE '%'||required.required_expression||'%')
+  );
+  IF missing IS NOT NULL THEN
+    RAISE EXCEPTION 'GPT02_NONCE_DENIAL_OR_FRESHNESS_DRIFT: %', missing
+      USING ERRCODE='55000';
   END IF;
   SELECT count(*) INTO trigger_count FROM pg_catalog.pg_trigger t
   WHERE t.tgrelid=rel AND t.tgname='dev_gpt02_nonce_immutable_trg'
