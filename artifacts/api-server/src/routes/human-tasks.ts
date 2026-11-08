@@ -17,6 +17,7 @@ import { z } from "zod";
 import { recordHumanRecoveryRecommendation } from "../services/humanRecoveryDecisionService.js";
 import { recordGpt02PrototypeIntegrity } from "../services/gpt02PrototypeEvidenceAudit.js";
 import { reserveGpt02DevRecoveryAttempt } from "../services/gpt02DevRecoveryReservation.js";
+import { getGpt02DevReservationPreflight } from "../services/gpt02DevReservationPreflight.js";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
@@ -244,6 +245,33 @@ router.post("/ai/human-tasks/:id/prototype-integrity",async(req,res):Promise<voi
     res.status(result.alreadyRecorded?200:201).json(result);
   }catch{
     res.status(503).json({error:"PROTOTYPE_INTEGRITY_VERIFICATION_UNAVAILABLE"});
+  }
+});
+
+// Reviewer-only, read-only preflight. This cannot reserve or dispatch.
+// GET still passes through guardLifecycleReview role and session enforcement.
+router.get("/ai/human-tasks/:id/recovery-reservation-preflight",async(req,res):Promise<void>=>{
+  res.setHeader("Cache-Control","no-store");
+  if(process.env["APP_ENV"]==="production" ||
+    req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+    res.status(403).json({error:"DEV_ONLY_RESERVATION_PREFLIGHT"});return;
+  }
+  const humanReviewId=Number(req.params["id"]);
+  const parsed=z.object({
+    parentCommandId:z.string().uuid(),jobId:z.coerce.number().int().positive(),
+  }).strict().safeParse(req.query);
+  if(!Number.isSafeInteger(humanReviewId)||humanReviewId<1||!parsed.success){
+    res.status(400).json({error:"INVALID_RESERVATION_PREFLIGHT"});return;
+  }
+  const actor=req.internalUser?.email;
+  if(!actor){res.status(401).json({error:"SESSION_REQUIRED"});return;}
+  try{
+    const result=await getGpt02DevReservationPreflight({
+      ...parsed.data,humanReviewId,actor,
+    });
+    res.status(result.ok?200:400).json(result);
+  }catch{
+    res.status(503).json({error:"RESERVATION_PREFLIGHT_UNAVAILABLE"});
   }
 });
 

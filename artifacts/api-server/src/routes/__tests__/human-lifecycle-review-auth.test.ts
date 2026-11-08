@@ -13,6 +13,8 @@ const prototypeMocks=vi.hoisted(()=>({recordGpt02PrototypeIntegrity:vi.fn()}));
 vi.mock('../../services/gpt02PrototypeEvidenceAudit.js',()=>prototypeMocks);
 const reservationMocks=vi.hoisted(()=>({reserveGpt02DevRecoveryAttempt:vi.fn()}));
 vi.mock('../../services/gpt02DevRecoveryReservation.js',()=>reservationMocks);
+const preflightMocks=vi.hoisted(()=>({getGpt02DevReservationPreflight:vi.fn()}));
+vi.mock('../../services/gpt02DevReservationPreflight.js',()=>preflightMocks);
 vi.mock('../../middleware/ssrfGuard.js',()=>({ssrfGuard:()=> (_req:unknown,_res:unknown,next:()=>void)=>next()}));
 vi.mock('../../middleware/internalAuth.js',()=>({
  requireAuth:async(req:any,res:any,next:()=>void)=>{
@@ -234,6 +236,22 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
      expect.objectContaining({actor:'admcst001@gmail.com',humanReviewId:6,jobId:135}));
    expect(valid.headers['cache-control']).toBe('no-store');
    delete process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED;
+ });
+ it('reservation preflight protects session, host, input and actor',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   const path=url+'/recovery-reservation-preflight?parentCommandId=83db99f5-cbda-4e60-be71-3090fb411bbb&jobId=135';
+   expect((await request(app).get(path).set('Host','dev.cstlogistic.co.id')).status).toBe(401);
+   expect((await request(app).get(path).set('Host','other.example').set('x-isolated-test-session','admin')).status).toBe(403);
+   expect((await request(app).get(path+'&actor=forged').set('Host','dev.cstlogistic.co.id').set('x-isolated-test-session','admin')).status).toBe(400);
+   expect(preflightMocks.getGpt02DevReservationPreflight).not.toHaveBeenCalled();
+ });
+ it('valid reviewer receives read-only preflight without grant',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   preflightMocks.getGpt02DevReservationPreflight.mockResolvedValueOnce({ok:true,reason:'SNAPSHOT_ONLY_NO_RESERVATION',prerequisiteSnapshotClear:true,reservationCreated:false,commandCreated:false,mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false});
+   const r=await request(app).get(url+'/recovery-reservation-preflight?parentCommandId=83db99f5-cbda-4e60-be71-3090fb411bbb&jobId=135').set('Host','dev.cstlogistic.co.id').set('x-isolated-test-session','admin');
+   expect(r.status).toBe(200);
+   expect(r.body).toMatchObject({reservationCreated:false,mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false});
+   expect(preflightMocks.getGpt02DevReservationPreflight).toHaveBeenCalledWith(expect.objectContaining({actor:'admcst001@gmail.com',humanReviewId:6,jobId:135}));
  });
  it('legacy non-lifecycle Human Task remains on existing route without extra session guard',async()=>{
   mocks.getTask.mockResolvedValue({task:{...target,id:7,sourceModule:'generic'},history:[]});
