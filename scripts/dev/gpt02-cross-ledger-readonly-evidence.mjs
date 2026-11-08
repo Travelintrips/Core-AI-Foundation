@@ -19,8 +19,11 @@ export function compareDevCommandAndPassiveLedger(source,receiver){
  const statusMatch=Boolean(identity&&normalize(source?.status)&&
   normalize(source.status)===normalize(receiver?.status));
  const missingTaskIds=source?.taskId==null&&receiver?.taskId==null;
- const taskIdCorrelated=Boolean(identity&&source?.taskId!=null&&receiver?.taskId!=null&&
+ // AI Core task_id and AI Task Center task_id refer to distinct tables.
+ // Equal numeric/string values are NOT proof of the same task, owner or attempt.
+ const taskIdValueMatches=Boolean(identity&&source?.taskId!=null&&receiver?.taskId!=null&&
    String(source.taskId)===String(receiver.taskId));
+ const taskIdCorrelated=false;
  const responseRows=Array.isArray(source?.responses)?source.responses:[];
  const events=receiver?.eventEvidence;
  const evidenceShape=Boolean(events&&typeof events==='object'&&
@@ -42,7 +45,7 @@ export function compareDevCommandAndPassiveLedger(source,receiver){
    {id:'identity',state:identity?'OBSERVED':'NOT_VERIFIED'},
    {id:'status',state:statusMatch?'OBSERVED':'NOT_VERIFIED'},
    {id:'failure_event_correlation',state:failureHistoryAgrees?'OBSERVED':'NOT_VERIFIED'},
-   {id:'task_owner_assignee',state:taskIdCorrelated?'TASK_ID_ONLY':'NOT_VERIFIED'},
+   {id:'task_owner_assignee',state:'NOT_VERIFIED'},
    {id:'native_checkpoint',state:nativeCheckpointObserved?'PRESENT_UNVERIFIED':'NOT_VERIFIED'},
    {id:'native_ack',state:nativeAcknowledgedCount>0?'PRESENT_UNVERIFIED':'NOT_VERIFIED'},
    {id:'native_completion',state:'NOT_VERIFIED'},
@@ -50,7 +53,8 @@ export function compareDevCommandAndPassiveLedger(source,receiver){
   ],
   sourceTerminalFailed:normalize(source?.status)==='FAILED',
   receiverReportedProgress:typeof receiver?.progress==='number'&&Number.isFinite(receiver.progress)?receiver.progress:null,
-  failureHistoryAgrees,taskIdCorrelated,taskIdsBothMissing:missingTaskIds,
+  failureHistoryAgrees,taskIdCorrelated,taskIdValueMatches,
+  taskNamespaceVerified:false,taskIdsBothMissing:missingTaskIds,
   receiverEventEvidenceBounded:evidenceShape,
   nativeAcknowledgedCount,nativeCheckpointObserved,receiverFinalAckFlag:finalAckVerified,
   identityVerified:identity,statusVerified:statusMatch,

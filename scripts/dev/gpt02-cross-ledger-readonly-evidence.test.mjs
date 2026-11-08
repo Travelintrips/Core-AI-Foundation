@@ -20,7 +20,9 @@ test('wrong ID, tenant, worker or assignment never matches identity',()=>{
 });
 test('100 percent completed self-report cannot prove native completion or owner',()=>{
  const r=compare({...source,status:'COMPLETED',taskId:42}, {...receiver,status:'completed',taskId:42,progress:100,finalAckVerified:true,eventEvidence:{...eventEvidence,lastObservedSourceStatus:'COMPLETED'}});
- assert.equal(r.identityVerified,true);assert.equal(r.taskIdCorrelated,true);
+ assert.equal(r.identityVerified,true);assert.equal(r.taskIdValueMatches,true);
+ assert.equal(r.taskIdCorrelated,false);assert.equal(r.taskNamespaceVerified,false);
+ assert.equal(r.checks.find(x=>x.id==='task_owner_assignee')?.state,'NOT_VERIFIED');
  assert.equal(r.ownerAndAssigneeVerified,false);assert.equal(r.workerCompletionVerified,false);
  assert.equal(r.mayDispatchWorker,false);assert.equal(r.releaseDecision,'NO_GO');
 });
@@ -29,4 +31,12 @@ test('truncated or suspect receiver event history is not independently correlate
   const r=compare(source,{...receiver,eventEvidence:{...eventEvidence,...patch}});
   assert.equal(r.failureHistoryAgrees,false);assert.equal(r.workerCompletionVerified,false);
  }
+});
+
+test('different task namespaces never become verified from coincident IDs',()=>{
+ const r=compare({...source,taskId:'42'},{...receiver,taskId:42});
+ assert.equal(r.taskIdValueMatches,true);
+ assert.equal(r.taskIdCorrelated,false);
+ assert.equal(r.ownerAndAssigneeVerified,false);
+ assert.equal(r.releaseDecision,'NO_GO');
 });
