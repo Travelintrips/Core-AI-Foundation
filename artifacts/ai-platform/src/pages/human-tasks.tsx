@@ -150,6 +150,13 @@ function TaskDetailDialog({
   const [notes, setNotes] = useState("");
   const [assignUser, setAssignUser] = useState("");
   const [assignRole, setAssignRole] = useState("");
+  const [recoveryNotes, setRecoveryNotes] = useState("");
+  const [recoveryPending, setRecoveryPending] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [prototypeFile, setPrototypeFile] = useState<File | null>(null);
+  const [prototypeManifestFile, setPrototypeManifestFile] = useState<File | null>(null);
+  const [prototypePending, setPrototypePending] = useState(false);
+  const [prototypeMessage, setPrototypeMessage] = useState("");
 
   const { data, isLoading } = useGetHumanTask(taskId ?? 0, {
     query: { enabled: open && taskId !== null, queryKey: getGetHumanTaskQueryKey(taskId ?? 0) },
@@ -172,6 +179,95 @@ function TaskDetailDialog({
   const task = data?.task;
   const history = data?.history ?? [];
   const isTerminal = task && ["completed", "rejected", "cancelled", "expired"].includes(task.status);
+  const isRecoveryReview = task?.sourceModule === "ai_core_lifecycle";
+  const payload = task?.payloadJson && typeof task.payloadJson === "object" && !Array.isArray(task.payloadJson)
+    ? task.payloadJson as Record<string, unknown> : {};
+  const recoveryCommandId = typeof payload["commandId"] === "string" ? payload["commandId"] : "";
+  const recoveryJobId = typeof payload["taskId"] === "number"
+    ? payload["taskId"] : Number(payload["taskId"]);
+  const recommendationRecorded = history.some((entry) => entry.action === "human_recovery_recommendation");
+  const prototypeIntegrityRecorded = history.some((entry) => entry.action === "prototype_bytes_sha256_verified");
+
+  async function submitPrototypeIntegrity() {
+    if(!taskId || !prototypeFile || !prototypeManifestFile ||
+      !Number.isSafeInteger(recoveryJobId) || !recoveryCommandId){
+      setPrototypeMessage("Pilih index.html dan recovery-evidence.json untuk review yang valid.");
+      return;
+    }
+    if(prototypeFile.name!=="index.html" ||
+      prototypeManifestFile.name!=="recovery-evidence.json" ||
+      prototypeFile.size<=0 || prototypeFile.size>1024*1024 ||
+      prototypeManifestFile.size>10000) {
+      setPrototypeMessage("Nama/ukuran file tidak cocok. Maksimal HTML 1 MB dan manifest 10 KB.");
+      return;
+    }
+    setPrototypePending(true);
+    setPrototypeMessage("");
+    try{
+      const manifest:unknown=JSON.parse(await prototypeManifestFile.text());
+      const bytes=new Uint8Array(await prototypeFile.arrayBuffer());
+      // Encode bytes in chunks to avoid a large variadic call/stack overflow.
+      let binary="";
+      for(let offset=0;offset<bytes.length;offset+=8192)
+        binary+=String.fromCharCode(...bytes.subarray(offset,offset+8192));
+      const artifactBase64=btoa(binary);
+      const response=await fetch(`/api/ai/human-tasks/${taskId}/prototype-integrity`,{
+        method:"POST",credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jobId:recoveryJobId,commandId:recoveryCommandId,
+          manifest,artifactBase64}),
+      });
+      const body:unknown=await response.json();
+      const result=body && typeof body==="object" && !Array.isArray(body)
+        ? body as Record<string,unknown> : {};
+      if(!response.ok)throw new Error(typeof result["error"]==="string"
+        ? result["error"]:"PROTOTYPE_VERIFICATION_FAILED");
+      if(result["mayCreateCommand"]!==false || result["mayDispatchWorker"]!==false ||
+        result["mayCloseJob"]!==false || result["operationalIntegrationVerified"]!==false)
+        throw new Error("UNEXPECTED_AUTHORIZATION_RESULT");
+      setPrototypeMessage("Integritas file diverifikasi oleh server dan dicatat dalam audit. GPT02 tetap terkunci.");
+      invalidate();
+    }catch(error){
+      setPrototypeMessage(error instanceof Error ? error.message : "Verifikasi gagal");
+    }finally{setPrototypePending(false);}
+  }
+
+  async function submitRecoveryRecommendation(decision: "recommend_new_attempt" | "deny_new_attempt") {
+    if(!taskId || !recoveryCommandId || !Number.isSafeInteger(recoveryJobId) || recoveryJobId < 1) {
+      setRecoveryMessage("Command/Job belum tervalidasi. Tidak ada keputusan yang dikirim.");
+      return;
+    }
+    if(recoveryNotes.trim().length < 20) {
+      setRecoveryMessage("Tuliskan alasan review minimal 20 karakter.");
+      return;
+    }
+    const proceed = window.confirm(decision === "recommend_new_attempt"
+      ? "Rekomendasikan percobaan DEV baru? Ini TIDAK memberikan izin dispatch atau resume GPT02."
+      : "Catat penolakan percobaan baru untuk Job ini?");
+    if(!proceed)return;
+    setRecoveryPending(true);
+    setRecoveryMessage("");
+    try {
+      const response=await fetch(`/api/ai/human-tasks/${taskId}/recovery-recommendation`,{
+        method:"POST",credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          commandId:recoveryCommandId,jobId:recoveryJobId,decision,notes:recoveryNotes.trim(),
+        }),
+      });
+      const result:unknown=await response.json();
+      const parsed=result && typeof result==="object" && !Array.isArray(result)
+        ? result as Record<string,unknown> : {};
+      if(!response.ok)throw new Error(typeof parsed["error"]==="string" ? parsed["error"] : "REQUEST_FAILED");
+      if(parsed["dispatchAuthorized"]!==false || parsed["resumeAllowed"]!==false)
+        throw new Error("UNEXPECTED_RECOVERY_AUTHORIZATION");
+      setRecoveryMessage("Rekomendasi dicatat dalam audit. Resume GPT02 tetap terkunci.");
+      invalidate();
+    }catch(error){
+      setRecoveryMessage(error instanceof Error ? error.message : "Gagal menyimpan rekomendasi");
+    }finally{setRecoveryPending(false);}
+  }
+
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -258,6 +354,83 @@ function TaskDetailDialog({
               </div>
             )}
 
+            {isRecoveryReview && task.status === "accepted" && (
+              <div className="border border-amber-500/30 rounded-lg p-4 space-y-3">
+                <p className="text-sm font-semibold">Rekomendasi Pemulihan GPT02 — DEV</p>
+                <p className="text-xs text-muted-foreground">
+                  Periksa bukti artefak dan riwayat review terlebih dahulu. Rekomendasi ini
+                  bukan izin resume, checkpoint bertanda tangan, lease, atau final ACK.
+                  Hanya reviewer yang ditugaskan dapat mengirim keputusan.
+                </p>
+                <div className="space-y-1 rounded-md border border-border bg-muted/30 p-3 text-xs">
+                  <p className="font-medium">Pemeriksaan sebelum rekomendasi</p>
+                  <p>
+                    {history.some((entry) => entry.action==="artifact_recovery_verified")
+                      ? "Audit pemulihan artefak tercatat. Periksa rincian audit di Riwayat."
+                      : "Bukti pemulihan artefak belum tercatat di riwayat."}
+                  </p>
+                  <p className="text-amber-400">
+                    Prototipe dashboard bukan bukti streaming CCTV nyata, WhatsApp,
+                    checkpoint tertandatangani, ataupun final ACK.
+                  </p>
+                  <p>Status rekomendasi: {recommendationRecorded ? "Sudah dicatat" : "Belum diputuskan"}</p>
+                </div>
+                <p className="text-xs font-mono break-all">
+                  Job {Number.isSafeInteger(recoveryJobId) ? recoveryJobId : "tidak valid"} ·
+                  Command {recoveryCommandId || "tidak valid"}
+                </p>
+                <Textarea placeholder="Alasan penilaian reviewer (minimal 20 karakter)"
+                  value={recoveryNotes} onChange={(event)=>setRecoveryNotes(event.target.value)}
+                  rows={3} className="text-sm" disabled={recommendationRecorded || recoveryPending}/>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm"
+                    disabled={recommendationRecorded || recoveryPending || recoveryNotes.trim().length < 20}
+                    onClick={()=>void submitRecoveryRecommendation("recommend_new_attempt")}>
+                    Rekomendasikan percobaan DEV baru
+                  </Button>
+                  <Button variant="outline" size="sm"
+                    disabled={recommendationRecorded || recoveryPending || recoveryNotes.trim().length < 20}
+                    onClick={()=>void submitRecoveryRecommendation("deny_new_attempt")}>
+                    Tolak percobaan baru
+                  </Button>
+                </div>
+                {recommendationRecorded && (
+                  <div className="rounded-md border border-border p-3 space-y-2">
+                    <p className="text-xs font-semibold">Verifikasi integritas file prototipe (DEV)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Pilih berkas asli index.html dan recovery-evidence.json dari folder pemulihan.
+                      Server menghitung SHA-256 dan mencatat audit, bukan memberikan izin eksekusi.
+                    </p>
+                    <label className="block text-xs space-y-1">
+                      <span>index.html</span>
+                      <input aria-label="Berkas prototipe index.html" type="file"
+                        accept=".html,text/html" className="block max-w-full"
+                        disabled={prototypeIntegrityRecorded || prototypePending}
+                        onChange={(e)=>setPrototypeFile(e.target.files?.[0]??null)}/>
+                    </label>
+                    <label className="block text-xs space-y-1">
+                      <span>recovery-evidence.json</span>
+                      <input aria-label="Manifest recovery-evidence.json" type="file"
+                        accept=".json,application/json" className="block max-w-full"
+                        disabled={prototypeIntegrityRecorded || prototypePending}
+                        onChange={(e)=>setPrototypeManifestFile(e.target.files?.[0]??null)}/>
+                    </label>
+                    <Button size="sm" variant="outline"
+                      disabled={prototypeIntegrityRecorded || prototypePending ||
+                        !prototypeFile || !prototypeManifestFile}
+                      onClick={()=>void submitPrototypeIntegrity()}>
+                      Verifikasi SHA-256 dan catat audit
+                    </Button>
+                    {prototypeIntegrityRecorded &&
+                      <p className="text-xs">Bukti integritas prototipe sudah tercatat. Tidak dapat diubah.</p>}
+                    {prototypeMessage && <p role="status" className="text-xs">{prototypeMessage}</p>}
+                  </div>
+                )}
+                {recommendationRecorded && <p className="text-xs">Keputusan reviewer sudah tercatat. Tidak dapat dikirim dua kali.</p>}
+                {recoveryMessage && <p className="text-xs" role="status">{recoveryMessage}</p>}
+              </div>
+            )}
+
             {/* Actions */}
             {!isTerminal && (
               <div className="border border-border rounded-lg p-4 space-y-3">
@@ -279,7 +452,7 @@ function TaskDetailDialog({
                   >
                     <UserCheck className="size-3 mr-1" /> Accept
                   </Button>
-                  <Button
+                  {!isRecoveryReview && <Button
                     size="sm"
                     variant="outline"
                     className="text-green-400 border-green-500/30"
@@ -287,7 +460,7 @@ function TaskDetailDialog({
                     disabled={complete.isPending}
                   >
                     <CheckCircle2 className="size-3 mr-1" /> Complete
-                  </Button>
+                  </Button>}
                   <Button
                     size="sm"
                     variant="outline"
@@ -406,11 +579,31 @@ function TaskDetailDialog({
   );
 }
 
+/** Optional direct link to one authorized Human Review; API auth still governs reads. */
+export function parseHumanReviewQuery(search: string): number | null {
+  const value=new URLSearchParams(search).get("review");
+  if(!value || !/^[1-9]\d{0,8}$/.test(value))return null;
+  const id=Number(value);
+  return Number.isSafeInteger(id)&&id>0?id:null;
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function HumanTasksPage() {
   const qc = useQueryClient();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(
+    () => typeof window==="undefined" ? null : parseHumanReviewQuery(window.location.search)
+  );
+  function closeSelectedReview() {
+    setSelectedId(null);
+    if(typeof window!=="undefined") {
+      const url=new URL(window.location.href);
+      if(url.searchParams.has("review")) {
+        url.searchParams.delete("review");
+        window.history.replaceState(window.history.state,"",url.pathname+url.search+url.hash);
+      }
+    }
+  }
   const [filters, setFilters] = useState<ListHumanTasksParams>({ limit: 50, offset: 0 });
   const [statusFilter, setStatusFilter] = useState("__all__");
   const [deptFilter, setDeptFilter] = useState("__all__");
@@ -693,7 +886,7 @@ export default function HumanTasksPage() {
       <TaskDetailDialog
         taskId={selectedId}
         open={selectedId !== null}
-        onClose={() => setSelectedId(null)}
+        onClose={closeSelectedReview}
       />
     </div>
   );
