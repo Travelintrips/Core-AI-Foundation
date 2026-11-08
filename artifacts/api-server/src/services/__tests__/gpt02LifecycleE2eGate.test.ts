@@ -24,17 +24,17 @@ describe("integrated GPT02 lifecycle diagnostic contract is strictly non-authori
     expect(x.gates[0]?.reason).toBe("AMBIGUOUS_EVIDENCE");
   });
   it("rejects evidence bound to another job or candidate", () => {
-    const rows = observations(); rows[2] = {...rows[2]!,jobId:136};
+    const rows = observations(); rows[3] = {...rows[3]!,jobId:136};
     expect(assess(rows).missingOrUnverified).toContain("legacyAttemptsExcluded");
-    rows[2] = {...rows[2]!,jobId:135,candidateCommandId:parent};
+    rows[3] = {...rows[3]!,jobId:135,candidateCommandId:parent};
     expect(assess(rows).missingOrUnverified).toContain("legacyAttemptsExcluded");
   });
   it("rejects non-verified evidence, empty provenance and invalid time", () => {
-    const rows = observations(); rows[5] = {...rows[5]!,verified:false};
+    const rows = observations(); rows[6] = {...rows[6]!,verified:false};
     expect(assess(rows).missingOrUnverified).toContain("exclusiveFencingLease");
-    rows[5] = {...rows[5]!,verified:true,evidenceId:" "};
+    rows[6] = {...rows[6]!,verified:true,evidenceId:" "};
     expect(assess(rows).missingOrUnverified).toContain("exclusiveFencingLease");
-    rows[5] = {...rows[5]!,evidenceId:"proof",recordedAt:"unknown"};
+    rows[6] = {...rows[6]!,evidenceId:"proof",recordedAt:"unknown"};
     expect(assess(rows).missingOrUnverified).toContain("exclusiveFencingLease");
   });
   it("rejects invalid subjects and parent identical to candidate", () => {

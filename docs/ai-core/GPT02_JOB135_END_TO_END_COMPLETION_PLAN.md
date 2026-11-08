@@ -65,3 +65,7 @@ Each job must show owner, responsible human, AI worker, last native event, actua
 
 ## Rate-limit and circuit evidence guard in this candidate
 `gpt02LifecycleRateLimitGate.ts` evaluates a persisted health/circuit/rate-limit observation, including HTTP 429 Retry-After delta-seconds and HTTP-date. Unknown history, unhealthy workers and OPEN/HALF_OPEN circuits fail closed. It does not retry, poll, queue, or dispatch. The future state machine must source those observations from authenticated server-owned records, not client-supplied booleans.
+
+
+## Legacy census and job projection coverage
+`gpt02LegacyAttemptAudit.ts` provides a DEV-only read-only bridge census of potential previous commands, without returning sensitive instructions. The existence or *absence* of tagged descendants alone **cannot establish no legacy execution**; the census always sets `legacyUntaggedAttemptsExcluded=false` and blocks issuance. A future issuer requires operator-reviewed cross-ledger migration and durable exclusion, not a time-window count. The typed E2E diagnostic now also requires independently bound `intakeAssignment` and `progressEscalation` evidence (13 fine-grained evidence fields mapping to the 12 acceptance stages). No completion percentage may be inferred from these fields.

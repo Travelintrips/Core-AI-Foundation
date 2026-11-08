@@ -4,16 +4,16 @@
  * Each gate is independently bound to the same job, parent and candidate.
  */
 export type LifecycleGateName =
-  | "humanApproval" | "prototypeIntegrity" | "legacyAttemptsExcluded"
+  | "intakeAssignment" | "humanApproval" | "prototypeIntegrity" | "legacyAttemptsExcluded"
   | "durableParentLink" | "reservationReadback" | "exclusiveFencingLease"
   | "workerHealth" | "rateLimitClear" | "issuerAuthorization"
-  | "nativeAck" | "resultVerified";
+  | "nativeAck" | "progressEscalation" | "resultVerified";
 
 export const requiredLifecycleGates: readonly LifecycleGateName[] = [
-  "humanApproval", "prototypeIntegrity", "legacyAttemptsExcluded",
+  "intakeAssignment", "humanApproval", "prototypeIntegrity", "legacyAttemptsExcluded",
   "durableParentLink", "reservationReadback", "exclusiveFencingLease",
   "workerHealth", "rateLimitClear", "issuerAuthorization",
-  "nativeAck", "resultVerified",
+  "nativeAck", "progressEscalation", "resultVerified",
 ] as const;
 
 export type GateEvidence = {
