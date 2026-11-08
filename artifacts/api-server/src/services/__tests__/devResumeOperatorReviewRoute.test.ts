@@ -119,6 +119,11 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
   full.use(optionalSessionAuth);
   full.use("/api",adminAuthWithExceptions,route);
   const server=full.listen(0,"127.0.0.1");
+  await new Promise<void>((resolve,reject)=>{
+   if(server.listening){resolve();return;}
+   server.once("listening",resolve);
+   server.once("error",reject);
+  });
   try {
    const endpoint="/api/ai/core-chat/dev/resume/reviews/2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0/verification";
    const anonymous=await request(server).get(endpoint);
