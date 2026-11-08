@@ -36,6 +36,8 @@ jobs:
         run: node --test scripts/ai-core-command.test.mjs
       - name: Verify DEV GPT02 resume RFC remains fail-closed
         run: node --test scripts/dev/test-gpt02-resume-rfc.mjs
+      - name: Verify GPT02 integrated acceptance remains fail-closed
+        run: node --test scripts/dev/gpt02-integrated-acceptance.test.mjs
       - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
         run: bash scripts/dev/test-gpt02-resume-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 operator grant issuance contract
