@@ -27,6 +27,16 @@ grep -q 'GPT02_DEV_SCHEMA_NOT_INSTALLED_REQUIRES_SEPARATE_APPROVED_MIGRATION' "$
 echo 'ABSENT_SCHEMA_PREFLIGHT_FAIL_CLOSED_PASS'
 for sql in "$ROOT/docs/dev/gpt02-task-attempt-binding.proposed.sql" "$ROOT/docs/dev/gpt02-binding-attestation-nonces.proposed.sql"; do
  docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated < "$sql" >/dev/null
+ if [[ "$sql" == *gpt02-task-attempt-binding.proposed.sql ]]; then
+  # Interrupted install: binding exists but nonce is absent. Must not pass.
+  if docker exec "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated -f /tmp/gpt02-schema-preflight/gpt02-live-dev-migration-preflight.sql > "$TMPDIR_TEST/partial-preflight.log" 2>&1; then
+   echo 'PARTIAL_SCHEMA_PREFLIGHT_UNEXPECTED_PASS' >&2; exit 2
+  fi
+  grep -q 'GPT02_DEV_PARTIAL_SCHEMA_REQUIRES_MANUAL_RECONCILIATION' "$TMPDIR_TEST/partial-preflight.log" || {
+   cat "$TMPDIR_TEST/partial-preflight.log" >&2; echo 'PARTIAL_SCHEMA_PREFLIGHT_WRONG_REASON' >&2; exit 2
+  }
+  echo 'PARTIAL_SCHEMA_PREFLIGHT_FAIL_CLOSED_PASS'
+ fi
 done
 # Verify complete catalog invariants before using synthetic data.
 NONCE_GUARD="$ROOT/scripts/dev/gpt02-binding-nonce-schema-drift-guard.sql"
