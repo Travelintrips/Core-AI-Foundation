@@ -26,6 +26,12 @@ describe("GPT02 Job135 archived evidence is read-only and cannot grant issuer",(
    mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false});
   expect(mock.calls).toBe(1);
  });
+ it("pg driver timestamptz Date is a valid verified timestamp",()=>{
+  expect(interpretGpt02Job135ArchiveCensus({
+    ...row,parent_created_at:new Date("2026-11-07T18:56:09.873Z")
+  })).toMatchObject({available:true,legacyArchiveCommands:12,
+    mayCreateCommand:false});
+ });
  it("known match never authorizes issuance",()=>{
   expect(interpretGpt02Job135ArchiveCensus({...row,archive_parent_tag_matches:1}))
    .toMatchObject({available:true,explicitParentArchiveMatches:1,

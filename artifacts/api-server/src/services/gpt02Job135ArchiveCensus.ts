@@ -27,7 +27,10 @@ export function interpretGpt02Job135ArchiveCensus(row:Record<string,unknown>|und
     row["may_create_command"]!==false ||
     row["may_dispatch_worker"]!==false ||
     row["may_close_job"]!==false ||
-    typeof row["parent_created_at"]!=="string")
+    !((row["parent_created_at"] instanceof Date &&
+        Number.isFinite(row["parent_created_at"].getTime())) ||
+      (typeof row["parent_created_at"]==="string" &&
+        !Number.isNaN(Date.parse(row["parent_created_at"])))))
     return deny("ARCHIVE_CENSUS_MALFORMED");
   return {
     available:true as const,
