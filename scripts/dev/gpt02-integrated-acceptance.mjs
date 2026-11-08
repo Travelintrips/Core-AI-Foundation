@@ -64,6 +64,10 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_BINDING_CRYPTO_EVIDENCE_NOT_AUTHORITY','Signed binding proof cannot become grant, writer or dispatch authorization',
+  file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('VALID_SIGNATURE_BUT_NO_INDEPENDENT_RUNTIME_ATTESTOR') &&
+  file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('independentAttestationVerified:false') &&
+  file('scripts/dev/gpt02-binding-attestation-verifier.test.mjs').includes('wrong key or edited payload fails')),
  check('DEV_BINDING_WRITER_FAIL_CLOSED','Binding writer preview cannot persist without independent attestor and session',
   file('scripts/dev/gpt02-binding-writer-preflight.mjs').includes('authorizedWriterReady=false') &&
   file('scripts/dev/gpt02-binding-writer-preflight.mjs').includes('independentAttestationVerified=false') &&
