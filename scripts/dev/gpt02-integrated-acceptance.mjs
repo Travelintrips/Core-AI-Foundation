@@ -64,6 +64,9 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_RECEIVER_WORKER_CORRELATION','Passive receiver worker assignment mismatch cannot be mistaken for GPT02 worker evidence',
+  file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('RECEIVER_WORKER_CORRELATION_MISMATCH') &&
+  file('artifacts/api-server/src/services/__tests__/jobLifecycleAiTaskReadback.test.ts').includes('wrong worker attribution fails')),
  check('DEV_RECEIVER_CANNOT_CLAIM_EXECUTION_AUTHORITY','AI Task receiver is accepted only when explicit execution/grant/dispatch flags all deny authority',
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('RECEIVER_AUTHORITY_CONTRACT_MISMATCH') &&
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('row["verifiedExecution"]!==false') &&

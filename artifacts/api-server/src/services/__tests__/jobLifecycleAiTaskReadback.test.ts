@@ -20,6 +20,17 @@ it("wrong source and correlation are denied",async()=>{
   expect(result.verified).toBe(false);
  }
 });
+it("wrong worker attribution fails without upgrading absent worker identity",async()=>{
+ for(const workerId of ["other-worker", "", null, 42]){
+  const result=await readDevAiTaskJob(id,env,mock({...body,timeline:{commandId:id,workerId}}));
+  expect(result).toEqual({verified:false,reason:"RECEIVER_WORKER_CORRELATION_MISMATCH"});
+ }
+ const legitimate=await readDevAiTaskJob(id,env,mock({...body,
+  timeline:{commandId:id,workerId:"openclaw-dell-chatgpt-wake-dev"}}));
+ expect(legitimate.verified).toBe(true);
+ const absent=await readDevAiTaskJob(id,env,mock(body));
+ expect(absent.verified).toBe(true);
+});
 it("receiver cannot promote ledger identity into execution approval",async()=>{
  for(const changed of [{verifiedExecution:true},{mayIssueGrant:true},{mayDispatchWorker:true},
   {verifiedExecution:undefined},{mayIssueGrant:undefined},{mayDispatchWorker:undefined}]){

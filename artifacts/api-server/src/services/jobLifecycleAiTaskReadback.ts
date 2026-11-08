@@ -32,6 +32,12 @@ export async function readDevAiTaskJob(commandId:string,
   // is never accepted as a GPT02 approval or monitoring certificate.
   if(row["verifiedExecution"]!==false||row["mayIssueGrant"]!==false||
     row["mayDispatchWorker"]!==false)return deny("RECEIVER_AUTHORITY_CONTRACT_MISMATCH");
+  // The passive ledger reconciler can supply the originally assigned
+  // worker; conflicting assignment is not an acceptable correlation.
+  // Absence of workerId means identity-only readback, NEVER an assignment proof.
+  if(meta&&Object.hasOwn(meta,"workerId")&&
+    meta["workerId"]!=="openclaw-dell-chatgpt-wake-dev")
+   return deny("RECEIVER_WORKER_CORRELATION_MISMATCH");
   if(row["found"]!==true||row["readOnly"]!==true||row["source"]!=="AI_CORE"||
     row["external_id"]!==externalId||meta?.["commandId"]!==commandId||
     typeof row["id"]!=="string"||!uuid.test(row["id"])||
