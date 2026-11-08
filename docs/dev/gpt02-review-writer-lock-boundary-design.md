@@ -45,3 +45,6 @@ The signing HTTP route now checks an explicit `isTrustedDevReviewWriterReady()` 
 
 ## Refuse accidental execution of unsafe writer RFC — 2026-11-08
 The checked-in role-only SQL RFC now throws an unconditional SQLSTATE 0A000 before any grants, roles or policies are applied. The isolated PostgreSQL regression verifies the **exact original file fails closed and creates no writer role**. It then removes that explicit blocker only in a disposable local copy within the network-isolated container test, so its role/RLS behavior remains covered without introducing a deployable migration. This addresses the immediate risk of a reviewer copying the incomplete SQL proposal into CST-DEV and accidentally granting raw unsigned INSERT.
+
+## Actual readiness module regression (2026-11-08)
+An additional focused Vitest imports the **actual** `isTrustedDevReviewWriterReady()` implementation (not the route's mock) and checks that DEV, test, and production environments remain false even if signing is enabled. The full route suite and actual-readiness suite passed 36/36 locally. This prevents a purely environment-driven activation from being mistaken for a trusted writer.
