@@ -39,6 +39,10 @@ const gates=[
   existsSync(resolve(root,'scripts/dev/test-gpt02-resume-isolated-postgres.sh'))),
  check('GRANT_ISSUANCE_CONTRACT','Isolated grant issuance test exists',
   existsSync(resolve(root,'scripts/dev/test-gpt02-issuance-isolated-postgres.sh'))),
+ check('LEAST_PRIVILEGE_ATTESTOR_READBACK','Attestor readback uses scoped non-superuser audit reader and single snapshot',
+  file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('audit_reader_login') &&
+  !file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('"-U","postgres"') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('NON-SUPERUSER LEAST-PRIVILEGE AUDIT READER PASS')),
  check('INDEPENDENT_ATTESTOR_SUBPROCESS','A separate child independently reads audit, verifies Ed25519 before attestor SQL and denies forged audit',
   file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('verifyOperatorApprovalProof({') &&
   file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').indexOf('verifyOperatorApprovalProof({') <

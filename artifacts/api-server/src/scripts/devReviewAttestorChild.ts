@@ -17,15 +17,20 @@ if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]!=="test"||
 try {
  const id=readFileSync(0,"utf8").trim();
  if(!/^[1-9][0-9]{0,8}$/.test(id))deny();
- const query="SELECT replace(encode(convert_to(proof_json::text,'UTF8'),'base64'),chr(10),'') FROM isolated.audit WHERE id="+id;
+ // Both proof and its digest come from one SQL statement/snapshot.
+ const query="SELECT replace(encode(convert_to(proof_json::text,'UTF8'),'base64'),chr(10),''),"+
+  "md5(proof_json::text) FROM isolated.audit WHERE id="+id;
  const postgres=(user:string,password:string,sql:string)=>execFileSync("docker",[
   "exec","-e","PGPASSWORD="+password,c!,"psql","-h","127.0.0.1", "-U",user,"-d","postgres",
   "-qAt","-v","ON_ERROR_STOP=1","-c",sql],{encoding:"utf8",timeout:15000,maxBuffer:16384}).trim();
- // Test-only privileged readback. Actual service requires a separately scoped
- // read-only credential and a transaction that binds attestation to audit.
- const raw=execFileSync("docker",["exec",c!,"psql","-U","postgres","-qAt","-c",query],
-  {encoding:"utf8",timeout:15000,maxBuffer:16384}).trim();
- if(!raw||raw.length>8192)deny();
+ // Test-only readback uses a dedicated non-superuser login with SELECT on
+ // audit ID and proof only; no access to commands, roles or writes.
+ const row=postgres("audit_reader_login","isolated-reader-credential",query);
+ const pieces=row.split("|");
+ if(pieces.length!==2||pieces[0]!.length>8192||
+    !/^[A-Za-z0-9+/=]+$/.test(pieces[0]!)||
+    !/^[a-f0-9]{32}$/.test(pieces[1]!))deny();
+ const [raw,digest]=pieces as [string,string];
  const proof=JSON.parse(Buffer.from(raw,"base64").toString("utf8"));
  const verified=verifyOperatorApprovalProof({
   proof,expectedCommandId:"169a7492-cfd8-4a56-bb57-18001b6b5968",
@@ -35,11 +40,8 @@ try {
   serverPublicKeyDerBase64:key,
  });
  if(!verified.validForReview)deny();
- // Query digest in the DB, which binds the attestation to its stored audit.
- const digest=execFileSync("docker",["exec",c!,"psql","-U","postgres","-qAt","-c",
-  "SELECT md5(proof_json::text) FROM isolated.audit WHERE id="+id],
-  {encoding:"utf8",timeout:15000,maxBuffer:1024}).trim();
- if(!/^[a-f0-9]{32}$/.test(digest))deny();
+ // The digest was read in the same snapshot as the verified proof.
+ // The attestation procedure separately rechecks equality at insertion.
  const accepted=postgres("attestor_login","isolated-attestor-credential",
   "SELECT isolated.attest_review("+id+",'"+digest+"')");
  if(accepted!=="t")deny();

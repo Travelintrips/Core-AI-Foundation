@@ -21,6 +21,7 @@ CREATE ROLE verified_service NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE runtime NOLOGIN;
 CREATE ROLE issuer NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE attestor NOLOGIN NOINHERIT NOBYPASSRLS;
+CREATE ROLE audit_reader NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE lease_worker NOLOGIN NOINHERIT NOBYPASSRLS;
 -- Disposable real login identities with unique test-only credentials. All
 -- connections are to the networkless PostgreSQL container via loopback.
@@ -28,6 +29,8 @@ CREATE ROLE runtime_login LOGIN PASSWORD 'isolated-runtime-credential';
 CREATE ROLE writer_login LOGIN PASSWORD 'isolated-writer-credential';
 CREATE ROLE verifier_login LOGIN PASSWORD 'isolated-verifier-credential';
 CREATE ROLE attestor_login LOGIN PASSWORD 'isolated-attestor-credential';
+CREATE ROLE audit_reader_login LOGIN PASSWORD 'isolated-reader-credential';
+GRANT audit_reader TO audit_reader_login;
 GRANT attestor TO attestor_login;
 CREATE ROLE issuer_login LOGIN PASSWORD 'isolated-issuer-credential';
 CREATE ROLE lease_worker_login LOGIN PASSWORD 'isolated-worker-credential';
@@ -37,7 +40,7 @@ GRANT runtime TO runtime_login;
 GRANT writer TO writer_login;
 GRANT verified_service TO verifier_login;
 CREATE SCHEMA isolated;
-GRANT USAGE ON SCHEMA isolated TO writer,runtime,verified_service,issuer,lease_worker,attestor;
+GRANT USAGE ON SCHEMA isolated TO writer,runtime,verified_service,issuer,lease_worker,attestor,audit_reader;
 CREATE TABLE isolated.commands(id integer PRIMARY KEY,status text NOT NULL);
 CREATE TABLE isolated.responses(id integer PRIMARY KEY, command_id integer NOT NULL REFERENCES isolated.commands(id),
  kind text NOT NULL, created_at integer NOT NULL, acknowledged boolean NOT NULL DEFAULT false);
@@ -48,6 +51,10 @@ INSERT INTO isolated.commands VALUES(1,'PROCESSING');
 INSERT INTO isolated.responses VALUES(10,1,'CHECKPOINT',10,true),(11,1,'BLOCKER',20,false);
 INSERT INTO isolated.operators VALUES(7,'admin','active');
 ALTER TABLE isolated.audit ENABLE ROW LEVEL SECURITY;
+-- Dedicated non-superuser readback identity, limited to proof and ID only.
+-- No direct privilege on commands/responses/operators, no INSERT/UPDATE/DELETE.
+GRANT SELECT(id,proof_json) ON isolated.audit TO audit_reader;
+CREATE POLICY audit_reader_select ON isolated.audit FOR SELECT TO audit_reader USING (true);
 -- Review writer has no raw table or command write access.
 CREATE FUNCTION isolated.try_append(p_command integer,p_operator integer,p_checkpoint integer,p_blocker integer,p_proof jsonb)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,isolated
@@ -288,6 +295,13 @@ done
 count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
 [ "$count" = 4 ] || { echo "FAIL subprocess isolation audit count: $count";exit 1; }
 echo "PRIVATE PROCESS AUDIT COUNT PASS"
+reader_sql() { docker exec -e PGPASSWORD=isolated-reader-credential "$name" psql -h 127.0.0.1 -U audit_reader_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "$1"; }
+reader_identity="$(reader_sql "SELECT current_user||':'||rolsuper::text FROM pg_roles WHERE rolname=current_user")"
+[ "$reader_identity" = 'audit_reader_login:false' ] || { echo "FAIL audit readback runs as unexpected principal";exit 1; }
+for denied_query in "SELECT nonce FROM isolated.audit LIMIT 1" "SELECT * FROM isolated.commands LIMIT 1" "UPDATE isolated.audit SET proof_json='{}'::jsonb WHERE id=1" "DELETE FROM isolated.audit WHERE id=1"; do
+ if reader_sql "$denied_query" >/dev/null 2>&1; then echo "FAIL reader exceeded read-only audit scope";exit 1;fi
+done
+echo "NON-SUPERUSER LEAST-PRIVILEGE AUDIT READER PASS"
 # Cross-component integration, all inside this same transient PostgreSQL DB:
 # no review -> no grant; issuer cannot write audit; worker cannot issue grant;
 # grant one-shot, lease one winner under concurrency, fenced worker result.
