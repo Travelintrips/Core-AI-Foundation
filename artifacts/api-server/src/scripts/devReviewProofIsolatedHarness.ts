@@ -42,4 +42,4 @@ if(!verified.validForReview){
  process.stderr.write("PROOF_DENIED:"+verified.reason+"\n");process.exit(3);
 }
 if(mode!=="valid"){process.stderr.write("UNEXPECTED_PROOF_ACCEPTANCE\n");process.exit(4);}
-process.stdout.write(proof.nonce+"\n");
+process.stdout.write(Buffer.from(JSON.stringify(proof),"utf8").toString("base64")+"\n");
