@@ -44,6 +44,8 @@ jobs:
         run: node --test scripts/dev/gpt02-task-lineage-ownership.test.mjs
       - name: Verify GPT02 live evidence requires independent authenticated readback
         run: node --test scripts/dev/gpt02-live-evidence-gate.test.mjs
+      - name: Verify isolated PostgreSQL task-attempt binding claims are immutable and non-authorizing
+        run: bash scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
         run: bash scripts/dev/test-gpt02-resume-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 operator grant issuance contract

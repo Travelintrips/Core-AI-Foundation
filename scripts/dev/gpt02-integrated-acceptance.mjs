@@ -64,6 +64,11 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_BINDING_CLAIM_PROTOTYPE_INERT','Proposed task-attempt binding has strict uniqueness and cannot authorize execution',
+  file('docs/dev/gpt02-task-attempt-binding.proposed.sql').includes('binding_verified boolean NOT NULL DEFAULT false CHECK (binding_verified=false)') &&
+  file('docs/dev/gpt02-task-attempt-binding.proposed.sql').includes('may_dispatch_worker boolean NOT NULL DEFAULT false CHECK (may_dispatch_worker=false)') &&
+  file('docs/dev/gpt02-task-attempt-binding.proposed.sql').includes('claim_attempt_once UNIQUE(attempt_id)') &&
+  file('scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh').includes('DISPOSABLE_POSTGRES_BINDING_TEST_PASS')),
  check('DEV_TASK_NAMESPACE_AND_OWNERSHIP_GUARD','Core UUID tasks and AI Task integer tasks cannot prove ownership from matching values',
   file('scripts/dev/gpt02-task-lineage-ownership.mjs').includes('taskBindingVerified=false') &&
   file('scripts/dev/gpt02-task-lineage-ownership.mjs').includes('accountableOwnerVerified=false') &&
