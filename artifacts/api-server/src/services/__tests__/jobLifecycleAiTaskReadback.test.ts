@@ -33,6 +33,23 @@ it("wrong worker attribution fails without upgrading absent worker identity",asy
  const absent=await readDevAiTaskJob(id,env,mock(body));
  expect(absent.verified).toBe(true);
 });
+it("passive receiver failed job with reported 100% remains non-completion evidence",async()=>{
+ const eventEvidence={observedEventCount:2,sourceEventCount:1,signedEventCount:0,
+  historyTruncated:false,lastObservedSourceStatus:"FAILED",reportedStatus:"failed",
+  reportedProgress:100,progressProvesCompletion:false,nativeWorkerCompletionVerified:false,
+  mayIssueGrant:false,mayDispatchWorker:false};
+ const result=await readDevAiTaskJob(id,env,mock({...body,status:"failed",progress:100,eventEvidence}));
+ expect(result.verified).toBe(true);
+ expect(result.receiverProgress).toBe(100);
+ expect(result.receiverEventEvidence).toMatchObject({observedEventCount:2,signedEventCount:0,
+  nativeWorkerCompletionVerified:false,progressProvesCompletion:false});
+ for(const changed of [{nativeWorkerCompletionVerified:true},{progressProvesCompletion:true},
+  {reportedStatus:"completed"},{sourceEventCount:3},{signedEventCount:3},
+  {mayIssueGrant:true},{observedEventCount:101},{historyTruncated:"false"}]){
+  expect(await readDevAiTaskJob(id,env,mock({...body,status:"failed",progress:100,
+   eventEvidence:{...eventEvidence,...changed}}))).toEqual({verified:false,reason:"RECEIVER_EVENT_CONTRACT_MISMATCH"});
+ }
+});
 it("non-passive or omitted provenance is rejected",async()=>{
  for(const passiveLedger of [false,undefined,null,"true"]){
   expect(await readDevAiTaskJob(id,env,mock({...body,passiveLedger}))).toEqual({

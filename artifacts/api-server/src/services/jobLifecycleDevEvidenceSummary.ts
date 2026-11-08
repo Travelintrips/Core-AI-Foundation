@@ -16,6 +16,7 @@ export type RecoverySummary={found:boolean;commandId:string;commandStatus?:strin
   aiTaskLedgerReceiverJobId?:string;
   aiTaskLedgerReceiverStatus?:string;
   aiTaskLedgerReceiverProgress?:number;
+  aiTaskLedgerReceiverEventEvidence?:NonNullable<Awaited<ReturnType<typeof readDevAiTaskJob>>["receiverEventEvidence"]>;
   // Receiver-reported job status/progress are NOT native worker completion.
   aiTaskLedgerStatusAndProgressAuthoritative:false;
   releaseDecision:"NO_GO";snapshotAtomic:false;maySign:false;mayIssueGrant:false;
@@ -79,7 +80,8 @@ export function attachDevAiTaskReadback(base:RecoverySummary,receiver:Awaited<Re
   ...(observed?{
    aiTaskLedgerReceiverJobId:receiver.receiverJobId,
    aiTaskLedgerReceiverStatus:receiver.receiverStatus,
-   ...(receiver.receiverProgress!==undefined?{aiTaskLedgerReceiverProgress:receiver.receiverProgress}:{})
+   ...(receiver.receiverProgress!==undefined?{aiTaskLedgerReceiverProgress:receiver.receiverProgress}:{}),
+   ...(receiver.receiverEventEvidence?{aiTaskLedgerReceiverEventEvidence:receiver.receiverEventEvidence}:{})
   }:{}),
   checks:[...base.checks,{
    id:"ai_task_ledger_identity",state:observed?"OBSERVED" as const:"NOT_VERIFIED" as const,

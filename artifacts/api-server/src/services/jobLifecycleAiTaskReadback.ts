@@ -1,6 +1,10 @@
 /** Read-only DEV AI Task receiver correlation; never issue grants or worker calls. */
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type Result={verified:boolean;reason:string;receiverJobId?:string;receiverStatus?:string;receiverProgress?:number};
+type EventEvidence={observedEventCount:number;sourceEventCount:number;signedEventCount:number;
+ historyTruncated:boolean;lastObservedSourceStatus:string|null;
+ progressProvesCompletion:false;nativeWorkerCompletionVerified:false};
+type Result={verified:boolean;reason:string;receiverJobId?:string;receiverStatus?:string;
+ receiverProgress?:number;receiverEventEvidence?:EventEvidence};
 const MAX_LEDGER_BYTES=32*1024;
 /** Consume no more than 32 KiB of receiver JSON, even if Content-Length lies.
  * A real fetch Response supplies a readable stream; reject unavailable bodies.
@@ -75,8 +79,29 @@ export async function readDevAiTaskJob(commandId:string,
     typeof row["status"]!=="string"||row["status"].length>40)
    return deny("RECEIVER_CORRELATION_MISMATCH");
   const progress=row["progress"];
+  const eventRow=row["eventEvidence"];
+  let eventEvidence:EventEvidence|undefined;
+  if(eventRow!==undefined){
+   if(!eventRow||typeof eventRow!=="object"||Array.isArray(eventRow))
+    return deny("RECEIVER_EVENT_CONTRACT_MISMATCH");
+   const e=eventRow as Record<string,unknown>;
+   const count=e["observedEventCount"],sources=e["sourceEventCount"],signed=e["signedEventCount"];
+   if(![count,sources,signed].every(x=>typeof x==="number"&&Number.isSafeInteger(x)&&x>=0&&x<=100)||
+     (sources as number)>(count as number)||(signed as number)>(count as number)||
+     typeof e["historyTruncated"]!=="boolean"||
+     !(e["lastObservedSourceStatus"]===null||(typeof e["lastObservedSourceStatus"]==="string"&&e["lastObservedSourceStatus"].length<=40))||
+     e["progressProvesCompletion"]!==false||e["nativeWorkerCompletionVerified"]!==false||
+     e["mayIssueGrant"]!==false||e["mayDispatchWorker"]!==false||
+     e["reportedStatus"]!==row["status"]||e["reportedProgress"]!==row["progress"])
+    return deny("RECEIVER_EVENT_CONTRACT_MISMATCH");
+   eventEvidence={observedEventCount:count as number,sourceEventCount:sources as number,
+    signedEventCount:signed as number,historyTruncated:e["historyTruncated"] as boolean,
+    lastObservedSourceStatus:e["lastObservedSourceStatus"] as string|null,
+    progressProvesCompletion:false,nativeWorkerCompletionVerified:false};
+  }
   return {verified:true,reason:"DEV_RECEIVER_IDENTITY_OBSERVED_NOT_EXECUTION_AUTHORITY",
    receiverJobId:row["id"],receiverStatus:row["status"],
+   ...(eventEvidence?{receiverEventEvidence:eventEvidence}:{}),
    ...(typeof progress==="number"&&Number.isFinite(progress)&&progress>=0&&progress<=100?
     {receiverProgress:progress}:{})};
  }catch{return deny("RECEIVER_TRANSPORT_UNAVAILABLE");}
