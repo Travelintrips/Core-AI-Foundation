@@ -1,6 +1,6 @@
 import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {render,screen,fireEvent,waitFor,cleanup} from "@testing-library/react";
-import {Gpt02DevTimelinePanel} from "../../Gpt02DevTimelinePanel";
+import {Gpt02DevTimelinePanel,describeGpt02ReservationReadback} from "../../Gpt02DevTimelinePanel";
 const parent="83db99f5-cbda-4e60-be71-3090fb411bbb";
 const props={humanReviewId:6,jobId:135,parentCommandId:parent};
 const success={
@@ -24,6 +24,18 @@ describe("GPT02 DEV manual timeline UI",()=>{
   const originalFetch=globalThis.fetch;
   beforeEach(()=>{vi.stubGlobal("fetch",vi.fn());});
   afterEach(()=>{cleanup();vi.unstubAllGlobals();globalThis.fetch=originalFetch;});
+  it("distinguishes a verified empty reservation read from readback failure",()=>{
+    expect(describeGpt02ReservationReadback("NO_RESERVATION_FOR_REVIEW",false))
+      .toBe("Belum ada reservasi recovery untuk review ini");
+    expect(describeGpt02ReservationReadback("CANDIDATE_READER_EXECUTE_DENIED",false))
+      .toContain("belum tersedia");
+    expect(describeGpt02ReservationReadback("CANDIDATE_ID_READ_ONLY",true))
+      .toContain("belum izin eksekusi");
+    expect(describeGpt02ReservationReadback("RESERVATION_SCHEMA_READBACK_UNAVAILABLE",false))
+      .toBe("Pembacaan reservasi belum dapat diverifikasi");
+    expect(describeGpt02ReservationReadback(undefined,true))
+      .toBe("Pembacaan reservasi belum dapat diverifikasi");
+  });
   it("does not poll or fetch automatically",()=>{
     render(<Gpt02DevTimelinePanel {...props}/>);
     expect(screen.getByRole("button",{name:/Periksa timeline/})).toBeTruthy();
@@ -58,6 +70,16 @@ describe("GPT02 DEV manual timeline UI",()=>{
     expect(String(url)).toContain("/api/ai/human-tasks/6/gpt02-timeline?");
     expect(String(url)).toContain("jobId=135");
     expect(options).toMatchObject({method:"GET",credentials:"include",cache:"no-store"});
+  });
+  it("renders the verified empty recovery result and distinguishes failed response from BLOCKER event",async()=>{
+    vi.mocked(globalThis.fetch).mockResolvedValue(reply(200,{
+      ...success,reservationReadbackStatus:"NO_RESERVATION_FOR_REVIEW",blockerResponseId:null,
+    }));
+    render(<Gpt02DevTimelinePanel {...props}/>);
+    fireEvent.click(screen.getByRole("button",{name:/Periksa timeline/}));
+    await waitFor(()=>expect(screen.getByText("Belum ada reservasi recovery untuk review ini")).toBeTruthy());
+    expect(screen.getByText(/Respons terakhir FAILED/)).toBeTruthy();
+    expect(screen.getByText(/Tidak ada event BLOCKER terpisah/)).toBeTruthy();
   });
   it("optional cross-ledger failure never displays fabricated zero counts",async()=>{
     vi.mocked(globalThis.fetch).mockResolvedValue(reply(200,{

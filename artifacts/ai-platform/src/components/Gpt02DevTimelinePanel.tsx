@@ -22,6 +22,20 @@ export type Gpt02TimelineReadback = {
     mayCreateCommand:false;mayDispatchWorker:false;mayCloseJob:false};
 };
 
+export function describeGpt02ReservationReadback(status:string|undefined,verified:boolean|undefined){
+  if(status==="CANDIDATE_ID_READ_ONLY" && verified===true)
+    return "Identitas kandidat reservasi terbaca (belum izin eksekusi)";
+  if(status==="NO_RESERVATION_FOR_REVIEW")
+    return "Belum ada reservasi recovery untuk review ini";
+  if(status==="CANDIDATE_READER_NOT_INSTALLED")
+    return "Fungsi pembaca DEV belum dipasang";
+  if(status==="CANDIDATE_READER_EXECUTE_DENIED")
+    return "Hak EXECUTE pembaca DEV belum tersedia";
+  if(status==="MIGRATION_MISSING")
+    return "Tabel reservasi belum tersedia";
+  return "Pembacaan reservasi belum dapat diverifikasi";
+}
+
 export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
   humanReviewId:number;jobId:number;parentCommandId:string;
 }){
@@ -80,8 +94,10 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
       <p>Progres: <strong>{result.progressPercent===null||result.progressPercent===undefined?"Belum dapat dihitung":`${result.progressPercent}%`}</strong></p>
       <p>Aktivitas terakhir: <strong>{result.lastEventKind??"Belum ada"}</strong></p>
       <p>Native ACK: <strong>{result.lastNativeAckVerified?"Bukti checkpoint terverifikasi":"Belum terverifikasi"}</strong></p>
-      <p className="sm:col-span-2">Reservasi recovery: <strong>{result.reservationEvidenceVerified?"Identitas kandidat terbaca":result.reservationReadbackStatus==="CANDIDATE_READER_NOT_INSTALLED"?"Fungsi pembaca DEV belum dipasang":result.reservationReadbackStatus==="CANDIDATE_READER_EXECUTE_DENIED"?"Hak EXECUTE pembaca DEV belum tersedia":result.reservationReadbackStatus==="MIGRATION_MISSING"?"Tabel belum tersedia":"Belum terverifikasi"}</strong></p>
-      <p className="sm:col-span-2 break-all">Blocker: <strong>{result.blockerResponseId??"Tidak tercatat pada snapshot"}</strong></p>
+      <p className="sm:col-span-2">Reservasi recovery: <strong>{describeGpt02ReservationReadback(result.reservationReadbackStatus,result.reservationEvidenceVerified)}</strong></p>
+      <p className="sm:col-span-2 break-all">Event BLOCKER eksplisit: <strong>{result.blockerResponseId??"Tidak ada event BLOCKER terpisah"}</strong></p>
+      {result.lastEventKind==="FAILED"&&
+        <p className="sm:col-span-2 text-red-400">Respons terakhir FAILED. Job belum berhasil; tidak ada izin retry otomatis.</p>}
       <div className="sm:col-span-2 border-t border-border pt-2 space-y-1">
         <p className="font-semibold">Audit lintas-ledger (bukti eksplisit)</p>
         {result.crossLedger?.valid===false&&
