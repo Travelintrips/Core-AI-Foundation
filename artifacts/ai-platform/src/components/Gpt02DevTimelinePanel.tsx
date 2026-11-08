@@ -12,7 +12,9 @@ export type Gpt02TimelineReadback = {
   status?:string; lastEventKind?:string|null; lastEventId?:string|null;
   lastEventAt?:string|null; observedEventCount?:number;
   blockerResponseId?:string|null; lastNativeAckVerified?:boolean;
-  progressPercent?:number|null; mayDispatchWorker?:boolean;
+  progressPercent?:number|null;
+  reservationReadbackStatus?:string; reservationEvidenceVerified?:boolean;
+  mayDispatchWorker?:boolean;
   mayCloseJob?:boolean; eligibleForCompletionReview?:boolean;
 };
 
@@ -66,6 +68,7 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
       <p>Progres: <strong>{result.progressPercent===null||result.progressPercent===undefined?"Belum dapat dihitung":`${result.progressPercent}%`}</strong></p>
       <p>Aktivitas terakhir: <strong>{result.lastEventKind??"Belum ada"}</strong></p>
       <p>Native ACK: <strong>{result.lastNativeAckVerified?"Bukti checkpoint terverifikasi":"Belum terverifikasi"}</strong></p>
+      <p className="sm:col-span-2">Reservasi recovery: <strong>{result.reservationEvidenceVerified?"Identitas kandidat terbaca":result.reservationReadbackStatus==="SELECT_PERMISSION_DENIED"?"Tidak dapat dibaca: hak SELECT DEV belum tersedia":result.reservationReadbackStatus==="MIGRATION_MISSING"?"Tabel belum tersedia":"Belum terverifikasi"}</strong></p>
       <p className="sm:col-span-2 break-all">Blocker: <strong>{result.blockerResponseId??"Tidak tercatat pada snapshot"}</strong></p>
       <p className="sm:col-span-2 text-muted-foreground">Finalisasi: tetap memerlukan persetujuan serta bukti hasil independen. Tampilan ini bukan otorisasi.</p>
     </div>}

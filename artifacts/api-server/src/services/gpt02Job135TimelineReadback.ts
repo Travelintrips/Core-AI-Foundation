@@ -28,13 +28,13 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
       process.env["NODE_ENV"]!=="development") return denied("DEV_ONLY");
   const invalid=validateGpt02TimelineReadbackInput(x);
   if(invalid)return denied(invalid);
+  // A deployed DEV may not yet have the recovery reservation migration.
+  // Read the authenticated Human Review first using existing baseline tables,
+  // then detect optional reservation schema without executing a query against
+  // a missing table. No migration is applied by this diagnostic.
   const subject=await db.execute(sql`
-    SELECT t.id,t.status,t.assigned_user,t.payload_json,
-      r.id AS reservation_id,r.candidate_command_id
+    SELECT t.id,t.status,t.assigned_user,t.payload_json
     FROM ai_platform.ai_human_tasks t
-    LEFT JOIN ai_platform.gpt02_dev_recovery_reservations r
-      ON r.human_review_id=t.id AND r.job_id=${x.jobId}
-       AND r.parent_command_id=${x.parentCommandId}::uuid
     WHERE t.id=${x.humanReviewId}
       AND t.source_module='ai_core_lifecycle'
       AND t.payload_json->>'commandId'=${x.parentCommandId}
@@ -43,8 +43,33 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
   `);
   const row=subject.rows?.[0];
   if(!row)return denied("HUMAN_REVIEW_JOB_BINDING_NOT_FOUND");
-  const candidate=typeof row["candidate_command_id"]==="string" &&
-    uuid.test(row["candidate_command_id"])?row["candidate_command_id"]:null;
+  const schema=await db.execute(sql`
+    SELECT to_regclass('ai_platform.gpt02_dev_recovery_reservations') IS NOT NULL
+      AS reservations_present,
+      CASE WHEN to_regclass('ai_platform.gpt02_dev_recovery_reservations') IS NOT NULL
+        THEN has_table_privilege(current_user,
+          'ai_platform.gpt02_dev_recovery_reservations','SELECT')
+        ELSE false END AS reservations_readable
+  `);
+  if(typeof schema.rows?.[0]?.["reservations_present"]!=="boolean" ||
+     typeof schema.rows?.[0]?.["reservations_readable"]!=="boolean")
+    return denied("RESERVATION_SCHEMA_READBACK_UNAVAILABLE");
+  const reservationsPresent=schema.rows[0]["reservations_present"]===true;
+  const reservationsReadable=schema.rows[0]["reservations_readable"]===true;
+  let candidate:string|null=null;
+  if(reservationsPresent && reservationsReadable){
+    const reservation=await db.execute(sql`
+      SELECT r.candidate_command_id
+      FROM ai_platform.gpt02_dev_recovery_reservations r
+      WHERE r.human_review_id=${x.humanReviewId} AND r.job_id=${x.jobId}
+        AND r.parent_command_id=${x.parentCommandId}::uuid
+      LIMIT 1
+    `);
+    const item=reservation.rows?.[0]?.["candidate_command_id"];
+    if(item!==undefined && item!==null && (typeof item!=="string" || !uuid.test(item)))
+      return denied("RECOVERY_CANDIDATE_IDENTITY_INVALID");
+    candidate=typeof item==="string"?item:null;
+  }
   const commandIds=[x.parentCommandId,...(candidate?[candidate]:[])];
   const history=await db.execute(sql`
     SELECT id,command_id,kind,created_at,acknowledged_at
@@ -88,5 +113,11 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
     reviewAccepted:row["status"]==="accepted",responses:evidence,
   });
   return {ok:true as const,reviewOnly:true as const,
+    mayCreateCommand:false as const,
+    reservationSchemaAvailable:reservationsPresent,
+    reservationReadbackStatus:!reservationsPresent?"MIGRATION_MISSING":
+      !reservationsReadable?"SELECT_PERMISSION_DENIED":
+      candidate===null?"NO_RESERVATION_FOR_REVIEW":"CANDIDATE_ID_READ_ONLY",
+    reservationEvidenceVerified:reservationsPresent && reservationsReadable && candidate!==null,
     ...projection,mayDispatchWorker:false as const,mayCloseJob:false as const};
 }
