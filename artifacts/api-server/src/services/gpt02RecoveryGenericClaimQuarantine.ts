@@ -40,3 +40,13 @@ export function genericClaimNotGpt02RecoverySql() {
   )
 `;
 }
+
+
+// Additional DEV-only fail-closed identity census. No broad ledger SELECT.
+// SQL is emitted only for APP_ENV=development, keeping legacy PROD schema
+// independent until a separately approved migration exists there.
+export function genericClaimNotReservedCandidateSql() {
+  if(process.env["APP_ENV"]!=="development")
+    return sql`TRUE`;
+  return sql`ai_platform.gpt02_dev_generic_claim_allowed(id)`;
+}

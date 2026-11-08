@@ -1,7 +1,8 @@
 import {describe,it,expect} from "vitest";
 import {PgDialect} from "drizzle-orm/pg-core";
 import {
-  genericClaimNotGpt02RecoverySql,isQuarantinedGpt02RecoveryMetadata,
+  genericClaimNotGpt02RecoverySql,genericClaimNotReservedCandidateSql,
+  isQuarantinedGpt02RecoveryMetadata,
 } from "../gpt02RecoveryGenericClaimQuarantine.js";
 
 describe("generic worker never claims DEV GPT02 recovery",()=>{
@@ -48,4 +49,26 @@ describe("generic worker never claims DEV GPT02 recovery",()=>{
     expect(claim.indexOf("AND ${genericClaimNotGpt02RecoverySql()}")).toBeLessThan(
       claim.indexOf("FOR UPDATE SKIP LOCKED"));
   });
+  it("DEV uses owner-owned candidate identity function without broad table grants",()=>{
+    const prev=process.env["APP_ENV"];
+    try {
+      process.env["APP_ENV"]="development";
+      expect(new PgDialect().sqlToQuery(genericClaimNotReservedCandidateSql()).sql)
+        .toContain("ai_platform.gpt02_dev_generic_claim_allowed(id)");
+      process.env["APP_ENV"]="production";
+      expect(new PgDialect().sqlToQuery(genericClaimNotReservedCandidateSql()).sql).toContain("TRUE");
+      process.env["APP_ENV"]="staging";
+      expect(new PgDialect().sqlToQuery(genericClaimNotReservedCandidateSql()).sql).toContain("TRUE");
+    }finally{if(prev===undefined)delete process.env["APP_ENV"];else process.env["APP_ENV"]=prev}
+  });
+  it("generic claimant also includes the unmarked candidate identity filter",async()=>{
+    const {readFileSync}=await import("node:fs");
+    const source=readFileSync(new URL("../localCodingControlBridgeService.ts",import.meta.url),"utf8");
+    const claim=source.slice(source.indexOf("export async function claimCodingBridgeCommand("),
+      source.indexOf("// Only a worker holding the active command claim"));
+    expect(claim).toContain("AND ${genericClaimNotReservedCandidateSql()}");
+    expect(claim.indexOf("AND ${genericClaimNotReservedCandidateSql()}")).toBeLessThan(
+      claim.indexOf("FOR UPDATE SKIP LOCKED"));
+  });
+
 });
