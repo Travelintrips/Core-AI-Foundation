@@ -71,19 +71,21 @@ done
 echo 'PASS: missing review ID and mismatched review identity both denied'
 # A privileged SQL caller must not invent a different human approver,
 # nor backdate approval / create an excessively long-lived grant.
-for case in bad_approver long_ttl old_approval;do
+for case in bad_approver long_ttl old_approval null_consumed_approver;do
  if [[ "$case" == bad_approver ]];then
   query="UPDATE ai_platform.dev_gpt02_resume_grants SET approved_by='internal:8';"
  elif [[ "$case" == long_ttl ]];then
   query="UPDATE ai_platform.dev_gpt02_resume_grants SET expires_at=approved_at + interval '10 minutes';"
- else
+ elif [[ "$case" == old_approval ]];then
   query="UPDATE ai_platform.dev_gpt02_resume_grants SET approved_at=created_at - interval '1 day';"
+ else
+  query="UPDATE ai_platform.dev_gpt02_resume_grants SET status='CONSUMED',consumed_at=clock_timestamp(),approved_by=NULL;"
  fi
  if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$query" > "$DIR/$case" 2>&1;then
   echo "NO-GO: unsafe grant UPDATE allowed $case";exit 1
  fi
 done
-echo 'PASS: wrong approver identity, excessive grant TTL and backdated approval all denied'
+echo 'PASS: wrong approver identity, excessive TTL, backdated approval and NULL consumed approver all denied'
 
 # Replay protection survives a grant's REVOKED status. One review must never
 # back a second grant, even when the one-live-per-command index no longer applies.
