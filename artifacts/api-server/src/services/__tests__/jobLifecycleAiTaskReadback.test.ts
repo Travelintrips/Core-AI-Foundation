@@ -7,7 +7,9 @@ const env={APP_ENV:"development",NODE_ENV:"test",AI_TASK_LEDGER_READBACK_ENABLED
 const body={found:true,source:"AI_CORE",external_id:"bridge-command:"+id,
  id:job,status:"processing",progress:34,timeline:{commandId:id},readOnly:true,
  verifiedExecution:false,mayIssueGrant:false,mayDispatchWorker:false};
-const mock=(value:unknown,status=200)=>vi.fn(async()=>({status,ok:status===200,json:async()=>value})) as unknown as typeof fetch;
+const mock=(value:unknown,status=200)=>vi.fn(async()=>new Response(JSON.stringify(value),{
+ status,headers:{"Content-Type":"application/json"},
+})) as unknown as typeof fetch;
 it("matching DEV ledger response is only identity evidence",async()=>{
  const fetcher=mock(body);
  const result=await readDevAiTaskJob(id,env,fetcher);
@@ -45,6 +47,31 @@ it("release defaults cannot contact PROD or unconfigured endpoint",async()=>{
   expect((await readDevAiTaskJob(id,{...env,...config},fetcher)).verified).toBe(false);
   expect(fetcher).not.toHaveBeenCalled();
  }
+});
+it("oversized, invalid-type, truncated and malformed receiver responses fail closed",async()=>{
+ const badResponse=(data:string,headers:Record<string,string>)=>
+  vi.fn(async()=>new Response(data,{status:200,headers})) as unknown as typeof fetch;
+ const oversized=JSON.stringify({...body,padding:"a".repeat(35000)});
+ for(const fetcher of [
+  badResponse(oversized,{"Content-Type":"application/json"}),
+  badResponse(JSON.stringify(body),{"Content-Type":"text/html"}),
+  badResponse(JSON.stringify(body),{"Content-Type":"application/json","Content-Length":"999999"}),
+  badResponse('{"found":true',{ "Content-Type":"application/json"}),
+ ]){
+  const result=await readDevAiTaskJob(id,env,fetcher);
+  expect(result.verified).toBe(false);
+ }
+});
+it("a real streaming receiver is consumed with no-store GET and bearer authentication",async()=>{
+ const fetcher=mock(body);
+ const result=await readDevAiTaskJob(id,env,fetcher);
+ expect(result.verified).toBe(true);
+ const [url,options]=vi.mocked(fetcher).mock.calls[0]!;
+ expect(String(url)).toContain("bridge-command%3A"+id);
+ expect(options?.method).toBe("GET");
+ expect(options?.redirect).toBe("error");
+ expect((options?.headers as Record<string,string>)["Cache-Control"]).toBe("no-store");
+ expect((options?.headers as Record<string,string>).Authorization).toMatch(/^Bearer /);
 });
 it("404 and network failure remain unverified",async()=>{
  expect((await readDevAiTaskJob(id,env,mock({},404))).verified).toBe(false);

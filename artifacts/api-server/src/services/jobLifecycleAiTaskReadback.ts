@@ -1,6 +1,33 @@
 /** Read-only DEV AI Task receiver correlation; never issue grants or worker calls. */
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Result={verified:boolean;reason:string;receiverJobId?:string;receiverStatus?:string;receiverProgress?:number};
+const MAX_LEDGER_BYTES=32*1024;
+/** Consume no more than 32 KiB of receiver JSON, even if Content-Length lies.
+ * A real fetch Response supplies a readable stream; reject unavailable bodies.
+ * Never trust this receiver as execution authority. */
+async function readBoundedReceiverJson(response:Response):Promise<unknown>{
+ const type=response.headers.get("content-type")?.toLowerCase().split(";")[0]?.trim();
+ if(type!=="application/json")throw Error("LEDGER_NOT_JSON");
+ const length=response.headers.get("content-length");
+ if(length!==null&&(!/^[0-9]+$/.test(length)||Number(length)>MAX_LEDGER_BYTES))
+  throw Error("LEDGER_RESPONSE_TOO_LARGE");
+ if(!response.body)throw Error("LEDGER_RESPONSE_STREAM_MISSING");
+ const reader=response.body.getReader();
+ const decoder=new TextDecoder("utf-8",{fatal:true});
+ let bytes=0;
+ let raw="";
+ try{
+  while(true){
+   const {done,value}=await reader.read();
+   if(done)break;
+   bytes+=value.byteLength;
+   if(bytes>MAX_LEDGER_BYTES)throw Error("LEDGER_RESPONSE_TOO_LARGE");
+   raw+=decoder.decode(value,{stream:true});
+  }
+  raw+=decoder.decode();
+  return JSON.parse(raw);
+ }finally{reader.releaseLock();}
+}
 export async function readDevAiTaskJob(commandId:string,
  env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<Result>{
  const deny=(reason:string):Result=>({verified:false,reason});
@@ -16,12 +43,13 @@ export async function readDevAiTaskJob(commandId:string,
  try{
   const response=await fetcher("https://dev-ai-task.cstlogistic.co.id/api/bridge/jobs/by-external-id/"+
    encodeURIComponent(externalId),{
-   method:"GET",headers:{Authorization:"Bearer "+token,Accept:"application/json"},
+   method:"GET",headers:{Authorization:"Bearer "+token,Accept:"application/json",
+    "Cache-Control":"no-store"},
    redirect:"error",signal:AbortSignal.timeout(3000),
   });
   if(response.status===404)return deny("RECEIVER_JOB_NOT_FOUND");
   if(!response.ok)return deny("RECEIVER_READBACK_UNAVAILABLE");
-  const payload:unknown=await response.json();
+  const payload:unknown=await readBoundedReceiverJson(response);
   if(!payload||typeof payload!=="object"||Array.isArray(payload))return deny("RECEIVER_INVALID_RESPONSE");
   const row=payload as Record<string,unknown>;
   const timeline=row["timeline"];
