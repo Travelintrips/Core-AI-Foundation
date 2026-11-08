@@ -26,7 +26,7 @@ export function summarizeDevRecoveryEvidence(commandId:string,source:{
  checkpointAttested?:boolean;receiverAckVerified?:boolean;
  blockerEvidenceValid?:boolean;workerPresenceHealthy?:boolean;
  commandStatusReviewable?:boolean;checkpointResponseId?:string|null;
- blockingResponseId?:string|null;
+ blockingResponseId?:string|null;sourceTaskId?:string|null;
 }):RecoverySummary{
  const notVerified=(id:string,reason:string):EvidenceCheck=>({id,state:"NOT_VERIFIED",reason});
  const checks:EvidenceCheck[]=[
