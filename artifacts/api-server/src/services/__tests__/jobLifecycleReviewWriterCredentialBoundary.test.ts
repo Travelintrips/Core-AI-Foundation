@@ -20,7 +20,13 @@ describe("candidate writer credential separation (validation only, never a ready
   [{writerDatabaseUrl:good.writerDatabaseUrl?.replace("db.dev.invalid","db.prod.invalid")},"DATABASE_TARGET_MISMATCH"],
   [{writerDatabaseUrl:good.writerDatabaseUrl?.replace("/postgres","/otherdb")},"DATABASE_TARGET_MISMATCH"],
   [{writerDatabaseUrl:good.writerDatabaseUrl?.replace("gpt02_dev_review_writer_login","postgres")},"DEDICATED_WRITER_ROLE_REQUIRED"],
-  [{writerDatabaseUrl:good.writerDatabaseUrl+"?options=-crole%3Dpostgres"},"WRITER_STARTUP_ROLE_OVERRIDE_FORBIDDEN"],
+  [{writerDatabaseUrl:good.writerDatabaseUrl+"?options=-crole%3Dpostgres"},"DATABASE_URL_PARAMETER_OVERRIDE_FORBIDDEN"],
+  [{writerDatabaseUrl:good.writerDatabaseUrl+"?host=db.prod.invalid"},"DATABASE_URL_PARAMETER_OVERRIDE_FORBIDDEN"],
+  [{writerDatabaseUrl:good.writerDatabaseUrl+"?user=postgres"},"DATABASE_URL_PARAMETER_OVERRIDE_FORBIDDEN"],
+  [{writerDatabaseUrl:good.writerDatabaseUrl+"?dbname=otherdb"},"DATABASE_URL_PARAMETER_OVERRIDE_FORBIDDEN"],
+  [{runtimeDatabaseUrl:good.runtimeDatabaseUrl+"?host=db.other.invalid"},"DATABASE_URL_PARAMETER_OVERRIDE_FORBIDDEN"],
+  [{writerDatabaseUrl:good.writerDatabaseUrl?.replace("writer-test-secret","runtime-test-secret")},"RUNTIME_CREDENTIAL_REUSE_FORBIDDEN"],
+  [{writerDatabaseUrl:good.writerDatabaseUrl?.replace("writer-test-secret","runtime-test-s%65cret"),runtimeDatabaseUrl:good.runtimeDatabaseUrl?.replace("runtime-test-secret","runtime-test-secret")},"RUNTIME_CREDENTIAL_REUSE_FORBIDDEN"],
   [{writerDatabaseUrl:"not a database url"},"DATABASE_URL_INVALID"],
  ] as const)("rejects disallowed credentials and environments %#", (overrides,reason)=>{
   expect(check({...good,...overrides})).toMatchObject({

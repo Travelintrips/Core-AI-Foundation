@@ -30,14 +30,22 @@ export function assessDevReviewWriterCredentialBoundary(input:{
     if(runtime.hostname.toLowerCase()!==writer.hostname.toLowerCase()||
        runtime.port!==writer.port||runtime.pathname!==writer.pathname)
       return deny("DATABASE_TARGET_MISMATCH");
-    if(runtime.username===writer.username||runtime.password===writer.password||
+    // URL.username/password expose percent-encoded strings; compare the
+    // actual decoded credentials to prevent reuse hidden by URL encoding.
+    const runtimeUser=decodeURIComponent(runtime.username);
+    const writerUser=decodeURIComponent(writer.username);
+    const runtimePassword=decodeURIComponent(runtime.password);
+    const writerPassword=decodeURIComponent(writer.password);
+    if(runtimeUser===writerUser||runtimePassword===writerPassword||
        input.runtimeDatabaseUrl===input.writerDatabaseUrl)
       return deny("RUNTIME_CREDENTIAL_REUSE_FORBIDDEN");
-    if(writer.username!=="gpt02_dev_review_writer_login")
+    if(writerUser!=="gpt02_dev_review_writer_login")
       return deny("DEDICATED_WRITER_ROLE_REQUIRED");
-    if(writer.searchParams.has("options")||writer.searchParams.has("role")||
-       writer.searchParams.has("search_path"))
-      return deny("WRITER_STARTUP_ROLE_OVERRIDE_FORBIDDEN");
+    // Do not accept libpq overrides for identity, address, or database.
+    // Extra query fields are not required for this preflight proposal.
+    // A dedicated writer must use a reviewed connection configuration.
+    if(writer.search||runtime.search)
+      return deny("DATABASE_URL_PARAMETER_OVERRIDE_FORBIDDEN");
     return {eligibleForIndependentSecurityReview:true,reason:"DISTINCT_CREDENTIAL_SHAPE_ONLY_NOT_READY"};
   }catch{return deny("DATABASE_URL_INVALID");}
 }
