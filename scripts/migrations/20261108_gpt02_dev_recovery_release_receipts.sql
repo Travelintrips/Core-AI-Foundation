@@ -6,6 +6,17 @@ BEGIN
   IF current_setting('ai_core.dev_migration_authorized',true) IS DISTINCT FROM 'true' THEN
     RAISE EXCEPTION 'GPT02_DEV_MIGRATION_AUTHORIZATION_REQUIRED';
   END IF;
+  -- Require actual reservation-table ownership, not merely schema CREATE
+  -- or an arbitrary session setting. This does not relax RLS or GRANTs.
+  IF to_regclass('ai_platform.gpt02_dev_recovery_reservations') IS NULL OR
+     NOT EXISTS (
+       SELECT 1 FROM pg_class c WHERE
+         c.oid='ai_platform.gpt02_dev_recovery_reservations'::regclass
+         AND c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user)
+         AND c.relrowsecurity IS TRUE AND c.relforcerowsecurity IS FALSE
+     ) THEN
+     RAISE EXCEPTION 'GPT02_RECOVERY_LEDGER_MIGRATION_OWNER_OR_RLS_MISMATCH';
+  END IF;
 END $guard$;
 
 CREATE TABLE IF NOT EXISTS ai_platform.gpt02_dev_recovery_lease_releases (
