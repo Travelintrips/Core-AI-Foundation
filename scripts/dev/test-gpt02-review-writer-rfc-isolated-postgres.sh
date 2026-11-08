@@ -13,7 +13,8 @@ CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE SCHEMA ai_platform;
 GRANT USAGE ON SCHEMA ai_platform TO aicore_dev_runtime;
-CREATE TABLE ai_platform.ai_coding_bridge_commands(id uuid PRIMARY KEY);
+CREATE TABLE ai_platform.ai_coding_bridge_commands(id uuid PRIMARY KEY, status text NOT NULL);
+INSERT INTO ai_platform.ai_coding_bridge_commands VALUES ('169a7492-cfd8-4a56-bb57-18001b6b5968','PROCESSING');
 CREATE TABLE ai_platform.ai_coding_bridge_responses(id uuid PRIMARY KEY);
 CREATE TABLE ai_platform.internal_users(id integer PRIMARY KEY);
 CREATE TABLE ai_platform.dev_gpt02_operator_review_intents(id integer PRIMARY KEY, proof_json jsonb);
@@ -40,6 +41,19 @@ for sql in "UPDATE ai_platform.dev_gpt02_operator_review_intents SET proof_json=
  fi
 done
 echo "WRITE DENIAL PASS"
+# The command lock used by the existing persistence code needs UPDATE privilege.
+# SELECT-only must not be mistaken for the same protection.
+if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c  "SET ROLE gpt02_dev_review_writer; SELECT id FROM ai_platform.ai_coding_bridge_commands WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968' FOR UPDATE" >/dev/null 2>&1; then
+ echo "FAIL: dedicated writer unexpectedly acquired FOR UPDATE";exit 1
+fi
+echo "FOR UPDATE DENIED WITHOUT COMMAND UPDATE PASS"
+# PostgreSQL also requires UPDATE privilege for row-locking SELECT modes.
+# Do not use weaker lock variants to bypass the command fencing requirement.
+if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c \
+ "SET ROLE gpt02_dev_review_writer; SELECT id FROM ai_platform.ai_coding_bridge_commands WHERE id='169a7492-cfd8-4a56-bb57-18001b6b5968' FOR KEY SHARE" >/dev/null 2>&1; then
+ echo "FAIL: writer unexpectedly acquired row lock";exit 1
+fi
+echo "ROW LOCK WITHOUT UPDATE PRIVILEGE DENIED PASS"
 if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET ROLE aicore_dev_runtime; INSERT INTO ai_platform.dev_gpt02_operator_review_intents VALUES (2,'{}')" >/dev/null 2>&1; then
  echo "FAIL: ordinary runtime gained INSERT";exit 1
 fi
