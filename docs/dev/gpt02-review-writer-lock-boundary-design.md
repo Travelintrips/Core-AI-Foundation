@@ -31,3 +31,8 @@ The existing signed-review persistence function was tested with additional deter
 
 ## Application signer-to-persistence integration tests (2026-11-08)
 Added focused tests that create a short-lived proof using the actual DEV signer with an ephemeral Ed25519 test keypair, pass that proof to the actual persistence service, verify that the pre-transaction signature check permits a simulated DB write, and separately show that post-signing tampering fails before any SQL transaction. Focused suite: 17/17 PASS locally. Database calls remain Vitest mocks: these tests DO NOT establish genuine DB writer privileges, actual persisted review, worker ACK authenticity, or live resume readiness. Standalone SQL writer prototype still accepts unsigned input and MUST remain undeployed.
+
+## Read-after-lock evidence-fencing prototype — 2026-11-08
+Added a new disposable PostgreSQL 16 regression with a synthetic command, checkpoint, ACK, BLOCKER, operator, and append-only audit. Its restricted stored routine acquires a command lock, then reads response/operator evidence before appending. Tests independently reject a revoked operator, downgraded operator role, missing checkpoint ACK, superseded BLOCKER, terminal response, and terminal command. The historical audit row count stays constant after every denied attempt; the ordinary runtime cannot execute this procedure.
+
+This is a **proof-of-concept only**: the synthetic procedure still does not validate Ed25519, user session, actual worker receipts, proof expiration or real production schemas. Its acceptance of synthetic unsigned data is a known NO-GO condition. Do not apply it to CST-DEV or PROD; keep signer disabled until a trusted credential boundary and complete proof verification are implemented.

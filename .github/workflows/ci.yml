@@ -50,6 +50,8 @@ jobs:
         run: bash scripts/dev/test-gpt02-review-writer-rfc-isolated-postgres.sh
       - name: Verify synthetic GPT02 command-lock atomic writer prototype
         run: bash scripts/dev/test-gpt02-review-atomic-lock-prototype-isolated-postgres.sh
+      - name: Verify synthetic GPT02 review evidence fencing rejects stale and revoked audit
+        run: bash scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh
       - name: Verify concurrent terminal-state review-audit gate
         run: bash scripts/dev/test-gpt02-review-audit-command-race-postgres.sh
       - name: Verify exact GPT02 proposed claim remains inert in isolated PostgreSQL
