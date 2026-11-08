@@ -9,6 +9,8 @@ export type EvidenceState="OBSERVED"|"BLOCKED"|"NOT_VERIFIED";
 export type EvidenceCheck={id:string;state:EvidenceState;reason:string};
 export type RecoverySummary={found:boolean;commandId:string;commandStatus?:string;
   sourceTaskId:string|null;sourceTaskIdVerifiedAsAiTaskJob:false;
+  expectedAiTaskLedgerExternalId:string|null;
+  aiTaskLedgerReadbackVerified:false;
   releaseDecision:"NO_GO";snapshotAtomic:false;maySign:false;mayIssueGrant:false;
   mayDispatchWorker:false;mayCloseJob:false;checks:EvidenceCheck[]};
 function check(id:string,pass:boolean,positive:string,negative:string):EvidenceCheck{
@@ -48,6 +50,10 @@ export function summarizeDevRecoveryEvidence(commandId:string,source:{
   sourceTaskId:source.found&&typeof source.sourceTaskId==="string"&&
     source.sourceTaskId.length>0?source.sourceTaskId:null,
   sourceTaskIdVerifiedAsAiTaskJob:false,
+  // The passive ledger reconciler registers bridge-command records using
+  // this stable source ID; this value is a lookup key, NOT evidence of sync.
+  expectedAiTaskLedgerExternalId:source.found?"bridge-command:"+commandId:null,
+  aiTaskLedgerReadbackVerified:false,
   releaseDecision:"NO_GO",snapshotAtomic:false,maySign:false,mayIssueGrant:false,
   mayDispatchWorker:false,mayCloseJob:false,checks};
 }

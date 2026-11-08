@@ -24,6 +24,8 @@ describe("DEV evidence summary never escalates observation to authority",()=>{
    commandStatusReviewable:true,sourceTaskId:"source-task-42"});
   expect(s.sourceTaskId).toBe("source-task-42");
   expect(s.sourceTaskIdVerifiedAsAiTaskJob).toBe(false);
+  expect(s.expectedAiTaskLedgerExternalId).toBe("bridge-command:"+id);
+  expect(s.aiTaskLedgerReadbackVerified).toBe(false);
   expect(s.checks.find(x=>x.id==="job_intake")?.state).toBe("NOT_VERIFIED");
   expect(s.releaseDecision).toBe("NO_GO");
  });
@@ -31,6 +33,7 @@ describe("DEV evidence summary never escalates observation to authority",()=>{
   const s=summarizeDevRecoveryEvidence(id,{found:false,responseSnapshotComplete:true,checkpointAttested:true,
     receiverAckVerified:true,blockerEvidenceValid:true,workerPresenceHealthy:true});
   expect(s.found).toBe(false);
+  expect(s.expectedAiTaskLedgerExternalId).toBeNull();
   expect(s.checks.some(x=>x.state==="OBSERVED")).toBe(false);
  });
 });
