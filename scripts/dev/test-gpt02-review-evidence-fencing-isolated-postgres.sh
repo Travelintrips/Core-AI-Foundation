@@ -105,6 +105,16 @@ echo "GENERIC WRITER DIRECT SQL FORGERY DENIED PASS"
 test_case "COMPROMISED VERIFIED SERVICE STILL ACCEPTS REUSED SIGNATURE" t "$forged"
 count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
 [ "$count" = 2 ] || { echo "FAIL expected synthetic bypass demonstration";exit 1; }
+# Use the real TypeScript service contract (not just a standalone verifier)
+# with a private CLI test adapter invoking an isolated PostgreSQL transaction.
+# No credentials, listener, or SQL endpoint are exposed to the running API.
+(cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts contract-valid "$name")
+for mode in tampered expired; do
+ (cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts "contract-$mode" "$name")
+done
+count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
+[ "$count" = 3 ] || { echo "FAIL contract bypassed verifier or failed append: $count";exit 1; }
+echo "SERVICE CONTRACT DATABASE AUDIT COUNT PASS"
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='suspended' WHERE id=7" >/dev/null
 test_case "OPERATOR REVOKED" f "$signed_proof_b64"
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='active',role='viewer' WHERE id=7" >/dev/null
@@ -118,7 +128,7 @@ test_case "TERMINAL RESPONSE" f "$signed_proof_b64"
 docker exec "$name" psql -U postgres -q -c "DELETE FROM isolated.responses WHERE id=13; UPDATE isolated.commands SET status='FAILED' WHERE id=1" >/dev/null
 test_case "TERMINAL COMMAND" f "$signed_proof_b64"
 count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
-[ "$count" = 2 ] || { echo "FAIL historical audit count: $count"; exit 1; }
+[ "$count" = 3 ] || { echo "FAIL historical audit count: $count"; exit 1; }
 echo "AUDIT COUNT UNCHANGED PASS"
 if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET ROLE runtime; SELECT isolated.try_append(1,7,10,11,'{}'::jsonb)" >/dev/null 2>&1; then
  echo "FAIL ordinary runtime executed trusted-writer procedure";exit 1
