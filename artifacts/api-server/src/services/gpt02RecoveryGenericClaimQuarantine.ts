@@ -24,7 +24,10 @@ export function isQuarantinedGpt02RecoveryMetadata(value: unknown): boolean {
 // SQL key checks deliberately test PRESENCE, not truthiness: a malicious
 // null/false recovery marker may not circumvent the generic-worker blockade.
 // Do not require reservation-table SELECT grants from the application role.
-export const genericClaimNotGpt02Recovery = sql`
+// Construct lazily: unrelated bridge tests mock drizzle-orm without a sql
+// export and must not fail merely from importing this safety module.
+export function genericClaimNotGpt02RecoverySql() {
+  return sql`
   NOT (
     metadata_json ?| ARRAY[
       'gpt02Recovery','gpt02RecoveryParentCommandId',
@@ -36,3 +39,4 @@ export const genericClaimNotGpt02Recovery = sql`
     )
   )
 `;
+}

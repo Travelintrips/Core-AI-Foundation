@@ -10,8 +10,8 @@ trap cleanup EXIT
 cd "$root"
 pnpm --dir artifacts/api-server exec tsx -e "
 import {PgDialect} from 'drizzle-orm/pg-core';
-import {genericClaimNotGpt02Recovery} from './src/services/gpt02RecoveryGenericClaimQuarantine.ts';
-console.log(new PgDialect().sqlToQuery(genericClaimNotGpt02Recovery).sql);
+import {genericClaimNotGpt02RecoverySql} from './src/services/gpt02RecoveryGenericClaimQuarantine.ts';
+console.log(new PgDialect().sqlToQuery(genericClaimNotGpt02RecoverySql()).sql);
 " > "$temp/predicate.sql"
 grep -q 'metadata_json ?|' "$temp/predicate.sql"
 grep -q 'parentCommandId' "$temp/predicate.sql"

@@ -24,7 +24,7 @@ import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, i
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
 import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
-import {genericClaimNotGpt02Recovery,isQuarantinedGpt02RecoveryMetadata}
+import {genericClaimNotGpt02RecoverySql,isQuarantinedGpt02RecoveryMetadata}
   from "./gpt02RecoveryGenericClaimQuarantine.js";
 import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent } from "./devSopCheckpointIssuer.js";
 import { assertNoSelfAttestedCheckpoint } from "./devCheckpointClaimGuard.js";
@@ -872,7 +872,7 @@ export async function claimCodingBridgeCommand(input: {
         AND command_type <> 'DEV_CONTINUITY_WATCH'
         -- A direct UUID target, SSE or expired claim cannot bypass
         -- the dedicated GPT02 recovery fencing issuer/worker protocol.
-        AND ${genericClaimNotGpt02Recovery}
+        AND ${genericClaimNotGpt02RecoverySql()}
         AND CASE WHEN command_type = 'EXTERNAL_AGENT_WORK'
           AND metadata_json ->> 'capability' = 'chatgpt:wake'
           AND metadata_json ? 'devContinuity'
