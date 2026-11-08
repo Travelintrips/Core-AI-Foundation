@@ -57,7 +57,19 @@ BEGIN
    OR p_proof->>'workerId' IS DISTINCT FROM 'openclaw-dell-chatgpt-wake-dev'
    OR p_proof->>'nonce' !~ '^[a-f0-9]{64}$'
    OR p_proof->>'signatureBase64' !~ '^[a-zA-Z0-9+/]{86}==$'
+   OR p_proof->>'issuedAt' !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
+   OR p_proof->>'expiresAt' !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
  THEN RETURN false; END IF;
+ -- These SQL checks are a second clock boundary, not signature validation.
+ BEGIN
+   IF (p_proof->>'issuedAt')::timestamptz > clock_timestamp()
+      OR (p_proof->>'expiresAt')::timestamptz <= clock_timestamp()
+      OR (p_proof->>'expiresAt')::timestamptz <= (p_proof->>'issuedAt')::timestamptz
+      OR (p_proof->>'expiresAt')::timestamptz >
+         (p_proof->>'issuedAt')::timestamptz + interval '120 seconds'
+   THEN RETURN false; END IF;
+ EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow THEN RETURN false;
+ END;
  SELECT status INTO v_status FROM isolated.commands WHERE id=p_command FOR UPDATE;
  IF v_status IS DISTINCT FROM 'PROCESSING' THEN RETURN false; END IF;
  -- Separate statement after the command lock gives the latest committed response
@@ -107,6 +119,12 @@ done
 # even when bypassing the application verifier. Signature itself is not checked.
 bad_bind="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys,base64; p=json.load(sys.stdin); p["operatorId"]="internal:8"; print(base64.b64encode(json.dumps(p).encode()).decode())')"
 test_case "DATABASE PROOF IDENTITY BINDING REJECTION" f "$bad_bind"
+# Reject direct forged expiry bypass, even by a verifier DB credential.
+# This is defense in depth; a valid-time forged signature still succeeds.
+expired_direct="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys,base64; from datetime import datetime,timedelta,timezone; p=json.load(sys.stdin); t=datetime.now(timezone.utc)-timedelta(minutes=5); p["issuedAt"]=t.isoformat(timespec="milliseconds").replace("+00:00","Z"); p["expiresAt"]=(t+timedelta(seconds=60)).isoformat(timespec="milliseconds").replace("+00:00","Z"); p["nonce"]="b"*64; print(base64.b64encode(json.dumps(p).encode()).decode())')"
+test_case "DIRECT SQL EXPIRED PROOF DENIED" f "$expired_direct"
+future_direct="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys,base64; from datetime import datetime,timedelta,timezone; p=json.load(sys.stdin); t=datetime.now(timezone.utc)+timedelta(minutes=5); p["issuedAt"]=t.isoformat(timespec="milliseconds").replace("+00:00","Z"); p["expiresAt"]=(t+timedelta(seconds=60)).isoformat(timespec="milliseconds").replace("+00:00","Z"); p["nonce"]="c"*64; print(base64.b64encode(json.dumps(p).encode()).decode())')"
+test_case "DIRECT SQL FUTURE-DATED PROOF DENIED" f "$future_direct"
 # The generic writer role has no EXECUTE; direct signature reuse by that
 # identity fails even while the command is PROCESSING.
 forged="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys,base64; p=json.load(sys.stdin); p["nonce"]="a"*64; print(base64.b64encode(json.dumps(p).encode()).decode())')"
