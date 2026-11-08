@@ -103,14 +103,16 @@ done
 wait
 winners="$(grep -l '^success$' "$DIR"/race*.status | wc -l)"
 denied="$(grep -l '^denied$' "$DIR"/race*.status | wc -l)"
-# Count only the intended permanent review-uniqueness denial. A timeout,
-# connection failure, or unrelated CHECK violation is NOT an acceptable loser.
+# Two unique indexes can arbitrate competing inserts: same review lifetime
+# or same active command. Either exact uniqueness conflict is acceptable;
+# connection errors or unrelated CHECK failures are NOT acceptable.
 for i in 1 2 3; do
  if [[ "$(cat "$DIR/race$i.status")" == denied ]];then
-  grep -F 'dev_gpt02_grants_review_one_time' "$DIR/race$i.out" >/dev/null || {
-   echo "NO-GO: concurrent grant rejected for unexpected reason ($i)"
-   cat "$DIR/race$i.out";exit 1
-  }
+  if ! grep -F 'dev_gpt02_grants_review_one_time' "$DIR/race$i.out" >/dev/null &&
+     ! grep -F 'dev_gpt02_resume_grants_one_live_per_command' "$DIR/race$i.out" >/dev/null;then
+    echo "NO-GO: concurrent grant rejected for unexpected reason ($i)"
+    cat "$DIR/race$i.out";exit 1
+  fi
  fi
 done
 state="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT (SELECT count(*) FROM ai_platform.dev_gpt02_resume_grants),(SELECT count(*) FROM ai_platform.dev_gpt02_resume_command_leases);")"
