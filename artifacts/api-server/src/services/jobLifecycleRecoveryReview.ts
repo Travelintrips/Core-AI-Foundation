@@ -17,7 +17,7 @@ const validDate=(v:unknown):Date|null=>{
 
 export type RecoveryRuntimeFacts = {
   commandId:string; status:string; checkpointResponseId:string|null;
-  checkpointVerified:boolean; responseRows:readonly {id:string;kind:string;createdAt:Date|null;acknowledgedAt:Date|null}[];
+  checkpointAttested:boolean; nativeReceiverAckVerified:boolean; responseRows:readonly {id:string;kind:string;createdAt:Date|null;acknowledgedAt:Date|null}[];
   presence:{workerId:string;lastSeenAt:Date|null;leaseExpiresAt:Date|null;reportedHealth:string|null}|null;
   policy:unknown; serverFlag:boolean; now:Date;
   /** False if the database returned too many rows or an incomplete snapshot. */
@@ -30,8 +30,8 @@ export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
   const p=parseRecoveryPolicy(facts.policy);
   const rows=facts.responseRows.map(r=>({
     id:r.id,commandId:facts.commandId,kind:r.kind,createdAt:r.createdAt,acknowledgedAt:r.acknowledgedAt,
-    checkpointAttested:r.id===facts.checkpointResponseId&&facts.checkpointVerified,
-    receiverAckVerified:r.id===facts.checkpointResponseId&&facts.checkpointVerified,
+    checkpointAttested:r.id===facts.checkpointResponseId&&facts.checkpointAttested,
+    receiverAckVerified:r.id===facts.checkpointResponseId&&facts.checkpointAttested&&facts.nativeReceiverAckVerified,
   }));
   const readiness=assessJobLifecycleReadiness(rows);
   const blockerEvidence=reviewBlockerEvidence(facts.commandId,rows);
@@ -108,8 +108,10 @@ export async function getDevCommandRecoveryReview(commandId:string) {
   const pr=presence.rows?.[0];
   const facts:RecoveryRuntimeFacts={
     commandId,status:String(lifecycle.commandStatus),checkpointResponseId:lifecycle.checkpointResponseId,
-    checkpointVerified:lifecycle.checkpointAttested&&lifecycle.nativeReceiverAckVerified,
-    responseSnapshotComplete:(snapshot.rows??[]).length<101,
+    checkpointAttested:lifecycle.checkpointAttested===true,
+    nativeReceiverAckVerified:lifecycle.nativeReceiverAckVerified===true,
+    responseSnapshotComplete:lifecycle.responseSnapshotComplete===true&&
+      lifecycle.responseIdentityValid===true&&(snapshot.rows??[]).length<101,
     // Do not silently discard malformed records: invalid IDs must fail closed.
     responseRows:(snapshot.rows??[]).map(r=>({id:typeof r["id"]==="string"?r["id"]:"",
       kind:typeof r["kind"]==="string"?r["kind"]:"UNKNOWN",createdAt:validDate(r["created_at"]),
