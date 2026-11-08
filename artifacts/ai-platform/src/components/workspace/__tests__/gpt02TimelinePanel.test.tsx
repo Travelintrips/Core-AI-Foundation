@@ -46,6 +46,18 @@ describe("GPT02 DEV manual timeline UI",()=>{
     expect(String(url)).toContain("jobId=135");
     expect(options).toMatchObject({method:"GET",credentials:"include",cache:"no-store"});
   });
+  it("optional cross-ledger failure never displays fabricated zero counts",async()=>{
+    vi.mocked(globalThis.fetch).mockResolvedValue(reply(200,{
+      ...success,crossLedger:{valid:false,reason:"CROSS_LEDGER_READBACK_UNAVAILABLE",
+        legacyUntaggedAttemptsExcluded:false,
+        mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false},
+    }));
+    render(<Gpt02DevTimelinePanel {...props}/>);
+    fireEvent.click(screen.getByRole("button",{name:/Periksa timeline/}));
+    await waitFor(()=>expect(screen.getByRole("alert").textContent)
+      .toContain("CROSS_LEDGER_READBACK_UNAVAILABLE"));
+    expect(screen.getByText(/Event terkait parent:/).textContent).toContain("Belum terbaca");
+  });
   it("permission failure is explicit and never paints success",async()=>{
     vi.mocked(globalThis.fetch).mockResolvedValue(reply(403,{reason:"DEV_ONLY"}));
     render(<Gpt02DevTimelinePanel {...props}/>);

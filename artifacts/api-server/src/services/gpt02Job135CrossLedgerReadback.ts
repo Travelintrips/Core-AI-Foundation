@@ -39,7 +39,9 @@ export async function getGpt02Job135CrossLedgerReadback(x:Input) {
   if(!Number.isSafeInteger(x.humanReviewId)||x.humanReviewId<1||
     !Number.isSafeInteger(x.jobId)||x.jobId<1||!uuid.test(x.parentCommandId))
     return deny("INVALID_CROSS_LEDGER_SUBJECT");
-  const q=await db.execute(sql`
+  let q: Awaited<ReturnType<typeof db.execute>>;
+  try {
+    q=await db.execute(sql`
     WITH bound AS (
       SELECT id FROM ai_platform.ai_human_tasks
       WHERE id=${x.humanReviewId}
@@ -75,5 +77,11 @@ export async function getGpt02Job135CrossLedgerReadback(x:Input) {
           'prototype_bytes_sha256_verified')
       ) AS review_record_count
   `);
+  } catch {
+    // The primary timeline remains useful when the optional event census
+    // cannot be read (permissions, migration drift or temporary DB failure).
+    // Never convert missing evidence to four trustworthy zero counts.
+    return deny("CROSS_LEDGER_READBACK_UNAVAILABLE");
+  }
   return interpretGpt02CrossLedgerCounts(q.rows?.[0]);
 }

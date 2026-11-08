@@ -76,6 +76,8 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
       <p className="sm:col-span-2 break-all">Blocker: <strong>{result.blockerResponseId??"Tidak tercatat pada snapshot"}</strong></p>
       <div className="sm:col-span-2 border-t border-border pt-2 space-y-1">
         <p className="font-semibold">Audit lintas-ledger (bukti eksplisit)</p>
+        {result.crossLedger?.valid===false&&
+          <p className="text-red-400" role="alert">Audit lintas-ledger tidak tersedia: {result.crossLedger.reason}. Angka nol tidak dapat diasumsikan.</p>}
         <p>Event terkait parent: {result.crossLedger?.valid?result.crossLedger.parentEventCount:"Belum terbaca"}</p>
         <p>Event bertag Job: {result.crossLedger?.valid?result.crossLedger.explicitJobEventCount:"Belum terbaca"}</p>
         <p>Child command bertag: {result.crossLedger?.valid?result.crossLedger.taggedChildCount:"Belum terbaca"}</p>
