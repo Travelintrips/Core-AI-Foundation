@@ -85,4 +85,25 @@ if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET ROLE gpt02
  echo "FAIL writer changed command";exit 1
 fi
 echo "WRITER CANNOT ALTER COMMAND PASS"
+# A terminal command remains terminal even with a different nonce.
+deny_terminal="$(docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE gpt02_dev_review_writer; SELECT coalesce(ai_platform._synthetic_lock_then_append(1,'terminal-new-nonce')::text,'blocked')")"
+[ "$(printf '%s\n' "$deny_terminal" | tail -n 1)" = blocked ] || { echo "FAIL terminal command admitted";exit 1; }
+echo "TERMINAL COMMAND FAIL-CLOSED PASS"
+# A missing command cannot create an audit.
+deny_missing="$(docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE gpt02_dev_review_writer; SELECT coalesce(ai_platform._synthetic_lock_then_append(404,'missing')::text,'blocked')")"
+[ "$(printf '%s\n' "$deny_missing" | tail -n 1)" = blocked ] || { echo "FAIL missing command admitted";exit 1; }
+echo "MISSING COMMAND FAIL-CLOSED PASS"
+# The nonce constraint rejects a duplicate while command is PROCESSING.
+docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.ai_coding_bridge_commands SET status='PROCESSING' WHERE id=1" >/dev/null
+if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SET ROLE gpt02_dev_review_writer; SELECT ai_platform._synthetic_lock_then_append(1,'race-2')" > "$work/replay.log" 2>&1; then
+ echo "FAIL duplicate nonce admitted";exit 1
+fi
+grep -qi 'duplicate key value violates unique constraint' "$work/replay.log" || { cat "$work/replay.log";echo "FAIL wrong replay rejection";exit 1; }
+[ "$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM ai_platform.dev_review_synthetic')" = 1 ] || { echo "FAIL replay changed row count";exit 1; }
+echo "DUPLICATE NONCE FAIL-CLOSED PASS"
+# Explicitly demonstrate that this prototype still accepts unsigned nonce input.
+# This makes clear it is NOT a production approval verifier, even when races pass.
+unsigned="$(docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -qAt -c "SET ROLE gpt02_dev_review_writer; SELECT ai_platform._synthetic_lock_then_append(1,'unsigned-not-proof')")"
+printf '%s\n' "$unsigned" | tail -n 1 | grep -Eq '^[0-9]+$' || { echo "FAIL synthetic control behavior drift"; exit 1; }
+echo "UNSIGNED SYNTHETIC INPUT ACCEPTED — SECURITY BLOCKER CONFIRMED"
 echo "ATOMIC LOCK PROTOTYPE PASS — synthetic only; no signature checks, no trusted issuer"
