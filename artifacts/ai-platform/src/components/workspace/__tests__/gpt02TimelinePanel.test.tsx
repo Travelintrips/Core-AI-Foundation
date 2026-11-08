@@ -36,6 +36,24 @@ describe("GPT02 DEV manual timeline UI",()=>{
     expect(describeGpt02ReservationReadback(undefined,true))
       .toBe("Pembacaan reservasi belum dapat diverifikasi");
   });
+  it("shows archive totals without claiming permission to retry",async()=>{
+    vi.mocked(globalThis.fetch).mockResolvedValue(reply(200,{
+      ...success,archiveCensus:{
+        available:true,reason:"EXTERNAL_UNTAGGED_HISTORY_NOT_EXCLUDED",
+        priorDevArchiveCommands:86,legacyArchiveCommands:12,
+        legacyArchiveResponses:11,explicitParentArchiveMatches:0,
+        archivedAfterParentCount:0,historicalSourcesCovered:3,
+        legacyUntaggedAttemptsExcluded:false,mayCreateCommand:false,
+        mayDispatchWorker:false,mayCloseJob:false,
+      },
+    }));
+    render(<Gpt02DevTimelinePanel {...props}/>);
+    fireEvent.click(screen.getByRole("button",{name:/Periksa timeline/}));
+    await waitFor(()=>expect(screen.getByText(/Sensus arsip legacy Job 135/)).toBeTruthy());
+    expect(screen.getByText(/Arsip DEV lama: 86 command/)).toBeTruthy();
+    expect(screen.getByText(/Arsip legacy: 12 command, 11 respons/)).toBeTruthy();
+    expect(screen.getByText(/Eksekusi legacy eksternal tanpa penanda belum dapat dikesampingkan/)).toBeTruthy();
+  });
   it("does not poll or fetch automatically",()=>{
     render(<Gpt02DevTimelinePanel {...props}/>);
     expect(screen.getByRole("button",{name:/Periksa timeline/})).toBeTruthy();
