@@ -15,6 +15,17 @@ import {createIsolatedDevReviewWriterContract}
 const refusal={recorded:false,reason:"ISOLATED_VERIFIER_CHILD_UNAVAILABLE",
  mayIssueGrant:false,mayDispatchWorker:false};
 function reply(result:unknown){process.stdout.write(JSON.stringify(result)+"\n");}
+// Defense-in-depth: a test launcher must not forward a parent runtime's
+// secrets. A future deployment requires its own separately reviewed custody.
+const forbiddenParentEnv=[
+ "DATABASE_URL","SUPABASE_DEV_DATABASE_URL","SUPABASE_URL_DEV",
+ "GITHUB_TOKEN","OPENAI_API_KEY","OPENCLAW_AI_CORE_API_KEY",
+ "AI_CORE_DEV_OPERATOR_REVIEW_PRIVATE_KEY_DER_BASE64",
+ "GPT02_SYNTHETIC_PARENT_SECRET_MARKER","NODE_OPTIONS",
+];
+if(forbiddenParentEnv.some(key=>process.env[key]!==undefined)){
+ reply(refusal);process.exit(2);
+}
 if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]!=="test"||
    process.env["GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY"]!=="true"){
  reply(refusal);process.exit(2);

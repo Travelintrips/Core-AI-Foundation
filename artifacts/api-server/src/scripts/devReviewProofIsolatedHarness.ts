@@ -45,8 +45,12 @@ if(isChildMode){
   {proof,sql:"DROP TABLE isolated.audit",operatorId:"internal:999"}:{proof};
  const result=spawnSync("pnpm",["exec","tsx","src/scripts/devReviewIsolatedVerifierChild.ts"],{
   cwd:process.cwd(),
+  // Strict allowlist: NEVER forward parent secrets (Supabase, GitHub,
+  // database URLs, signing private keys, proxy tokens or NODE_OPTIONS).
   env:{
-   ...process.env,APP_ENV:"development",NODE_ENV:"test",
+   PATH:process.env["PATH"]??"/usr/bin:/bin",
+   HOME:process.env["HOME"]??"/tmp",
+   APP_ENV:"development",NODE_ENV:"test",
    GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY:"true",
    GPT02_SYNTHETIC_EXPIRED_TEST_ONLY:variant==="expired"?"true":"false",
    GPT02_SYNTHETIC_WRITER_CONTAINER:container,

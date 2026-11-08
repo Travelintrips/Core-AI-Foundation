@@ -132,7 +132,11 @@ count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isol
 echo "SERVICE CONTRACT DATABASE AUDIT COUNT PASS"
 # A separate test-only OS subprocess receives only proof JSON on stdin.
 # The parent never supplies SQL text or DB role selection in the request.
-(cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts child-valid "$name")
+(cd artifacts/api-server && \
+ GPT02_SYNTHETIC_PARENT_SECRET_MARKER="must-never-reach-child" \
+ SUPABASE_DEV_DATABASE_URL="postgresql://never:forward@parent.invalid/secret" \
+ OPENCLAW_AI_CORE_API_KEY="synthetic-secret-must-not-leak" \
+ pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts child-valid "$name")
 for mode in tampered expired injected; do
  (cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts "child-$mode" "$name")
 done
