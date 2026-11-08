@@ -66,6 +66,49 @@ describe("durable review intent audit, never actionable grant",()=>{
   expect(await invoke({...makeProof(),workerId:"other"})).toMatchObject({recorded:false,reason:"SIGNATURE_INVALID_SIGNATURE"});
   expect(fake.execute).not.toHaveBeenCalled();
  });
+ it("refuses an absent trusted Ed25519 public key before DB access",async()=>{
+  const x=await persistSignedDevOperatorReviewIntent({proof:makeProof(),
+   trustedPublicKeyDerBase64:undefined,operatorUserId:7,operatorRole:"admin",now});
+  expect(x).toMatchObject({recorded:false,reason:"SIGNATURE_NO_TRUSTED_KEY",
+   mayIssueGrant:false,mayDispatchWorker:false});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
+ it("refuses expired signatures without DB access",async()=>{
+  const x=await persistSignedDevOperatorReviewIntent({proof:makeProof(),
+   trustedPublicKeyDerBase64,operatorUserId:7,operatorRole:"admin",
+   now:new Date("2026-11-08T00:02:00.000Z")});
+  expect(x).toMatchObject({recorded:false,reason:"SIGNATURE_INVALID_PROOF_TIME"});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
+ it("refuses a trusted-key mismatch even if proof signature is valid for another key",async()=>{
+  const other=generateKeyPairSync("ed25519");
+  const x=await persistSignedDevOperatorReviewIntent({proof:makeProof(),
+   trustedPublicKeyDerBase64:other.publicKey.export({format:"der",type:"spki"}).toString("base64"),
+   operatorUserId:7,operatorRole:"admin",now});
+  expect(x).toMatchObject({recorded:false,reason:"SIGNATURE_INVALID_SIGNATURE"});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
+ it("refuses an operator-role mismatch before any SQL",async()=>{
+  const x=await persistSignedDevOperatorReviewIntent({proof:makeProof(),
+   trustedPublicKeyDerBase64,operatorUserId:7,operatorRole:"owner",now});
+  expect(x).toMatchObject({recorded:false,reason:"OPERATOR_IDENTITY_MISMATCH"});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
+ it("refuses malformed signature encoding before any SQL",async()=>{
+  const x=await invoke({...makeProof(),signatureBase64:"not-base64"});
+  expect(x).toMatchObject({recorded:false,reason:"SIGNATURE_INVALID_SIGNATURE"});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
+ it("refuses altered signed nonce without any SQL",async()=>{
+  const x=await invoke({...makeProof(),nonce:"abcdef0123456789".repeat(4)});
+  expect(x).toMatchObject({recorded:false,reason:"SIGNATURE_INVALID_SIGNATURE"});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
+ it("refuses all audit writes in production even when the flag is set",async()=>{
+  process.env["NODE_ENV"]="production";
+  expect(await invoke()).toMatchObject({recorded:false,reason:"DEV_DISABLED"});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
  it("denies all writes with disabled server feature",async()=>{
   delete process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"];
   expect(await invoke()).toMatchObject({recorded:false,reason:"DEV_DISABLED"});
