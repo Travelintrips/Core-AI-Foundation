@@ -38,6 +38,8 @@ jobs:
         run: node --test scripts/dev/test-gpt02-resume-rfc.mjs
       - name: Verify GPT02 integrated acceptance remains fail-closed
         run: node --test scripts/dev/gpt02-integrated-acceptance.test.mjs
+      - name: Verify GPT02 live evidence requires independent authenticated readback
+        run: node --test scripts/dev/gpt02-live-evidence-gate.test.mjs
       - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
         run: bash scripts/dev/test-gpt02-resume-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 operator grant issuance contract
