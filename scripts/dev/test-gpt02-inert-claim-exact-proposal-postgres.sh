@@ -87,15 +87,6 @@ for case in bad_approver long_ttl old_approval null_consumed_approver;do
 done
 echo 'PASS: wrong approver identity, excessive TTL, backdated approval and NULL consumed approver all denied'
 
-# Replay protection survives a grant's REVOKED status. One review must never
-# back a second grant, even when the one-live-per-command index no longer applies.
-docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.dev_gpt02_resume_grants SET status='REVOKED';" > "$DIR/revoked" 2>&1
-if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',now(),now()+interval '90 seconds');" > "$DIR/replay" 2>&1;then
- echo 'NO-GO: same review reused after revoked grant';exit 1
-fi
-grep -F 'dev_gpt02_grants_review_one_time' "$DIR/replay" >/dev/null || { echo 'NO-GO: replay rejected for unexpected reason';cat "$DIR/replay";exit 1; }
-docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.dev_gpt02_resume_grants SET status='APPROVED';" > "$DIR/reset" 2>&1
-echo 'PASS: one review cannot mint second grant after first is revoked'
 GRANT_ID="$(docker exec "$NAME" psql -U postgres -qAt -c 'SELECT id FROM ai_platform.dev_gpt02_resume_grants LIMIT 1')"
 if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "SELECT * FROM ai_platform.dev_gpt02_claim_resume('$GRANT_ID'::uuid,'169a7492-cfd8-4a56-bb57-18001b6b5968'::uuid,'08b7b237-7a16-46d0-b79d-029d0363c112'::uuid,'822efca2-7428-428a-ac66-548c0462438e'::uuid,'openclaw-dell-chatgpt-wake-dev',90);" > "$DIR/err" 2>&1;then
  echo 'NO-GO: inert claim returned successfully';exit 1
@@ -105,9 +96,29 @@ rows="$(docker exec "$NAME" psql -U postgres -qAt -c "SELECT (SELECT COUNT(*) FR
 [[ "$rows" == '1|0|f|f' ]] || { echo "NO-GO: unexpected readback $rows";exit 1; }
 echo 'PASS: exact proposed claim is inert (0A000 guard); approved synthetic grant unconsumed; no lease; no anon/authenticated EXECUTE'
 
+
+# Replay protection survives a grant's REVOKED status. One review must never
+# back a second grant, even when the one-live-per-command index no longer applies.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "UPDATE ai_platform.dev_gpt02_resume_grants SET status='REVOKED';" > "$DIR/revoked" 2>&1
+if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',now(),now()+interval '90 seconds');" > "$DIR/replay" 2>&1;then
+ echo 'NO-GO: same review reused after revoked grant';exit 1
+fi
+grep -F 'dev_gpt02_grants_review_one_time' "$DIR/replay" >/dev/null || { echo 'NO-GO: replay rejected for unexpected reason';cat "$DIR/replay";exit 1; }
+echo 'PASS: one review cannot mint second grant after first is revoked'
+# A revoked grant is permanent, not a re-approvable row.
+for bad in "UPDATE ai_platform.dev_gpt02_resume_grants SET status='APPROVED';" "DELETE FROM ai_platform.dev_gpt02_resume_grants;"; do
+ if docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "$bad" > "$DIR/resurrection" 2>&1;then
+  echo "NO-GO: terminal grant resurrection or DELETE permitted";exit 1
+ fi
+ grep -E 'GPT02_GRANT_(TERMINAL_IMMUTABLE|DELETE_FORBIDDEN)' "$DIR/resurrection" >/dev/null || {
+  echo "NO-GO: terminal protection denied for unexpected reason";cat "$DIR/resurrection";exit 1;
+ }
+done
+echo 'PASS: revoked grant cannot be restored or deleted'
 # Three independent concurrent connections race to mint from the SAME review.
-# Remove only the SYNTHETIC fixture grant inside disposable PostgreSQL.
-docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c 'DELETE FROM ai_platform.dev_gpt02_resume_grants;' > "$DIR/clear" 2>&1
+# Reset ONLY the disposable synthetic fixture using TRUNCATE. This is superuser
+# test setup, never an application API operation; row-level DELETE is guarded.
+docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c 'TRUNCATE ai_platform.dev_gpt02_resume_grants CASCADE;' > "$DIR/clear" 2>&1
 race_sql="INSERT INTO ai_platform.dev_gpt02_resume_grants(command_id,review_intent_id,operator_user_id,checkpoint_response_id,blocker_response_id,worker_id,status,approved_by,approved_at,expires_at) VALUES('169a7492-cfd8-4a56-bb57-18001b6b5968','2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0',7,'822efca2-7428-428a-ac66-548c0462438e','08b7b237-7a16-46d0-b79d-029d0363c112','openclaw-dell-chatgpt-wake-dev','APPROVED','internal:7',clock_timestamp(),clock_timestamp()+interval '90 seconds');"
 for i in 1 2 3; do
  (
