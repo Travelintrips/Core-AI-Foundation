@@ -130,6 +130,15 @@ done
 count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
 [ "$count" = 3 ] || { echo "FAIL contract bypassed verifier or failed append: $count";exit 1; }
 echo "SERVICE CONTRACT DATABASE AUDIT COUNT PASS"
+# A separate test-only OS subprocess receives only proof JSON on stdin.
+# The parent never supplies SQL text or DB role selection in the request.
+(cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts child-valid "$name")
+for mode in tampered expired injected; do
+ (cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts "child-$mode" "$name")
+done
+count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
+[ "$count" = 4 ] || { echo "FAIL subprocess isolation audit count: $count";exit 1; }
+echo "PRIVATE PROCESS AUDIT COUNT PASS"
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='suspended' WHERE id=7" >/dev/null
 test_case "OPERATOR REVOKED" f "$signed_proof_b64"
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='active',role='viewer' WHERE id=7" >/dev/null
@@ -143,7 +152,7 @@ test_case "TERMINAL RESPONSE" f "$signed_proof_b64"
 docker exec "$name" psql -U postgres -q -c "DELETE FROM isolated.responses WHERE id=13; UPDATE isolated.commands SET status='FAILED' WHERE id=1" >/dev/null
 test_case "TERMINAL COMMAND" f "$signed_proof_b64"
 count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
-[ "$count" = 3 ] || { echo "FAIL historical audit count: $count"; exit 1; }
+[ "$count" = 4 ] || { echo "FAIL historical audit count: $count"; exit 1; }
 echo "AUDIT COUNT UNCHANGED PASS"
 if docker exec -e PGPASSWORD=isolated-runtime-credential "$name" psql -h 127.0.0.1 -U runtime_login -d postgres -v ON_ERROR_STOP=1 -q -c "SELECT isolated.try_append(1,7,10,11,'{}'::jsonb)" >/dev/null 2>&1; then
  echo "FAIL ordinary runtime executed trusted-writer procedure";exit 1

@@ -5,15 +5,17 @@
  * has accepted a command-bound proof. No credentials or SQL are handled here.
  */
 import {generateKeyPairSync,randomBytes,sign} from "node:crypto";
-import {execFileSync} from "node:child_process";
+import {execFileSync,spawnSync} from "node:child_process";
 import {createIsolatedDevReviewWriterContract} from "../services/jobLifecycleReviewWriterServiceContract.js";
 import {operatorApprovalProofPayload,verifyOperatorApprovalProof,type OperatorApprovalProof}
  from "../services/jobLifecycleOperatorApprovalProof.js";
 
 const mode=process.argv[2];
 const isContractMode=mode?.startsWith("contract-")??false;
-const variant=isContractMode?mode!.slice("contract-".length):mode;
-if(variant!=="valid"&&variant!=="tampered"&&variant!=="expired"){
+const isChildMode=mode?.startsWith("child-")??false;
+const variant=isContractMode?mode!.slice("contract-".length):
+ isChildMode?mode!.slice("child-".length):mode;
+if(variant!=="valid"&&variant!=="tampered"&&variant!=="expired"&&variant!=="injected"){
   process.stderr.write("INVALID_TEST_MODE\n");process.exit(2);
 }
 const {privateKey,publicKey}=generateKeyPairSync("ed25519");
@@ -34,6 +36,32 @@ const proof:OperatorApprovalProof={
  signatureBase64:sign(null,Buffer.from(operatorApprovalProofPayload(proofBase)),privateKey).toString("base64"),
 };
 if(variant==="tampered") proof.blockerResponseId="70c61ea0-8524-4fba-9da5-a88b2467a6a7";
+if(isChildMode){
+ const container=process.argv[3];
+ if(!container||!/^gpt02-evidence-fence-[0-9]+$/.test(container)){
+  process.stderr.write("INVALID_CHILD_CONTAINER\n");process.exit(2);
+ }
+ const payload=variant==="injected"?
+  {proof,sql:"DROP TABLE isolated.audit",operatorId:"internal:999"}:{proof};
+ const result=spawnSync("pnpm",["exec","tsx","src/scripts/devReviewIsolatedVerifierChild.ts"],{
+  cwd:process.cwd(),
+  env:{
+   ...process.env,APP_ENV:"development",NODE_ENV:"test",
+   GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY:"true",
+   GPT02_SYNTHETIC_EXPIRED_TEST_ONLY:variant==="expired"?"true":"false",
+   GPT02_SYNTHETIC_WRITER_CONTAINER:container,
+   GPT02_SYNTHETIC_WRITER_PUBLIC_KEY:publicKey.export({format:"der",type:"spki"}).toString("base64"),
+  },
+  input:JSON.stringify(payload),encoding:"utf8",timeout:20_000,maxBuffer:16_384,
+ });
+ if(result.status!==0)throw new Error("CHILD_EXIT:"+result.status);
+ const response=JSON.parse(result.stdout) as {recorded:boolean;reason:string};
+ if(variant==="valid"&&response.recorded===true)process.stdout.write("PRIVATE_CHILD_VALID_AUDIT_PASS\n");
+ else if(variant!=="valid"&&response.recorded===false)process.stdout.write(
+  "PRIVATE_CHILD_"+variant.toUpperCase()+"_DENIED_PASS\n");
+ else throw new Error("CHILD_RESULT_UNEXPECTED:"+response.reason);
+ process.exit(0);
+}
 if(isContractMode){
  const container=process.argv[3];
  if(!container||!/^[a-zA-Z0-9_-]{6,80}$/.test(container)){
