@@ -59,7 +59,21 @@ test_case() {
  [ "$got" = "$expect" ] || { echo "FAIL $label actual=$got wanted=$expect"; exit 1; }
  echo "$label PASS"
 }
-test_case "VALID SYNTHETIC EVIDENCE" t n1
+# This is a test-only application/SQL handoff. It runs the ACTUAL TypeScript
+# Ed25519 verifier and passes its nonce to the synthetic PostgreSQL routine.
+# The database function itself DOES NOT verify signatures; direct calls remain
+# possible by the privileged writer role and must not be deployed.
+signed_nonce="$(cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts valid)"
+[[ "$signed_nonce" =~ ^[0-9a-f]{64}$ ]] || { echo "FAIL verified nonce encoding";exit 1; }
+test_case "REAL ED25519 VERIFIED BEFORE SYNTHETIC APPEND" t "$signed_nonce"
+for invalid in tampered expired; do
+ if (cd artifacts/api-server && pnpm exec tsx src/scripts/devReviewProofIsolatedHarness.ts "$invalid") >/dev/null 2>&1; then
+  echo "FAIL $invalid proof verifier accepted invalid proof";exit 1
+ fi
+ count="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT count(*) FROM isolated.audit')"
+ [ "$count" = 1 ] || { echo "FAIL $invalid proof reached the database";exit 1; }
+ echo "REAL ED25519 $invalid PRE-SQL REJECTION PASS"
+done
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='suspended' WHERE id=7" >/dev/null
 test_case "OPERATOR REVOKED" f n2
 docker exec "$name" psql -U postgres -q -c "UPDATE isolated.operators SET status='active',role='viewer' WHERE id=7" >/dev/null
