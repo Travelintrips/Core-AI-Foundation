@@ -8,7 +8,7 @@ export type NewAttemptPreflightReason =
   | "HUMAN_REVIEW_NOT_ACCEPTED" | "NO_RECOMMENDATION"
   | "REVIEWER_DENIED" | "ARTIFACT_NOT_VERIFIED" | "INVALID_ARTIFACT_HASH"
   | "JOB_BINDING_MISMATCH" | "COMMAND_BINDING_MISMATCH"
-  | "COMMAND_REPLAY" | "DUPLICATE_ATTEMPT"
+  | "NEW_COMMAND_ID_NOT_PROPOSED" | "COMMAND_REPLAY" | "DUPLICATE_ATTEMPT"
   | "WORKER_UNHEALTHY" | "RETRY_AFTER_ACTIVE"
   | "READY_FOR_SEPARATE_AUTHORIZATION";
 export type NewAttemptPreflight = {
@@ -49,7 +49,8 @@ export function evaluateNewAttemptPreflight(x: NewAttemptPreflight):{
   if(x.recommendation==="deny_new_attempt")return deny("REVIEWER_DENIED");
   if(!x.evidenceVerified)return deny("ARTIFACT_NOT_VERIFIED");
   if(!x.artifactSha256 || !/^[a-f0-9]{64}$/.test(x.artifactSha256))return deny("INVALID_ARTIFACT_HASH");
-  if(!x.proposedNewCommandId || x.proposedNewCommandId===x.originalCommandId)return deny("COMMAND_REPLAY");
+  if(!x.proposedNewCommandId)return deny("NEW_COMMAND_ID_NOT_PROPOSED");
+  if(x.proposedNewCommandId===x.originalCommandId)return deny("COMMAND_REPLAY");
   if(!Number.isSafeInteger(x.existingAttemptCount)||x.existingAttemptCount!==0)return deny("DUPLICATE_ATTEMPT");
   if(!x.workerHealthy)return deny("WORKER_UNHEALTHY");
   if(!Number.isFinite(x.now.getTime()) || (x.retryAfterAt &&

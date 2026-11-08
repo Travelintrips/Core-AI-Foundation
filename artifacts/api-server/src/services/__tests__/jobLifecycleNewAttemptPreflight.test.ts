@@ -29,6 +29,7 @@ describe("New attempt planning never authorizes dispatch",()=>{
   ["wrong digest",{artifactSha256:"unverified"},"INVALID_ARTIFACT_HASH"],
   ["wrong job",{reviewJobId:136},"JOB_BINDING_MISMATCH"],
   ["wrong command",{reviewCommandId:"other"},"COMMAND_BINDING_MISMATCH"],
+  ["missing candidate",{proposedNewCommandId:""},"NEW_COMMAND_ID_NOT_PROPOSED"],
   ["replay command",{proposedNewCommandId:original},"COMMAND_REPLAY"],
   ["duplicate attempt",{existingAttemptCount:1},"DUPLICATE_ATTEMPT"],
   ["malformed attempts",{existingAttemptCount:-1},"DUPLICATE_ATTEMPT"],

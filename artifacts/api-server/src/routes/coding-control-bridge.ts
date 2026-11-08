@@ -5,6 +5,7 @@ import { codingBridgeCommandSchema } from "./coding-bridge-command-schema.js";
 import { getCodingTaskCompletionEvidence } from "../services/codingTaskCompletionEvidence.js";
 import { getCodingCommandLifecycleEvidence } from "../services/codingCommandLifecycleEvidence.js";
 import { getDevCommandRecoveryReview } from "../services/jobLifecycleRecoveryReview.js";
+import { getNewAttemptIdentityPreview } from "../services/jobLifecycleNewAttemptIdentityPreview.js";
 import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, getCodingBridgeResponseAckReadback, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
   getCodingWhatsappConfigStatus,
@@ -348,6 +349,24 @@ router.post("/ai/coding/tasks/:id/autonomous/run-once",async(req,res):Promise<vo
  if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
  const cycle=await runAutonomousCodingCycle(id.data);
  res.json(cycle);
+});
+// Read-only candidate identity snapshot. Does not reserve/issue a command.
+router.get("/ai/coding/bridge/commands/:id/new-attempt-identity-preview",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY"});return;
+ }
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"INVALID_COMMAND_ID"});return;}
+ try{
+  const preview=await getNewAttemptIdentityPreview(id.data);
+  res.setHeader("Cache-Control","no-store");
+  if(preview.reason==="ORIGINAL_NOT_FOUND"){
+   res.status(404).json({error:"DEV_COMMAND_NOT_FOUND"});return;
+  }
+  res.json(preview);
+ }catch{
+  res.status(503).json({error:"IDENTITY_PREVIEW_UNAVAILABLE"});
+ }
 });
 // Read-only recovery review: no dispatch/resume/closure and no authorization grant.
 router.get("/ai/coding/bridge/commands/:id/recovery-review",async(req,res):Promise<void>=>{
