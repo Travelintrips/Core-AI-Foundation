@@ -22,6 +22,11 @@ export async function getDevStoredReviewReadback(input:{
  if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]==="production")
   return deny("DEV_ONLY");
  if(!uuid.test(input.reviewId))return deny("INVALID_REVIEW_ID");
+ // No trusted verifier key means no meaningful proof check. Fail before
+ // querying the review, operator, or command; do not infer authorization
+ // from a database FK or shape-only proof constraints.
+ if(!input.trustedPublicKeyDerBase64)
+  return deny("STORED_REVIEW_TRUST_KEY_UNCONFIGURED");
  const now=input.now??new Date();
  if(!Number.isFinite(now.getTime()))return deny("INVALID_TIME");
  try {
@@ -37,6 +42,11 @@ export async function getDevStoredReviewReadback(input:{
   const userId=Number(row["operator_user_id"]);
   if(!signedAt||!expiresAt||!Number.isSafeInteger(userId)||userId<1)
    return deny("STORED_REVIEW_ROW_INVALID");
+  // An expired stored review cannot regain authority. Avoid further lookups.
+  if(signedAt.getTime()>now.getTime()||expiresAt.getTime()<=now.getTime()||
+     expiresAt.getTime()<=signedAt.getTime()||
+     expiresAt.getTime()-signedAt.getTime()>120_000)
+   return deny("STORED_REVIEW_EXPIRED_OR_INVALID");
   const review:StoredReviewSnapshot={
    id:string(row["id"]),commandId:string(row["command_id"]),
    checkpointResponseId:string(row["checkpoint_response_id"]),
