@@ -56,13 +56,18 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
     }finally{setLoading(false);}
   }
   return <section className="rounded-lg border border-border p-4 space-y-3" aria-label="GPT02 DEV timeline">
-    <div className="flex items-center justify-between gap-2">
+    <div className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold">Timeline aktivitas GPT02 — DEV</h3>
         <p className="text-xs text-muted-foreground">Pembacaan manual dari server. Tidak menjalankan worker atau menutup job.</p>
       </div>
-      <Button size="sm" variant="outline" disabled={!valid||loading}
-        onClick={()=>void refresh()}><RefreshCw className="size-3 mr-1"/>{loading?"Membaca...":"Periksa timeline"}</Button>
+      <Button type="button" size="sm" variant="secondary"
+        className="flex w-full min-h-10 items-center justify-center whitespace-normal sm:w-auto"
+        disabled={!valid||loading} aria-label="Periksa timeline GPT02 DEV"
+        onClick={()=>void refresh()}>
+        <RefreshCw className="size-4 shrink-0" aria-hidden="true"/>
+        {loading?"Membaca timeline...":"Periksa timeline"}
+      </Button>
     </div>
     {!valid&&<p className="text-xs text-amber-400" role="status">Job ID atau command belum valid. Pembacaan dinonaktifkan.</p>}
     {error&&<p className="text-xs text-red-400 break-all" role="alert">Gagal membaca timeline: {error}. Tidak ada status PASS yang diasumsikan.</p>}
