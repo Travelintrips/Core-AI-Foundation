@@ -11,6 +11,8 @@ const decisionMocks=vi.hoisted(()=>({recordHumanRecoveryRecommendation:vi.fn()})
 vi.mock('../../services/humanRecoveryDecisionService.js',()=>decisionMocks);
 const prototypeMocks=vi.hoisted(()=>({recordGpt02PrototypeIntegrity:vi.fn()}));
 vi.mock('../../services/gpt02PrototypeEvidenceAudit.js',()=>prototypeMocks);
+const reservationMocks=vi.hoisted(()=>({reserveGpt02DevRecoveryAttempt:vi.fn()}));
+vi.mock('../../services/gpt02DevRecoveryReservation.js',()=>reservationMocks);
 vi.mock('../../middleware/ssrfGuard.js',()=>({ssrfGuard:()=> (_req:unknown,_res:unknown,next:()=>void)=>next()}));
 vi.mock('../../middleware/internalAuth.js',()=>({
  requireAuth:async(req:any,res:any,next:()=>void)=>{
@@ -161,6 +163,77 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
      mayCloseJob:false});
    expect(prototypeMocks.recordGpt02PrototypeIntegrity).toHaveBeenCalledWith(
      expect.objectContaining({humanReviewId:6,actor:'admcst001@gmail.com',jobId:135}));
+ });
+ it('reservation endpoint defaults OFF, no service invocation',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   delete process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED;
+   const r=await request(app).post(url+'/recovery-reservation')
+     .set('Host','127.0.0.1:7777').set('Origin','http://127.0.0.1:7777')
+     .set('x-isolated-test-session','admin').send({
+       parentCommandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
+       jobId:135,idempotencyKey:'2ba38abd-33bb-4459-9f3c-1fc280752a83'});
+   expect(r.status).toBe(403);
+   expect(r.body.error).toBe('RESERVATION_FEATURE_DISABLED');
+   expect(reservationMocks.reserveGpt02DevRecoveryAttempt).not.toHaveBeenCalled();
+ });
+ it('reservation denies anonymous, other reviewer, cross-origin and production',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED='true';
+   const payload={parentCommandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
+     jobId:135,idempotencyKey:'2ba38abd-33bb-4459-9f3c-1fc280752a83'};
+   const send=(session?:string,origin='http://127.0.0.1:7777')=>{
+     let r=request(app).post(url+'/recovery-reservation')
+       .set('Host','127.0.0.1:7777').set('Origin',origin);
+     if(session)r=r.set('x-isolated-test-session',session);
+     return r.send(payload);
+   };
+   expect((await send()).status).toBe(401);
+   expect((await send('other-admin')).status).toBe(403);
+   expect((await send('admin','https://evil.example')).status).toBe(403);
+   process.env.APP_ENV='production';
+   expect((await send('admin')).status).toBe(403);
+   expect(reservationMocks.reserveGpt02DevRecoveryAttempt).not.toHaveBeenCalled();
+   delete process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED;
+ });
+ it('reservation rejects forged actor, invalid body and non-DEV host',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED='true';
+   const payload={parentCommandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
+     jobId:135,idempotencyKey:'2ba38abd-33bb-4459-9f3c-1fc280752a83'};
+   const r=await request(app).post(url+'/recovery-reservation')
+     .set('Host','127.0.0.1:7777').set('Origin','http://127.0.0.1:7777')
+     .set('x-isolated-test-session','admin').send({...payload,actor:'forged'});
+   expect(r.status).toBe(403); // host is not DEV; do not enter service
+   expect(reservationMocks.reserveGpt02DevRecoveryAttempt).not.toHaveBeenCalled();
+   delete process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED;
+ });
+ it('valid DEV reviewer reservation uses server identity, remains non-executable',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED='true';
+   const payload={parentCommandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
+     jobId:135,idempotencyKey:'2ba38abd-33bb-4459-9f3c-1fc280752a83'};
+   const send=(body:unknown)=>request(app).post(url+'/recovery-reservation')
+     .set('Host','dev.cstlogistic.co.id')
+     .set('Origin','https://dev.cstlogistic.co.id')
+     .set('x-isolated-test-session','admin').send(body);
+   const bad=await send({...payload,actor:'spoofed@example.test'});
+   expect(bad.status).toBe(400);
+   expect(reservationMocks.reserveGpt02DevRecoveryAttempt).not.toHaveBeenCalled();
+   reservationMocks.reserveGpt02DevRecoveryAttempt.mockResolvedValueOnce({
+     ok:true,alreadyReserved:false,
+     reservationId:'f29a546e-9ee9-4262-a25a-3bcf2b38d53f',
+     candidateCommandId:'28a12988-1418-4b66-8be9-de3d66cac1ce',
+     mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false,
+   });
+   const valid=await send(payload);
+   expect(valid.status).toBe(201);
+   expect(valid.body).toMatchObject({
+     mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false,
+   });
+   expect(reservationMocks.reserveGpt02DevRecoveryAttempt).toHaveBeenCalledWith(
+     expect.objectContaining({actor:'admcst001@gmail.com',humanReviewId:6,jobId:135}));
+   expect(valid.headers['cache-control']).toBe('no-store');
+   delete process.env.AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED;
  });
  it('legacy non-lifecycle Human Task remains on existing route without extra session guard',async()=>{
   mocks.getTask.mockResolvedValue({task:{...target,id:7,sourceModule:'generic'},history:[]});
