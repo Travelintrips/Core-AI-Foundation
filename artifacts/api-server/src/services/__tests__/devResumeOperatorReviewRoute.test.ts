@@ -210,6 +210,33 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
   expect(r.body.proof).toBeUndefined();
   expect(m.persist).toHaveBeenCalledTimes(1);
  });
+ it("refuses to expose a newly signed proof when persistence crashes",async()=>{
+  setValidSigningEnvironment();
+  m.persist.mockRejectedValueOnce(new Error("synthetic isolated DB failure"));
+  const r=await postReview();
+  expect(r.status).toBe(503);
+  expect(r.body).toMatchObject({mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
+  expect(r.body.proof).toBeUndefined();
+  expect(m.persist).toHaveBeenCalledTimes(1);
+ });
+ it("does not persist or leak a review when server public key is absent",async()=>{
+  setValidSigningEnvironment();
+  delete process.env["AI_CORE_DEV_OPERATOR_APPROVAL_PUBLIC_KEY_DER_BASE64"];
+  const r=await postReview();
+  expect(r.status).toBe(409);
+  expect(r.body).toMatchObject({signed:false,reason:"SIGNING_KEY_NOT_CONFIGURED",
+   mayIssueGrant:false,mayDispatchWorker:false});
+  expect(r.body.proof).toBeUndefined();
+  expect(m.persist).not.toHaveBeenCalled();
+ });
+ it("does not persist when operator loses admin privilege before signing",async()=>{
+  setValidSigningEnvironment();
+  m.user={...valid(),role:"manager"};
+  const r=await postReview();
+  expect(r.status).toBe(403);
+  expect(m.recovery).not.toHaveBeenCalled();
+  expect(m.persist).not.toHaveBeenCalled();
+ });
  it("returns a review-only proof after successful audit, never execution authority",async()=>{
   setValidSigningEnvironment();
   m.persist.mockResolvedValue({recorded:true,recordId:"5a8f3b1b-3486-4380-a668-f1fb0af48b81",
