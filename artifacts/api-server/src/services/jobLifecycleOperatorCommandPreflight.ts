@@ -50,11 +50,19 @@ export async function getDevResumeOperatorCommandPreflight(commandId:string) {
    ["RETRY_BUDGET_UNVERIFIED",!prerequisites.retryBudgetVerified],
  ] as const).filter(([,blocked])=>blocked).map(([reason])=>reason);
  const approvalBlockers=[...evidenceBlockers,...executionBlockers];
+ // Deliberately do not equate empty diagnostic blockers with permission.
+ // The trusted issuance path is still NOT implemented, regardless of inputs.
+ const diagnosticStage=evidenceBlockers.length>0?"REVIEW_EVIDENCE_BLOCKED" as const:
+   executionBlockers.length>0?"EXECUTION_GATES_BLOCKED" as const:
+   "ISSUER_NOT_IMPLEMENTED" as const;
  return {
    found:true as const,commandId,commandStatus:review.commandStatus,
    approvalBlockers,
    reviewEvidenceBlockers:evidenceBlockers,
    executionAdditionalBlockers:executionBlockers,
+   reviewEvidenceReady:evidenceBlockers.length===0,
+   diagnosticStage,
+   issuanceBlockedReason:"TRUSTED_GRANT_ISSUER_NOT_IMPLEMENTED" as const,
    checkpointResponseId:review.checkpointResponseId,
    blockerResponseId:review.blockingResponseId,
    prerequisites,
