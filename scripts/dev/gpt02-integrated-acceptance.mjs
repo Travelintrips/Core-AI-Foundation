@@ -64,6 +64,11 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_NONCE_BINDING_ATOMICITY_INERT','One-shot nonce and binding commit together, without authorization authority',
+  file('docs/dev/gpt02-binding-attestation-nonces.proposed.sql').includes('may_dispatch_worker boolean NOT NULL DEFAULT false CHECK (may_dispatch_worker=false)') &&
+  file('docs/dev/gpt02-binding-attestation-nonces.proposed.sql').includes('dev_gpt02_nonce_attempt_once UNIQUE(attempt_id)') &&
+  file('scripts/dev/test-gpt02-binding-nonce-atomic-isolated-postgres.sh').includes('ATOMIC_NONCE_AND_BINDING_SINGLE_WINNER_PASS') &&
+  file('scripts/dev/test-gpt02-binding-nonce-atomic-isolated-postgres.sh').includes('FAILED_BINDING_ROLLS_BACK_NONCE_PASS')),
  check('DEV_BINDING_CRYPTO_EVIDENCE_NOT_AUTHORITY','Signed binding proof cannot become grant, writer or dispatch authorization',
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('VALID_SIGNATURE_BUT_NO_INDEPENDENT_RUNTIME_ATTESTOR') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('independentAttestationVerified:false') &&

@@ -50,6 +50,8 @@ jobs:
         run: node --test scripts/dev/gpt02-live-evidence-gate.test.mjs
       - name: Verify isolated PostgreSQL task-attempt binding claims are immutable and non-authorizing
         run: bash scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh
+      - name: Verify atomic nonce reservation and binding replay denial in isolated PostgreSQL
+        run: bash scripts/dev/test-gpt02-binding-nonce-atomic-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
         run: bash scripts/dev/test-gpt02-resume-isolated-postgres.sh
       - name: Verify isolated PostgreSQL GPT02 operator grant issuance contract
