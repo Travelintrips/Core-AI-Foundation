@@ -56,6 +56,12 @@ CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_grant_transition_guard()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
 SET search_path=pg_catalog,ai_platform AS $grant_guard$
 BEGIN
+ IF TG_OP='INSERT' THEN
+  IF NEW.status IN ('APPROVED','CONSUMED') THEN
+   RAISE EXCEPTION 'GPT02_GRANT_DIRECT_APPROVAL_DISABLED' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+ END IF;
  IF TG_OP='DELETE' THEN
   RAISE EXCEPTION 'GPT02_GRANT_DELETE_FORBIDDEN' USING ERRCODE='55000';
  END IF;
@@ -92,7 +98,7 @@ REVOKE ALL ON FUNCTION ai_platform.dev_gpt02_grant_transition_guard()
 DROP TRIGGER IF EXISTS dev_gpt02_grant_transition_guard_trg
  ON ai_platform.dev_gpt02_resume_grants;
 CREATE TRIGGER dev_gpt02_grant_transition_guard_trg
- BEFORE UPDATE OR DELETE ON ai_platform.dev_gpt02_resume_grants
+ BEFORE INSERT OR UPDATE OR DELETE ON ai_platform.dev_gpt02_resume_grants
  FOR EACH ROW EXECUTE FUNCTION ai_platform.dev_gpt02_grant_transition_guard();
 
 CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_resume_command_leases (
