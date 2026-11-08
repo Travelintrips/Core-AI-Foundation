@@ -59,15 +59,26 @@ describe("GPT02 DEV durable lease CAS, zero dispatch authority", () => {
     expect(await heartbeatGpt02DevRecoveryLease({...identity,fencingToken:"2",ttlSeconds:30})).toMatchObject({
       ok:true,action:"HEARTBEAT",fencingToken:"2",mayDispatchWorker:false});
   });
-  it("release denies unverifiable retries and stale takeover tokens", async () => {
-    mock.plan=[[{fencing_token:"2",lease_expires_at:null}]];
+  it("release commits an owner-bound receipt in the same transaction", async () => {
+    mock.plan=[[{fencing_token:"2",lease_expires_at:null}],[{fencing_token:"2"}]];
     expect(await releaseGpt02DevRecoveryLease({...identity,fencingToken:"2"})).toMatchObject({
       ok:true,action:"RELEASED",mayDispatchWorker:false});
-    mock.calls=0;mock.plan=[[]];
+    expect(mock.calls).toBe(2);
+  });
+  it("idempotent release requires receipt and matching unowned lease", async () => {
+    mock.plan=[[],[{fencing_token:"2",lease_expires_at:null}]];
     expect(await releaseGpt02DevRecoveryLease({...identity,fencingToken:"2"})).toMatchObject({
-      ok:false,reason:"FENCING_TOKEN_STALE_OR_LEASE_EXPIRED"});
-    mock.calls=0;mock.plan=[[]];
+      ok:true,action:"ALREADY_RELEASED",mayDispatchWorker:false});
+    mock.calls=0;mock.plan=[[],[]];
     expect(await releaseGpt02DevRecoveryLease({...identity,fencingToken:"1"})).toMatchObject({
       ok:false,reason:"FENCING_TOKEN_STALE_OR_LEASE_EXPIRED"});
+    mock.calls=0;mock.plan=[[],[]];
+    expect(await releaseGpt02DevRecoveryLease({...identity,workerId:"other-worker",fencingToken:"2"})).toMatchObject({
+      ok:false,reason:"FENCING_TOKEN_STALE_OR_LEASE_EXPIRED"});
+  });
+  it("refuses to acknowledge release if receipt is not durable", async () => {
+    mock.plan=[[{fencing_token:"2",lease_expires_at:null}],[]];
+    await expect(releaseGpt02DevRecoveryLease({...identity,fencingToken:"2"}))
+      .rejects.toThrow("GPT02_RELEASE_RECEIPT_NOT_DURABLE");
   });
 });

@@ -105,19 +105,48 @@ export async function releaseGpt02DevRecoveryLease(input: LeaseToken) {
   if (!mutationsEnabled()) return deny("LEASE_MUTATIONS_DISABLED");
   const invalid = validateGpt02LeaseRequest(input);
   if (invalid) return deny(invalid);
-  const released = await db.execute(sql`
-    UPDATE ai_platform.gpt02_dev_recovery_leases
-    SET lease_owner=NULL, lease_expires_at=NULL, updated_at=clock_timestamp()
-    WHERE reservation_id=${input.reservationId}::uuid
-      AND lease_owner=${input.workerId}
-      AND fencing_token=${input.fencingToken}::bigint
-      AND lease_expires_at>clock_timestamp()
-    RETURNING fencing_token::text AS fencing_token, lease_expires_at
-  `);
-  if (released.rows?.[0]) return leaseResult(released.rows[0], "RELEASED");
-  // A released row no longer carries the previous worker identity.
-  // Do not report a retry as successful without a durable owner receipt:
-  // otherwise an unrelated worker with the same token could claim success.
-  // The final issuer release protocol must persist signed release provenance.
-  return deny("FENCING_TOKEN_STALE_OR_LEASE_EXPIRED");
+  return db.transaction(async tx => {
+    // Atomic CAS release and durable provenance. A failed receipt insert rolls
+    // back the lease UPDATE: no ACK without an owner-bound committed receipt.
+    const released = await tx.execute(sql`
+      UPDATE ai_platform.gpt02_dev_recovery_leases
+      SET lease_owner=NULL, lease_expires_at=NULL, updated_at=clock_timestamp()
+      WHERE reservation_id=${input.reservationId}::uuid
+        AND lease_owner=${input.workerId}
+        AND fencing_token=${input.fencingToken}::bigint
+        AND lease_expires_at>clock_timestamp()
+      RETURNING fencing_token::text AS fencing_token, lease_expires_at
+    `);
+    if (released.rows?.[0]) {
+      const receipt = await tx.execute(sql`
+        INSERT INTO ai_platform.gpt02_dev_recovery_lease_releases
+          (reservation_id,fencing_token,lease_owner)
+        VALUES (${input.reservationId}::uuid,${input.fencingToken}::bigint,${input.workerId})
+        RETURNING fencing_token::text AS fencing_token
+      `);
+      if (!receipt.rows?.[0]) {
+        throw new Error("GPT02_RELEASE_RECEIPT_NOT_DURABLE");
+      }
+      return leaseResult(released.rows[0], "RELEASED");
+    }
+    // Exact, previously committed receipt AND the original token still
+    // unowned is necessary for an idempotent response. If the lease was
+    // taken over by another worker, even a real old receipt is not a
+    // current-lease acknowledgement.
+    const previous = await tx.execute(sql`
+      SELECT lr.fencing_token::text AS fencing_token,
+             l.lease_expires_at
+      FROM ai_platform.gpt02_dev_recovery_lease_releases lr
+      JOIN ai_platform.gpt02_dev_recovery_leases l
+        ON l.reservation_id=lr.reservation_id
+       AND l.fencing_token=lr.fencing_token
+      WHERE lr.reservation_id=${input.reservationId}::uuid
+        AND lr.fencing_token=${input.fencingToken}::bigint
+        AND lr.lease_owner=${input.workerId}
+        AND l.lease_owner IS NULL AND l.lease_expires_at IS NULL
+      FOR UPDATE OF l
+    `);
+    if (previous.rows?.[0]) return leaseResult(previous.rows[0], "ALREADY_RELEASED");
+    return deny("FENCING_TOKEN_STALE_OR_LEASE_EXPIRED");
+  });
 }
