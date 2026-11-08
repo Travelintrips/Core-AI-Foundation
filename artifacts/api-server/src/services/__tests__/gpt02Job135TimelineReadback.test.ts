@@ -8,6 +8,10 @@ vi.mock("@workspace/db",()=>({db:{execute:async()=>({rows:mock.plan[mock.calls++
 vi.mock("../codingCommandLifecycleEvidence.js",()=>({
   getCodingCommandLifecycleEvidence:mock.proof,
 }));
+const crossLedgerMock=vi.hoisted(()=>({read:vi.fn()}));
+vi.mock("../gpt02Job135CrossLedgerReadback.js",()=>({
+  getGpt02Job135CrossLedgerReadback:crossLedgerMock.read,
+}));
 import {getGpt02Job135TimelineReadback,validateGpt02TimelineReadbackInput}
   from "../gpt02Job135TimelineReadback.js";
 const parent="83db99f5-cbda-4e60-be71-3090fb411bbb";
@@ -31,11 +35,18 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
     process.env["APP_ENV"]="development";process.env["NODE_ENV"]="development";
     mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("COMPLETED","completed-1")]];
     mock.proof.mockImplementation(async(cmd:string)=>proof(cmd));
+    crossLedgerMock.read.mockResolvedValue({
+      valid:true,reason:"LEGACY_UNTAGGED_HISTORY_NOT_EXCLUDED",
+      parentEventCount:1,explicitJobEventCount:0,taggedChildCount:0,
+      reviewRecordCount:2,legacyUntaggedAttemptsExcluded:false,
+      mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false,
+    });
   });
   afterEach(()=>{
     if(oldApp===undefined)delete process.env["APP_ENV"];else process.env["APP_ENV"]=oldApp;
     if(oldNode===undefined)delete process.env["NODE_ENV"];else process.env["NODE_ENV"]=oldNode;
     mock.proof.mockReset();
+    crossLedgerMock.read.mockReset();
   });
   it("rejects production or bad identity before querying DB",async()=>{
     process.env["APP_ENV"]="production";
@@ -95,6 +106,7 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
       ok:true,status:"BLOCKED_OR_UNVERIFIED",progressPercent:null,
       eligibleForCompletionReview:false,mayDispatchWorker:false,mayCloseJob:false});
     expect(mock.proof).toHaveBeenCalledTimes(2);
+    expect(crossLedgerMock.read).toHaveBeenCalledWith(input());
   });
   it("signed checkpoint evidence can show native ACK but never final completion",async()=>{
     mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("CHECKPOINT","checkpoint-1")]];

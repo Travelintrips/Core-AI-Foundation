@@ -16,6 +16,10 @@ export type Gpt02TimelineReadback = {
   reservationReadbackStatus?:string; reservationEvidenceVerified?:boolean;
   mayDispatchWorker?:boolean;
   mayCloseJob?:boolean; eligibleForCompletionReview?:boolean;
+  crossLedger?:{valid:boolean;reason:string;parentEventCount?:number;
+    explicitJobEventCount?:number;taggedChildCount?:number;
+    reviewRecordCount?:number;legacyUntaggedAttemptsExcluded:false;
+    mayCreateCommand:false;mayDispatchWorker:false;mayCloseJob:false};
 };
 
 export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
@@ -70,6 +74,13 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
       <p>Native ACK: <strong>{result.lastNativeAckVerified?"Bukti checkpoint terverifikasi":"Belum terverifikasi"}</strong></p>
       <p className="sm:col-span-2">Reservasi recovery: <strong>{result.reservationEvidenceVerified?"Identitas kandidat terbaca":result.reservationReadbackStatus==="CANDIDATE_READER_NOT_INSTALLED"?"Fungsi pembaca DEV belum dipasang":result.reservationReadbackStatus==="CANDIDATE_READER_EXECUTE_DENIED"?"Hak EXECUTE pembaca DEV belum tersedia":result.reservationReadbackStatus==="MIGRATION_MISSING"?"Tabel belum tersedia":"Belum terverifikasi"}</strong></p>
       <p className="sm:col-span-2 break-all">Blocker: <strong>{result.blockerResponseId??"Tidak tercatat pada snapshot"}</strong></p>
+      <div className="sm:col-span-2 border-t border-border pt-2 space-y-1">
+        <p className="font-semibold">Audit lintas-ledger (bukti eksplisit)</p>
+        <p>Event terkait parent: {result.crossLedger?.valid?result.crossLedger.parentEventCount:"Belum terbaca"}</p>
+        <p>Event bertag Job: {result.crossLedger?.valid?result.crossLedger.explicitJobEventCount:"Belum terbaca"}</p>
+        <p>Child command bertag: {result.crossLedger?.valid?result.crossLedger.taggedChildCount:"Belum terbaca"}</p>
+        <p className="text-amber-400">Riwayat command legacy tanpa tag belum dapat dikesampingkan. Tidak ada izin retry atau dispatch.</p>
+      </div>
       <p className="sm:col-span-2 text-muted-foreground">Finalisasi: tetap memerlukan persetujuan serta bukti hasil independen. Tampilan ini bukan otorisasi.</p>
     </div>}
     {!result&&!error&&<p className="text-xs text-muted-foreground">Klik Periksa timeline untuk mengambil data terbaru. Tidak ada polling otomatis.</p>}

@@ -7,6 +7,7 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { getCodingCommandLifecycleEvidence } from "./codingCommandLifecycleEvidence.js";
+import { getGpt02Job135CrossLedgerReadback } from "./gpt02Job135CrossLedgerReadback.js";
 import {projectGpt02Job135Timeline,type TimelineResponse} from "./gpt02Job135TimelineProjection.js";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -121,7 +122,9 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
     assignedWorkerId:null, // worker claim requires independent verified assignment
     reviewAccepted:row["status"]==="accepted",responses:evidence,
   });
+  const crossLedger=await getGpt02Job135CrossLedgerReadback(x);
   return {ok:true as const,reviewOnly:true as const,
+    crossLedger,
     mayCreateCommand:false as const,
     reservationSchemaAvailable:reservationsPresent,
     reservationReadbackStatus:!reservationsPresent?"MIGRATION_MISSING":

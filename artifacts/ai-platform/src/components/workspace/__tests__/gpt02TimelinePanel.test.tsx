@@ -11,6 +11,10 @@ const success={
   reservationReadbackStatus:"CANDIDATE_READER_NOT_INSTALLED",
   reservationEvidenceVerified:false,
   mayDispatchWorker:false,mayCloseJob:false,
+  crossLedger:{valid:true,reason:"LEGACY_UNTAGGED_HISTORY_NOT_EXCLUDED",
+    parentEventCount:1,explicitJobEventCount:0,taggedChildCount:0,
+    reviewRecordCount:2,legacyUntaggedAttemptsExcluded:false,
+    mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false},
 };
 const reply=(status:number,body:unknown)=>({ok:status>=200&&status<300,status,
   json:async()=>body}) as Response;
@@ -34,6 +38,7 @@ describe("GPT02 DEV manual timeline UI",()=>{
     fireEvent.click(screen.getByRole("button",{name:/Periksa timeline/}));
     await waitFor(()=>expect(screen.getByText("Fungsi pembaca DEV belum dipasang")).toBeTruthy());
     expect(screen.getByText("Belum dapat dihitung")).toBeTruthy();
+    expect(screen.getByText(/Riwayat command legacy tanpa tag belum dapat dikesampingkan/)).toBeTruthy();
     expect(screen.getAllByText("Belum terverifikasi").length).toBeGreaterThan(0);
     expect(globalThis.fetch).toHaveBeenCalledOnce();
     const [url,options]=vi.mocked(globalThis.fetch).mock.calls[0]!;
