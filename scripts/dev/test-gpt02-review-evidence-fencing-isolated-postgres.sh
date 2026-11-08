@@ -109,15 +109,28 @@ REVOKE ALL ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb
 GRANT EXECUTE ON FUNCTION isolated.try_append(integer,integer,integer,integer,jsonb) TO verified_service;
 -- ONE disposable database now exercises the review -> grant -> lease ->
 -- fenced completion chain. This does not authenticate Ed25519 in PostgreSQL.
+-- Disposable protected key, readable only by the function owner. No live secret.
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+CREATE TABLE isolated.attestation_mac_keys(key_hex text NOT NULL);
+INSERT INTO isolated.attestation_mac_keys VALUES(encode(public.gen_random_bytes(32),'hex'));
 CREATE TABLE isolated.review_attestations(
  audit_id integer PRIMARY KEY REFERENCES isolated.audit(id),
  proof_digest text NOT NULL,
  attested_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
-CREATE FUNCTION isolated.attest_review(p_audit integer,p_digest text)
+CREATE FUNCTION isolated.attest_review(p_audit integer,p_digest text,p_mac text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,isolated AS $$
-DECLARE v_inserted integer;
+DECLARE v_inserted integer; v_key text;
 BEGIN
+ SELECT key_hex INTO STRICT v_key FROM isolated.attestation_mac_keys;
+ -- Role credentials alone cannot create a valid attestation. The process
+ -- needs a separate one-time test secret, held outside its DB login.
+ IF p_mac IS NULL OR p_mac !~ '^[a-f0-9]{64}$' OR
+    p_mac IS DISTINCT FROM encode(public.hmac(
+      convert_to(p_audit::text||':'||p_digest,'UTF8'),
+      decode(v_key,'hex'),'sha256'),'hex') THEN
+   RETURN false;
+ END IF;
  INSERT INTO isolated.review_attestations(audit_id,proof_digest)
  SELECT a.id,p_digest FROM isolated.audit a
  WHERE a.id=p_audit AND p_digest=md5(a.proof_json::text)
@@ -125,8 +138,8 @@ BEGIN
  ON CONFLICT (audit_id) DO NOTHING RETURNING audit_id INTO v_inserted;
  RETURN v_inserted IS NOT NULL;
 END $$;
-REVOKE ALL ON FUNCTION isolated.attest_review(integer,text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION isolated.attest_review(integer,text) TO attestor;
+REVOKE ALL ON FUNCTION isolated.attest_review(integer,text,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION isolated.attest_review(integer,text,text) TO attestor;
 CREATE TABLE isolated.grants(
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
  command_id integer NOT NULL REFERENCES isolated.commands(id),
@@ -318,8 +331,8 @@ echo "END-TO-END ROLE SEPARATION PASS"
 forged_id="$(docker exec "$name" psql -U postgres -qAt -c "SELECT id FROM isolated.audit WHERE nonce=repeat('a',64)")"
 [ -n "$forged_id" ] || { echo "FAIL synthetic forged audit not found"; exit 1; }
 [ "$(issuer_sql "SELECT isolated.issue_grant($forged_id,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL un-attested forged audit issued grant"; exit 1; }
-if issuer_sql "SELECT isolated.attest_review($forged_id,'incorrect')" >/dev/null 2>&1; then echo "FAIL issuer could self-attest";exit 1;fi
-if docker exec -e PGPASSWORD=isolated-verifier-credential "$name" psql -h 127.0.0.1 -U verifier_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "SELECT isolated.attest_review($forged_id,'incorrect')" >/dev/null 2>&1; then echo "FAIL verifier could self-attest";exit 1;fi
+if issuer_sql "SELECT isolated.attest_review($forged_id,'incorrect',repeat('0',64))" >/dev/null 2>&1; then echo "FAIL issuer could self-attest";exit 1;fi
+if docker exec -e PGPASSWORD=isolated-verifier-credential "$name" psql -h 127.0.0.1 -U verifier_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "SELECT isolated.attest_review($forged_id,'incorrect',repeat('0',64))" >/dev/null 2>&1; then echo "FAIL verifier could self-attest";exit 1;fi
 echo "FORGED AUDIT ISSUANCE AND SELF-ATTESTATION DENIED PASS"
 signed_nonce="$(printf '%s' "$signed_proof_b64" | base64 -d | python3 -c 'import json,sys; print(json.load(sys.stdin)["nonce"])')"
 [[ "$signed_nonce" =~ ^[a-f0-9]{64}$ ]] || { echo "FAIL verified nonce format";exit 1; }
@@ -339,14 +352,41 @@ for audit_to_check in "$audit_id" "$forged_id"; do
  fi
 done
 attestor_sql() { docker exec -e PGPASSWORD=isolated-attestor-credential "$name" psql -h 127.0.0.1 -U attestor_login -d postgres -v ON_ERROR_STOP=1 -qAt -c "$1"; }
+# Key is generated inside disposable PostgreSQL; used only by the test launcher
+# for injecting into the ephemeral child. Never pass this from web runtime.
+test_attestor_mac_key="$(docker exec "$name" psql -U postgres -qAt -c 'SELECT key_hex FROM isolated.attestation_mac_keys')"
+[[ "$test_attestor_mac_key" =~ ^[a-f0-9]{64}$ ]] || { echo "FAIL disposable MAC key";exit 1; }
+if attestor_sql "SELECT key_hex FROM isolated.attestation_mac_keys" >/dev/null 2>&1; then
+ echo "FAIL attestor login can read MAC key table";exit 1
+fi
+if reader_sql "SELECT key_hex FROM isolated.attestation_mac_keys" >/dev/null 2>&1; then
+ echo "FAIL reader login can read MAC key table";exit 1
+fi
+if docker exec -e PGPASSWORD=isolated-verifier-credential "$name" psql -h 127.0.0.1 -U verifier_login -d postgres -qAt -v ON_ERROR_STOP=1 -c "SELECT key_hex FROM isolated.attestation_mac_keys" >/dev/null 2>&1; then
+ echo "FAIL verifier login can read MAC key table";exit 1
+fi
+echo "ATTESTATION MAC KEY NONDISCLOSURE BY ALL LOGINS PASS"
 digest="$(docker exec "$name" psql -U postgres -qAt -c "SELECT md5(proof_json::text) FROM isolated.audit WHERE id=$audit_id")"
-(cd artifacts/api-server && env -i PATH="$PATH" HOME="${HOME:-/tmp}" APP_ENV=development NODE_ENV=test GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY=true GPT02_SYNTHETIC_WRITER_CONTAINER="$name" GPT02_SYNTHETIC_WRITER_PUBLIC_KEY="$trusted_pub_b64" pnpm exec tsx src/scripts/devReviewAttestorChild.ts <<< "$audit_id")
-if (cd artifacts/api-server && env -i PATH="$PATH" HOME="${HOME:-/tmp}" APP_ENV=development NODE_ENV=test GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY=true GPT02_SYNTHETIC_WRITER_CONTAINER="$name" GPT02_SYNTHETIC_WRITER_PUBLIC_KEY="$trusted_pub_b64" pnpm exec tsx src/scripts/devReviewAttestorChild.ts <<< "$forged_id") >/dev/null 2>&1; then
+# Before any valid attestation exists, an attacker holding ONLY the login and
+# public digest must not mint one with a guessed MAC.
+[ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest',repeat('0',64))")" = f ] || { echo "FAIL stolen attestor credential minted pre-existing audit";exit 1; }
+pre_state="$(docker exec "$name" psql -U postgres -qAt -c "SELECT count(*) FROM isolated.review_attestations WHERE audit_id=$audit_id")"
+[ "$pre_state" = 0 ] || { echo "FAIL rejected MAC recorded attestation";exit 1; }
+echo "PRE-ATTESTATION STOLEN CREDENTIAL WITHOUT MAC DENIED PASS"
+(cd artifacts/api-server && env -i PATH="$PATH" HOME="${HOME:-/tmp}" APP_ENV=development NODE_ENV=test GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY=true GPT02_SYNTHETIC_WRITER_CONTAINER="$name" GPT02_SYNTHETIC_WRITER_PUBLIC_KEY="$trusted_pub_b64" GPT02_SYNTHETIC_ATTESTOR_KEY_TEST_ONLY="$test_attestor_mac_key" pnpm exec tsx src/scripts/devReviewAttestorChild.ts <<< "$audit_id")
+if (cd artifacts/api-server && env -i PATH="$PATH" HOME="${HOME:-/tmp}" APP_ENV=development NODE_ENV=test GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY=true GPT02_SYNTHETIC_WRITER_CONTAINER="$name" GPT02_SYNTHETIC_WRITER_PUBLIC_KEY="$trusted_pub_b64" GPT02_SYNTHETIC_ATTESTOR_KEY_TEST_ONLY="$test_attestor_mac_key" pnpm exec tsx src/scripts/devReviewAttestorChild.ts <<< "$forged_id") >/dev/null 2>&1; then
  echo "FAIL compromised audit independently attested"; exit 1
 fi
 echo "INDEPENDENT PROCESS FORGED AUDIT ATTESTATION DENIED PASS"
-[ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest')")" = f ] || { echo "FAIL attestation replay";exit 1; }
-[ "$(attestor_sql "SELECT isolated.attest_review($forged_id,'bad-digest')")" = f ] || { echo "FAIL invalid audit digest attested";exit 1; }
+# Even the real attestor DB identity must not be able to attest from the
+# public audit digest alone without separate proof-of-key possession.
+[ "$(attestor_sql "SELECT isolated.attest_review($forged_id,'$digest',repeat('0',64))")" = f ] || { echo "FAIL stolen attestor login accepted forged MAC";exit 1; }
+[ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest',repeat('0',64))")" = f ] || { echo "FAIL stolen attestor login accepted valid digest with forged MAC";exit 1; }
+# Replay of the exact accepted MAC is denied by the one-shot audit PK.
+valid_mac="$(printf '%s' "$audit_id:$digest" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$test_attestor_mac_key" | awk '{print $NF}')"
+[ "$(attestor_sql "SELECT isolated.attest_review($audit_id,'$digest','$valid_mac')")" = f ] || { echo "FAIL attestation replay";exit 1; }
+[ "$(attestor_sql "SELECT isolated.attest_review($forged_id,'bad-digest',repeat('0',64))")" = f ] || { echo "FAIL invalid audit digest attested";exit 1; }
+echo "STOLEN ATTESTOR LOGIN WITHOUT SEPARATE MAC KEY DENIED PASS"
 grant="$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")"
 [[ "$grant" =~ ^[0-9]+$ ]] || { echo "FAIL signed audit did not yield synthetic grant";exit 1; }
 [ "$(issuer_sql "SELECT isolated.issue_grant($audit_id,'openclaw-dell-chatgpt-wake-dev')")" = "" ] || { echo "FAIL replay grant issuance";exit 1; }

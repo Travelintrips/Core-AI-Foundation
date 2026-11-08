@@ -5,14 +5,17 @@
  * the distinct test attestor SQL identity. Never deploy to CST-DEV or PROD.
  */
 import {readFileSync} from "node:fs";
+import {createHmac} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {verifyOperatorApprovalProof} from "../services/jobLifecycleOperatorApprovalProof.js";
 const deny=()=>{process.stdout.write("ATTESTATION_DENIED\n");process.exit(3);};
 const c=process.env["GPT02_SYNTHETIC_WRITER_CONTAINER"];
 const key=process.env["GPT02_SYNTHETIC_WRITER_PUBLIC_KEY"];
+const macKey=process.env["GPT02_SYNTHETIC_ATTESTOR_KEY_TEST_ONLY"];
 if(process.env["APP_ENV"]!=="development"||process.env["NODE_ENV"]!=="test"||
  process.env["GPT02_SYNTHETIC_WRITER_CHILD_TEST_ONLY"]!=="true"||
  !c||!/^gpt02-evidence-fence-[0-9]+$/.test(c)||!key||
+ !macKey||!/^[a-f0-9]{64}$/.test(macKey)||
  ["DATABASE_URL","SUPABASE_DEV_DATABASE_URL","OPENCLAW_AI_CORE_API_KEY","NODE_OPTIONS"].some(k=>process.env[k]!==undefined))deny();
 try {
  const id=readFileSync(0,"utf8").trim();
@@ -42,8 +45,10 @@ try {
  if(!verified.validForReview)deny();
  // The digest was read in the same snapshot as the verified proof.
  // The attestation procedure separately rechecks equality at insertion.
+ const mac=createHmac("sha256",Buffer.from(macKey!,"hex"))
+   .update(id+":"+digest,"utf8").digest("hex");
  const accepted=postgres("attestor_login","isolated-attestor-credential",
-  "SELECT isolated.attest_review("+id+",'"+digest+"')");
+  "SELECT isolated.attest_review("+id+",'"+digest+"','"+mac+"')");
  if(accepted!=="t")deny();
  process.stdout.write("PERSISTED_AUDIT_CRYPTO_ATTESTED_PASS\n");
 }catch{deny();}

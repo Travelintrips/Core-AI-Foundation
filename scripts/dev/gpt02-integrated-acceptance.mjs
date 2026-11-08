@@ -39,6 +39,11 @@ const gates=[
   existsSync(resolve(root,'scripts/dev/test-gpt02-resume-isolated-postgres.sh'))),
  check('GRANT_ISSUANCE_CONTRACT','Isolated grant issuance test exists',
   existsSync(resolve(root,'scripts/dev/test-gpt02-issuance-isolated-postgres.sh'))),
+ check('ATTESTOR_MAC_SECOND_FACTOR_PROTOTYPE','Attestor SQL requires a separate keyed MAC, not only a DB login or audit digest',
+  file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('createHmac("sha256"') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('public.hmac(') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('PRE-ATTESTATION STOLEN CREDENTIAL WITHOUT MAC DENIED PASS') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('ATTESTATION MAC KEY NONDISCLOSURE BY ALL LOGINS PASS')),
  check('LEAST_PRIVILEGE_ATTESTOR_READBACK','Attestor readback uses scoped non-superuser audit reader and single snapshot',
   file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('audit_reader_login') &&
   !file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('"-U","postgres"') &&
