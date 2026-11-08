@@ -16,6 +16,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { z } from "zod";
 import { recordHumanRecoveryRecommendation } from "../services/humanRecoveryDecisionService.js";
 import { recordGpt02PrototypeIntegrity } from "../services/gpt02PrototypeEvidenceAudit.js";
+import { reserveGpt02DevRecoveryAttempt } from "../services/gpt02DevRecoveryReservation.js";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
@@ -62,7 +63,7 @@ async function guardLifecycleReview(req: Request, res: Response, next: NextFunct
             // Ignore client-provided identity even if submitted by a matching actor.
             // The recommendation endpoint accepts a strict, actor-free body.
             // Authentication identity is obtained from req.internalUser there.
-            req.body=(req.path.endsWith("/recovery-recommendation") || req.path.endsWith("/prototype-integrity"))
+            req.body=(req.path.endsWith("/recovery-recommendation") || req.path.endsWith("/prototype-integrity") || req.path.endsWith("/recovery-reservation"))
               ? body : {...body,performedBy:actor.email};
           }
           next();
@@ -243,6 +244,48 @@ router.post("/ai/human-tasks/:id/prototype-integrity",async(req,res):Promise<voi
     res.status(result.alreadyRecorded?200:201).json(result);
   }catch{
     res.status(503).json({error:"PROTOTYPE_INTEGRITY_VERIFICATION_UNAVAILABLE"});
+  }
+});
+
+// DEV-only explicit reviewer-bound reservation. A reservation is NOT a command,
+// exclusive execution lease, grant or dispatch. Flag stays OFF by default.
+// The lifecycle guard above provides authenticated assigned admin/owner, session,
+// password-change enforcement, and same-origin browser mutation.
+router.post("/ai/human-tasks/:id/recovery-reservation",async(req,res):Promise<void>=>{
+  res.setHeader("Cache-Control","no-store");
+  if(process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"]!=="true"){
+    res.status(403).json({error:"RESERVATION_FEATURE_DISABLED"});return;
+  }
+  if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+    res.status(403).json({error:"DEV_ONLY_RESERVATION"});return;
+  }
+  const humanReviewId=Number(req.params["id"]);
+  if(!Number.isSafeInteger(humanReviewId)||humanReviewId<1){
+    res.status(400).json({error:"INVALID_HUMAN_REVIEW_ID"});return;
+  }
+  const parsed=z.object({
+    parentCommandId:z.string().uuid(),
+    jobId:z.number().int().positive(),
+    idempotencyKey:z.string().uuid(),
+  }).strict().safeParse(req.body);
+  if(!parsed.success){
+    res.status(400).json({error:"INVALID_RESERVATION_REQUEST"});return;
+  }
+  const actor=req.internalUser?.email;
+  if(!actor){res.status(401).json({error:"SESSION_REQUIRED"});return;}
+  try {
+    const result=await reserveGpt02DevRecoveryAttempt({
+      ...parsed.data,humanReviewId,actor,
+    });
+    if(!result.ok){
+      res.status(result.error==="ASSIGNED_HUMAN_REVIEWER_REQUIRED"?403:
+        result.error==="HUMAN_REVIEW_NOT_FOUND"?404:409).json(result);
+      return;
+    }
+    res.status(result.alreadyReserved?200:201).json(result);
+  }catch {
+    // No fallthrough to existing coding command, lease, or worker routines.
+    res.status(503).json({error:"RECOVERY_RESERVATION_UNAVAILABLE"});
   }
 });
 
