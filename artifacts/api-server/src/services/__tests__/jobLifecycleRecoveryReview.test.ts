@@ -124,6 +124,11 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
      expect(x.recoveredArtifactEvidenceRecorded).toBe(true);
      expect(x.linkedJobId).toBe(135);
      expect(x.humanRecoveryRecommendation).toBe("recommend_new_attempt");
+     expect(x.newAttemptPreflight.reason).toBe("ARTIFACT_NOT_VERIFIED");
+     expect(x.newAttemptPreflight.readyForSeparateAuthorization).toBe(false);
+     expect(x.newAttemptPreflight.mayCreateCommand).toBe(false);
+     expect(x.newAttemptPreflight.mayDispatchWorker).toBe(false);
+     expect(x.newAttemptPreflightUnverifiedInputs).toContain("verified_artifact_manifest");
      expect(x.humanRecoveryAuthorizationVerified).toBe(false);
      expect(x.commandResumeAuthorizationVerified).toBe(false);
      expect(x.mayDispatchWorker).toBe(false);
@@ -135,9 +140,25 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
    const x=await getDevCommandRecoveryReview(facts().commandId);
    expect(x.found).toBe(true);
    if(!x.found)return;
+   expect(x.newAttemptPreflight.reason).toBe("MISSING_REVIEW");
+   expect(x.newAttemptPreflight.mayCreateCommand).toBe(false);
    expect(x.humanReviewId).toBeNull();
    expect(x.recoveredArtifactEvidenceRecorded).toBe(false);
    expect(x.humanRecoveryAuthorizationVerified).toBe(false);
+ });
+ it("accepted review without recommendation cannot prepare a command",async()=>{
+   m.humanRows=[{id:6,status:"accepted",completed_at:null,job_id:"135",
+      assigned_user:reviewer,recovered_artifact_evidence_recorded:true,
+      recommendation_notes:null,recommendation_actor:null}];
+   try{
+     const x=await getDevCommandRecoveryReview(facts().commandId);
+     expect(x.found).toBe(true);
+     if(!x.found)return;
+     expect(x.newAttemptPreflight.reason).toBe("NO_RECOMMENDATION");
+     expect(x.newAttemptPreflight.mayCreateCommand).toBe(false);
+     expect(x.newAttemptPreflight.mayDispatchWorker).toBe(false);
+     expect(x.newAttemptPreflight.mayCloseJob).toBe(false);
+   }finally{m.humanRows=[];}
  });
  it("unknown command returns not found without querying presence",async()=>{
   const prior=m.life;

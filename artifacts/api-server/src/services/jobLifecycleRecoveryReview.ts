@@ -6,6 +6,7 @@ import { assessJobLifecycleReadiness } from "./jobLifecycleReadinessService.js";
 import { evaluateRecoveryDecision } from "./jobLifecycleRecoveryGate.js";
 import { reviewBlockerEvidence } from "./jobLifecycleBlockerEvidence.js";
 import { getCodingCommandLifecycleEvidence } from "./codingCommandLifecycleEvidence.js";
+import { evaluateNewAttemptPreflight } from "./jobLifecycleNewAttemptPreflight.js";
 
 const workerId = "openclaw-dell-chatgpt-wake-dev";
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==="object"&&!Array.isArray(v);
@@ -153,17 +154,40 @@ export async function getDevCommandRecoveryReview(commandId:string) {
   const review=humanReview.rows?.[0];
   const reviewId=Number(review?.["id"]);
   const linkedJobId=Number(review?.["job_id"]);
+  const validJobId=Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null;
+  const recommendation=parseRecoveryRecommendation(
+    review?.["recommendation_notes"],review?.["recommendation_actor"],review?.["assigned_user"],
+    commandId,validJobId,
+  );
+  const runtimeReview=assessReadonlyRecoveryFacts(facts);
+  // No new-command identity, persisted duplicate count, retry clearance or
+  // cryptographically verified artifact manifest exists in this readback.
+  // Do not infer any of those from a historical text note or worker presence.
+  const newAttemptPreflight=evaluateNewAttemptPreflight({
+    environment:process.env["APP_ENV"]==="production"?"production":"development",
+    jobId:validJobId??0,reviewJobId:validJobId,
+    originalCommandId:commandId,reviewCommandId:review?.["id"]?commandId:null,
+    proposedNewCommandId:"",
+    originalCommandStatus:String(lifecycle.commandStatus),
+    humanReviewStatus:typeof review?.["status"]==="string"?review["status"]:null,
+    recommendation,
+    evidenceVerified:false,artifactSha256:null,existingAttemptCount:-1,
+    workerHealthy:runtimeReview.workerPresenceHealthy,
+    retryAfterAt:null,now:facts.now,
+  });
   return {
-    found:true as const,...assessReadonlyRecoveryFacts(facts),
+    found:true as const,...runtimeReview,
     humanReviewId:Number.isSafeInteger(reviewId)&&reviewId>0?reviewId:null,
     humanReviewStatus:typeof review?.["status"]==="string"?review["status"]:null,
     humanReviewCompleted:Boolean(review?.["completed_at"]),
     recoveredArtifactEvidenceRecorded:review?.["recovered_artifact_evidence_recorded"]===true,
     linkedJobId:Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null,
-    humanRecoveryRecommendation:parseRecoveryRecommendation(
-      review?.["recommendation_notes"],review?.["recommendation_actor"],review?.["assigned_user"],
-      commandId,Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null,
-    ),
+    humanRecoveryRecommendation:recommendation,
+    newAttemptPreflight,
+    newAttemptPreflightUnverifiedInputs:[
+      "verified_artifact_manifest","new_command_identity","duplicate_attempt_count",
+      "retry_after_clearance","command_exclusive_lease","explicit_dispatch_authorization",
+    ] as const,
     // Accept and evidence cannot authorize a command or create a signed checkpoint.
     humanRecoveryAuthorizationVerified:false as const,
   };
