@@ -123,5 +123,8 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     serverFlag:process.env["AI_CORE_DEV_LIFECYCLE_RECOVERY_REVIEW_ENABLED"]==="true",
     now:new Date(),
   };
-  return {found:true as const,...assessReadonlyRecoveryFacts(facts)};
+  return {found:true as const,...assessReadonlyRecoveryFacts(facts),
+    // Source command's own task FK is a trace hint, NOT verified AI Task Center identity.
+    sourceTaskId:typeof lifecycle.taskId==="string"&&lifecycle.taskId.length>0?
+      lifecycle.taskId:null};
 }

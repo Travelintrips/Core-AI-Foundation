@@ -19,6 +19,14 @@ describe("DEV evidence summary never escalates observation to authority",()=>{
   expect(s.releaseDecision).toBe("NO_GO");
   expect(s.mayDispatchWorker).toBe(false);
  });
+ it("shows DB command task reference without claiming an AI Task job match",()=>{
+  const s=summarizeDevRecoveryEvidence(id,{found:true,commandStatus:"PROCESSING",
+   commandStatusReviewable:true,sourceTaskId:"source-task-42"});
+  expect(s.sourceTaskId).toBe("source-task-42");
+  expect(s.sourceTaskIdVerifiedAsAiTaskJob).toBe(false);
+  expect(s.checks.find(x=>x.id==="job_intake")?.state).toBe("NOT_VERIFIED");
+  expect(s.releaseDecision).toBe("NO_GO");
+ });
  it("missing command is not treated as an empty valid response snapshot",()=>{
   const s=summarizeDevRecoveryEvidence(id,{found:false,responseSnapshotComplete:true,checkpointAttested:true,
     receiverAckVerified:true,blockerEvidenceValid:true,workerPresenceHealthy:true});

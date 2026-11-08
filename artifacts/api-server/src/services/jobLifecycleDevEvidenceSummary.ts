@@ -8,6 +8,7 @@ import {getDevCommandRecoveryReview} from "./jobLifecycleRecoveryReview.js";
 export type EvidenceState="OBSERVED"|"BLOCKED"|"NOT_VERIFIED";
 export type EvidenceCheck={id:string;state:EvidenceState;reason:string};
 export type RecoverySummary={found:boolean;commandId:string;commandStatus?:string;
+  sourceTaskId:string|null;sourceTaskIdVerifiedAsAiTaskJob:false;
   releaseDecision:"NO_GO";snapshotAtomic:false;maySign:false;mayIssueGrant:false;
   mayDispatchWorker:false;mayCloseJob:false;checks:EvidenceCheck[]};
 function check(id:string,pass:boolean,positive:string,negative:string):EvidenceCheck{
@@ -44,6 +45,9 @@ export function summarizeDevRecoveryEvidence(commandId:string,source:{
  ];
  return {found:source.found,commandId,
   ...(source.found?{commandStatus:source.commandStatus}:{}),
+  sourceTaskId:source.found&&typeof source.sourceTaskId==="string"&&
+    source.sourceTaskId.length>0?source.sourceTaskId:null,
+  sourceTaskIdVerifiedAsAiTaskJob:false,
   releaseDecision:"NO_GO",snapshotAtomic:false,maySign:false,mayIssueGrant:false,
   mayDispatchWorker:false,mayCloseJob:false,checks};
 }
