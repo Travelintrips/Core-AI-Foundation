@@ -15,6 +15,7 @@ vi.mock("../jobLifecycleRecoveryReview.js",()=>({getDevCommandRecoveryReview:m.r
 vi.mock("../jobLifecycleStoredReviewReadback.js",()=>({getDevStoredReviewReadback:m.verifyStored}));
 vi.mock("../jobLifecycleOperatorReviewPersistence.js",()=>({persistSignedDevOperatorReviewIntent:m.persist}));
 import route from "../../routes/dev-resume-operator-review.js";
+import {adminAuthWithExceptions,optionalSessionAuth} from "../../middleware/adminAuth.js";
 const app=express();
 app.use(express.json());
 app.use(cookieParser());
@@ -111,6 +112,34 @@ describe("GPT02 DEV resume operator readiness uses real internal session and DB 
   const r=await request(app).get(verificationUrl).set("Cookie","internal_session=valid-session");
   expect(r.status).toBe(404);
   expect(r.body).toMatchObject({verified:false,mayIssueGrant:false,mayDispatchWorker:false});
+ });
+ it("real loopback HTTP with global API auth denies anonymous and permits session only as read-only",async()=>{
+  const full=express();
+  full.use(cookieParser());
+  full.use(optionalSessionAuth);
+  full.use("/api",adminAuthWithExceptions,route);
+  const server=full.listen(0,"127.0.0.1");
+  try {
+   const endpoint="/api/ai/core-chat/dev/resume/reviews/2e14f3e6-c7b0-41f5-81b8-1c5ff5cd4dc0/verification";
+   const anonymous=await request(server).get(endpoint);
+   expect(anonymous.status).toBe(401);
+   expect(m.verifyStored).not.toHaveBeenCalled();
+   m.user={...valid(),role:"manager"};
+   const denied=await request(server).get(endpoint).set("Cookie","internal_session=valid-session");
+   expect(denied.status).toBe(403);
+   expect(m.verifyStored).not.toHaveBeenCalled();
+   m.user=valid();
+   m.verifyStored.mockResolvedValue({verified:true,reason:"SIGNED_STORED_REVIEW_VERIFIED_NOT_A_GRANT",
+    snapshotAtomic:false,mayIssueGrant:false,mayDispatchWorker:false,mayCloseJob:false});
+   const ok=await request(server).get(endpoint).set("Cookie","internal_session=valid-session");
+   expect(ok.status).toBe(200);
+   expect(ok.headers["cache-control"]).toBe("no-store");
+   expect(ok.body).toMatchObject({verified:true,mayIssueGrant:false,
+    mayDispatchWorker:false,mayCloseJob:false});
+   expect(m.verifyStored).toHaveBeenCalledTimes(1);
+  } finally {
+   await new Promise<void>((resolve,reject)=>server.close(err=>err?reject(err):resolve()));
+  }
  });
  const command="169a7492-cfd8-4a56-bb57-18001b6b5968";
  const preflightUrl="/ai/core-chat/dev/resume/commands/"+command+"/approval-preflight";
