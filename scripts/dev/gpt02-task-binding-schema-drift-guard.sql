@@ -29,6 +29,11 @@ BEGIN
   LIKE '%RAISE EXCEPTION ''GPT02_TASK_BINDING_IMMUTABLE''%'
   OR pg_get_functiondef('ai_platform.dev_gpt02_task_binding_immutable()'::regprocedure) ~* 'RETURN[[:space:]]+NEW' THEN
   RAISE EXCEPTION 'GPT02_BINDING_TRIGGER_FUNCTION_DRIFT' USING ERRCODE='55000'; END IF;
+ -- A recorded actor must be the same operator ID bound into nonce provenance.
+ IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint c WHERE c.conrelid=rel
+  AND c.contype='c' AND c.convalidated AND c.conname='claim_recorded_by_operator_identity'
+  AND pg_get_constraintdef(c.oid) LIKE '%operator_user_id%') THEN
+  RAISE EXCEPTION 'GPT02_BINDING_OPERATOR_IDENTITY_DRIFT' USING ERRCODE='55000'; END IF;
  -- Check hardcoded authority-denial constraints still actually exist and are validated.
  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint c WHERE c.conrelid=rel AND c.contype='c'
   AND c.convalidated AND pg_get_constraintdef(c.oid) LIKE '%binding_verified = false%') THEN

@@ -24,9 +24,9 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_binding_attestation_nonces (
  -- A reserved nonce cannot COMMIT without a matching binding claim, even if
  -- the nonce INSERT comes before the claim INSERT inside one transaction.
  CONSTRAINT dev_gpt02_nonce_binding_provenance_fk FOREIGN KEY
-  (core_command_id,hub_execution_job_id,attempt_id,evidence_sha256)
+  (tenant_id,core_command_id,hub_execution_job_id,attempt_id,evidence_sha256,operator_user_id)
   REFERENCES ai_platform.dev_gpt02_task_attempt_binding_claims
-  (core_command_id,hub_execution_job_id,attempt_id,evidence_sha256)
+  (tenant_id,core_command_id,hub_execution_job_id,attempt_id,evidence_sha256,operator_user_id)
   DEFERRABLE INITIALLY DEFERRED
 );
 CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_nonce_immutable()

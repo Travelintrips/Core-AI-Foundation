@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_task_attempt_binding_claims (
  accountable_owner_id text NOT NULL CHECK (length(trim(accountable_owner_id))>0 AND length(accountable_owner_id)<=128),
  evidence_sha256 text NOT NULL CHECK (evidence_sha256 ~ '^[0-9a-f]{64}$'),
  evidence_source text NOT NULL CHECK (evidence_source='independent_dev_attestation'),
+ operator_user_id integer NOT NULL CHECK (operator_user_id>0),
  recorded_by text NOT NULL CHECK (recorded_by ~ '^internal:[1-9][0-9]*$'),
+ CONSTRAINT claim_recorded_by_operator_identity CHECK (recorded_by='internal:'||operator_user_id::text),
  source_observed_at timestamptz NOT NULL,
  receiver_observed_at timestamptz NOT NULL,
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -36,7 +38,7 @@ CREATE TABLE IF NOT EXISTS ai_platform.dev_gpt02_task_attempt_binding_claims (
  CONSTRAINT claim_evidence_digest_once UNIQUE(evidence_sha256),
  -- Redundant as a unique key, but required for composite FK provenance binding.
  CONSTRAINT claim_nonce_provenance_tuple_once UNIQUE
-  (core_command_id,hub_execution_job_id,attempt_id,evidence_sha256)
+  (tenant_id,core_command_id,hub_execution_job_id,attempt_id,evidence_sha256,operator_user_id)
 );
 -- Existing tables could predate this proposal: permissions and triggers must not drift.
 CREATE OR REPLACE FUNCTION ai_platform.dev_gpt02_task_binding_immutable()

@@ -47,6 +47,7 @@ assert_guard_rejects(){
 
 assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT claim_core_command_once;' 'UNIQUE_COMMAND'
 assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT claim_attempt_once;' 'UNIQUE_ATTEMPT'
+assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT claim_recorded_by_operator_identity;' 'OPERATOR_IDENTITY'
 assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT dev_gpt02_task_attempt_binding_claims_binding_verified_check;' 'SELF_ATTESTATION'
 assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DROP CONSTRAINT dev_gpt02_task_attempt_binding_claims_may_dispatch_worker_check;' 'DISPATCH'
 assert_guard_rejects 'ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims DISABLE TRIGGER dev_gpt02_task_binding_immutable_trg;' 'IMMUTABLE_TRIGGER'
@@ -68,13 +69,13 @@ BEGIN
  INSERT INTO ai_platform.dev_gpt02_task_attempt_binding_claims
  (tenant_id,core_command_id,core_coding_task_id,hub_execution_job_id,hub_ai_task_id,
  attempt_id,attempt_number,worker_id,assignee_namespace,assignee_id,owner_namespace,
- accountable_owner_id,evidence_sha256,evidence_source,recorded_by,
+ accountable_owner_id,evidence_sha256,evidence_source,operator_user_id,recorded_by,
  source_observed_at,receiver_observed_at)
  VALUES ('default',cmd,'965604aa-9e6b-478b-8e33-cc52a8f0b8ca',
  'e343ceee-98cb-4f28-9314-e96be590ea82',42,
  '93f178a4-444e-48df-8a49-242f0bdf1b51',1,'openclaw-dell-chatgpt-wake-dev',
  'ai_task_hub.public.ai_tasks.assigned_to_id',7,'ai_task_hub.accountable_owner',
- 'owner-reviewer-1',repeat('a',64),'independent_dev_attestation','internal:301',now(),now()) RETURNING id INTO claim;
+ 'owner-reviewer-1',repeat('a',64),'independent_dev_attestation',301,'internal:301',now(),now()) RETURNING id INTO claim;
  SELECT count(*) INTO n FROM ai_platform.dev_gpt02_task_attempt_binding_claims
  WHERE binding_verified=false AND may_dispatch_worker=false AND may_close_job=false;
  IF n<>1 THEN RAISE EXCEPTION 'FAIL_INERT_CLAIM'; END IF;
@@ -84,7 +85,7 @@ BEGIN
   SELECT gen_random_uuid(),tenant_id,core_command_id,core_coding_task_id,
    gen_random_uuid(),hub_ai_task_id,gen_random_uuid(),attempt_number,worker_id,
    assignee_namespace,assignee_id,owner_namespace,accountable_owner_id,repeat('b',64),
-   evidence_source,recorded_by,source_observed_at,receiver_observed_at,created_at,
+   evidence_source,operator_user_id,recorded_by,source_observed_at,receiver_observed_at,created_at,
    false,false,false FROM ai_platform.dev_gpt02_task_attempt_binding_claims WHERE id=claim;
   RAISE EXCEPTION 'REPLAY_NOT_REJECTED';
  EXCEPTION WHEN unique_violation THEN RAISE NOTICE 'COMMAND_REPLAY_DENIED_PASS'; END;
@@ -104,11 +105,11 @@ BEGIN
   INSERT INTO ai_platform.dev_gpt02_task_attempt_binding_claims
   (tenant_id,core_command_id,core_coding_task_id,hub_execution_job_id,hub_ai_task_id,attempt_id,
    attempt_number,worker_id,assignee_namespace,assignee_id,owner_namespace,
-   accountable_owner_id,evidence_sha256,evidence_source,recorded_by,source_observed_at,receiver_observed_at)
+   accountable_owner_id,evidence_sha256,evidence_source,operator_user_id,recorded_by,source_observed_at,receiver_observed_at)
   VALUES ('other',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),99,gen_random_uuid(),1,
    'openclaw-dell-chatgpt-wake-dev','ai_task_hub.public.ai_tasks.assigned_to_id',7,
    'ai_task_hub.accountable_owner','owner-reviewer-1',repeat('c',64),
-   'independent_dev_attestation','internal:301',now(),now());
+   'independent_dev_attestation',301,'internal:301',now(),now());
   RAISE EXCEPTION 'CROSS_TENANT_NOT_REJECTED';
  EXCEPTION WHEN check_violation THEN RAISE NOTICE 'CROSS_TENANT_DENIED_PASS'; END;
 END;
@@ -142,7 +143,7 @@ BEGIN
   INSERT INTO ai_platform.dev_gpt02_task_attempt_binding_claims
   SELECT gen_random_uuid(),tenant_id,gen_random_uuid(),core_coding_task_id,
    gen_random_uuid(),55,gen_random_uuid(),2,worker_id,assignee_namespace,assignee_id,
-   owner_namespace,' ',repeat('e',64),evidence_source,recorded_by,
+   owner_namespace,' ',repeat('e',64),evidence_source,operator_user_id,recorded_by,
    source_observed_at,receiver_observed_at,created_at,false,false,false
   FROM ai_platform.dev_gpt02_task_attempt_binding_claims WHERE id=baseline.id;
   RAISE EXCEPTION 'BLANK_OWNER_ACCEPTED';
@@ -151,7 +152,7 @@ BEGIN
   INSERT INTO ai_platform.dev_gpt02_task_attempt_binding_claims
   SELECT gen_random_uuid(),tenant_id,gen_random_uuid(),core_coding_task_id,
    gen_random_uuid(),56,gen_random_uuid(),2,worker_id,assignee_namespace,assignee_id,
-   owner_namespace,accountable_owner_id,repeat('f',64),evidence_source,recorded_by,
+   owner_namespace,accountable_owner_id,repeat('f',64),evidence_source,operator_user_id,recorded_by,
    source_observed_at,receiver_observed_at,created_at,false,true,false
   FROM ai_platform.dev_gpt02_task_attempt_binding_claims WHERE id=baseline.id;
   RAISE EXCEPTION 'GRANT_FLAG_ACCEPTED';
@@ -189,13 +190,13 @@ BEGIN;
 INSERT INTO ai_platform.dev_gpt02_task_attempt_binding_claims
 (tenant_id,core_command_id,core_coding_task_id,hub_execution_job_id,hub_ai_task_id,
  attempt_id,attempt_number,worker_id,assignee_namespace,assignee_id,owner_namespace,
- accountable_owner_id,evidence_sha256,evidence_source,recorded_by,
+ accountable_owner_id,evidence_sha256,evidence_source,operator_user_id,recorded_by,
  source_observed_at,receiver_observed_at)
 VALUES ('default','fa2ac381-7ee7-44bf-801f-2d57c9e017e6',
  '965604aa-9e6b-478b-8e33-cc52a8f0b8ca',gen_random_uuid(),77,
  gen_random_uuid(),1,'openclaw-dell-chatgpt-wake-dev',
  'ai_task_hub.public.ai_tasks.assigned_to_id',7,'ai_task_hub.accountable_owner',
- 'race-test-owner',encode(gen_random_bytes(32),'hex'),'independent_dev_attestation',
+ 'race-test-owner',encode(gen_random_bytes(32),'hex'),'independent_dev_attestation',301,
  'internal:301',now(),now());
 SELECT pg_sleep(2);
 COMMIT;
