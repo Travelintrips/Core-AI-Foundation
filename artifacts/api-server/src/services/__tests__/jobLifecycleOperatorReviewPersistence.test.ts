@@ -1,6 +1,7 @@
 import {beforeEach,afterEach,describe,it,expect,vi} from "vitest";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {operatorApprovalProofPayload,type OperatorApprovalProof} from "../jobLifecycleOperatorApprovalProof.js";
+import {signDevOperatorReviewIntent} from "../jobLifecycleOperatorReviewSigner.js";
 const fake=vi.hoisted(()=>({execute:vi.fn(),transaction:vi.fn()}));
 vi.mock("@workspace/db",()=>({db:{execute:fake.execute,transaction:fake.transaction}}));
 import {persistSignedDevOperatorReviewIntent} from "../jobLifecycleOperatorReviewPersistence.js";
@@ -31,6 +32,45 @@ beforeEach(()=>{process.env["APP_ENV"]="development";process.env["NODE_ENV"]="te
 afterEach(()=>{delete process.env["APP_ENV"];delete process.env["NODE_ENV"];
  delete process.env["AI_CORE_DEV_OPERATOR_REVIEW_SIGNING_ENABLED"];});
 describe("durable review intent audit, never actionable grant",()=>{
+ it("signs server-held review evidence then cryptographically verifies before DB transaction",async()=>{
+  const signed=signDevOperatorReviewIntent({
+   operator:{id:7,role:"admin",status:"active",accountType:"internal",mustChangePassword:false},
+   commandId,commandStatus:"PROCESSING",checkpointResponseId:cp,blockerResponseId:bl,
+   workerId:"openclaw-dell-chatgpt-wake-dev",now,
+   commandEvidenceVerified:true,checkpointAttested:true,nativeAckVerified:true,
+   blockerEvidenceVerified:true,responseSnapshotComplete:true,
+   explicitReviewAcknowledgement:true,appEnv:"development",nodeEnv:"test",
+   enabledByServer:true,
+   privateKeyDerBase64:keys.privateKey.export({format:"der",type:"pkcs8"}).toString("base64"),
+   trustedPublicKeyDerBase64,
+  });
+  expect(signed).toMatchObject({signed:true,mayIssueGrant:false,mayDispatchWorker:false});
+  expect(signed.proof).toBeDefined();
+  fake.execute.mockResolvedValueOnce({rows:[{id:commandId}]}).mockResolvedValueOnce({rows:[{id:cp}]});
+  const persisted=await invoke(signed.proof!);
+  expect(persisted).toMatchObject({recorded:true,mayIssueGrant:false,mayDispatchWorker:false});
+  expect(fake.transaction).toHaveBeenCalledTimes(1);
+  expect(fake.execute).toHaveBeenCalledTimes(2);
+ });
+ it("rejects tampering between server signer and persistence without opening DB transaction",async()=>{
+  const signed=signDevOperatorReviewIntent({
+   operator:{id:7,role:"admin",status:"active",accountType:"internal",mustChangePassword:false},
+   commandId,commandStatus:"PROCESSING",checkpointResponseId:cp,blockerResponseId:bl,
+   workerId:"openclaw-dell-chatgpt-wake-dev",now,
+   commandEvidenceVerified:true,checkpointAttested:true,nativeAckVerified:true,
+   blockerEvidenceVerified:true,responseSnapshotComplete:true,
+   explicitReviewAcknowledgement:true,appEnv:"development",nodeEnv:"test",
+   enabledByServer:true,
+   privateKeyDerBase64:keys.privateKey.export({format:"der",type:"pkcs8"}).toString("base64"),
+   trustedPublicKeyDerBase64,
+  });
+  expect(signed.signed).toBe(true);
+  const tampered={...signed.proof!,blockerResponseId:cp};
+  const persisted=await invoke(tampered);
+  expect(persisted).toMatchObject({recorded:false,reason:"SIGNATURE_INVALID_SIGNATURE",
+   mayIssueGrant:false,mayDispatchWorker:false});
+  expect(fake.transaction).not.toHaveBeenCalled();
+ });
  it("returns record id only after constrained DB insertion succeeds",async()=>{
   fake.execute.mockResolvedValueOnce({rows:[{id:commandId}]}).mockResolvedValueOnce({rows:[{id:"5a8f3b1b-3486-4380-a668-f1fb0af48b81"}]});
   const x=await invoke();
