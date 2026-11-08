@@ -16,6 +16,14 @@ export type Gpt02TimelineReadback = {
   reservationReadbackStatus?:string; reservationEvidenceVerified?:boolean;
   mayDispatchWorker?:boolean;
   mayCloseJob?:boolean; eligibleForCompletionReview?:boolean;
+  infrastructure?:{
+    reservationTablePresent:boolean;commandLinksTablePresent:boolean;
+    leasesTablePresent:boolean;releaseReceiptsTablePresent:boolean;
+    reservationMutationsEnabled:boolean;leaseMutationsEnabled:boolean;
+    issuerVerified:false;legacyExternalAttemptsExcluded:false;
+    nativeAckVerified:false;mayCreateCommand:false;
+    mayDispatchWorker:false;mayCloseJob:false;
+  };
   crossLedger?:{valid:boolean;reason:string;parentEventCount?:number;
     explicitJobEventCount?:number;taggedChildCount?:number;
     reviewRecordCount?:number;legacyUntaggedAttemptsExcluded:false;
@@ -98,6 +106,16 @@ export function Gpt02DevTimelinePanel({humanReviewId,jobId,parentCommandId}:{
       <p className="sm:col-span-2 break-all">Event BLOCKER eksplisit: <strong>{result.blockerResponseId??"Tidak ada event BLOCKER terpisah"}</strong></p>
       {result.lastEventKind==="FAILED"&&
         <p className="sm:col-span-2 text-red-400">Respons terakhir FAILED. Job belum berhasil; tidak ada izin retry otomatis.</p>}
+      <div className="sm:col-span-2 border-t border-border pt-2 space-y-1">
+        <p className="font-semibold">Kesiapan infrastruktur recovery (hanya informasi)</p>
+        {result.infrastructure ? <>
+          <p>Reservasi / parent–child: {result.infrastructure.reservationTablePresent&&result.infrastructure.commandLinksTablePresent?"Tabel tersedia":"Tabel belum lengkap"}</p>
+          <p>Lease / receipt: {result.infrastructure.leasesTablePresent&&result.infrastructure.releaseReceiptsTablePresent?"Tabel tersedia":"Tabel belum lengkap"}</p>
+          <p>Flag reservasi: {result.infrastructure.reservationMutationsEnabled?"ON (bukan otorisasi)":"OFF"}</p>
+          <p>Flag lease: {result.infrastructure.leaseMutationsEnabled?"ON (bukan otorisasi)":"OFF"}</p>
+          <p className="text-amber-400">Issuer, riwayat eksternal, dan native ACK belum terverifikasi. Struktur tabel bukan izin membuat command.</p>
+        </> : <p className="text-amber-400">Kesiapan tabel recovery belum dapat dibaca.</p>}
+      </div>
       <div className="sm:col-span-2 border-t border-border pt-2 space-y-1">
         <p className="font-semibold">Audit lintas-ledger (bukti eksplisit)</p>
         {result.crossLedger?.valid===false&&

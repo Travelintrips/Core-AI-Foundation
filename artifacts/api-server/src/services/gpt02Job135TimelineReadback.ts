@@ -25,7 +25,7 @@ export function validateGpt02TimelineReadbackInput(x:Input) {
 }
 
 export async function getGpt02Job135TimelineReadback(x:Input) {
-  if (process.env["APP_ENV"]==="production"||
+  if (process.env["APP_ENV"]!=="development"||
       process.env["NODE_ENV"]!=="development") return denied("DEV_ONLY");
   const invalid=validateGpt02TimelineReadbackInput(x);
   if(invalid)return denied(invalid);
@@ -49,12 +49,33 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
     SELECT to_regclass('ai_platform.gpt02_dev_recovery_reservations') IS NOT NULL
       AS reservations_present,
       to_regprocedure('ai_platform.gpt02_dev_timeline_candidate_reader(integer,integer,uuid)')
-        IS NOT NULL AS candidate_reader_present
+        IS NOT NULL AS candidate_reader_present,
+      to_regclass('ai_platform.gpt02_dev_recovery_command_links') IS NOT NULL
+        AS command_links_present,
+      to_regclass('ai_platform.gpt02_dev_recovery_leases') IS NOT NULL
+        AS leases_present,
+      to_regclass('ai_platform.gpt02_dev_recovery_lease_releases') IS NOT NULL
+        AS receipts_present
   `);
   const schemaRow=schema.rows?.[0];
   if(typeof schemaRow?.["reservations_present"]!=="boolean" ||
      typeof schemaRow?.["candidate_reader_present"]!=="boolean")
     return denied("RESERVATION_SCHEMA_READBACK_UNAVAILABLE");
+  if(["command_links_present","leases_present","receipts_present"].some(k=>
+      typeof schemaRow[k]!=="boolean"))
+    return denied("RECOVERY_LEDGER_SCHEMA_READBACK_UNAVAILABLE");
+  const infrastructure={
+    reservationTablePresent:schemaRow["reservations_present"]===true,
+    commandLinksTablePresent:schemaRow["command_links_present"]===true,
+    leasesTablePresent:schemaRow["leases_present"]===true,
+    releaseReceiptsTablePresent:schemaRow["receipts_present"]===true,
+    reservationMutationsEnabled:process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"]==="true",
+    leaseMutationsEnabled:process.env["AI_CORE_DEV_GPT02_LEASE_MUTATIONS_ENABLED"]==="true",
+    issuerVerified:false as const,
+    legacyExternalAttemptsExcluded:false as const,
+    nativeAckVerified:false as const,
+    mayCreateCommand:false as const,mayDispatchWorker:false as const,mayCloseJob:false as const,
+  };
   const reservationsPresent=schemaRow["reservations_present"]===true;
   const readerPresent=schemaRow["candidate_reader_present"]===true;
   let candidate:string|null=null;
@@ -124,7 +145,7 @@ export async function getGpt02Job135TimelineReadback(x:Input) {
   });
   const crossLedger=await getGpt02Job135CrossLedgerReadback(x);
   return {ok:true as const,reviewOnly:true as const,
-    crossLedger,
+    crossLedger,infrastructure,
     mayCreateCommand:false as const,
     reservationSchemaAvailable:reservationsPresent,
     reservationReadbackStatus:!reservationsPresent?"MIGRATION_MISSING":

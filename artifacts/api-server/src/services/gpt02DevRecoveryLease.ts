@@ -19,8 +19,13 @@ const safe = (x: Subject) =>
   uuid.test(x.reservationId) && typeof x.workerId === "string" &&
   x.workerId.length <= 128 && x.workerId.trim().length > 0 &&
   x.workerId === x.workerId.trim();
+// Two independent, explicit DEV gates. An accidentally enabled lease flag
+// must never activate mutations while the recovery reservation gate is OFF.
+// No lease grants dispatch authority even if all flags are explicitly true.
 const mutationsEnabled = () =>
   process.env["APP_ENV"] === "development" &&
+  process.env["NODE_ENV"] === "development" &&
+  process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"] === "true" &&
   process.env["AI_CORE_DEV_GPT02_LEASE_MUTATIONS_ENABLED"] === "true";
 
 export function validateGpt02LeaseRequest(
