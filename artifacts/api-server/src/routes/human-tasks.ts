@@ -15,6 +15,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { recordHumanRecoveryRecommendation } from "../services/humanRecoveryDecisionService.js";
+import { recordGpt02PrototypeIntegrity } from "../services/gpt02PrototypeEvidenceAudit.js";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
@@ -61,7 +62,7 @@ async function guardLifecycleReview(req: Request, res: Response, next: NextFunct
             // Ignore client-provided identity even if submitted by a matching actor.
             // The recommendation endpoint accepts a strict, actor-free body.
             // Authentication identity is obtained from req.internalUser there.
-            req.body=req.path.endsWith("/recovery-recommendation")
+            req.body=(req.path.endsWith("/recovery-recommendation") || req.path.endsWith("/prototype-integrity"))
               ? body : {...body,performedBy:actor.email};
           }
           next();
@@ -218,6 +219,30 @@ router.post("/ai/human-tasks/:id/recovery-recommendation", async(req,res):Promis
     res.status(201).json(outcome);
   }catch{
     res.status(503).json({error:"RECOVERY_RECOMMENDATION_UNAVAILABLE"});
+  }
+});
+
+// DEV-only: verify uploaded prototype BYTES, persist hash proof only.
+// Role, assigned reviewer, session and same-origin are enforced by guardLifecycleReview.
+router.post("/ai/human-tasks/:id/prototype-integrity",async(req,res):Promise<void>=>{
+  const id=Number(req.params["id"]);
+  if(!Number.isSafeInteger(id)||id<1){res.status(400).json({error:"INVALID_HUMAN_TASK_ID"});return;}
+  const body=z.object({
+    jobId:z.number().int().positive(),commandId:z.string().uuid(),
+    manifest:z.record(z.string(),z.unknown()),
+    artifactBase64:z.string().min(4).max(1_400_000),
+  }).strict().safeParse(req.body);
+  if(!body.success){res.status(400).json({error:"INVALID_PROTOTYPE_UPLOAD"});return;}
+  const actor=req.internalUser?.email;
+  if(!actor){res.status(401).json({error:"SESSION_REQUIRED"});return;}
+  try{
+    const result=await recordGpt02PrototypeIntegrity({humanReviewId:id,actor,...body.data});
+    res.setHeader("Cache-Control","no-store");
+    if(!result.ok){res.status(result.error==="ASSIGNED_HUMAN_REVIEWER_REQUIRED"?403:409)
+      .json({error:result.error});return;}
+    res.status(result.alreadyRecorded?200:201).json(result);
+  }catch{
+    res.status(503).json({error:"PROTOTYPE_INTEGRITY_VERIFICATION_UNAVAILABLE"});
   }
 });
 

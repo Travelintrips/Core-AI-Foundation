@@ -9,6 +9,8 @@ const mocks=vi.hoisted(()=>({
 vi.mock('../../services/humanTaskService.js',()=>mocks);
 const decisionMocks=vi.hoisted(()=>({recordHumanRecoveryRecommendation:vi.fn()}));
 vi.mock('../../services/humanRecoveryDecisionService.js',()=>decisionMocks);
+const prototypeMocks=vi.hoisted(()=>({recordGpt02PrototypeIntegrity:vi.fn()}));
+vi.mock('../../services/gpt02PrototypeEvidenceAudit.js',()=>prototypeMocks);
 vi.mock('../../middleware/ssrfGuard.js',()=>({ssrfGuard:()=> (_req:unknown,_res:unknown,next:()=>void)=>next()}));
 vi.mock('../../middleware/internalAuth.js',()=>({
  requireAuth:async(req:any,res:any,next:()=>void)=>{
@@ -119,6 +121,46 @@ describe('AI Core lifecycle Human Review authorization (isolated app, mocked ide
      .set('Origin','http://127.0.0.1:7777').set('x-isolated-test-session','admin').send(send());
    expect(prod.status).toBe(403);
    expect(decisionMocks.recordHumanRecoveryRecommendation).not.toHaveBeenCalled();
+ });
+ it('prototype upload enforces reviewer session, origin, strict body and DEV only',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   const payload={jobId:135,commandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
+     manifest:{jobId:135},artifactBase64:'YWJj'};
+   const send=(session?:string,origin='http://127.0.0.1:7777')=>{
+     let r=request(app).post(url+'/prototype-integrity')
+       .set('Host','127.0.0.1:7777').set('Origin',origin);
+     if(session)r=r.set('x-isolated-test-session',session);
+     return r.send(payload);
+   };
+   expect((await send()).status).toBe(401);
+   expect((await send('other-admin')).status).toBe(403);
+   expect((await send('admin','https://evil.example')).status).toBe(403);
+   const bad=await request(app).post(url+'/prototype-integrity')
+     .set('Host','127.0.0.1:7777').set('Origin','http://127.0.0.1:7777')
+     .set('x-isolated-test-session','admin').send({...payload,performedBy:'forged'});
+   expect(bad.status).toBe(400);
+   expect(prototypeMocks.recordGpt02PrototypeIntegrity).not.toHaveBeenCalled();
+   process.env.APP_ENV='production';
+   expect((await send('admin')).status).toBe(403);
+   expect(prototypeMocks.recordGpt02PrototypeIntegrity).not.toHaveBeenCalled();
+ });
+ it('valid reviewer prototype upload can record digest without dispatch',async()=>{
+   mocks.getTask.mockResolvedValue({task:{...target,status:'accepted'},history:[]});
+   prototypeMocks.recordGpt02PrototypeIntegrity.mockResolvedValueOnce({
+     ok:true,auditId:15,alreadyRecorded:false,sha256:'a'.repeat(64),bytes:123,
+     operationalIntegrationVerified:false,mayCreateCommand:false,
+     mayDispatchWorker:false,mayCloseJob:false,
+   });
+   const r=await request(app).post(url+'/prototype-integrity')
+     .set('Host','127.0.0.1:7777').set('Origin','http://127.0.0.1:7777')
+     .set('x-isolated-test-session','admin')
+     .send({jobId:135,commandId:'83db99f5-cbda-4e60-be71-3090fb411bbb',
+       manifest:{jobId:135},artifactBase64:'YWJj'});
+   expect(r.status).toBe(201);
+   expect(r.body).toMatchObject({mayCreateCommand:false,mayDispatchWorker:false,
+     mayCloseJob:false});
+   expect(prototypeMocks.recordGpt02PrototypeIntegrity).toHaveBeenCalledWith(
+     expect.objectContaining({humanReviewId:6,actor:'admcst001@gmail.com',jobId:135}));
  });
  it('legacy non-lifecycle Human Task remains on existing route without extra session guard',async()=>{
   mocks.getTask.mockResolvedValue({task:{...target,id:7,sourceModule:'generic'},history:[]});

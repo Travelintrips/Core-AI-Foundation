@@ -7,6 +7,7 @@ import { evaluateRecoveryDecision } from "./jobLifecycleRecoveryGate.js";
 import { reviewBlockerEvidence } from "./jobLifecycleBlockerEvidence.js";
 import { getCodingCommandLifecycleEvidence } from "./codingCommandLifecycleEvidence.js";
 import { evaluateNewAttemptPreflight } from "./jobLifecycleNewAttemptPreflight.js";
+import { parsePrototypeAudit, PROTOTYPE_AUDIT_ACTION } from "./gpt02PrototypeEvidenceAudit.js";
 
 const workerId = "openclaw-dell-chatgpt-wake-dev";
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==="object"&&!Array.isArray(v);
@@ -118,6 +119,12 @@ export async function getDevCommandRecoveryReview(commandId:string) {
       t.payload_json->>'taskId' AS job_id,
       t.assigned_user,
       (SELECT h.notes FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action=${PROTOTYPE_AUDIT_ACTION}
+        ORDER BY h.id DESC LIMIT 1) AS integrity_notes,
+      (SELECT h.performed_by FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action=${PROTOTYPE_AUDIT_ACTION}
+        ORDER BY h.id DESC LIMIT 1) AS integrity_actor,
+      (SELECT h.notes FROM ai_platform.ai_human_task_history h
         WHERE h.task_id=t.id AND h.action='human_recovery_recommendation'
         ORDER BY h.id DESC LIMIT 1) AS recommendation_notes,
       (SELECT h.performed_by FROM ai_platform.ai_human_task_history h
@@ -159,6 +166,10 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     review?.["recommendation_notes"],review?.["recommendation_actor"],review?.["assigned_user"],
     commandId,validJobId,
   );
+  const prototypeIntegrityEvidence=parsePrototypeAudit(
+    review?.["integrity_notes"],review?.["integrity_actor"],review?.["assigned_user"],
+    commandId,validJobId,Number.isSafeInteger(reviewId)&&reviewId>0?reviewId:null,
+  );
   const runtimeReview=assessReadonlyRecoveryFacts(facts);
   // No new-command identity, persisted duplicate count, retry clearance or
   // cryptographically verified artifact manifest exists in this readback.
@@ -171,7 +182,8 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     originalCommandStatus:String(lifecycle.commandStatus),
     humanReviewStatus:typeof review?.["status"]==="string"?review["status"]:null,
     recommendation,
-    evidenceVerified:false,artifactSha256:null,existingAttemptCount:-1,
+    evidenceVerified:prototypeIntegrityEvidence?.verified===true,
+    artifactSha256:prototypeIntegrityEvidence?.sha256??null,existingAttemptCount:-1,
     workerHealthy:runtimeReview.workerPresenceHealthy,
     retryAfterAt:null,now:facts.now,
   });
@@ -183,9 +195,11 @@ export async function getDevCommandRecoveryReview(commandId:string) {
     recoveredArtifactEvidenceRecorded:review?.["recovered_artifact_evidence_recorded"]===true,
     linkedJobId:Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null,
     humanRecoveryRecommendation:recommendation,
+    prototypeIntegrityEvidence,
     newAttemptPreflight,
     newAttemptPreflightUnverifiedInputs:[
-      "verified_artifact_manifest","new_command_identity","duplicate_attempt_count",
+      ...(!prototypeIntegrityEvidence ? ["verified_artifact_manifest"] : []),
+      "new_command_identity","duplicate_attempt_count",
       "retry_after_clearance","command_exclusive_lease","explicit_dispatch_authorization",
     ] as const,
     // Accept and evidence cannot authorize a command or create a signed checkpoint.

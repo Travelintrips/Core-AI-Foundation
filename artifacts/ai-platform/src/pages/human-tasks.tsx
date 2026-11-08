@@ -153,6 +153,10 @@ function TaskDetailDialog({
   const [recoveryNotes, setRecoveryNotes] = useState("");
   const [recoveryPending, setRecoveryPending] = useState(false);
   const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [prototypeFile, setPrototypeFile] = useState<File | null>(null);
+  const [prototypeManifestFile, setPrototypeManifestFile] = useState<File | null>(null);
+  const [prototypePending, setPrototypePending] = useState(false);
+  const [prototypeMessage, setPrototypeMessage] = useState("");
 
   const { data, isLoading } = useGetHumanTask(taskId ?? 0, {
     query: { enabled: open && taskId !== null, queryKey: getGetHumanTaskQueryKey(taskId ?? 0) },
@@ -182,6 +186,51 @@ function TaskDetailDialog({
   const recoveryJobId = typeof payload["taskId"] === "number"
     ? payload["taskId"] : Number(payload["taskId"]);
   const recommendationRecorded = history.some((entry) => entry.action === "human_recovery_recommendation");
+  const prototypeIntegrityRecorded = history.some((entry) => entry.action === "prototype_bytes_sha256_verified");
+
+  async function submitPrototypeIntegrity() {
+    if(!taskId || !prototypeFile || !prototypeManifestFile ||
+      !Number.isSafeInteger(recoveryJobId) || !recoveryCommandId){
+      setPrototypeMessage("Pilih index.html dan recovery-evidence.json untuk review yang valid.");
+      return;
+    }
+    if(prototypeFile.name!=="index.html" ||
+      prototypeManifestFile.name!=="recovery-evidence.json" ||
+      prototypeFile.size<=0 || prototypeFile.size>1024*1024 ||
+      prototypeManifestFile.size>10000) {
+      setPrototypeMessage("Nama/ukuran file tidak cocok. Maksimal HTML 1 MB dan manifest 10 KB.");
+      return;
+    }
+    setPrototypePending(true);
+    setPrototypeMessage("");
+    try{
+      const manifest:unknown=JSON.parse(await prototypeManifestFile.text());
+      const bytes=new Uint8Array(await prototypeFile.arrayBuffer());
+      // Encode bytes in chunks to avoid a large variadic call/stack overflow.
+      let binary="";
+      for(let offset=0;offset<bytes.length;offset+=8192)
+        binary+=String.fromCharCode(...bytes.subarray(offset,offset+8192));
+      const artifactBase64=btoa(binary);
+      const response=await fetch(`/api/ai/human-tasks/${taskId}/prototype-integrity`,{
+        method:"POST",credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jobId:recoveryJobId,commandId:recoveryCommandId,
+          manifest,artifactBase64}),
+      });
+      const body:unknown=await response.json();
+      const result=body && typeof body==="object" && !Array.isArray(body)
+        ? body as Record<string,unknown> : {};
+      if(!response.ok)throw new Error(typeof result["error"]==="string"
+        ? result["error"]:"PROTOTYPE_VERIFICATION_FAILED");
+      if(result["mayCreateCommand"]!==false || result["mayDispatchWorker"]!==false ||
+        result["mayCloseJob"]!==false || result["operationalIntegrationVerified"]!==false)
+        throw new Error("UNEXPECTED_AUTHORIZATION_RESULT");
+      setPrototypeMessage("Integritas file diverifikasi oleh server dan dicatat dalam audit. GPT02 tetap terkunci.");
+      invalidate();
+    }catch(error){
+      setPrototypeMessage(error instanceof Error ? error.message : "Verifikasi gagal");
+    }finally{setPrototypePending(false);}
+  }
 
   async function submitRecoveryRecommendation(decision: "recommend_new_attempt" | "deny_new_attempt") {
     if(!taskId || !recoveryCommandId || !Number.isSafeInteger(recoveryJobId) || recoveryJobId < 1) {
@@ -345,6 +394,38 @@ function TaskDetailDialog({
                     Tolak percobaan baru
                   </Button>
                 </div>
+                {recommendationRecorded && (
+                  <div className="rounded-md border border-border p-3 space-y-2">
+                    <p className="text-xs font-semibold">Verifikasi integritas file prototipe (DEV)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Pilih berkas asli index.html dan recovery-evidence.json dari folder pemulihan.
+                      Server menghitung SHA-256 dan mencatat audit, bukan memberikan izin eksekusi.
+                    </p>
+                    <label className="block text-xs space-y-1">
+                      <span>index.html</span>
+                      <input aria-label="Berkas prototipe index.html" type="file"
+                        accept=".html,text/html" className="block max-w-full"
+                        disabled={prototypeIntegrityRecorded || prototypePending}
+                        onChange={(e)=>setPrototypeFile(e.target.files?.[0]??null)}/>
+                    </label>
+                    <label className="block text-xs space-y-1">
+                      <span>recovery-evidence.json</span>
+                      <input aria-label="Manifest recovery-evidence.json" type="file"
+                        accept=".json,application/json" className="block max-w-full"
+                        disabled={prototypeIntegrityRecorded || prototypePending}
+                        onChange={(e)=>setPrototypeManifestFile(e.target.files?.[0]??null)}/>
+                    </label>
+                    <Button size="sm" variant="outline"
+                      disabled={prototypeIntegrityRecorded || prototypePending ||
+                        !prototypeFile || !prototypeManifestFile}
+                      onClick={()=>void submitPrototypeIntegrity()}>
+                      Verifikasi SHA-256 dan catat audit
+                    </Button>
+                    {prototypeIntegrityRecorded &&
+                      <p className="text-xs">Bukti integritas prototipe sudah tercatat. Tidak dapat diubah.</p>}
+                    {prototypeMessage && <p role="status" className="text-xs">{prototypeMessage}</p>}
+                  </div>
+                )}
                 {recommendationRecorded && <p className="text-xs">Keputusan reviewer sudah tercatat. Tidak dapat dikirim dua kali.</p>}
                 {recoveryMessage && <p className="text-xs" role="status">{recoveryMessage}</p>}
               </div>

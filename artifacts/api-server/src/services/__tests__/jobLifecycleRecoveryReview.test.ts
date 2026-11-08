@@ -123,6 +123,7 @@ describe("DEV-only native GPT02 fail-closed recovery review",()=>{
      expect(x.humanReviewCompleted).toBe(false);
      expect(x.recoveredArtifactEvidenceRecorded).toBe(true);
      expect(x.linkedJobId).toBe(135);
+     expect(x.prototypeIntegrityEvidence).toBeNull();
      expect(x.humanRecoveryRecommendation).toBe("recommend_new_attempt");
      expect(x.newAttemptPreflight.reason).toBe("ARTIFACT_NOT_VERIFIED");
      expect(x.newAttemptPreflight.readyForSeparateAuthorization).toBe(false);
