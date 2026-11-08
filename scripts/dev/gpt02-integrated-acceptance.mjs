@@ -73,6 +73,12 @@ const gates=[
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('VALID_SIGNATURE_BUT_NO_INDEPENDENT_RUNTIME_ATTESTOR') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.mjs').includes('independentAttestationVerified:false') &&
   file('scripts/dev/gpt02-binding-attestation-verifier.test.mjs').includes('wrong key or edited payload fails')),
+ check('DEV_TWO_DATABASE_LIVE_READONLY_PROBE','Authorized VPS-only Core and Hub readbacks remain explicitly non-authorizing',
+  file('scripts/dev/run-gpt02-binding-live-readonly-audit.sh').includes('BEGIN READ ONLY') &&
+  file('scripts/dev/run-gpt02-binding-live-readonly-audit.sh').includes('ai-task-development') &&
+  file('scripts/dev/run-gpt02-binding-live-readonly-audit.sh').includes('core-ai-dev') &&
+  file('scripts/dev/gpt02-binding-live-readonly-audit.mjs').includes('reportedProgressProvesCompletion:false') &&
+  file('scripts/dev/gpt02-binding-live-readonly-audit.test.mjs').includes('100% progress is never completed')),
  check('DEV_BINDING_SCOPED_DATABASE_ROLES','Disposable nonowner writer and independent reader have mutually exclusive permissions',
   file('scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh').includes('SCOPED_NONOWNER_WRITER_COMMIT_PASS') &&
   file('scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh').includes('INDEPENDENT_SCOPED_READBACK_PASS') &&

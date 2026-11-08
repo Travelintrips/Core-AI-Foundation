@@ -48,6 +48,10 @@ jobs:
         run: node --test scripts/dev/gpt02-binding-trusted-operator-boundary.test.mjs
       - name: Verify integrated offline GPT02 operator-readback-attestation chain remains non-authorizing
         run: node --test scripts/dev/gpt02-binding-integrated-evidence-gate.test.mjs
+      - name: Verify sanitized cross-database DEV binding read-only audit stays non-authorizing
+        run: |
+          node --test scripts/dev/gpt02-binding-live-readonly-audit.test.mjs
+          bash -n scripts/dev/run-gpt02-binding-live-readonly-audit.sh
       - name: Verify offline binding Ed25519 evidence remains non-authorizing
         run: node --test scripts/dev/gpt02-binding-attestation-verifier.test.mjs
       - name: Verify GPT02 live evidence requires independent authenticated readback
