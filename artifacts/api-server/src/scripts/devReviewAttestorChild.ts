@@ -45,10 +45,11 @@ try {
  if(!verified.validForReview)deny();
  // The digest was read in the same snapshot as the verified proof.
  // The attestation procedure separately rechecks equality at insertion.
+ const epoch=Math.floor(Date.now()/1000);
  const mac=createHmac("sha256",Buffer.from(macKey!,"hex"))
-   .update(id+":"+digest,"utf8").digest("hex");
+   .update(id+":"+digest+":"+epoch,"utf8").digest("hex");
  const accepted=postgres("attestor_login","isolated-attestor-credential",
-  "SELECT isolated.attest_review("+id+",'"+digest+"','"+mac+"')");
+  "SELECT isolated.attest_review("+id+",'"+digest+"',"+epoch+",'"+mac+"')");
  if(accepted!=="t")deny();
  process.stdout.write("PERSISTED_AUDIT_CRYPTO_ATTESTED_PASS\n");
 }catch{deny();}

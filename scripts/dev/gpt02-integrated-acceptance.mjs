@@ -39,6 +39,9 @@ const gates=[
   existsSync(resolve(root,'scripts/dev/test-gpt02-resume-isolated-postgres.sh'))),
  check('GRANT_ISSUANCE_CONTRACT','Isolated grant issuance test exists',
   existsSync(resolve(root,'scripts/dev/test-gpt02-issuance-isolated-postgres.sh'))),
+ check('ATTESTOR_TIME_BOUNDED_MAC','Synthetic MAC is bound to proof digest, audit ID, and short validity window',
+  file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('id+":"+digest+":"+epoch') &&
+  file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('TIME-BOUNDED MAC STALE AND FUTURE DENIED PASS')),
  check('ATTESTOR_MAC_SECOND_FACTOR_PROTOTYPE','Attestor SQL requires a separate keyed MAC, not only a DB login or audit digest',
   file('artifacts/api-server/src/scripts/devReviewAttestorChild.ts').includes('createHmac("sha256"') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('public.hmac(') &&
