@@ -64,6 +64,10 @@ const gates=[
  check('SAME_DATABASE_CHAIN_PROTOTYPE','One disposable PostgreSQL tests review audit to grant to single-winner fenced lease',
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB REVIEW AUDIT TO ONE-SHOT GRANT PASS') &&
   file('scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh').includes('SAME-DB SINGLE WINNER LEASE AND FENCED RESULT PASS')),
+ check('DEV_CROSS_LEDGER_LIVE_READONLY_ANALYZER','Independent DEV source and receiver snapshots cannot assert owner, ACK or completion',
+  file('scripts/dev/gpt02-cross-ledger-readonly-evidence.mjs').includes("releaseDecision:'NO_GO'") &&
+  file('scripts/dev/gpt02-cross-ledger-readonly-evidence.mjs').includes('ownerAndAssigneeVerified:false') &&
+  file('scripts/dev/gpt02-cross-ledger-readonly-evidence.test.mjs').includes('failed command correlation does not authorize')),
  check('DEV_RECEIVER_PASSIVE_ORIGIN_REQUIRED','Receiver must explicitly attest passive ledger provenance, not an active execution record',
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('RECEIVER_NOT_PASSIVE_LEDGER') &&
   file('artifacts/api-server/src/services/jobLifecycleAiTaskReadback.ts').includes('row["passiveLedger"]!==true') &&
