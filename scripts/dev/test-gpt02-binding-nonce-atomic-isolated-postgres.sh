@@ -22,8 +22,8 @@ assert_nonce_drift_denied(){
  local label="$1" patch="$2" logfile="$TMPDIR_TEST/drift-$1.log"
  # Changes are intentionally rolled back when the guard raises.
  if {
-   printf 'BEGIN;\\n%s\\n' "$patch"
-   printf "SELECT 'GPT02_NONCE_PATCH_APPLIED' AS marker;\\n"
+   printf 'BEGIN;\n%s\n' "$patch"
+   printf "SELECT 'GPT02_NONCE_PATCH_APPLIED' AS marker;\n"
    cat "$NONCE_GUARD"
  } | docker exec -i "$NAME" psql -X -v ON_ERROR_STOP=1 -U postgres -d isolated >"$logfile" 2>&1; then
    echo "NONCE_DRIFT_NOT_DETECTED:$label" >&2; exit 2
