@@ -81,6 +81,23 @@ describe("GPT02 DEV manual timeline UI",()=>{
     expect(screen.getByText(/Respons terakhir FAILED/)).toBeTruthy();
     expect(screen.getByText(/Tidak ada event BLOCKER terpisah/)).toBeTruthy();
   });
+  it("shows schema readiness without implying issuer or native ACK",async()=>{
+    vi.mocked(globalThis.fetch).mockResolvedValue(reply(200,{
+      ...success,infrastructure:{
+        reservationTablePresent:true,commandLinksTablePresent:true,
+        leasesTablePresent:true,releaseReceiptsTablePresent:true,
+        reservationMutationsEnabled:false,leaseMutationsEnabled:false,
+        issuerVerified:false,legacyExternalAttemptsExcluded:false,
+        nativeAckVerified:false,mayCreateCommand:false,
+        mayDispatchWorker:false,mayCloseJob:false,
+      },
+    }));
+    render(<Gpt02DevTimelinePanel {...props}/>);
+    fireEvent.click(screen.getByRole("button",{name:/Periksa timeline/}));
+    await waitFor(()=>expect(screen.getByText(/Kesiapan infrastruktur recovery/)).toBeTruthy());
+    expect(screen.getByText(/Issuer, riwayat eksternal, dan native ACK belum terverifikasi/)).toBeTruthy();
+    expect(screen.getAllByText(/Tabel tersedia/).length).toBe(2);
+  });
   it("optional cross-ledger failure never displays fabricated zero counts",async()=>{
     vi.mocked(globalThis.fetch).mockResolvedValue(reply(200,{
       ...success,crossLedger:{valid:false,reason:"CROSS_LEDGER_READBACK_UNAVAILABLE",

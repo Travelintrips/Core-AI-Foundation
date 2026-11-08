@@ -33,7 +33,8 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
   const oldApp=process.env["APP_ENV"],oldNode=process.env["NODE_ENV"];
   beforeEach(()=>{
     process.env["APP_ENV"]="development";process.env["NODE_ENV"]="development";
-    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("COMPLETED","completed-1")]];
+    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true,
+       command_links_present:true,leases_present:true,receipts_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("COMPLETED","completed-1")]];
     mock.proof.mockImplementation(async(cmd:string)=>proof(cmd));
     crossLedgerMock.read.mockResolvedValue({
       valid:true,reason:"LEGACY_UNTAGGED_HISTORY_NOT_EXCLUDED",
@@ -57,13 +58,51 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
       .toBe("INVALID_TIMELINE_SUBJECT");
     expect(mock.calls).toBe(0);
   });
+  it("staging and unspecified APP_ENV cannot read DEV-only timeline",async()=>{
+    process.env["APP_ENV"]="staging";
+    expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
+      ok:false,reason:"DEV_ONLY",mayDispatchWorker:false,
+    });
+    delete process.env["APP_ENV"];
+    expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
+      ok:false,reason:"DEV_ONLY",mayDispatchWorker:false,
+    });
+    expect(mock.calls).toBe(0);
+  });
   it("review not bound to exact job and parent is denied",async()=>{
     mock.plan=[[]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:false,reason:"HUMAN_REVIEW_JOB_BINDING_NOT_FOUND"});
   });
+  it("infrastructure schema and disabled flags do not grant issuer authority",async()=>{
+    process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"]="false";
+    process.env["AI_CORE_DEV_GPT02_LEASE_MUTATIONS_ENABLED"]="false";
+    try{
+      const result=await getGpt02Job135TimelineReadback(input());
+      expect(result).toMatchObject({
+        ok:true,infrastructure:{
+          reservationTablePresent:true,commandLinksTablePresent:true,
+          leasesTablePresent:true,releaseReceiptsTablePresent:true,
+          reservationMutationsEnabled:false,leaseMutationsEnabled:false,
+          issuerVerified:false,legacyExternalAttemptsExcluded:false,
+          nativeAckVerified:false,mayCreateCommand:false,mayDispatchWorker:false,
+        },mayCreateCommand:false,mayDispatchWorker:false,mayCloseJob:false,
+      });
+    }finally{
+      delete process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"];
+      delete process.env["AI_CORE_DEV_GPT02_LEASE_MUTATIONS_ENABLED"];
+    }
+  });
+  it("absent recovery-ledger schema metadata cannot be treated as installed",async()=>{
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}]];
+    expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
+      ok:false,reason:"RECOVERY_LEDGER_SCHEMA_READBACK_UNAVAILABLE",
+      mayDispatchWorker:false,mayCloseJob:false,
+    });
+  });
   it("missing reservation migration reads baseline parent without mutation",async()=>{
-    mock.plan=[[task(null)],[{reservations_present:false,candidate_reader_present:false}],
+    mock.plan=[[task(null)],[{reservations_present:false,candidate_reader_present:false,
+       command_links_present:false,leases_present:false,receipts_present:false}],
       [response("FAILED","failed-1",parent)]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,reservationSchemaAvailable:false,reservationEvidenceVerified:false,
@@ -72,7 +111,8 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
     expect(mock.calls).toBe(3);
   });
   it("DEV schema exists but narrow reader absent: parent timeline remains visible, no candidate assumed",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:false}],
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:false,
+       command_links_present:false,leases_present:false,receipts_present:false}],
       [response("FAILED","failed-1",parent)]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,reservationSchemaAvailable:true,
@@ -82,7 +122,8 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
     expect(mock.calls).toBe(3);
   });
   it("narrow reader installed but execution denied remains blocked",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true,
+       command_links_present:true,leases_present:true,receipts_present:true}],
       [{can_execute:false}],[response("FAILED","failed-1",parent)]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,reservationReadbackStatus:"CANDIDATE_READER_EXECUTE_DENIED",
@@ -95,7 +136,8 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
       ok:false,reason:"RESERVATION_SCHEMA_READBACK_UNAVAILABLE"});
   });
   it("candidate absent remains issuer-unverified",async()=>{
-    mock.plan=[[task(null)],[{reservations_present:false,candidate_reader_present:false}],[]];
+    mock.plan=[[task(null)],[{reservations_present:false,candidate_reader_present:false,
+       command_links_present:false,leases_present:false,receipts_present:false}],[]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,status:"ISSUER_NOT_VERIFIED",progressPercent:null,
       mayDispatchWorker:false,mayCloseJob:false});
@@ -109,22 +151,26 @@ describe("server-read GPT02 timeline never trusts fabricated final ACK",()=>{
     expect(crossLedgerMock.read).toHaveBeenCalledWith(input());
   });
   it("signed checkpoint evidence can show native ACK but never final completion",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("CHECKPOINT","checkpoint-1")]];
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true,
+       command_links_present:true,leases_present:true,receipts_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("CHECKPOINT","checkpoint-1")]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:true,lastEventKind:"CHECKPOINT",lastNativeAckVerified:true,
       eligibleForCompletionReview:false,mayCloseJob:false});
   });
   it("101 rows fail closed rather than silently truncate timeline",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],Array.from({length:101},(_,i)=>response("PROGRESS","r-"+i))];
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true,
+       command_links_present:true,leases_present:true,receipts_present:true}],[{can_execute:true}],[{candidate_command_id:child}],Array.from({length:101},(_,i)=>response("PROGRESS","r-"+i))];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:false,reason:"TIMELINE_RESPONSE_LIMIT_REACHED"});
     expect(mock.proof).not.toHaveBeenCalled();
   });
   it("invalid kind and command mismatch fail closed",async()=>{
-    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("FORGED_PASS","fake")]];
+    mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true,
+       command_links_present:true,leases_present:true,receipts_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("FORGED_PASS","fake")]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:false,reason:"TIMELINE_RESPONSE_INVALID"});
-    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("ACK","wrong", "a1aa961d-ac1e-4e12-a2c8-28ed07ff97cc")]];
+    mock.calls=0;mock.plan=[[task()],[{reservations_present:true,candidate_reader_present:true,
+       command_links_present:true,leases_present:true,receipts_present:true}],[{can_execute:true}],[{candidate_command_id:child}],[response("ACK","wrong", "a1aa961d-ac1e-4e12-a2c8-28ed07ff97cc")]];
     expect(await getGpt02Job135TimelineReadback(input())).toMatchObject({
       ok:false,reason:"TIMELINE_RESPONSE_INVALID"});
   });

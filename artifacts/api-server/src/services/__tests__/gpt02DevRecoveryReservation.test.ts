@@ -34,7 +34,9 @@ const plan=()=>{
       candidate_command_id:"28a12988-1418-4b66-8be9-de3d66cac1ce"}],
   ];
 };
+const originalNodeEnv=process.env["NODE_ENV"];
 beforeEach(()=>{
+  process.env["NODE_ENV"]="development";
   process.env["APP_ENV"]="development";
   process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"]="true";
   plan();
@@ -42,6 +44,8 @@ beforeEach(()=>{
 afterEach(()=>{
   delete process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"];
   delete process.env["APP_ENV"];
+  if(originalNodeEnv===undefined)delete process.env["NODE_ENV"];
+  else process.env["NODE_ENV"]=originalNodeEnv;
 });
 describe("DEV reservation only, no GPT02 dispatch or command issuance",()=>{
   it("refuses feature disabled and production before touching DB",async()=>{
@@ -51,6 +55,25 @@ describe("DEV reservation only, no GPT02 dispatch or command issuance",()=>{
     process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"]="true";
     process.env["APP_ENV"]="production";
     expect((await reserveGpt02DevRecoveryAttempt(input())).ok).toBe(false);
+    expect(mock.calls).toBe(0);
+  });
+  it("requires exact DEV runtime and explicit reservation gate",async()=>{
+    const scenarios=[
+      ["APP_ENV","staging"],["APP_ENV",undefined],
+      ["NODE_ENV","production"],["NODE_ENV",undefined],
+      ["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED",undefined],
+    ] as const;
+    for(const [key,value] of scenarios){
+      const previous=process.env[key];
+      if(value===undefined)delete process.env[key];
+      else process.env[key]=value;
+      expect(await reserveGpt02DevRecoveryAttempt(input())).toMatchObject({
+        ok:false,error:"RESERVATION_FEATURE_DISABLED",mayCreateCommand:false,
+        mayDispatchWorker:false,mayCloseJob:false,
+      });
+      if(previous===undefined)delete process.env[key];
+      else process.env[key]=previous;
+    }
     expect(mock.calls).toBe(0);
   });
   it("rejects invalid IDs, actors and subject",async()=>{

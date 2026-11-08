@@ -31,7 +31,8 @@ export async function reserveGpt02DevRecoveryAttempt(input:{
   parentCommandId:string;humanReviewId:number;jobId:number;actor:string;idempotencyKey:string;
 }) {
   // Fail closed; default OFF, even when this module is deployed.
-  if(process.env["APP_ENV"]==="production" ||
+  if(process.env["APP_ENV"]!=="development" ||
+     process.env["NODE_ENV"]!=="development" ||
      process.env["AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED"]!=="true")
     return deny("RESERVATION_FEATURE_DISABLED");
   const invalid=validateReservationRequest(input);
