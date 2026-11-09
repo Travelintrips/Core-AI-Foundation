@@ -63,5 +63,17 @@ BEGIN
     'ai_platform.dev_gpt02_task_attempt_binding_claims','SELECT,UPDATE,DELETE')
  OR has_table_privilege('dev_gpt02_claim_writer_nologin',
     'ai_platform.dev_gpt02_binding_attestation_nonces','SELECT,UPDATE,DELETE')
- THEN RAISE EXCEPTION 'GPT02_APP_LOGIN_STILL_HAS_EVIDENCE_ACCESS'; END IF;
+ THEN RAISE EXCEPTION 'GPT02_ACCESS_DIAGNOSTIC:%',
+ jsonb_build_object(
+ 'postgres_claim_insert',has_table_privilege('postgres','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT'),
+ 'postgres_nonce_insert',has_table_privilege('postgres','ai_platform.dev_gpt02_binding_attestation_nonces','INSERT'),
+ 'postgres_claim_excess',has_table_privilege('postgres','ai_platform.dev_gpt02_task_attempt_binding_claims','SELECT,UPDATE,DELETE'),
+ 'postgres_nonce_excess',has_table_privilege('postgres','ai_platform.dev_gpt02_binding_attestation_nonces','SELECT,UPDATE,DELETE'),
+ 'member_writer',pg_has_role('postgres','dev_gpt02_claim_writer_nologin','MEMBER'),
+ 'member_owner',pg_has_role('postgres','dev_gpt02_evidence_owner','MEMBER'),
+ 'owner_create',has_schema_privilege('dev_gpt02_evidence_owner','ai_platform','CREATE'),
+ 'writer_claim_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT'),
+ 'writer_nonce_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_binding_attestation_nonces','INSERT'),
+ 'writer_excess',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','SELECT,UPDATE,DELETE')
+ ); END IF;
 END $verify$;
