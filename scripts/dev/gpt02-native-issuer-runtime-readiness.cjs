@@ -117,4 +117,4 @@ async function main() {
     process.exitCode=2;
   } finally {await db.end().catch(()=>{});}
 }
-if(require.main===module)main().catch(()=>{process.stderr.write("READINESS_CHECK_UNAVAILABLE\n");process.exitCode=2;});
+if(require.main===module || process.env.GPT02_READINESS_RUN==="true")main().catch(()=>{process.stderr.write("READINESS_CHECK_UNAVAILABLE\n");process.exitCode=2;});
