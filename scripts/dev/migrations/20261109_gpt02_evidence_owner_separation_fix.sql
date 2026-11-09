@@ -62,9 +62,9 @@ BEGIN
  OR NOT has_table_privilege('dev_gpt02_claim_writer_nologin',
     'ai_platform.dev_gpt02_binding_attestation_nonces','INSERT')
  OR has_table_privilege('dev_gpt02_claim_writer_nologin',
-    'ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT,UPDATE,DELETE')
+    'ai_platform.dev_gpt02_task_attempt_binding_claims','SELECT,UPDATE,DELETE')
  OR has_table_privilege('dev_gpt02_claim_writer_nologin',
-    'ai_platform.dev_gpt02_binding_attestation_nonces','INSERT,UPDATE,DELETE')
+    'ai_platform.dev_gpt02_binding_attestation_nonces','SELECT,UPDATE,DELETE')
  THEN RAISE EXCEPTION 'GPT02_WRITER_DML_OR_SET_ROLE_NOT_FENCED:%',
  jsonb_build_object(
  'postgres_claim_insert',has_table_privilege('postgres','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT'),
@@ -76,7 +76,7 @@ BEGIN
  'owner_create',has_schema_privilege('dev_gpt02_evidence_owner','ai_platform','CREATE'),
  'writer_claim_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT'),
  'writer_nonce_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_binding_attestation_nonces','INSERT'),
- 'writer_excess',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT,UPDATE,DELETE'), 
+ 'writer_excess',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','SELECT,UPDATE,DELETE'), 
  'postgres_can_set_writer',pg_has_role('postgres','dev_gpt02_claim_writer_nologin','SET'),
  'postgres_can_set_owner',pg_has_role('postgres','dev_gpt02_evidence_owner','SET'),
  'postgres_claim_update',has_table_privilege('postgres','ai_platform.dev_gpt02_task_attempt_binding_claims','UPDATE'),
