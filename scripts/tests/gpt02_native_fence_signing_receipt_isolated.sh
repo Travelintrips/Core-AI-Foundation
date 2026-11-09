@@ -19,7 +19,7 @@ for i in $(seq 1 120); do
  sleep .25
 done
 if [ "$ready" != 1 ]; then echo 'PG16_FIXTURE_NOT_READY' >&2; exit 1; fi
-for f in 20261108_gpt02_dev_recovery_reservations.sql 20261108_gpt02_dev_recovery_lineage_lease.sql 20261109_gpt02_dev_native_fence_signing_receipts.sql; do
+for f in 20261108_gpt02_dev_recovery_reservations.sql 20261108_gpt02_dev_recovery_lineage_lease.sql 20261109_gpt02_dev_native_fence_signing_receipts.sql 20261109_gpt02_dev_fence_receipt_immutable.sql; do
  docker cp "$root/scripts/migrations/$f" "$name:/tmp/$f"
 done
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
@@ -43,6 +43,14 @@ fi
 if ! grep -q GPT02_DEV_MIGRATION_AUTHORIZATION_REQUIRED "$tmp/denied"; then cat "$tmp/denied"; exit 1; fi
 for i in 1 2; do
  docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -c 'SET ai_core.dev_migration_authorized=true' -f /tmp/20261109_gpt02_dev_native_fence_signing_receipts.sql >"$tmp/created" 2>&1 || { cat "$tmp/created"; exit 1; }
+done
+# No-migration-guard and double-apply safety for the new additive barrier.
+if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/20261109_gpt02_dev_fence_receipt_immutable.sql >"$tmp/immutable-denied" 2>&1; then
+ echo 'FAIL: unguarded immutable migration accepted'; exit 1
+fi
+grep -q GPT02_DEV_MIGRATION_AUTHORIZATION_REQUIRED "$tmp/immutable-denied"
+for i in 1 2; do
+ docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -c 'SET ai_core.dev_migration_authorized=true' -f /tmp/20261109_gpt02_dev_fence_receipt_immutable.sql >"$tmp/immutable-created" 2>&1 || { cat "$tmp/immutable-created"; exit 1; }
 done
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
 INSERT INTO ai_platform.gpt02_dev_recovery_reservations
@@ -73,10 +81,35 @@ BEGIN
  END;
  IF (SELECT count(*) FROM ai_platform.gpt02_dev_native_fence_signing_receipts) <> 1
  THEN RAISE EXCEPTION 'INVALID_TTL_LEFT_RECEIPT'; END IF;
+ -- Even the table owner cannot change, remove or truncate a signed receipt
+ -- using ordinary DML. Exception blocks roll back only the attempted mutation.
+ BEGIN
+   UPDATE ai_platform.gpt02_dev_native_fence_signing_receipts
+      SET worker_id='other-worker' WHERE reservation_id=rid;
+   RAISE EXCEPTION 'RECEIPT_UPDATE_ACCEPTED';
+ EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
+ END;
+ BEGIN
+   DELETE FROM ai_platform.gpt02_dev_native_fence_signing_receipts
+     WHERE reservation_id=rid;
+   RAISE EXCEPTION 'RECEIPT_DELETE_ACCEPTED';
+ EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
+ END;
+ BEGIN
+   TRUNCATE ai_platform.gpt02_dev_native_fence_signing_receipts;
+   RAISE EXCEPTION 'RECEIPT_TRUNCATE_ACCEPTED';
+ EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
+ END;
+ IF (SELECT count(*) FROM ai_platform.gpt02_dev_native_fence_signing_receipts) <> 1
+ THEN RAISE EXCEPTION 'IMMUTABLE_RECEIPT_CHANGED_OR_REMOVED'; END IF;
+ IF has_table_privilege('aicore_dev_runtime','ai_platform.gpt02_dev_native_fence_signing_receipts','UPDATE')
+ OR has_table_privilege('aicore_dev_runtime','ai_platform.gpt02_dev_native_fence_signing_receipts','DELETE')
+ OR has_table_privilege('aicore_dev_runtime','ai_platform.gpt02_dev_native_fence_signing_receipts','TRUNCATE')
+ THEN RAISE EXCEPTION 'MUTATION_PRIVILEGE_LEAK'; END IF;
  IF has_table_privilege('aicore_dev_runtime','ai_platform.gpt02_dev_native_fence_signing_receipts','INSERT')
  OR has_table_privilege('anon','ai_platform.gpt02_dev_native_fence_signing_receipts','SELECT')
  OR has_table_privilege('authenticated','ai_platform.gpt02_dev_native_fence_signing_receipts','SELECT')
  THEN RAISE EXCEPTION 'RECEIPT_ROLE_GRANT_LEAK';END IF;
 END $$;
 SQL
-echo 'PASS: isolated PG16 migration guard/idempotency, duplicate receipt denial, TTL rollback, no broad grants'
+echo 'PASS: isolated PG16 migration guard/idempotency, duplicate receipt denial, TTL rollback, UPDATE/DELETE/TRUNCATE denied, no broad grants'
