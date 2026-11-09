@@ -25,6 +25,9 @@ BEGIN
 END $preflight$;
 CREATE ROLE dev_gpt02_evidence_owner NOLOGIN NOINHERIT NOSUPERUSER
  NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+-- PostgreSQL 17 creator membership may have SET=FALSE. Enable it only
+-- during this transaction, then revoke the whole membership below.
+GRANT dev_gpt02_evidence_owner TO postgres WITH SET TRUE;
 ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims
  OWNER TO dev_gpt02_evidence_owner;
 ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces
