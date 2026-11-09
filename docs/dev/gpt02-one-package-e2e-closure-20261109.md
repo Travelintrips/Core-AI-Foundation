@@ -21,6 +21,15 @@
 
 Dependencies: A+B underpin C+D; C+D gate E; E provides proof for F. UI, monitoring and worker tests can be prepared in parallel, but no release can bypass A→D. Complete changes must be reviewed and tested as a set, not asserted PASS from individual unit tests.
 
+## DELL wake executor observation — 2026-11-09
+
+- The DELL machine is online and has OpenClaw-related Node processes, but that is **not a native task completion receipt**.
+- Windows Scheduled Task `AI Core DELL Wake Executor DEV` is reported `Running`, with `MultipleInstances=IgnoreNew` and `ExecutionTimeLimit=PT0S` (no bounded task time). Attempts triggered every five minutes produced Task Scheduler operational **Event 322 Warning** repeatedly between 15:13 and 15:48 WIB on Nov 9.
+- Last scheduler result `0x800710E0` maps via Windows `net helpmsg 4320` to *“The operator or administrator has refused the request.”* With `IgnoreNew`, this is consistent with subsequent triggers not being admitted while a prior instance remains running; do not assert a definitive root cause without process/job linkage.
+- `GPT02 DEV Local Health Monitor` returned `0` on its last observed run, but this only attests monitor execution, **not the executor's command ACK**.
+- Safe worker workstream therefore includes checking whether a lingering executor instance owns a valid lease, measuring bounded lifetime/heartbeat, and ensuring at-most-once worker admission. **Do not kill or restart the running task without verifying ownership and in-flight command state; do not replay failed Task #135.**
+- Neither the unified SQL acceptance script nor Windows process existence can prove a signed native final ACK. This remains a release blocker.
+
 ## One unified live acceptance
 
 The repository now contains `scripts/dev/gpt02-unified-e2e-acceptance-readonly.cjs`.
