@@ -5,6 +5,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 name="gpt02-sign-receipt-$$"
 tmp="$(mktemp -d)"
 cleanup(){ docker rm -f "$name" >/dev/null 2>&1 || :; rm -rf "$tmp"; }
+trap 'echo "FENCE_RECEIPT_FIXTURE_FAILED at line $LINENO" >&2; for f in "$tmp"/*; do [ -f "$f" ] && { echo "fixture log: $(basename "$f")" >&2; tail -n 24 "$f" >&2; }; done; docker logs --tail 15 "$name" >&2 || :' ERR
 trap cleanup EXIT
 docker run -d --rm --network none --name "$name" -e POSTGRES_PASSWORD=test-only postgres:16-alpine >/dev/null
 for i in $(seq 1 60); do
@@ -33,7 +34,7 @@ done
 if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/20261109_gpt02_dev_native_fence_signing_receipts.sql >"$tmp/denied" 2>&1; then
  echo "FAIL: unguarded migration"; exit 1
 fi
-grep -q GPT02_DEV_MIGRATION_AUTHORIZATION_REQUIRED "$tmp/denied"
+if ! grep -q GPT02_DEV_MIGRATION_AUTHORIZATION_REQUIRED "$tmp/denied"; then cat "$tmp/denied"; exit 1; fi
 for i in 1 2; do
  docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -c 'SET ai_core.dev_migration_authorized=true' -f /tmp/20261109_gpt02_dev_native_fence_signing_receipts.sql >"$tmp/created" 2>&1 || { cat "$tmp/created"; exit 1; }
 done
