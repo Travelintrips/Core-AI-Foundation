@@ -64,6 +64,10 @@ jobs:
         run: bash scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh
       - name: Verify atomic nonce reservation and binding replay denial in isolated PostgreSQL
         run: bash scripts/dev/test-gpt02-binding-nonce-atomic-isolated-postgres.sh
+      - name: Verify native GPT02 issuer readiness remains fail-closed
+        run: |
+          node --test scripts/dev/gpt02-native-issuer-runtime-readiness.test.cjs
+          node --check scripts/dev/gpt02-native-issuer-runtime-readiness.cjs
       - name: Verify synthetic Ed25519 attestation and atomic binding nonce contract
         run: node scripts/dev/test-gpt02-crypto-atomic-binding-isolated.mjs
       - name: Verify scoped database writer, separate reader and runtime role denial
