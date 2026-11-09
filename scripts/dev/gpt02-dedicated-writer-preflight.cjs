@@ -118,7 +118,7 @@ async function run() {
   }finally{await c.end().catch(()=>{})}
   process.stdout.write(JSON.stringify(evaluateDedicatedWriter(snapshot))+"\n");
 }
-module.exports={evaluateDedicatedWriter,safeDsnIdentity};
+module.exports={evaluateDedicatedWriter,safeDsnIdentity,run};
 if(require.main===module)run().catch(()=>{
  process.stdout.write(JSON.stringify(evaluateDedicatedWriter({}))+"\n");
 });
