@@ -23,6 +23,10 @@ export async function listDevDellQueuedWakeCommandIds(clientId: string): Promise
     FROM ai_platform.ai_coding_bridge_commands
     WHERE status = 'RECEIVED'
       AND metadata_json ->> 'assignedClientId' = ${clientId}::text
+      -- Narrow owner-controlled DB gate rejects reserved/linked candidates
+      -- even if recovery metadata is absent or forged. Missing function or
+      -- revoked EXECUTE fails closed: SSE must NOT send a wake on DB error.
+      AND ai_platform.gpt02_dev_generic_claim_allowed(id) IS TRUE
       AND NOT (
         COALESCE(metadata_json ?| ARRAY[
           'gpt02Recovery','gpt02RecoveryParentCommandId',
