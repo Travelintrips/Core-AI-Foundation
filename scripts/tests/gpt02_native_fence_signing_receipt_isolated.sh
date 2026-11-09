@@ -8,11 +8,17 @@ cleanup(){ docker rm -f "$name" >/dev/null 2>&1 || :; rm -rf "$tmp"; }
 trap 'echo "FENCE_RECEIPT_FIXTURE_FAILED at line $LINENO" >&2; for f in "$tmp"/*; do [ -f "$f" ] && { echo "fixture log: $(basename "$f")" >&2; tail -n 24 "$f" >&2; }; done; docker logs --tail 15 "$name" >&2 || :' ERR
 trap cleanup EXIT
 docker run -d --rm --network none --name "$name" -e POSTGRES_PASSWORD=test-only postgres:16-alpine >/dev/null
-for i in $(seq 1 60); do
- if docker exec "$name" pg_isready -U postgres >/dev/null 2>&1;then break;fi
- sleep .2
+# pg_isready may pass while the image's temporary initdb server is about
+# to shut down. Require an actual SQL query against the final persistent server.
+ready=0
+for i in $(seq 1 120); do
+ if docker exec "$name" psql -U postgres -Atqc 'SELECT 1' 2>/dev/null | grep -qx 1; then
+   sleep 1
+   if docker exec "$name" psql -U postgres -Atqc 'SELECT 1' 2>/dev/null | grep -qx 1; then ready=1; break; fi
+ fi
+ sleep .25
 done
-docker exec "$name" pg_isready -U postgres >/dev/null
+if [ "$ready" != 1 ]; then echo 'PG16_FIXTURE_NOT_READY' >&2; exit 1; fi
 for f in 20261108_gpt02_dev_recovery_reservations.sql 20261108_gpt02_dev_recovery_lineage_lease.sql 20261109_gpt02_dev_native_fence_signing_receipts.sql; do
  docker cp "$root/scripts/migrations/$f" "$name:/tmp/$f"
 done
