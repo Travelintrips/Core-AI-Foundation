@@ -1,0 +1,21 @@
+name: GPT02 DEV Readiness Metadata Regression
+on:
+  pull_request:
+    paths:
+      - 'scripts/windows/ai-core/gpt02-readiness-metadata-census.mjs'
+      - 'scripts/windows/ai-core/test-gpt02-readiness-metadata-census.mjs'
+      - '.github/workflows/gpt02-dev-readiness-metadata.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  metadata-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/windows/ai-core/gpt02-readiness-metadata-census.mjs
+      - run: node --test scripts/windows/ai-core/test-gpt02-readiness-metadata-census.mjs
