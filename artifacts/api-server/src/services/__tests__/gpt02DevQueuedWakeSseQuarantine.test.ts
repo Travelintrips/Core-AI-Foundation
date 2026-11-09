@@ -31,6 +31,7 @@ describe("DEV DELL targeted SSE recovery quarantine", () => {
     const normalized = compiled.sql.replace(/\s+/g, " ");
     expect(normalized).toContain("status = 'RECEIVED'");
     expect(normalized).toContain("assignedClientId");
+    expect(normalized).toContain("ai_platform.gpt02_dev_generic_claim_allowed(id) IS TRUE");
     for (const key of ["gpt02Recovery", "gpt02RecoveryParentCommandId",
       "recoveryParentCommandId", "recovery_parent_command_id", "parentCommandId"]) {
       expect(normalized).toContain(key);
@@ -40,6 +41,15 @@ describe("DEV DELL targeted SSE recovery quarantine", () => {
     expect(normalized).toContain("AND NOT (");
     expect(normalized).toContain("LIMIT 128");
     expect(compiled.params).toEqual([DEV_DELL_WAKE_CLIENT_ID]);
+  });
+  it("query remains fail-closed if the durable exclusion function is missing or denied", async () => {
+    mock.rows = [];
+    mock.calls = [];
+    // A missing database function must NOT be silently replaced by a permissive path.
+    // This test verifies the query retains its mandatory gate.
+    await listDevDellQueuedWakeCommandIds(DEV_DELL_WAKE_CLIENT_ID);
+    const compiled = new PgDialect().sqlToQuery(mock.calls[0] as Parameters<PgDialect["sqlToQuery"]>[0]);
+    expect(compiled.sql.match(/gpt02_dev_generic_claim_allowed/g)).toHaveLength(1);
   });
   it("returns only valid IDs, never derives worker authority from returned rows", async () => {
     mock.rows = [{id:valid},{id:"invalid"},{id:42},{id:null}];
