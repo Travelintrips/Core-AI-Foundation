@@ -257,6 +257,24 @@ class FakeTransport(NativeTransport):
 
 
 class NativeTransportTests(unittest.TestCase):
+    def test_readiness_requires_original_task_even_with_genuine_looking_ack(self):
+        # Pure synthetic UI text: no browser, credentials, command or dispatch.
+        guard = NativeTransport.__new__(NativeTransport)
+        guard.event, guard.challenge = EVENT, CHALLENGE
+        original = MESSAGE + "\nAssistant: " + FINAL
+        cases = (
+            ("original", original, True),
+            ("layout_whitespace", MESSAGE.replace(" Reply once", "  Reply\n once") + "\nAssistant: " + FINAL, True),
+            ("altered_user_text", original.replace("Reply once", "Altered untrusted text"), False),
+            ("duplicate_user_task", MESSAGE + "\n" + MESSAGE + "\nAssistant: " + FINAL, False),
+            ("no_assistant_ack", MESSAGE, False),
+            ("stop_control", original + '\nbutton "Stop generating"', False),
+            ("missing_user", FINAL + "\n[AI_CORE_WAKE:" + EVENT + "] [AI_CORE_ATTEST:" + CHALLENGE + "]", False),
+        )
+        for name, snapshot, expected in cases:
+            with self.subTest(name=name):
+                self.assertIs(guard._ready(snapshot, MESSAGE), expected)
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
