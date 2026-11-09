@@ -48,7 +48,7 @@ export async function reserveGpt02DevRecoveryAttempt(input:{
     const reviewer=locked.rows?.[0];
     if(!reviewer)return deny("HUMAN_REVIEW_NOT_FOUND");
     const err=validateHumanRecoverySubject({
-      sourceModule:reviewer["source_module"],sourceId:reviewer["source_id"],status:reviewer["status"],
+      sourceModule:reviewer["source_module"],sourceId:reviewer["source_id"],requireSourceId:true,status:reviewer["status"],
       assignedUser:reviewer["assigned_user"],payload:reviewer["payload_json"],
       actor:input.actor,jobId:input.jobId,commandId:input.parentCommandId,
     });
