@@ -68,6 +68,8 @@ jobs:
         run: |
           node --test scripts/dev/gpt02-native-issuer-runtime-readiness.test.cjs
           node --check scripts/dev/gpt02-native-issuer-runtime-readiness.cjs
+      - name: Verify actual isolated PostgreSQL login writer, reader and app boundaries
+        run: bash scripts/dev/test-gpt02-distinct-login-writer-isolated-postgres.sh
       - name: Verify synthetic Ed25519 attestation and atomic binding nonce contract
         run: node scripts/dev/test-gpt02-crypto-atomic-binding-isolated.mjs
       - name: Verify scoped database writer, separate reader and runtime role denial
