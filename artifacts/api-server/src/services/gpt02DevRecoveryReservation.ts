@@ -41,14 +41,14 @@ export async function reserveGpt02DevRecoveryAttempt(input:{
     // Serialize all requests against the same reviewer row. The DB also
     // enforces one reservation per parent and idempotency key.
     const locked=await tx.execute(sql`
-      SELECT id,source_module,status,assigned_user,payload_json
+      SELECT id,source_module,source_id,status,assigned_user,payload_json
       FROM ai_platform.ai_human_tasks
       WHERE id=${input.humanReviewId} FOR UPDATE
     `);
     const reviewer=locked.rows?.[0];
     if(!reviewer)return deny("HUMAN_REVIEW_NOT_FOUND");
     const err=validateHumanRecoverySubject({
-      sourceModule:reviewer["source_module"],status:reviewer["status"],
+      sourceModule:reviewer["source_module"],sourceId:reviewer["source_id"],status:reviewer["status"],
       assignedUser:reviewer["assigned_user"],payload:reviewer["payload_json"],
       actor:input.actor,jobId:input.jobId,commandId:input.parentCommandId,
     });
