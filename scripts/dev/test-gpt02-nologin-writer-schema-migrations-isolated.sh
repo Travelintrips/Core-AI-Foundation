@@ -48,7 +48,21 @@ SELECT (
 );
 SQL
 )"
-test "$CHECK" = t || { echo INERT_WRITER_SCHEMA_GUARD_FAILED >&2;exit 3; }
+if [ "$CHECK" != t ]; then
+ docker exec "$N" psql -X -qAt -U postgres -d synthetic <<'SQL'
+SELECT 'login',rolcanlogin,rolsuper,rolbypassrls FROM pg_roles WHERE rolname='dev_gpt02_claim_writer_nologin';
+SELECT 'claim_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT');
+SELECT 'nonce_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_binding_attestation_nonces','INSERT');
+SELECT 'claim_excess',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','SELECT,UPDATE,DELETE');
+SELECT 'nonce_excess',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_binding_attestation_nonces','SELECT,UPDATE,DELETE');
+SELECT 'anon_insert',has_table_privilege('anon','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT');
+SELECT 'authenticated_insert',has_table_privilege('authenticated','ai_platform.dev_gpt02_binding_attestation_nonces','INSERT');
+SELECT 'service_insert',has_table_privilege('service_role','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT');
+SELECT 'fk',count(*),bool_and(condeferrable) FROM pg_constraint WHERE conname='dev_gpt02_nonce_binding_provenance_fk';
+SQL
+ echo INERT_WRITER_SCHEMA_GUARD_FAILED >&2
+ exit 3
+fi
 echo GPT02_NOLOGIN_WRITER_SCHEMA_PERMISSIONS_PASS
 # PostgreSQL 17 may grant the role creator role-admin membership; the
 # production guard permits only postgres, never any app role.
