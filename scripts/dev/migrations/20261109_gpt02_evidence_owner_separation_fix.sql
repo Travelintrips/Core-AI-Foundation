@@ -28,6 +28,9 @@ CREATE ROLE dev_gpt02_evidence_owner NOLOGIN NOINHERIT NOSUPERUSER
 -- PostgreSQL 17 creator membership may have SET=FALSE. Enable it only
 -- during this transaction, then revoke the whole membership below.
 GRANT dev_gpt02_evidence_owner TO postgres WITH SET TRUE;
+-- Owner transfers also require CREATE privilege on the containing schema;
+-- grant it temporarily and revoke before transaction commit.
+GRANT CREATE ON SCHEMA ai_platform TO dev_gpt02_evidence_owner;
 ALTER TABLE ai_platform.dev_gpt02_task_attempt_binding_claims
  OWNER TO dev_gpt02_evidence_owner;
 ALTER TABLE ai_platform.dev_gpt02_binding_attestation_nonces
@@ -38,6 +41,7 @@ ALTER FUNCTION ai_platform.dev_gpt02_nonce_immutable()
  OWNER TO dev_gpt02_evidence_owner;
 -- Postgres 17 automatically grants the creator admin membership. The Hub
 -- application logs in as postgres, so that MUST be revoked on both roles.
+REVOKE CREATE ON SCHEMA ai_platform FROM dev_gpt02_evidence_owner;
 REVOKE dev_gpt02_claim_writer_nologin FROM postgres;
 REVOKE dev_gpt02_evidence_owner FROM postgres;
 DO $verify$
@@ -50,6 +54,7 @@ BEGIN
  OR has_table_privilege('postgres','ai_platform.dev_gpt02_binding_attestation_nonces','SELECT,UPDATE,DELETE')
  OR pg_has_role('postgres','dev_gpt02_claim_writer_nologin','MEMBER')
  OR pg_has_role('postgres','dev_gpt02_evidence_owner','MEMBER')
+ OR has_schema_privilege('dev_gpt02_evidence_owner','ai_platform','CREATE')
  OR NOT has_table_privilege('dev_gpt02_claim_writer_nologin',
     'ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT')
  OR NOT has_table_privilege('dev_gpt02_claim_writer_nologin',
