@@ -26,7 +26,7 @@ for file in \
   scripts/dev/migrations/20261109_gpt02_writer_nologin_no_authority.sql;do
  docker exec -i "$N" psql -X -v ON_ERROR_STOP=1 -U postgres -d synthetic < "$ROOT/$file" >/dev/null
 done
-CHECK="$(docker exec "$N" psql -X -qAt -U postgres -d synthetic <<'SQL'
+CHECK="$(docker exec -i "$N" psql -X -qAt -U postgres -d synthetic <<'SQL'
 SELECT (
   (SELECT rolcanlogin IS FALSE AND rolsuper IS FALSE AND rolbypassrls IS FALSE
     FROM pg_roles WHERE rolname='dev_gpt02_claim_writer_nologin')
@@ -49,7 +49,7 @@ SELECT (
 SQL
 )"
 if [ "$CHECK" != t ]; then
- docker exec "$N" psql -X -qAt -U postgres -d synthetic <<'SQL'
+ docker exec -i "$N" psql -X -qAt -U postgres -d synthetic <<'SQL'
 SELECT 'login',rolcanlogin,rolsuper,rolbypassrls FROM pg_roles WHERE rolname='dev_gpt02_claim_writer_nologin';
 SELECT 'claim_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT');
 SELECT 'nonce_insert',has_table_privilege('dev_gpt02_claim_writer_nologin','ai_platform.dev_gpt02_binding_attestation_nonces','INSERT');
