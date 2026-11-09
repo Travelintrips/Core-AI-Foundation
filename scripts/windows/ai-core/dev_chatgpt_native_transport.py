@@ -747,7 +747,12 @@ class NativeTransport:
                 msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
 
     def _ready(self, snapshot, message):
-        return (not STOP.search(snapshot) and snapshot.count(message) == 1 and
+        # Visible innerText can change whitespace but may not change task words.
+        # ACK markers alone are not proof that the exact user task is present.
+        normalized_message = " ".join(message.split())
+        normalized_snapshot = " ".join(snapshot.split())
+        return (bool(normalized_message) and not STOP.search(snapshot) and
+                normalized_snapshot.count(normalized_message) == 1 and
                 snapshot.count("[AI_CORE_WAKE:" + self.event + "]") == 1 and
                 snapshot.count("[AI_CORE_ATTEST:" + self.challenge + "]") == 1 and
                 snapshot.count("[AI_CORE_ATTEST_ACK:" + self.challenge + "]") >= 2)
@@ -756,7 +761,8 @@ class NativeTransport:
         """Log bounded boolean-only evidence; never persist chat text or token values."""
         flags = (
             bool(STOP.search(snapshot)),
-            snapshot.count(message) == 1,
+            bool(" ".join(message.split())) and
+            " ".join(snapshot.split()).count(" ".join(message.split())) == 1,
             snapshot.count("[AI_CORE_WAKE:" + self.event + "]") == 1,
             snapshot.count("[AI_CORE_ATTEST:" + self.challenge + "]") == 1,
             snapshot.count("[AI_CORE_ATTEST_ACK:" + self.challenge + "]") >= 2,
