@@ -72,6 +72,8 @@ jobs:
         run: |
           node --test scripts/dev/gpt02-dedicated-writer-preflight.test.cjs
           node --check scripts/dev/gpt02-dedicated-writer-preflight.cjs
+      - name: Verify deployed DEV inert evidence schema and NOLOGIN writer migrations
+        run: bash scripts/dev/test-gpt02-nologin-writer-schema-migrations-isolated.sh
       - name: Verify actual isolated PostgreSQL login writer, reader and app boundaries
         run: bash scripts/dev/test-gpt02-distinct-login-writer-isolated-postgres.sh
       - name: Verify synthetic Ed25519 attestation and atomic binding nonce contract
