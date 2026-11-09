@@ -68,6 +68,10 @@ jobs:
         run: |
           node --test scripts/dev/gpt02-native-issuer-runtime-readiness.test.cjs
           node --check scripts/dev/gpt02-native-issuer-runtime-readiness.cjs
+      - name: Verify dedicated GPT02 writer startup preflight stays non-authorizing
+        run: |
+          node --test scripts/dev/gpt02-dedicated-writer-preflight.test.cjs
+          node --check scripts/dev/gpt02-dedicated-writer-preflight.cjs
       - name: Verify actual isolated PostgreSQL login writer, reader and app boundaries
         run: bash scripts/dev/test-gpt02-distinct-login-writer-isolated-postgres.sh
       - name: Verify synthetic Ed25519 attestation and atomic binding nonce contract
