@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/migrations/20261109_gpt02_dev_native_fence_signing_receipts.sql'
+      - 'scripts/migrations/20261109_gpt02_dev_fence_receipt_immutable.sql'
       - 'scripts/tests/gpt02_native_fence_signing_receipt_isolated.sh'
       - '.github/workflows/gpt02-dev-fence-signing-receipt.yml'
   workflow_dispatch:
