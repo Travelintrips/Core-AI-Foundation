@@ -9,7 +9,7 @@
  * The signer retains a database row lock until Ed25519 signing completes.
  * Never accept key material or verification booleans from an HTTP request.
  */
-import { sign, type KeyObject } from "node:crypto";
+import { createHash, sign, type KeyObject } from "node:crypto";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { canonicalGpt02NativeRecoveryFenceProof } from "./gpt02NativeRecoveryFenceProofContract.js";
@@ -114,7 +114,27 @@ export async function signGpt02DevInitialFence(
       fencingToken:fence,sequence:0,
       issuedAtUtcMs:issued,expiresAtUtcMs:expires,
     };
-    const signature=sign(null,canonicalGpt02NativeRecoveryFenceProof(proof),privateKey);
+    // Fail closed on retries: persist a unique one-shot receipt in the SAME
+    // transaction as the locked lease check. Nothing is exposed until commit.
+    // The receipt stores only digests and binding metadata, never private key
+    // material, signature bytes, instructions, or browser transcripts.
+    const canonical=canonicalGpt02NativeRecoveryFenceProof(proof);
+    const signature=sign(null,canonical,privateKey);
+    const payloadSha256=createHash("sha256").update(canonical).digest("hex");
+    const signatureSha256=createHash("sha256").update(signature).digest("hex");
+    const recorded=await tx.execute(sql`
+      INSERT INTO ai_platform.gpt02_dev_native_fence_signing_receipts
+        (reservation_id,child_command_id,fencing_token,sequence,worker_id,
+         payload_sha256,signature_sha256,issued_at_utc_ms,expires_at_utc_ms)
+      VALUES (${input.reservationId}::uuid,${input.childCommandId}::uuid,
+        ${fence}::bigint,0,${input.workerId},
+        ${payloadSha256},${signatureSha256},
+        ${issued}::bigint,${expires}::bigint)
+      ON CONFLICT DO NOTHING
+      RETURNING reservation_id
+    `);
+    if(recorded.rows?.length!==1)
+      return deny("FENCE_SIGNING_RECEIPT_ALREADY_EXISTS_OR_UNVERIFIED");
     return {ok:true as const,proof,signature:signature.toString("base64"),
       // Proof creation is not a worker dispatch or native ACK.
       mayCreateCommand:false as const,mayDispatchWorker:false as const,
