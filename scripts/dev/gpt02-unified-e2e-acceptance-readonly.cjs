@@ -22,7 +22,7 @@ function healthy(service){
  const p=spawnSync('docker',['inspect',service,'--format','{{.State.Health.Status}}'],{encoding:'utf8',timeout:5000});
  return p.status===0&&p.stdout.trim()==='healthy';
 }
-const coreSql="SELECT to_regclass('ai_platform.dev_gpt02_task_attempt_binding_claims') IS NOT NULL AS binding_ready, to_regclass('ai_platform.dev_gpt02_binding_attestation_nonces') IS NOT NULL AS nonce_ready, to_regclass('ai_platform.dev_gpt02_resume_grants') IS NOT NULL AS grant_ready, to_regclass('ai_platform.dev_gpt02_resume_command_leases') IS NOT NULL AS lease_ready, (SELECT count(*)::int FROM ai_platform.dev_gpt02_task_attempt_binding_claims) AS bindings, (SELECT count(*)::int FROM ai_platform.dev_gpt02_binding_attestation_nonces) AS nonces, (SELECT status FROM ai_platform.ai_coding_bridge_commands WHERE id=$1::uuid) AS command_status, (SELECT task_id::text FROM ai_platform.ai_coding_bridge_commands WHERE id=$1::uuid) AS core_task_id";
+const coreSql="SELECT to_regclass('ai_platform.dev_gpt02_task_attempt_binding_claims') IS NOT NULL AS binding_ready, to_regclass('ai_platform.dev_gpt02_binding_attestation_nonces') IS NOT NULL AS nonce_ready, to_regclass('ai_platform.dev_gpt02_resume_grants') IS NOT NULL AS grant_ready, to_regclass('ai_platform.dev_gpt02_resume_command_leases') IS NOT NULL AS lease_ready, (SELECT status FROM ai_platform.ai_coding_bridge_commands WHERE id=$1::uuid) AS command_status, (SELECT task_id::text FROM ai_platform.ai_coding_bridge_commands WHERE id=$1::uuid) AS core_task_id";
 const hubSql="SELECT current_user AS role, (SELECT rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb FROM pg_roles WHERE rolname=current_user) AS privileged, pg_has_role(current_user,'pg_read_all_data','MEMBER') AS global_reader, pg_has_role(current_user,'dev_gpt02_claim_writer_nologin','SET') AS can_set_writer, has_table_privilege(current_user,'ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT,UPDATE,DELETE') AS can_mutate_claim, has_table_privilege(current_user,'ai_platform.dev_gpt02_binding_attestation_nonces','INSERT,UPDATE,DELETE') AS can_mutate_nonce, j.id::text AS execution_id, j.command_id::text AS command_id, j.status AS execution_status, j.attestation_verified, j.final_ack_verified, t.assigned_to_id IS NOT NULL AS pic_present FROM public.ai_tasks t LEFT JOIN LATERAL (SELECT id,command_id,status,attestation_verified,final_ack_verified FROM public.ai_execution_jobs WHERE task_id=t.id AND company_id=t.company_id AND source='AI_TASK' ORDER BY created_at DESC,id DESC LIMIT 1) j ON true WHERE t.id=$1 AND t.company_id='default' LIMIT 1";
 function assess(c,h,services){
  const checks={
@@ -41,7 +41,7 @@ function assess(c,h,services){
   passed:Object.values(checks).filter(Boolean).length,total:Object.keys(checks).length+3,
   blockers,observations:{coreCommandStatus:c.command_status,coreTaskIdPresent:!!c.core_task_id,
    executionStatus:h.execution_status,executionObserved:!!h.execution_id,
-   currentHubDbRole:h.role,bindingCount:c.bindings,nonceCount:c.nonces},
+   currentHubDbRole:h.role,bindingCountsNotRequested:true},
   releaseDecision:'NO_GO',issuerPermitted:false,dispatchPermitted:false,
   resumePermitted:false,completionPermitted:false,readOnly:true};
 }
