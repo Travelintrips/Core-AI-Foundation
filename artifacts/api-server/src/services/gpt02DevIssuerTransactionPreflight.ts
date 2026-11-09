@@ -44,7 +44,7 @@ export async function readGpt02IssuerTransactionPreflight(input:Subject) {
     const review=task.rows?.[0];
     if(!review)return deny("HUMAN_REVIEW_NOT_FOUND");
     const subject=validateHumanRecoverySubject({
-      sourceModule:review["source_module"],sourceId:review["source_id"],status:review["status"],
+      sourceModule:review["source_module"],sourceId:review["source_id"],requireSourceId:true,status:review["status"],
       assignedUser:review["assigned_user"],payload:review["payload_json"],
       actor:input.actor,jobId:input.jobId,commandId:input.parentCommandId,
     });
