@@ -1,0 +1,20 @@
+name: GPT02 DEV Fence Signing Receipt Isolation
+on:
+  pull_request:
+    paths:
+      - 'scripts/migrations/20261109_gpt02_dev_native_fence_signing_receipts.sql'
+      - 'scripts/tests/gpt02_native_fence_signing_receipt_isolated.sh'
+      - '.github/workflows/gpt02-dev-fence-signing-receipt.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signing-receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fixture syntax
+        run: bash -n scripts/tests/gpt02_native_fence_signing_receipt_isolated.sh
+      - name: Verify disposable PostgreSQL 16
+        run: bash scripts/tests/gpt02_native_fence_signing_receipt_isolated.sh

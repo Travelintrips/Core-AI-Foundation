@@ -3,10 +3,11 @@ import { generateKeyPairSync, verify } from "node:crypto";
 import { PgDialect } from "drizzle-orm/pg-core";
 const mock=vi.hoisted(()=>({
   calls:[] as unknown[],rows:[] as Array<Record<string,unknown>>,
+  receiptRows:[{reservation_id:"22aa961d-ac1e-4e12-a2c8-28ed07ff97cc"}] as Array<Record<string,unknown>>,
 }));
 vi.mock("@workspace/db",()=>({
   db:{transaction:async (f:(tx:unknown)=>Promise<unknown>)=>
-    f({execute:async(q:unknown)=>{mock.calls.push(q);return {rows:mock.rows};}})},
+    f({execute:async(q:unknown)=>{mock.calls.push(q);return {rows:mock.calls.length===1?mock.rows:mock.receiptRows};}})},
 }));
 import { signGpt02DevInitialFence,validateGpt02ServerFenceSigningSubject }
  from "../gpt02DevServerFenceSigner.js";
@@ -22,6 +23,7 @@ const ids={
 const {privateKey,publicKey}=generateKeyPairSync("ed25519");
 beforeEach(()=>{
   mock.calls=[];mock.rows=[];
+  mock.receiptRows=[{reservation_id:"22aa961d-ac1e-4e12-a2c8-28ed07ff97cc"}];
   Object.assign(process.env,{
     APP_ENV:"development",NODE_ENV:"development",
     AI_CORE_DEV_GPT02_RESERVATIONS_ENABLED:"true",
@@ -88,8 +90,24 @@ describe("DEV native lease-bound initial fence signer (NOT routed)",()=>{
     expect(result.mayDispatchWorker).toBe(false);
     expect(result.nativeAckVerified).toBe(false);
     expect(result.proof.sequence).toBe(0);
+    expect(mock.calls).toHaveLength(2);
+    const receipt=new PgDialect().sqlToQuery(mock.calls[1] as Parameters<PgDialect["sqlToQuery"]>[0]);
+    expect(receipt.sql).toContain("INSERT INTO ai_platform.gpt02_dev_native_fence_signing_receipts");
+    expect(receipt.sql).toContain("ON CONFLICT DO NOTHING");
+    expect(receipt.sql).toContain("RETURNING reservation_id");
+    expect(receipt.params).toHaveLength(8);
+    expect(receipt.params[4]).toMatch(/^[0-9a-f]{64}$/);
+    expect(receipt.params[5]).toMatch(/^[0-9a-f]{64}$/);
     expect(verify(null,canonicalGpt02NativeRecoveryFenceProof(result.proof),
       publicKey,Buffer.from(result.signature,"base64"))).toBe(true);
+  });
+  it("never releases a signature if the durable receipt insert conflicts",async()=>{
+    mock.rows=[{artifact_sha256:"f".repeat(64),fencing_token:"2",
+      now_ms:"1794078278000",expiration_ms:"1794078288000"}];
+    mock.receiptRows=[];
+    const result=await signGpt02DevInitialFence(ids,privateKey);
+    expect(result).toMatchObject({ok:false,reason:"FENCE_SIGNING_RECEIPT_ALREADY_EXISTS_OR_UNVERIFIED",mayDispatchWorker:false});
+    expect(mock.calls).toHaveLength(2);
   });
   it("rejects an expired, fractional or unsafe BIGINT fencing token",async()=>{
     for(const row of [
