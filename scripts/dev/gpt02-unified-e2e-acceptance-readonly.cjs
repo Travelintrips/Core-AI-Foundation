@@ -3,7 +3,10 @@
 // Unified, bounded and READ ONLY. Never authorizes or resumes GPT02.
 // Run on authorized DEV VPS with GPT02_UNIFIED_INVENTORY_MODE=DEV_VPS_READONLY.
 const {spawnSync}=require("node:child_process");
-const ID="83db99f5-cbda-4e60-be71-3090fb411bbb",TASK=135;
+const DEFAULT_COMMAND="83db99f5-cbda-4e60-be71-3090fb411bbb";
+const ID=process.env.GPT02_AUDIT_COMMAND_ID||DEFAULT_COMMAND;
+const TASK=Number(process.env.GPT02_AUDIT_TASK_ID||135);
+const COMMAND_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function inside(service,dir,pg,dsn,sql,param){
  const code=[
   'const {Client}=require('+JSON.stringify(pg)+');',
@@ -46,6 +49,9 @@ function assess(c,h,services){
   resumePermitted:false,completionPermitted:false,readOnly:true};
 }
 function main(){
+ if(!Number.isSafeInteger(TASK)||TASK<=0||!COMMAND_UUID.test(ID)){
+  console.error('INVALID_READ_ONLY_TASK_OR_COMMAND_SELECTOR');process.exitCode=2;return;
+ }
  if(process.env.GPT02_UNIFIED_INVENTORY_MODE!=='DEV_VPS_READONLY'){
   console.error('DEV_VPS_READONLY_MODE_REQUIRED');process.exitCode=2;return;
  }
