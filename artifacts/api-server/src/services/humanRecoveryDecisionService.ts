@@ -10,7 +10,7 @@ export type HumanRecoveryChoice = "recommend_new_attempt" | "deny_new_attempt";
 export function validateHumanRecoverySubject(subject: {
   sourceModule: unknown; status: unknown; assignedUser: unknown;
   payload: unknown; commandId: string; jobId: number; actor: string;
-  sourceId?: unknown;
+  sourceId?: unknown; requireSourceId?: boolean;
 }) {
   const payload = subject.payload && typeof subject.payload === "object" &&
     !Array.isArray(subject.payload) ? subject.payload as Record<string, unknown> : {};
@@ -20,7 +20,7 @@ export function validateHumanRecoverySubject(subject: {
     return "ASSIGNED_HUMAN_REVIEWER_REQUIRED";
   if (payload["commandId"] !== subject.commandId || String(payload["taskId"]) !== String(subject.jobId))
     return "RECOVERY_SUBJECT_MISMATCH";
-  if (subject.sourceId !== undefined) {
+  if (subject.requireSourceId === true || subject.sourceId !== undefined) {
     const executionId = payload["executionId"];
     if (typeof executionId !== "string" ||
         !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(executionId) ||
