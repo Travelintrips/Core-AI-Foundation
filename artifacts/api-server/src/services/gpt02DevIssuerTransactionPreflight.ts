@@ -37,14 +37,14 @@ export async function readGpt02IssuerTransactionPreflight(input:Subject) {
   return db.transaction(async tx=>{
     // Locks are acquired in a fixed order, and no command is issued.
     const task=await tx.execute(sql`
-      SELECT id,source_module,status,assigned_user,payload_json
+      SELECT id,source_module,source_id,status,assigned_user,payload_json
       FROM ai_platform.ai_human_tasks
       WHERE id=${input.humanReviewId} FOR UPDATE
     `);
     const review=task.rows?.[0];
     if(!review)return deny("HUMAN_REVIEW_NOT_FOUND");
     const subject=validateHumanRecoverySubject({
-      sourceModule:review["source_module"],status:review["status"],
+      sourceModule:review["source_module"],sourceId:review["source_id"],requireSourceId:true,status:review["status"],
       assignedUser:review["assigned_user"],payload:review["payload_json"],
       actor:input.actor,jobId:input.jobId,commandId:input.parentCommandId,
     });

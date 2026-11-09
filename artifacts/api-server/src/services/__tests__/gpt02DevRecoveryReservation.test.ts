@@ -25,7 +25,8 @@ const plan=()=>{
   mock.calls=0;
   mock.plan=[
     [{id:6,source_module:"ai_core_lifecycle",status:"accepted",assigned_user:actor,
-      payload_json:{commandId:parent,taskId:"135",resumeAllowed:false}}],
+      source_id:"execution:4eb75fa9-f9e4-4573-8e00-d3084b4c2c8a",
+      payload_json:{commandId:parent,taskId:"135",executionId:"4eb75fa9-f9e4-4573-8e00-d3084b4c2c8a",resumeAllowed:false}}],
     [{status:"FAILED",metadata_json:{devOnly:true,capability:"chatgpt:wake"}}],
     [{recommendation_notes:recommendation,recommendation_actor:actor,
       integrity_notes:integrity,integrity_actor:actor}],
@@ -100,6 +101,13 @@ describe("DEV reservation only, no GPT02 dispatch or command issuance",()=>{
     plan();
     expect(await reserveGpt02DevRecoveryAttempt({...input(),actor:"unassigned@example.com"}))
       .toMatchObject({ok:false,error:"ASSIGNED_HUMAN_REVIEWER_REQUIRED"});
+  });
+  it("denies cross-ledger job number collisions by source execution ID",async()=>{
+    mock.plan[0][0].source_id="execution:00000000-0000-4000-8000-000000000000";
+    expect(await reserveGpt02DevRecoveryAttempt(input())).toMatchObject({ok:false,error:"RECOVERY_EXECUTION_IDENTITY_MISMATCH"});
+    expect(mock.calls).toBe(1);
+    plan();delete mock.plan[0][0].source_id;
+    expect(await reserveGpt02DevRecoveryAttempt(input())).toMatchObject({ok:false,error:"RECOVERY_EXECUTION_IDENTITY_MISMATCH"});
   });
   it("rejects non-FAILED command and missing recommendation or manifest",async()=>{
     mock.plan[1]=[{status:"PENDING",metadata_json:{devOnly:true,capability:"chatgpt:wake"}}];

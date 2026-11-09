@@ -10,6 +10,7 @@ export type HumanRecoveryChoice = "recommend_new_attempt" | "deny_new_attempt";
 export function validateHumanRecoverySubject(subject: {
   sourceModule: unknown; status: unknown; assignedUser: unknown;
   payload: unknown; commandId: string; jobId: number; actor: string;
+  sourceId?: unknown; requireSourceId?: boolean;
 }) {
   const payload = subject.payload && typeof subject.payload === "object" &&
     !Array.isArray(subject.payload) ? subject.payload as Record<string, unknown> : {};
@@ -19,6 +20,13 @@ export function validateHumanRecoverySubject(subject: {
     return "ASSIGNED_HUMAN_REVIEWER_REQUIRED";
   if (payload["commandId"] !== subject.commandId || String(payload["taskId"]) !== String(subject.jobId))
     return "RECOVERY_SUBJECT_MISMATCH";
+  if (subject.requireSourceId === true || subject.sourceId !== undefined) {
+    const executionId = payload["executionId"];
+    if (typeof executionId !== "string" ||
+        !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(executionId) ||
+        subject.sourceId !== "execution:" + executionId)
+      return "RECOVERY_EXECUTION_IDENTITY_MISMATCH";
+  }
   if (payload["resumeAllowed"] !== false) return "RECOVERY_NOT_FAIL_CLOSED";
   return null;
 }
@@ -29,14 +37,14 @@ export async function recordHumanRecoveryRecommendation(input: {
 }) {
   return db.transaction(async tx => {
     const rows = await tx.execute(sql`
-      SELECT id,source_module,status,assigned_user,payload_json
+      SELECT id,source_module,source_id,status,assigned_user,payload_json
       FROM ai_platform.ai_human_tasks
       WHERE id=${input.humanTaskId} FOR UPDATE
     `);
     const review = rows.rows?.[0];
     if (!review) return { ok: false as const, error: "HUMAN_REVIEW_NOT_FOUND" };
     const error = validateHumanRecoverySubject({
-      sourceModule: review["source_module"], status:review["status"],assignedUser:review["assigned_user"],
+      sourceModule: review["source_module"], sourceId:review["source_id"], status:review["status"],assignedUser:review["assigned_user"],
       payload:review["payload_json"],commandId:input.commandId,jobId:input.jobId,actor:input.actor,
     });
     if(error)return {ok:false as const,error};
