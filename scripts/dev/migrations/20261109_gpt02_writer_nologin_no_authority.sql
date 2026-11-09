@@ -1,6 +1,8 @@
 -- CST-DEV: non-login writer CAPABILITY ONLY. Not an operational credential.
 -- Requires append-only claim and nonce tables already installed and empty.
--- No role memberships, passwords, logins, APIs, grants, worker dispatch, or issuer.
+-- No runtime/app memberships, passwords, logins, APIs, dispatch, or issuer.
+-- PostgreSQL may auto-register the provisioning role 'postgres' as role admin;
+-- that administrative membership is tolerated, all other members denied.
 SET LOCAL lock_timeout='5s';
 DO $guard$
 BEGIN
@@ -22,8 +24,11 @@ DO $verify$
 BEGIN
   IF (SELECT rolcanlogin OR rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls
       FROM pg_roles WHERE rolname='dev_gpt02_claim_writer_nologin')
-    OR EXISTS(SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.roleid
-              WHERE r.rolname='dev_gpt02_claim_writer_nologin')
+    OR EXISTS(SELECT 1 FROM pg_auth_members m
+              JOIN pg_roles r ON r.oid=m.roleid
+              JOIN pg_roles member_role ON member_role.oid=m.member
+              WHERE r.rolname='dev_gpt02_claim_writer_nologin'
+                AND member_role.rolname <> 'postgres')
     OR NOT has_table_privilege('dev_gpt02_claim_writer_nologin',
           'ai_platform.dev_gpt02_task_attempt_binding_claims','INSERT')
     OR NOT has_table_privilege('dev_gpt02_claim_writer_nologin',
