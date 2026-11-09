@@ -21,7 +21,7 @@ const integrity=JSON.stringify({schemaVersion:1,evidenceKind:"server_hashed_arti
 const baseline=()=>{
   mock.calls=0;mock.plan=[
     [{id:6,source_module:"ai_core_lifecycle",status:"accepted",
-      assigned_user:actor,payload_json:{commandId:parent,taskId:"135",resumeAllowed:false}}],
+      assigned_user:actor,source_id:"execution:4eb75fa9-f9e4-4573-8e00-d3084b4c2c8a",payload_json:{commandId:parent,taskId:"135",executionId:"4eb75fa9-f9e4-4573-8e00-d3084b4c2c8a",resumeAllowed:false}}],
     [{id:parent,status:"FAILED",metadata_json:{devOnly:true,capability:"chatgpt:wake"}}],
     [{id:reservation,parent_command_id:parent,candidate_command_id:candidate,
       human_review_id:6,job_id:135,artifact_sha256:sha}],
@@ -50,6 +50,14 @@ describe("issuer transaction preflight locks identity but never issues",()=>{
     baseline();mock.plan[2]=[{parent_command_id:parent,candidate_command_id:candidate,
       human_review_id:6,job_id:136,artifact_sha256:sha}];
     expect((await readGpt02IssuerTransactionPreflight(input())).reason).toBe("RESERVATION_IDENTITY_MISMATCH");
+  });
+  it("rejects wrong or missing execution identity before parent lookup",async()=>{
+    mock.plan[0]=[{id:6,source_module:"ai_core_lifecycle",status:"accepted",assigned_user:actor,source_id:"execution:00000000-0000-4000-8000-000000000000",payload_json:{commandId:parent,taskId:"135",executionId:"4eb75fa9-f9e4-4573-8e00-d3084b4c2c8a",resumeAllowed:false}}];
+    expect((await readGpt02IssuerTransactionPreflight(input())).reason).toBe("RECOVERY_EXECUTION_IDENTITY_MISMATCH");
+    expect(mock.calls).toBe(1);
+    baseline();delete mock.plan[0][0].source_id;
+    expect((await readGpt02IssuerTransactionPreflight(input())).reason).toBe("RECOVERY_EXECUTION_IDENTITY_MISMATCH");
+    expect(mock.calls).toBe(1);
   });
   it("rejects missing trusted reviewer recommendation and hash mismatch",async()=>{
     mock.plan[3]=[{recommendation_notes:null,recommendation_actor:actor,
