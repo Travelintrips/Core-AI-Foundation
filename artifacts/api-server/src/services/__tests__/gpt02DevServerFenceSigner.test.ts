@@ -95,7 +95,7 @@ describe("DEV native lease-bound initial fence signer (NOT routed)",()=>{
     expect(receipt.sql).toContain("INSERT INTO ai_platform.gpt02_dev_native_fence_signing_receipts");
     expect(receipt.sql).toContain("ON CONFLICT DO NOTHING");
     expect(receipt.sql).toContain("RETURNING reservation_id");
-    expect(receipt.params).toHaveLength(9);
+    expect(receipt.params).toHaveLength(8);
     expect(receipt.params[4]).toMatch(/^[0-9a-f]{64}$/);
     expect(receipt.params[5]).toMatch(/^[0-9a-f]{64}$/);
     expect(verify(null,canonicalGpt02NativeRecoveryFenceProof(result.proof),
