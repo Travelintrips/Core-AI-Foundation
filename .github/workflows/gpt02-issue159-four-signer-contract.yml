@@ -27,12 +27,16 @@ jobs:
           cache: pnpm
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify four independent signer domains
+      - name: Verify four independent signer domains and custody policy
         working-directory: artifacts/api-server
-        run: pnpm exec vitest run src/services/__tests__/gpt02Issue159FourSignerContract.test.ts
+        run: >-
+          pnpm exec vitest run
+          src/services/__tests__/gpt02Issue159FourSignerContract.test.ts
+          src/services/__tests__/gpt02Issue159SignerCustodyPolicy.test.ts
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
           pnpm exec tsc --noEmit --skipLibCheck --target ES2022
           --module NodeNext --moduleResolution NodeNext --types node
           src/services/gpt02Issue159FourSignerContract.ts
+          src/services/gpt02Issue159SignerCustodyPolicy.ts
