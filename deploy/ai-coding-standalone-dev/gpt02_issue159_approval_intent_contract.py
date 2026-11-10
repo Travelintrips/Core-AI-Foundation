@@ -39,15 +39,9 @@ def canonical_approval(claims: object) -> str:
     )
 
 
-def build_approval_intent_record(
-    claims: object,
-    identity: object,
-    intent_id: str,
-    recorded_at_ms: int,
-):
+def validate_approval_claims(claims: object):
     canonical = canonical_approval(claims)
     c = claims
-
     if (
         c["v"] != 2
         or c["environment"] != "DEV"
@@ -73,6 +67,18 @@ def build_approval_intent_record(
         or c["expiresAt"] - c["issuedAt"] > 300000
     ):
         _fail("GPT02_ISSUE159_APPROVAL_CLAIMS_INVALID")
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return {"canonicalClaims": canonical, "claimsSha256": digest}
+
+
+def build_approval_intent_record(
+    claims: object,
+    identity: object,
+    intent_id: str,
+    recorded_at_ms: int,
+):
+    validated = validate_approval_claims(claims)
+    c = claims
 
     if (
         not isinstance(identity, dict)
@@ -94,7 +100,8 @@ def build_approval_intent_record(
     ):
         _fail("GPT02_ISSUE159_APPROVAL_INTENT_TIME_OR_ID_INVALID")
 
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    digest = validated["claimsSha256"]
+    canonical = validated["canonicalClaims"]
 
     return {
         "record": {
