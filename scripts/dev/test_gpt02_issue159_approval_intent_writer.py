@@ -7,7 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy/ai-coding-standalone-dev"
@@ -49,13 +49,24 @@ class ApprovalIntentWriterTest(unittest.TestCase):
         self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
         return path, con
 
-    def identity(self, user_id=CLAIMS["superAdminId"], role="super_admin"):
-        return {"user_id": user_id, "email": "fixture@example.com", "role": role}
+    def identity(self, user_id=CLAIMS["superAdminId"], role="super_admin",
+                 enabled=True, auth_method="supabase_aal2"):
+        return {
+            "userId": user_id, "role": role,
+            "enabled": enabled, "authMethod": auth_method,
+        }
+
+    def verifier(self, identity=None):
+        if identity is None:
+            identity = self.identity()
+        return Mock(return_value=identity)
 
     def test_verified_aal2_super_admin_records_one_intent_but_never_authority(self):
         path, con = self.db()
-        with patch.object(writer, "admin_identity", return_value=self.identity()) as verify:
-            out = writer.record_issue159_approval_intent(TOKEN, con, dict(CLAIMS), now_ms=2000)
+        verify = self.verifier()
+        out = writer.record_issue159_approval_intent(
+            TOKEN, con, dict(CLAIMS), identity_verifier=verify, now_ms=2000
+        )
         verify.assert_called_once_with(TOKEN, con)
         self.assertTrue(out["ok"])
         self.assertTrue(out["intentRecorded"])
@@ -69,7 +80,8 @@ class ApprovalIntentWriterTest(unittest.TestCase):
                       decision,recorded_at_ms,expires_at_ms
                FROM gpt02_issue159_approval_intents"""
         ).fetchone()
-        canonical = writer.canonical_issue159_approval_claims(CLAIMS)
+        from gpt02_issue159_approval_intent_contract import canonical_approval
+        canonical = canonical_approval(CLAIMS)
         self.assertEqual(row[0], hashlib.sha256(canonical.encode()).hexdigest())
         self.assertEqual(row[1:], (
             CLAIMS["superAdminId"], "supabase_aal2", "super_admin",
@@ -79,9 +91,13 @@ class ApprovalIntentWriterTest(unittest.TestCase):
 
     def test_replay_same_claims_is_rejected_by_unique_contract(self):
         path, con = self.db()
-        with patch.object(writer, "admin_identity", return_value=self.identity()):
-            first = writer.record_issue159_approval_intent(TOKEN, con, dict(CLAIMS), now_ms=2000)
-            second = writer.record_issue159_approval_intent(TOKEN, con, dict(CLAIMS), now_ms=2100)
+        verify = self.verifier()
+        first = writer.record_issue159_approval_intent(
+            TOKEN, con, dict(CLAIMS), identity_verifier=verify, now_ms=2000
+        )
+        second = writer.record_issue159_approval_intent(
+            TOKEN, con, dict(CLAIMS), identity_verifier=verify, now_ms=2100
+        )
         self.assertTrue(first["ok"])
         self.assertFalse(second["ok"])
         self.assertEqual(second["reason"], "APPROVAL_INTENT_REPLAY_OR_CONFLICT")
@@ -95,11 +111,15 @@ class ApprovalIntentWriterTest(unittest.TestCase):
             None,
             self.identity("dev_approval_token", "super_admin"),
             self.identity(CLAIMS["superAdminId"], "admin"),
+            self.identity(CLAIMS["superAdminId"], "super_admin", enabled=False),
+            self.identity(CLAIMS["superAdminId"], "super_admin", auth_method="static_dev_token"),
             self.identity("another-user", "super_admin"),
         ):
             path, con = self.db()
-            with patch.object(writer, "admin_identity", return_value=identity):
-                out = writer.record_issue159_approval_intent(TOKEN, con, dict(CLAIMS), now_ms=2000)
+            out = writer.record_issue159_approval_intent(
+                TOKEN, con, dict(CLAIMS),
+                identity_verifier=self.verifier(identity), now_ms=2000
+            )
             self.assertFalse(out["ok"])
             self.assertEqual(out["reason"], "AAL2_SUPER_ADMIN_IDENTITY_MISMATCH")
             self.assertEqual(
@@ -117,16 +137,34 @@ class ApprovalIntentWriterTest(unittest.TestCase):
         ]
         for claims in cases:
             path, con = self.db()
-            with patch.object(writer, "admin_identity") as verify:
-                out = writer.record_issue159_approval_intent(TOKEN, con, claims, now_ms=2000)
+            verify = self.verifier()
+            out = writer.record_issue159_approval_intent(
+                TOKEN, con, claims, identity_verifier=verify, now_ms=2000
+            )
             self.assertFalse(out["ok"])
             self.assertEqual(out["reason"], "APPROVAL_CLAIMS_INVALID")
             verify.assert_not_called()
             con.close()
 
+    def test_missing_or_broken_identity_verifier_fails_closed(self):
+        path, con = self.db()
+        out = writer.record_issue159_approval_intent(
+            TOKEN, con, dict(CLAIMS), now_ms=2000
+        )
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["reason"], "AAL2_IDENTITY_VERIFIER_REQUIRED")
+
+        broken = Mock(side_effect=RuntimeError("synthetic verifier failure"))
+        out = writer.record_issue159_approval_intent(
+            TOKEN, con, dict(CLAIMS), identity_verifier=broken, now_ms=2000
+        )
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["reason"], "AAL2_IDENTITY_VERIFICATION_FAILED")
+        con.close()
+
     def test_source_has_no_signing_key_dispatch_or_production_surface(self):
         source = WRITER.read_text()
-        self.assertIn("admin_identity(access_token, connection)", source)
+        self.assertIn("callable(identity_verifier)", source)
         for forbidden in (
             "createPrivateKey", "load_pem_private_key", "Ed25519PrivateKey",
             "sign(", "dispatch_worker", "create_command",
