@@ -4,9 +4,18 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 from pathlib import Path
 from admin_identity import admin_identity
+from supabase_identity import PUBLISHABLE_KEY,SUPABASE_URL,configuration_ready
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
+LOGIN_TEMPLATE=Path(__file__).with_name('admin_login.html')
 def now(): return datetime.now(timezone.utc).isoformat()
+def render_admin_login():
+ if not configuration_ready():return None
+ try:template=LOGIN_TEMPLATE.read_text()
+ except OSError:return None
+ body=template.replace('__AICODING_SUPABASE_AUTH_BASE_JSON__',json.dumps(SUPABASE_URL+'/auth/v1')).replace('__AICODING_SUPABASE_PUBLISHABLE_KEY_JSON__',json.dumps(PUBLISHABLE_KEY))
+ if '__AICODING_SUPABASE_' in body:return None
+ return body.encode()
 def conn():
  c=sqlite3.connect(DB,timeout=10)
  c.execute('PRAGMA busy_timeout=10000')
@@ -37,14 +46,15 @@ class Handler(BaseHTTPRequestHandler):
  def authorized(self): return self.principal() is not None
  def do_GET(self):
   if urlparse(self.path).path in ('/','/login'):
-   body=Path('/opt/ai-coding-standalone-dev/admin_login.html').read_bytes()
+   body=render_admin_login()
+   if body is None:return self.send(503,{'error':'login_config_unavailable'})
    self.send_response(200)
    self.send_header('Content-Type','text/html; charset=utf-8')
    self.send_header('Content-Length',str(len(body)))
    self.send_header('Cache-Control','no-store')
    self.send_header('X-Content-Type-Options','nosniff')
    self.send_header('X-Frame-Options','DENY')
-   self.send_header('Content-Security-Policy',"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://xssrfshdrtdfupgqwfdw.supabase.co; base-uri 'none'; form-action 'none'")
+   self.send_header('Content-Security-Policy',"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self' "+SUPABASE_URL+"; base-uri 'none'; form-action 'none'")
    self.end_headers()
    self.wfile.write(body)
    return
