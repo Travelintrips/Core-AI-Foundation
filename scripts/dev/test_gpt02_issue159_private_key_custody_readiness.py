@@ -84,7 +84,7 @@ class PrivateKeyCustodyReadinessTest(unittest.TestCase):
         for forbidden in (
             "systemd-creds cat", "systemd-creds decrypt", "systemd-creds setup",
             "createPrivateKey", "Ed25519PrivateKey", "sign(",
-            "open(path", "Path(path).read", "privateCredentialBytesRead": True",
+            "open(path", "Path(path).read", '"privateCredentialBytesRead": True',
         ):
             self.assertNotIn(forbidden, source)
 
