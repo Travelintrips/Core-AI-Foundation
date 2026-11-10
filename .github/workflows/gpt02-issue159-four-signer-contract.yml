@@ -9,12 +9,14 @@ on:
       - 'artifacts/api-server/src/services/gpt02Issue159ApprovalAuthorizerEvidence.ts'
       - 'artifacts/api-server/src/services/gpt02Issue159OperatorAuthorizerEvidence.ts'
       - 'artifacts/api-server/src/services/gpt02Issue159IssuerAuthorizerEvidence.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159SignerBoundaryReadiness.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159FourSignerContract.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerCustodyPolicy.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159PublicTrustHandoff.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159ApprovalAuthorizerEvidence.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
 
@@ -47,6 +49,7 @@ jobs:
           src/services/__tests__/gpt02Issue159ApprovalAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts
+          src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
@@ -58,3 +61,4 @@ jobs:
           src/services/gpt02Issue159ApprovalAuthorizerEvidence.ts
           src/services/gpt02Issue159OperatorAuthorizerEvidence.ts
           src/services/gpt02Issue159IssuerAuthorizerEvidence.ts
+          src/services/gpt02Issue159SignerBoundaryReadiness.ts
