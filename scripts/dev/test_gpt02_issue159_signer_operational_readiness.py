@@ -39,8 +39,9 @@ def custody(*, host_secret=False, credentials=0, baseline=True):
 
 def runtime(**patch):
     base = {
-        "approvalReaderMounted": False,
-        "approvalWriterMounted": False,
+        "approvalReaderSourceInstalled": False,
+        "approvalWriterSourceInstalled": False,
+        "approvalWriterIntegrated": False,
         "hubPublicTrustDirectoryPresent": False,
         "hubFingerprintManifestPresent": False,
     }
@@ -57,6 +58,10 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertFalse(out["hostCredentialSecretSecure"])
         self.assertFalse(out["fourSignerCredentialMetadataSecure"])
         self.assertIn("REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
+        self.assertIn("APPROVAL_READER_SOURCE_NOT_INSTALLED", out["blockers"])
+        self.assertIn("APPROVAL_WRITER_SOURCE_NOT_INSTALLED", out["blockers"])
+        self.assertIn("APPROVAL_INTENT_WRITER_NOT_INTEGRATED", out["blockers"])
+        self.assertIn("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL", out["blockers"])
         self.assertIn("SYSTEMD_HOST_CREDENTIAL_SECRET_NOT_PROVISIONED", out["blockers"])
         self.assertIn("FOUR_SIGNER_CREDENTIALS_NOT_PROVISIONED", out["blockers"])
         self.assertIn("HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL", out["blockers"])
@@ -69,8 +74,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             approval(evidence=True),
             custody(host_secret=True, credentials=4),
             runtime(
-                approvalReaderMounted=True,
-                approvalWriterMounted=True,
+                approvalReaderSourceInstalled=True,
+                approvalWriterSourceInstalled=True,
+                approvalWriterIntegrated=True,
                 hubPublicTrustDirectoryPresent=True,
                 hubFingerprintManifestPresent=True,
             ),
@@ -79,6 +85,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertTrue(out["hostCredentialSecretSecure"])
         self.assertTrue(out["fourSignerCredentialMetadataSecure"])
         self.assertTrue(out["hubOperationalPublicTrustInstalled"])
+        self.assertTrue(out["approvalReaderSourceInstalled"])
+        self.assertTrue(out["approvalWriterSourceInstalled"])
+        self.assertTrue(out["approvalWriterIntegrated"])
+        self.assertFalse(out["approvalTrustedReaderOperational"])
+        self.assertIn("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL", out["blockers"])
         self.assertIn(
             "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
             out["blockers"],
