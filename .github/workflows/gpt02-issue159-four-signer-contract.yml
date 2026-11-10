@@ -17,6 +17,9 @@ on:
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent_schema.sql'
+      - 'scripts/dev/gpt02_issue159_approval_store_readiness.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_store_readiness.py'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
 
@@ -50,6 +53,8 @@ jobs:
           src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts
+      - name: Verify approval store readiness contract
+        run: python3 scripts/dev/test_gpt02_issue159_approval_store_readiness.py
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
