@@ -52,6 +52,8 @@ def _systemd_version():
 
 
 def inspect(store=STORE, host_secret=HOST_SECRET, operational=True):
+    expected_uid = 0 if operational else os.geteuid()
+    expected_gid = 0 if operational else os.getegid()
     if operational and (store != STORE or host_secret != HOST_SECRET):
         return {
             "environment": "DEV",
@@ -68,7 +70,7 @@ def inspect(store=STORE, host_secret=HOST_SECRET, operational=True):
         store_ok = (
             stat.S_ISDIR(st.st_mode) and not stat.S_ISLNK(st.st_mode)
             and stat.S_IMODE(st.st_mode) == 0o700
-            and st.st_uid == 0 and st.st_gid == 0
+            and st.st_uid == expected_uid and st.st_gid == expected_gid
         )
         store_meta = {
             "present": True, "mode": f"{stat.S_IMODE(st.st_mode):04o}",
@@ -93,7 +95,7 @@ def inspect(store=STORE, host_secret=HOST_SECRET, operational=True):
         }
         if meta["present"] and not (
             meta["regular"] and meta["mode"] in ("0400", "0600")
-            and meta["uid"] == 0 and meta["gid"] == 0
+            and meta["uid"] == expected_uid and meta["gid"] == expected_gid
         ):
             all_credential_meta_ok = False
 
@@ -103,7 +105,8 @@ def inspect(store=STORE, host_secret=HOST_SECRET, operational=True):
     host_secret_ok = (
         host_meta["present"] and host_meta["regular"]
         and host_meta["mode"] in ("0400", "0600")
-        and host_meta["uid"] == 0 and host_meta["gid"] == 0
+        and host_meta["uid"] == expected_uid
+        and host_meta["gid"] == expected_gid
     )
 
     baseline = bool(
