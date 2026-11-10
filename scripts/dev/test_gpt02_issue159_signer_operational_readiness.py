@@ -22,6 +22,7 @@ def approval(*, evidence=False, schema=True):
         "approvalIntentLookupIndexExact": schema,
         "fileSecurityVerified": schema,
         "operationalEvidenceAvailable": evidence,
+        "trustedPersistedReadReady": schema,
     }
 
 
@@ -88,8 +89,8 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertTrue(out["approvalReaderSourceInstalled"])
         self.assertTrue(out["approvalWriterSourceInstalled"])
         self.assertTrue(out["approvalWriterIntegrated"])
-        self.assertFalse(out["approvalTrustedReaderOperational"])
-        self.assertIn("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL", out["blockers"])
+        self.assertTrue(out["approvalTrustedReaderOperational"])
+        self.assertNotIn("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL", out["blockers"])
         self.assertIn(
             "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
             out["blockers"],
