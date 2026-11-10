@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Metadata-only GPT02 Issue #159 encrypted signer-custody readiness probe.
 
-Never opens credential files, never invokes systemd-creds decrypt/cat/setup,
-never loads a key, and never grants signing/dispatch authority.
+Never opens credential files and never uses systemd-creds to expose or initialize
+credential contents. It never loads a key or grants signing/dispatch authority.
 """
 from __future__ import annotations
 
