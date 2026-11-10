@@ -114,8 +114,8 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         for forbidden in (
             "sqlite3.connect", "INSERT INTO", "UPDATE ", "DELETE FROM",
             "systemd-creds decrypt", "createPrivateKey", "Ed25519PrivateKey",
-            "sign(", "open(", "dispatchPermitted": True",
-            "operationalSigningReady": True",
+            "sign(", "open(", '"dispatchPermitted": True',
+            '"operationalSigningReady": True',
         ):
             self.assertNotIn(forbidden, source)
 
