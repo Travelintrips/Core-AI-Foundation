@@ -35,6 +35,7 @@ CLAIMS = {
     "expiresAt": 10000,
 }
 TOKEN = "x" * 64
+_DEFAULT_IDENTITY = object()
 
 class ApprovalIntentWriterTest(unittest.TestCase):
     def db(self):
@@ -56,8 +57,8 @@ class ApprovalIntentWriterTest(unittest.TestCase):
             "enabled": enabled, "authMethod": auth_method,
         }
 
-    def verifier(self, identity=None):
-        if identity is None:
+    def verifier(self, identity=_DEFAULT_IDENTITY):
+        if identity is _DEFAULT_IDENTITY:
             identity = self.identity()
         return Mock(return_value=identity)
 
