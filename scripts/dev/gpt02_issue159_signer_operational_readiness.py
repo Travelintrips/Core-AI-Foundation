@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 from gpt02_issue159_approval_store_readiness import inspect as inspect_approval
 from gpt02_issue159_private_key_custody_readiness import inspect as inspect_custody
@@ -30,8 +31,9 @@ def assess(approval, custody, runtime):
         and approval.get("fileSecurityVerified") is True
     )
     approval_evidence = approval.get("operationalEvidenceAvailable") is True
-    approval_reader_mounted = runtime.get("approvalReaderMounted") is True
-    approval_writer_mounted = runtime.get("approvalWriterMounted") is True
+    approval_reader_source = runtime.get("approvalReaderSourceInstalled") is True
+    approval_writer_source = runtime.get("approvalWriterSourceInstalled") is True
+    approval_writer_integrated = runtime.get("approvalWriterIntegrated") is True
 
     custody_baseline = (
         custody.get("reason") ==
@@ -54,10 +56,13 @@ def assess(approval, custody, runtime):
         blockers.append("APPROVAL_STORE_SCHEMA_NOT_READY")
     if not approval_evidence:
         blockers.append("REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE")
-    if not approval_reader_mounted:
-        blockers.append("APPROVAL_TRUSTED_READER_NOT_MOUNTED")
-    if not approval_writer_mounted:
-        blockers.append("APPROVAL_INTENT_WRITER_NOT_MOUNTED")
+    if not approval_reader_source:
+        blockers.append("APPROVAL_READER_SOURCE_NOT_INSTALLED")
+    if not approval_writer_source:
+        blockers.append("APPROVAL_WRITER_SOURCE_NOT_INSTALLED")
+    if not approval_writer_integrated:
+        blockers.append("APPROVAL_INTENT_WRITER_NOT_INTEGRATED")
+    blockers.append("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL")
     if not custody_baseline:
         blockers.append("SYSTEMD_CUSTODY_BASELINE_NOT_READY")
     if not host_secret:
@@ -73,8 +78,10 @@ def assess(approval, custody, runtime):
         "environment": "DEV",
         "approvalStoreSchemaReady": approval_schema_ready,
         "realAal2ApprovalEvidenceAvailable": approval_evidence,
-        "approvalReaderMounted": approval_reader_mounted,
-        "approvalWriterMounted": approval_writer_mounted,
+        "approvalReaderSourceInstalled": approval_reader_source,
+        "approvalWriterSourceInstalled": approval_writer_source,
+        "approvalWriterIntegrated": approval_writer_integrated,
+        "approvalTrustedReaderOperational": False,
         "systemdCustodyBaselineReady": custody_baseline,
         "hostCredentialSecretSecure": host_secret,
         "fourSignerCredentialMetadataSecure": four_credentials,
@@ -92,13 +99,26 @@ def assess(approval, custody, runtime):
 
 
 def live_runtime_metadata():
+    reader_path = os.path.join(
+        LIVE_RUNTIME, "gpt02_issue159_approval_intent_reader.py"
+    )
+    writer_path = os.path.join(
+        LIVE_RUNTIME, "gpt02_issue159_approval_intent.py"
+    )
+    api_path = os.path.join(LIVE_RUNTIME, "approval_api.py")
+    api_source = ""
+    try:
+        api_source = Path(api_path).read_text(encoding="utf-8")
+    except OSError:
+        pass
+    writer_integrated = (
+        "gpt02_issue159_approval_intent" in api_source
+        and "record_issue159_approval_intent" in api_source
+    )
     return {
-        "approvalReaderMounted": os.path.isfile(
-            os.path.join(LIVE_RUNTIME, "gpt02_issue159_approval_intent_reader.py")
-        ),
-        "approvalWriterMounted": os.path.isfile(
-            os.path.join(LIVE_RUNTIME, "gpt02_issue159_approval_intent.py")
-        ),
+        "approvalReaderSourceInstalled": os.path.isfile(reader_path),
+        "approvalWriterSourceInstalled": os.path.isfile(writer_path),
+        "approvalWriterIntegrated": writer_integrated,
         "hubPublicTrustDirectoryPresent": os.path.isdir(HUB_TRUST_DIR),
         "hubFingerprintManifestPresent": os.path.isfile(HUB_MANIFEST),
     }
