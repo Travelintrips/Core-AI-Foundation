@@ -92,6 +92,8 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         self.assertEqual(out["reason"],
                          "ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY")
         self.assertTrue(out["approvalIntentSchemaExact"])
+        self.assertTrue(out["approvalIntentSourceDecisionUnique"])
+        self.assertTrue(out["approvalIntentLookupIndexExact"])
         self.assertEqual(out["approvalIntentRows"], 1)
         self.assertTrue(out["operationalEvidenceAvailable"])
         self.assertTrue(out["trustedPersistedReadReady"])
@@ -109,8 +111,26 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         self.assertEqual(out["reason"],
                          "ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY")
         self.assertTrue(out["approvalIntentSchemaExact"])
+        self.assertTrue(out["approvalIntentSourceDecisionUnique"])
+        self.assertTrue(out["approvalIntentLookupIndexExact"])
         self.assertEqual(out["approvalIntentRows"], 0)
         self.assertFalse(out["operationalEvidenceAvailable"])
+        self.assertFalse(out["trustedPersistedReadReady"])
+
+    def test_missing_source_decision_unique_index_fails_closed(self):
+        path = self.db()
+        con = sqlite3.connect(path)
+        schema = SCHEMA_PATH.read_text().replace(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_gpt02_issue159_approval_intents_source_decision\n"
+            "  ON gpt02_issue159_approval_intents(source_decision_id);\n", ""
+        )
+        con.executescript(schema)
+        con.commit()
+        con.close()
+        out = probe.inspect(path, operational=False)
+        self.assertEqual(out["reason"], "ISSUE159_APPROVAL_INTENT_INDEX_DRIFT")
+        self.assertFalse(out["approvalIntentSourceDecisionUnique"])
+        self.assertTrue(out["approvalIntentLookupIndexExact"])
         self.assertFalse(out["trustedPersistedReadReady"])
 
     def test_schema_drift_fails_closed(self):
