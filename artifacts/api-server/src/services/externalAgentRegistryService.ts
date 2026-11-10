@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+﻿import { eq } from "drizzle-orm";
 import { aiCodingBridgePresenceTable, db } from "@workspace/db";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
 import { renewCodingBridgePresence } from "./localCodingControlBridgeService.js";
@@ -39,6 +39,13 @@ export const EXTERNAL_AGENT_RULES = {
     source: "openclaw",
     role: "bounded_device_executor",
     capabilities: ["tools:bounded", "device:hostname", "chatgpt:wake"],
+    permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
+  },
+  // Isolated DEV read-only device worker. Do not reuse the browser-wake identity.
+  "openclaw-travelintrips-tools-dev": {
+    source: "openclaw",
+    role: "bounded_device_executor",
+    capabilities: ["tools:bounded", "device:hostname"],
     permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
   },
   "openclaw-travelintrips-dev": {

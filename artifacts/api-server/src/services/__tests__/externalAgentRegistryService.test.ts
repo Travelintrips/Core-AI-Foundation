@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { EXTERNAL_AGENT_RULES, getExternalAgentRule } from "../externalAgentRegistryService.js";
 
 describe("external agent registry policy", () => {
+  it("keeps Travelintrips DEV hostname tools separate from browser wake", () => {
+    expect(getExternalAgentRule("openclaw-travelintrips-tools-dev")).toMatchObject({
+      source: "openclaw", role: "bounded_device_executor",
+      capabilities: ["tools:bounded", "device:hostname"],
+      permissions: { codingWorkspaceWrite: false, gitCommit: false, gitPush: false, productionDeploy: false },
+    });
+    expect(getExternalAgentRule("openclaw-travelintrips-tools-dev")?.capabilities).not.toContain("chatgpt:wake");
+  });
+
   it("locks canonical roles and capabilities inside AI Core", () => {
     expect(getExternalAgentRule("gcp-openclaw-main")).toMatchObject({
       source: "openclaw",
