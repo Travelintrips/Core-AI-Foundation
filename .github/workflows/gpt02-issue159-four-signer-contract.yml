@@ -33,6 +33,8 @@ on:
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159PrivateKeyCustodyContract.test.ts'
       - 'scripts/dev/gpt02_issue159_private_key_custody_readiness.py'
       - 'scripts/dev/test_gpt02_issue159_private_key_custody_readiness.py'
+      - 'scripts/dev/gpt02_issue159_signer_operational_readiness.py'
+      - 'scripts/dev/test_gpt02_issue159_signer_operational_readiness.py'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
 
@@ -73,6 +75,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_approval_intent_writer.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_contract.py
           python3 scripts/dev/test_gpt02_issue159_private_key_custody_readiness.py
+          python3 scripts/dev/test_gpt02_issue159_signer_operational_readiness.py
           python3 scripts/dev/test_gpt02_issue159_approval_http.py
           python3 scripts/dev/test_gpt02_issue159_approval_api_route.py
       - name: Targeted contract typecheck
