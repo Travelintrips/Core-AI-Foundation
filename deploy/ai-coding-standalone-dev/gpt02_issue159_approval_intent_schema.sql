@@ -30,3 +30,6 @@ CREATE INDEX IF NOT EXISTS idx_gpt02_issue159_approval_intents_lookup
   ON gpt02_issue159_approval_intents(
     company_id, task_id, command_id, attempt_id
   );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gpt02_issue159_approval_intents_source_decision
+  ON gpt02_issue159_approval_intents(source_decision_id);
