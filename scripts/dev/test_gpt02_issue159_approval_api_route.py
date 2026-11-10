@@ -5,6 +5,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+import time
 import threading
 import types
 import unittest
@@ -28,6 +29,8 @@ api = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(api)
 
+BASE_NOW_MS = int(time.time() * 1000)
+
 CLAIMS = {
     "v": 2,
     "environment": "DEV",
@@ -39,8 +42,8 @@ CLAIMS = {
     "operatorNamespace": "ai-task-hub.public.users",
     "superAdminId": "google_fixture_super_admin",
     "companyId": "default",
-    "issuedAt": 1,
-    "expiresAt": 9999999999999,
+    "issuedAt": BASE_NOW_MS - 1000,
+    "expiresAt": BASE_NOW_MS + 120000,
 }
 AAL2_TOKEN = "a" * 64
 STATIC_TOKEN = "s" * 64
