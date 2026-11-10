@@ -65,14 +65,15 @@ export function assessGpt02Issue159PrivateKeyCustodyHost(input: unknown) {
       GPT02_ISSUE159_PRIVATE_KEY_CUSTODY.mechanism,
     encryptedStoreBaselineVerified: true as const,
     tpm2Available: x["tpm2DevicePresent"] === true,
-    hostEncryptionKeyReady: hostKeyReady,
-    fourRealSignerCredentialsPresent: realCredentialsPresent,
+    hostEncryptionKeyObserved: hostKeyReady,
+    fourRealSignerCredentialsObserved: realCredentialsPresent,
+    hostMetadataIndependentlyAttested: false as const,
     privateKeysLoaded: false as const,
     signerRuntimeMounted: false as const,
     signingPermitted: false as const,
     authorizationGranted: false as const,
     dispatchPermitted: false as const,
-    operationalCustodyReady: hostKeyReady && realCredentialsPresent,
+    operationalCustodyReady: false as const,
     releaseDecision: "NO_GO" as const,
   });
 }
