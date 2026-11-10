@@ -1,0 +1,38 @@
+name: GPT02 Issue159 Four-Signer Contract
+
+on:
+  pull_request:
+    paths:
+      - 'artifacts/api-server/src/services/gpt02Issue159FourSignerContract.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159FourSignerContract.test.ts'
+      - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify four independent signer domains
+        working-directory: artifacts/api-server
+        run: pnpm exec vitest run src/services/__tests__/gpt02Issue159FourSignerContract.test.ts
+      - name: Targeted contract typecheck
+        working-directory: artifacts/api-server
+        run: >-
+          pnpm exec tsc --noEmit --skipLibCheck --target ES2022
+          --module NodeNext --moduleResolution NodeNext --types node
+          src/services/gpt02Issue159FourSignerContract.ts
