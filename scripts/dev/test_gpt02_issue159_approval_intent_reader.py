@@ -25,6 +25,11 @@ CREATE TABLE approval_decisions (
  reason TEXT,
  created_at TEXT NOT NULL
 );
+CREATE TABLE admin_identities (
+ user_id TEXT PRIMARY KEY,
+ role TEXT NOT NULL,
+ enabled INTEGER NOT NULL DEFAULT 0
+);
 """
 
 LOOKUP = {
@@ -58,6 +63,10 @@ class ApprovalIntentReaderTest(unittest.TestCase):
             "INSERT INTO approval_decisions VALUES (?,?,?,?,?,?,?)",
             ("33333333-3333-4333-8333-333333333333","job-1",
              source_decision,source_actor,"f"*64,"","2026-11-11T00:00:00Z"),
+        )
+        con.execute(
+            "INSERT INTO admin_identities(user_id,role,enabled) VALUES (?,?,?)",
+            (actor,"super_admin",1),
         )
         con.execute(
             """INSERT INTO gpt02_issue159_approval_intents
@@ -112,6 +121,25 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         self.seed(path2, source_decision="REJECT")
         out = reader.read_approval_intent(path2, LOOKUP, 1500, operational=False)
         self.assertEqual(out["reason"], "APPROVAL_INTENT_PROVENANCE_MISMATCH")
+
+    def test_current_super_admin_revocation_fails_closed(self):
+        for role, enabled in (("admin", 1), ("super_admin", 0)):
+            path = self.db()
+            self.seed(path)
+            con = sqlite3.connect(path)
+            con.execute(
+                "UPDATE admin_identities SET role=?,enabled=? WHERE user_id=?",
+                (role, enabled, LOOKUP["superAdminId"]),
+            )
+            con.commit()
+            con.close()
+            out = reader.read_approval_intent(
+                path, LOOKUP, 1500, operational=False
+            )
+            self.assertEqual(
+                out["reason"], "APPROVAL_INTENT_PROVENANCE_MISMATCH"
+            )
+            self.assertFalse(out["persistedTrustedReadProven"])
 
     def test_expired_or_future_observation_fails_closed(self):
         path = self.db()
