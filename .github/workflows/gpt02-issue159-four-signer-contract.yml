@@ -4,7 +4,17 @@ on:
   pull_request:
     paths:
       - 'artifacts/api-server/src/services/gpt02Issue159FourSignerContract.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159SignerCustodyPolicy.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159PublicTrustHandoff.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159ApprovalAuthorizerEvidence.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159OperatorAuthorizerEvidence.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159IssuerAuthorizerEvidence.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159FourSignerContract.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerCustodyPolicy.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159PublicTrustHandoff.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159ApprovalAuthorizerEvidence.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
 
