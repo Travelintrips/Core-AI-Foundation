@@ -160,7 +160,9 @@ def inspect(db_path: str, operational: bool = True):
             approvalIntentRows=total,
             fallbackActorRowsInIntentTable=0,
             operationalEvidenceAvailable=total > 0,
-            trustedPersistedReadReady=total > 0,
+            # Capability and evidence are separate: a clean exact store can be
+            # read safely even before the first real AAL2 approval row exists.
+            trustedPersistedReadReady=True,
         )
     except sqlite3.Error:
         return result("APPROVAL_DB_READ_FAILED", **common)
