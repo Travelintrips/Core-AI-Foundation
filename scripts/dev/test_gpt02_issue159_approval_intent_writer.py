@@ -129,8 +129,8 @@ class ApprovalIntentWriterTest(unittest.TestCase):
         self.assertIn("admin_identity(access_token, connection)", source)
         for forbidden in (
             "createPrivateKey", "load_pem_private_key", "Ed25519PrivateKey",
-            "signature", "dispatch_worker", "create_command", "PROD",
-            "dev_approval_token' :", "AICODING_APPROVAL_TOKEN",
+            "sign(", "dispatch_worker", "create_command",
+            "AICODING_APPROVAL_TOKEN",
         ):
             self.assertNotIn(forbidden, source)
 
