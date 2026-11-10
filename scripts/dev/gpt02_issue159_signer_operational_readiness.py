@@ -32,6 +32,11 @@ def assess(approval, custody, runtime):
     )
     approval_evidence = approval.get("operationalEvidenceAvailable") is True
     approval_reader_source = runtime.get("approvalReaderSourceInstalled") is True
+    approval_reader_operational = (
+        approval_schema_ready
+        and approval.get("trustedPersistedReadReady") is True
+        and approval_reader_source
+    )
     approval_writer_source = runtime.get("approvalWriterSourceInstalled") is True
     approval_writer_integrated = runtime.get("approvalWriterIntegrated") is True
 
@@ -62,7 +67,8 @@ def assess(approval, custody, runtime):
         blockers.append("APPROVAL_WRITER_SOURCE_NOT_INSTALLED")
     if not approval_writer_integrated:
         blockers.append("APPROVAL_INTENT_WRITER_NOT_INTEGRATED")
-    blockers.append("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL")
+    if not approval_reader_operational:
+        blockers.append("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL")
     if not custody_baseline:
         blockers.append("SYSTEMD_CUSTODY_BASELINE_NOT_READY")
     if not host_secret:
@@ -81,7 +87,7 @@ def assess(approval, custody, runtime):
         "approvalReaderSourceInstalled": approval_reader_source,
         "approvalWriterSourceInstalled": approval_writer_source,
         "approvalWriterIntegrated": approval_writer_integrated,
-        "approvalTrustedReaderOperational": False,
+        "approvalTrustedReaderOperational": approval_reader_operational,
         "systemdCustodyBaselineReady": custody_baseline,
         "hostCredentialSecretSecure": host_secret,
         "fourSignerCredentialMetadataSecure": four_credentials,
