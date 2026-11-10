@@ -16,15 +16,6 @@ assert spec.loader is not None
 spec.loader.exec_module(reader)
 
 LEGACY = """
-CREATE TABLE approval_decisions (
- id TEXT PRIMARY KEY,
- job_id TEXT NOT NULL,
- decision TEXT NOT NULL,
- actor TEXT NOT NULL,
- artifact_hash TEXT NOT NULL,
- reason TEXT,
- created_at TEXT NOT NULL
-);
 CREATE TABLE admin_identities (
  user_id TEXT PRIMARY KEY,
  role TEXT NOT NULL,
@@ -55,27 +46,19 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         return path
 
     def seed(self, path, *, actor=LOOKUP["superAdminId"],
-             source_actor=None, source_decision="APPROVE",
              recorded=1000, expires=2000):
-        source_actor = actor if source_actor is None else source_actor
         con = sqlite3.connect(path)
-        con.execute(
-            "INSERT INTO approval_decisions VALUES (?,?,?,?,?,?,?)",
-            ("33333333-3333-4333-8333-333333333333","job-1",
-             source_decision,source_actor,"f"*64,"","2026-11-11T00:00:00Z"),
-        )
         con.execute(
             "INSERT INTO admin_identities(user_id,role,enabled) VALUES (?,?,?)",
             (actor,"super_admin",1),
         )
         con.execute(
             """INSERT INTO gpt02_issue159_approval_intents
-            (id,source_decision_id,task_id,command_id,attempt_id,company_id,
+            (id,task_id,command_id,attempt_id,company_id,
              claims_sha256,actor_id,auth_method,role_at_decision,decision,
              recorded_at_ms,expires_at_ms)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             ("44444444-4444-4444-8444-444444444444",
-             "33333333-3333-4333-8333-333333333333",
              LOOKUP["taskId"],LOOKUP["commandId"],LOOKUP["attemptId"],
              LOOKUP["companyId"],LOOKUP["claimsSha256"],actor,
              "supabase_aal2","super_admin","APPROVE",recorded,expires),
@@ -86,6 +69,10 @@ class ApprovalIntentReaderTest(unittest.TestCase):
     def test_exact_row_is_trusted_read_but_never_signing_authority(self):
         path = self.db()
         self.seed(path)
+        con = sqlite3.connect(path)
+        tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        con.close()
+        self.assertNotIn("approval_decisions", tables)
         out = reader.read_approval_intent(path, LOOKUP, 1500, operational=False)
         self.assertTrue(out["persistedTrustedReadProven"])
         self.assertTrue(out["approvalBindingMatched"])
@@ -111,16 +98,6 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         out = reader.read_approval_intent(path, invalid, 1500, operational=False)
         self.assertEqual(out["reason"], "APPROVAL_INTENT_LOOKUP_INVALID")
 
-    def test_source_decision_actor_or_decision_mismatch_fails_closed(self):
-        path = self.db()
-        self.seed(path, source_actor="different-user")
-        out = reader.read_approval_intent(path, LOOKUP, 1500, operational=False)
-        self.assertEqual(out["reason"], "APPROVAL_INTENT_PROVENANCE_MISMATCH")
-
-        path2 = self.db()
-        self.seed(path2, source_decision="REJECT")
-        out = reader.read_approval_intent(path2, LOOKUP, 1500, operational=False)
-        self.assertEqual(out["reason"], "APPROVAL_INTENT_PROVENANCE_MISMATCH")
 
     def test_current_super_admin_revocation_fails_closed(self):
         for role, enabled in (("admin", 1), ("super_admin", 0)):
