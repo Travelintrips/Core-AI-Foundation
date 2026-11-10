@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+﻿import { randomUUID } from "node:crypto";
 import { AI_CORE_BLOCKER_SOP } from "./aiCoreOperationalSop.js";
 import { OPENCLAW_PC_CLIENT_IDS, selectOpenClawExecutor } from "./openClawFailoverSelectionService.js";
 import { chooseActivePc } from "./openClawPcLeaderService.js";
@@ -16,6 +16,7 @@ import {
 export const OPENCLAW_AGENT_CLIENT_ID = "gcp-openclaw-main" as const;
 export const OPENCLAW_VPS_CLIENT_ID = "openclaw-vps-main" as const;
 export const OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID = "openclaw-travelintrips-dev" as const;
+export const OPENCLAW_TRAVELINTRIPS_TOOLS_DEV_CLIENT_ID = "openclaw-travelintrips-tools-dev" as const;
 export const OPENCLAW_PC_DEV_CLIENT_ID = "openclaw-pc-worker-dev" as const;
 export const OPENCLAW_PCHP_DEV_CLIENT_ID = "openclaw-pchp-dev" as const;
 export const OPENCLAW_PC_CLIENT_ID = "openclaw-pc-worker" as const;
@@ -31,6 +32,7 @@ const REQUIRED_CAPABILITY: Record<ExternalAgentClientId, string> = {
   [OPENCLAW_PC_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PCHP_DEV_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID]: "tools:bounded",
+  [OPENCLAW_TRAVELINTRIPS_TOOLS_DEV_CLIENT_ID]: "device:hostname",
   [OPENCLAW_PC_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC2_CLIENT_ID]: "tools:bounded",
   [OPENCLAW_PC3_CLIENT_ID]: "tools:bounded",
@@ -51,6 +53,7 @@ const EXPLICIT_AGENT_PATTERNS: Array<{
   // Host-specific requests must take precedence over the generic OpenClaw alias.
   { clientId: "openclaw-dell-chatgpt-wake-dev", agent: /\bopenclaw-dell-chatgpt-wake-dev\b/i },
   { clientId: "openclaw-dell-admcst001-dev", agent: /\bopenclaw-dell-admcst001-dev\b/i },
+  { clientId: OPENCLAW_TRAVELINTRIPS_TOOLS_DEV_CLIENT_ID, agent: /\bopenclaw-travelintrips-tools-dev\b/i },
   { clientId: OPENCLAW_TRAVELINTRIPS_DEV_CLIENT_ID, agent: /openclaw-travelintrips-dev|openclaw[\s-]*travelintrips[\s-]*dev|travelintrips[\s-]*dev/i },
   { clientId: OPENCLAW_VMSC_CHATGPT_CLIENT_ID, agent: /openclaw-vmsc-chatgpt-wake-dev|vmsc[\s-]*chatgpt/i },
   { clientId: "openclaw-pc-worker-dell-browser", agent: /\b(?:openclaw-pc-worker-dell-browser|dell-browser)\b/i },
@@ -218,6 +221,17 @@ export async function dispatchExternalAgentWork(input: {
     );
   }
 
+  // Separate fixed-grammar read-only hostname lane. Never reinterpret a browser
+  // wake, general shell request, or caller-supplied capability as this lane.
+  if (resolvedClientId === OPENCLAW_TRAVELINTRIPS_TOOLS_DEV_CLIENT_ID) {
+    if (input.source !== "ai-core-chat" ||
+        !/^@?\s*cek hostname pc travelintrips$/i.test(input.instruction.trim()) ||
+        input.metadata?.["capability"] === "chatgpt:wake") {
+      throw new ExternalAgentDispatchError(
+        "CAPABILITY_DENIED", "DEV_HOSTNAME_PREFLIGHT_REQUIRED: only the exact read-only hostname command is permitted.",
+      );
+    }
+  }
   const requiredCapability = requiredCapabilityForExternalAgent(
     resolvedClientId as ExternalAgentClientId,
   );

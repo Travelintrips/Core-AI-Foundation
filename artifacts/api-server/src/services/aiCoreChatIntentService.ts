@@ -164,6 +164,13 @@ export function classifyAiCoreChatDispatch(
         "Leading # explicitly routes this command to the paired PC through OpenClaw without Coding Orchestrator.",
     };
   }
+  // Exact, read-only DEV device command. Dedicated worker identity is NOT
+  // the challenge-bound ChatGPT browser-wake identity.
+  if (/^@?\s*cek hostname pc travelintrips$/i.test(message.trim())) {
+    return { kind: "EXTERNAL_AGENT", workload, preset: null, infrastructureOperation: null,
+      githubOperation: null, externalAgentClientId: "openclaw-travelintrips-tools-dev",
+      executionLane: "TARGETED", reason: "Exact DEV Travelintrips hostname check." };
+  }
   // Explicit bounded DEV-only ping to the named Travelintrips worker.
   if (/\b(?:ping|uji\s+ping|test\s+ping)\b/i.test(message) && /\b(?:openclaw|oc)\b/i.test(message) && /\btravelintrips\b/i.test(message) && /\bdev\b/i.test(message) && !/\b(?:prod|production|produksi|deploy|hapus|delete|uninstall|install|restart)\b/i.test(message) && !hasExplicitSourceChange(message)) {
     return { kind: "EXTERNAL_AGENT", workload, preset: null, infrastructureOperation: null, githubOperation: null, externalAgentClientId: "openclaw-travelintrips-dev", executionLane: "TARGETED", reason: "Explicit bounded DEV Travelintrips ping to named worker." };

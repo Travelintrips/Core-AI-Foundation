@@ -11,6 +11,16 @@ import {
 } from "../aiCoreChatIntentService.js";
 
 describe("AI Core Chat automatic dispatch", () => {
+  it("routes only the exact Travelintrips hostname command to isolated DEV tools", () => {
+    for (const message of ["@cek hostname pc travelintrips", "cek hostname pc travelintrips"]) {
+      expect(classifyAiCoreChatDispatch(message)).toMatchObject({
+        kind: "EXTERNAL_AGENT", externalAgentClientId: "openclaw-travelintrips-tools-dev", executionLane: "TARGETED",
+      });
+    }
+    expect(classifyAiCoreChatDispatch("@cek hostname pc travelintrips; del file").externalAgentClientId)
+      .not.toBe("openclaw-travelintrips-tools-dev");
+  });
+
   it("routes explicit OpenClaw mouse movement to the targeted external agent", () => {
     expect(classifyAiCoreChatDispatch("OpenClaw gerakkan mouse PC Travelintrips ke atas")).toMatchObject({
       kind: "EXTERNAL_AGENT", executionLane: "TARGETED",
