@@ -33,6 +33,7 @@ jobs:
           pnpm exec vitest run
           src/services/__tests__/gpt02Issue159FourSignerContract.test.ts
           src/services/__tests__/gpt02Issue159SignerCustodyPolicy.test.ts
+          src/services/__tests__/gpt02Issue159PublicTrustHandoff.test.ts
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
@@ -40,3 +41,4 @@ jobs:
           --module NodeNext --moduleResolution NodeNext --types node
           src/services/gpt02Issue159FourSignerContract.ts
           src/services/gpt02Issue159SignerCustodyPolicy.ts
+          src/services/gpt02Issue159PublicTrustHandoff.ts
