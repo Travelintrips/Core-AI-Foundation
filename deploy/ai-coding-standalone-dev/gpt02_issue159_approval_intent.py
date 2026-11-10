@@ -13,6 +13,7 @@ import uuid
 from gpt02_issue159_approval_intent_contract import (
     ApprovalIntentContractError,
     build_approval_intent_record,
+    validate_approval_claims,
 )
 
 
@@ -46,6 +47,11 @@ def record_issue159_approval_intent(
         now_ms = int(time.time() * 1000)
     if not isinstance(now_ms, int) or now_ms <= 0:
         return _denied("APPROVAL_TIME_INVALID")
+
+    try:
+        validate_approval_claims(claims)
+    except ApprovalIntentContractError:
+        return _denied("APPROVAL_CLAIMS_INVALID")
 
     try:
         identity = identity_verifier(access_token, connection)
