@@ -18,10 +18,12 @@ on:
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent_schema.sql'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent_contract.py'
       - 'scripts/dev/gpt02_issue159_approval_store_readiness.py'
       - 'scripts/dev/test_gpt02_issue159_approval_store_readiness.py'
       - 'scripts/dev/gpt02_issue159_approval_intent_reader.py'
       - 'scripts/dev/test_gpt02_issue159_approval_intent_reader.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_intent_contract.py'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
 
@@ -59,6 +61,7 @@ jobs:
         run: |
           python3 scripts/dev/test_gpt02_issue159_approval_store_readiness.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_reader.py
+          python3 scripts/dev/test_gpt02_issue159_approval_intent_contract.py
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
