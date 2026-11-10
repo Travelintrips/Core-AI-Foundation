@@ -1,95 +1,71 @@
-"""DEV-only GPT02 Issue #159 AAL2 approval-intent persistence helper.
+"""DEV-only GPT02 Issue #159 approval-intent persistence helper.
 
 Not imported by approval_api.py yet. No route is mounted by this change.
-The helper verifies the Supabase AAL2 identity through admin_identity() itself,
-then records one self-contained Issue159 approval intent. It never signs,
-loads keys, creates commands, dispatches workers, or touches PROD.
+The caller must inject a reviewed AAL2 identity verifier. Without one, this
+helper fails closed. It never signs, loads keys, creates commands, dispatches
+workers, or touches PROD.
 """
 from __future__ import annotations
-import hashlib
-import json
-import re
 import sqlite3
 import time
 import uuid
 
-from admin_identity import admin_identity
-
-FIELDS = (
-    "v","environment","audience","taskId","commandId","attemptId","nonce",
-    "operatorNamespace","superAdminId","companyId","issuedAt","expiresAt",
+from gpt02_issue159_approval_intent_contract import (
+    ApprovalIntentContractError,
+    build_approval_intent_record,
 )
-UUID = re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
-SUBJECT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$")
-NONCE = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
+
 
 def _denied(reason):
     return {
         "ok": False,
         "reason": reason,
         "intentRecorded": False,
+        "trustedIdentityReadProven": False,
         "signingPermitted": False,
         "authorizationGranted": False,
         "dispatchPermitted": False,
         "releaseDecision": "NO_GO",
     }
 
-def canonical_issue159_approval_claims(claims):
-    if not isinstance(claims, dict) or set(claims) != set(FIELDS):
-        raise ValueError("GPT02_ISSUE159_APPROVAL_FIELDS_INVALID")
-    return json.dumps(
-        {name: claims[name] for name in FIELDS},
-        ensure_ascii=False, separators=(",", ":"), allow_nan=False,
-    )
 
-def _claims_valid(c, now_ms):
-    return (
-        c.get("v") == 2 and
-        c.get("environment") == "DEV" and
-        c.get("audience") == "GPT02_NEW_TASK_SINGLE_COMMAND_APPROVAL" and
-        isinstance(c.get("taskId"), int) and c["taskId"] > 136 and
-        isinstance(c.get("commandId"), str) and UUID.fullmatch(c["commandId"]) and
-        isinstance(c.get("attemptId"), str) and UUID.fullmatch(c["attemptId"]) and
-        c["commandId"] != c["attemptId"] and
-        isinstance(c.get("nonce"), str) and NONCE.fullmatch(c["nonce"]) and
-        c.get("operatorNamespace") == "ai-task-hub.public.users" and
-        isinstance(c.get("superAdminId"), str) and SUBJECT.fullmatch(c["superAdminId"]) and
-        c["superAdminId"] != "dev_approval_token" and
-        c.get("companyId") == "default" and
-        isinstance(c.get("issuedAt"), int) and isinstance(c.get("expiresAt"), int) and
-        c["issuedAt"] >= 0 and c["issuedAt"] <= now_ms + 5000 and
-        c["expiresAt"] > now_ms and c["expiresAt"] > c["issuedAt"] and
-        c["expiresAt"] - c["issuedAt"] <= 300000
-    )
-
-def record_issue159_approval_intent(access_token, connection, claims, now_ms=None):
+def record_issue159_approval_intent(
+    access_token,
+    connection,
+    claims,
+    identity_verifier=None,
+    now_ms=None,
+):
     if not isinstance(access_token, str) or not (40 <= len(access_token) <= 8192):
         return _denied("AAL2_SUPER_ADMIN_TOKEN_REQUIRED")
     if not isinstance(connection, sqlite3.Connection):
         return _denied("APPROVAL_DB_CONNECTION_REQUIRED")
+    if not callable(identity_verifier):
+        return _denied("AAL2_IDENTITY_VERIFIER_REQUIRED")
     if now_ms is None:
         now_ms = int(time.time() * 1000)
     if not isinstance(now_ms, int) or now_ms <= 0:
         return _denied("APPROVAL_TIME_INVALID")
 
     try:
-        canonical = canonical_issue159_approval_claims(claims)
-    except (ValueError, TypeError):
-        return _denied("APPROVAL_CLAIMS_INVALID")
-    if not _claims_valid(claims, now_ms):
-        return _denied("APPROVAL_CLAIMS_INVALID")
-
-    identity = admin_identity(access_token, connection)
-    if (
-        not isinstance(identity, dict) or
-        identity.get("role") != "super_admin" or
-        identity.get("user_id") != claims["superAdminId"] or
-        identity.get("user_id") == "dev_approval_token"
-    ):
+        identity = identity_verifier(access_token, connection)
+    except Exception:
+        return _denied("AAL2_IDENTITY_VERIFICATION_FAILED")
+    if not isinstance(identity, dict):
         return _denied("AAL2_SUPER_ADMIN_IDENTITY_MISMATCH")
 
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     intent_id = str(uuid.uuid4())
+    try:
+        built = build_approval_intent_record(
+            claims, identity, intent_id, now_ms
+        )
+    except ApprovalIntentContractError as exc:
+        code = str(exc)
+        if code == "GPT02_ISSUE159_AAL2_SUPER_ADMIN_REQUIRED":
+            return _denied("AAL2_SUPER_ADMIN_IDENTITY_MISMATCH")
+        return _denied("APPROVAL_CLAIMS_INVALID")
+
+    record = built["record"]
     try:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
@@ -99,10 +75,12 @@ def record_issue159_approval_intent(access_token, connection, claims, now_ms=Non
              recorded_at_ms,expires_at_ms)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                intent_id, claims["taskId"], claims["commandId"],
-                claims["attemptId"], claims["companyId"], digest,
-                identity["user_id"], "supabase_aal2", "super_admin", "APPROVE",
-                now_ms, claims["expiresAt"],
+                record["id"], record["task_id"], record["command_id"],
+                record["attempt_id"], record["company_id"],
+                record["claims_sha256"], record["actor_id"],
+                record["auth_method"], record["role_at_decision"],
+                record["decision"], record["recorded_at_ms"],
+                record["expires_at_ms"],
             ),
         )
         connection.commit()
@@ -122,15 +100,16 @@ def record_issue159_approval_intent(access_token, connection, claims, now_ms=Non
     return {
         "ok": True,
         "reason": "AAL2_APPROVAL_INTENT_RECORDED_NO_SIGNING_AUTHORITY",
-        "intentId": intent_id,
-        "claimsSha256": digest,
-        "actorId": identity["user_id"],
-        "authMethod": "supabase_aal2",
-        "roleAtDecision": "super_admin",
-        "decision": "APPROVE",
-        "recordedAt": now_ms,
-        "expiresAt": claims["expiresAt"],
+        "intentId": record["id"],
+        "claimsSha256": record["claims_sha256"],
+        "actorId": record["actor_id"],
+        "authMethod": record["auth_method"],
+        "roleAtDecision": record["role_at_decision"],
+        "decision": record["decision"],
+        "recordedAt": record["recorded_at_ms"],
+        "expiresAt": record["expires_at_ms"],
         "intentRecorded": True,
+        "trustedIdentityReadProven": True,
         "signingPermitted": False,
         "authorizationGranted": False,
         "dispatchPermitted": False,
