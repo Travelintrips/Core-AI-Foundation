@@ -38,8 +38,10 @@ export function inspectGpt02Issue159OperatorAuthorizerEvidence(input: {
   if (input.role === "hub") {
     if (!exactObject(input.evidence, [
       "namespace", "operatorId", "operatorRole", "active",
-      "hubTaskId", "hubExecutionId", "linkId",
-      "approvalDigest", "claimsSha256",
+      "hubTaskId", "hubExecutionId", "commandCandidateId", "attemptId", "linkId",
+      "assignmentAuditAction", "assignmentAuditEntityId",
+      "assignmentActorId", "assignmentActorRole", "assignmentActorActive",
+      "approvalDigest", "claimsSha256", "observedAt",
     ])) {
       throw new Error("GPT02_ISSUE159_HUB_EVIDENCE_SHAPE_INVALID");
     }
@@ -50,10 +52,20 @@ export function inspectGpt02Issue159OperatorAuthorizerEvidence(input: {
         e["active"] !== true ||
         e["hubTaskId"] !== claims["hubTaskId"] ||
         e["hubExecutionId"] !== claims["hubExecutionId"] ||
+        e["commandCandidateId"] !== claims["coreCommandId"] ||
+        e["attemptId"] !== claims["attemptId"] ||
         e["linkId"] !== claims["linkId"] ||
+        e["assignmentAuditAction"] !== "gpt02_pic_assigned" ||
+        e["assignmentAuditEntityId"] !== String(claims["hubTaskId"]) ||
+        e["assignmentActorId"] !== claims["hubOperatorId"] ||
+        e["assignmentActorRole"] !== "super_admin" ||
+        e["assignmentActorActive"] !== true ||
         e["approvalDigest"] !== claims["approvalDigest"] ||
         e["claimsSha256"] !== digest ||
+        e["observedAt"] !== input.observedAt ||
         !UUID.test(String(e["hubExecutionId"])) ||
+        !UUID.test(String(e["commandCandidateId"])) ||
+        !UUID.test(String(e["attemptId"])) ||
         !UUID.test(String(e["linkId"])) ||
         !HEX.test(String(e["approvalDigest"]))) {
       throw new Error("GPT02_ISSUE159_HUB_IDENTITY_BINDING_MISMATCH");
@@ -61,8 +73,9 @@ export function inspectGpt02Issue159OperatorAuthorizerEvidence(input: {
   } else {
     if (!exactObject(input.evidence, [
       "namespace", "operatorUserId", "operatorRole", "active",
-      "passwordChanged", "coreTaskId", "coreCommandId",
-      "linkId", "claimsSha256",
+      "passwordChanged", "coreTaskId", "coreCommandId", "attemptId",
+      "taskStatus", "runCount", "commandCount", "workerId",
+      "linkId", "claimsSha256", "observedAt",
     ])) {
       throw new Error("GPT02_ISSUE159_CORE_EVIDENCE_SHAPE_INVALID");
     }
@@ -75,10 +88,18 @@ export function inspectGpt02Issue159OperatorAuthorizerEvidence(input: {
         e["passwordChanged"] !== true ||
         e["coreTaskId"] !== claims["coreTaskId"] ||
         e["coreCommandId"] !== claims["coreCommandId"] ||
+        e["attemptId"] !== claims["attemptId"] ||
+        e["taskStatus"] !== "PENDING" ||
+        e["runCount"] !== 0 ||
+        e["commandCount"] !== 0 ||
+        e["workerId"] !== "openclaw-dell-chatgpt-wake-dev" ||
+        e["workerId"] !== claims["workerId"] ||
         e["linkId"] !== claims["linkId"] ||
         e["claimsSha256"] !== digest ||
+        e["observedAt"] !== input.observedAt ||
         !UUID.test(String(e["coreTaskId"])) ||
         !UUID.test(String(e["coreCommandId"])) ||
+        !UUID.test(String(e["attemptId"])) ||
         !UUID.test(String(e["linkId"]))) {
       throw new Error("GPT02_ISSUE159_CORE_IDENTITY_BINDING_MISMATCH");
     }
