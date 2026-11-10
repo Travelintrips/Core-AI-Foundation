@@ -114,7 +114,7 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         self.assertTrue(out["approvalIntentLookupIndexExact"])
         self.assertEqual(out["approvalIntentRows"], 0)
         self.assertFalse(out["operationalEvidenceAvailable"])
-        self.assertFalse(out["trustedPersistedReadReady"])
+        self.assertTrue(out["trustedPersistedReadReady"])
 
     def test_missing_lookup_index_fails_closed(self):
         path = self.db()
