@@ -49,9 +49,17 @@ const hubEvidence = () => ({
   active: true,
   hubTaskId: claims.hubTaskId,
   hubExecutionId: claims.hubExecutionId,
+  commandCandidateId: claims.coreCommandId,
+  attemptId: claims.attemptId,
   linkId: claims.linkId,
+  assignmentAuditAction: "gpt02_pic_assigned",
+  assignmentAuditEntityId: String(claims.hubTaskId),
+  assignmentActorId: claims.hubOperatorId,
+  assignmentActorRole: "super_admin",
+  assignmentActorActive: true,
   approvalDigest: claims.approvalDigest,
   claimsSha256: digest,
+  observedAt: 2000,
 });
 
 const coreEvidence = () => ({
@@ -62,8 +70,14 @@ const coreEvidence = () => ({
   passwordChanged: true,
   coreTaskId: claims.coreTaskId,
   coreCommandId: claims.coreCommandId,
+  attemptId: claims.attemptId,
+  taskStatus: "PENDING",
+  runCount: 0,
+  commandCount: 0,
+  workerId: claims.workerId,
   linkId: claims.linkId,
   claimsSha256: digest,
+  observedAt: 2000,
 });
 
 describe("GPT02 Issue159 operator signer authorizer evidence", () => {
@@ -97,6 +111,12 @@ describe("GPT02 Issue159 operator signer authorizer evidence", () => {
       { active: false },
       { claimsSha256: "b".repeat(64) },
       { approvalDigest: "c".repeat(64) },
+      { assignmentAuditAction: "other_action" },
+      { assignmentAuditEntityId: "999" },
+      { assignmentActorId: "other-user" },
+      { assignmentActorRole: "admin" },
+      { assignmentActorActive: false },
+      { observedAt: 2001 },
     ]) {
       expect(() => inspectGpt02Issue159OperatorAuthorizerEvidence({
         role: "hub", claims, evidence: { ...hubEvidence(), ...patch }, observedAt: 2000,
@@ -111,6 +131,11 @@ describe("GPT02 Issue159 operator signer authorizer evidence", () => {
       { active: false },
       { passwordChanged: false },
       { coreTaskId: "66666666-6666-4666-8666-666666666666" },
+      { taskStatus: "RUNNING" },
+      { runCount: 1 },
+      { commandCount: 1 },
+      { workerId: "other-worker" },
+      { observedAt: 2001 },
       { claimsSha256: "b".repeat(64) },
     ]) {
       expect(() => inspectGpt02Issue159OperatorAuthorizerEvidence({
