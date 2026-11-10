@@ -1,9 +1,9 @@
--- DEV-only additive storage contract for GPT02 Issue #159 approval intent evidence.
--- NOT applied by this PR. No signer, no key, no dispatch authority.
--- Existing approval_decisions remains unchanged.
+-- DEV-only additive storage contract for GPT02 Issue #159 AAL2 approval evidence.
+-- NOT an execution approval, signer, key, or dispatch authority.
+-- This table is self-contained: legacy approval_decisions rows are coding_test
+-- decisions and MUST NOT be reused as Issue159 approval provenance.
 CREATE TABLE IF NOT EXISTS gpt02_issue159_approval_intents (
   id TEXT PRIMARY KEY,
-  source_decision_id TEXT NOT NULL REFERENCES approval_decisions(id),
   task_id INTEGER NOT NULL CHECK (task_id > 136),
   command_id TEXT NOT NULL,
   attempt_id TEXT NOT NULL,
@@ -26,10 +26,8 @@ CREATE TABLE IF NOT EXISTS gpt02_issue159_approval_intents (
   UNIQUE(task_id, command_id, attempt_id),
   UNIQUE(claims_sha256)
 );
+
 CREATE INDEX IF NOT EXISTS idx_gpt02_issue159_approval_intents_lookup
   ON gpt02_issue159_approval_intents(
-    company_id, task_id, command_id, attempt_id
+    company_id, task_id, command_id, attempt_id, claims_sha256, actor_id
   );
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_gpt02_issue159_approval_intents_source_decision
-  ON gpt02_issue159_approval_intents(source_decision_id);
