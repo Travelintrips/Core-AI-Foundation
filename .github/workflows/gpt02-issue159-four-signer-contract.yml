@@ -67,6 +67,7 @@ jobs:
           src/services/__tests__/gpt02Issue159ApprovalAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts
+          src/services/__tests__/gpt02Issue159PrivateKeyCustodyContract.test.ts
           src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts
       - name: Verify approval store readiness contract
         run: |
@@ -89,4 +90,5 @@ jobs:
           src/services/gpt02Issue159ApprovalAuthorizerEvidence.ts
           src/services/gpt02Issue159OperatorAuthorizerEvidence.ts
           src/services/gpt02Issue159IssuerAuthorizerEvidence.ts
+          src/services/gpt02Issue159PrivateKeyCustodyContract.ts
           src/services/gpt02Issue159SignerBoundaryReadiness.ts
