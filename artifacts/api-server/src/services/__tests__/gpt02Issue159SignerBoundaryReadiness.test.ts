@@ -29,6 +29,8 @@ const approvalClaims = {
 };
 const approvalDigest = createHash("sha256")
   .update(canonicalGpt02Issue159Approval(approvalClaims)).digest("hex");
+const nonceDigest = createHash("sha256")
+  .update(approvalClaims.nonce).digest("hex");
 
 const linkClaims = {
   v: 1, environment: "DEV", audience: "GPT02_DUAL_ACCOUNT_COMMAND_LINK",
@@ -63,7 +65,7 @@ const issuerClaims = {
   receiptId: "66666666-6666-4666-8666-666666666666",
   linkId: linkClaims.linkId,
   fenceId: "77777777-7777-4777-8777-777777777777",
-  approvalDigest, nonceDigest: "b".repeat(64),
+  approvalDigest, nonceDigest,
   issuerRole: "dev_gpt02_issuer_evidence", leaseEpoch: 1,
   issuedAt: 3000, expiresAt: 10000,
 };
@@ -143,12 +145,27 @@ function fixture() {
     },
     issuer: {
       claims: issuerClaims,
+      approvalClaims,
+      operatorLinkClaims: linkClaims,
       nonceReceipt: {
         receiptId: issuerClaims.receiptId,
         commandId: issuerClaims.commandId,
-        approvalDigest: issuerClaims.approvalDigest,
-        nonceDigest: issuerClaims.nonceDigest,
+        nonce: approvalClaims.nonce,
+        digest: approvalDigest,
         consumedAt: 2000,
+      },
+      identityReceipt: {
+        receiptId: issuerClaims.receiptId,
+        commandId: issuerClaims.commandId,
+        linkId: linkClaims.linkId,
+        operatorUserId: linkClaims.coreOperatorUserId,
+        hubOperatorId: linkClaims.hubOperatorId,
+        linkDigest,
+        bindingVerified: false,
+        mayDispatchWorker: false,
+        mayIssueGrant: false,
+        mayCloseJob: false,
+        coreLedgerWritten: false,
       },
       fence: {
         fenceId: issuerClaims.fenceId,
