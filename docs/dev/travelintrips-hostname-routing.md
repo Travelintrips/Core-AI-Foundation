@@ -1,6 +1,6 @@
 # Travelintrips DEV hostname route — security review required
 
-**Status: proposed; not deployed; E2E NOT PASS.**
+**Status: RLS approved and applied to CST-DEV; application not yet released; E2E NOT PASS.**
 
 ## Scope
 An isolated `openclaw-travelintrips-tools-dev` worker receives only the exact Agent-mode request `@cek hostname pc travelintrips`.
@@ -9,9 +9,9 @@ There is no shell, Git mutation, production action, or general natural-language 
 A separate Python consumer checks source, clientId, server-required capability, exact command, and hostname before posting a callback.
 
 ## Mandatory authorization gate
-The DEV database RLS for `ai_platform.ai_coding_bridge_presence`, `ai_platform.ai_coding_bridge_commands`, and `ai_platform.ai_coding_bridge_responses` explicitly enumerates old worker IDs. No policy currently explicitly references `openclaw-travelintrips-tools-dev`.
+The DEV database RLS for `ai_platform.ai_coding_bridge_presence`, `ai_platform.ai_coding_bridge_commands`, and `ai_platform.ai_coding_bridge_responses` explicitly enumerates old worker IDs. Nine exact-worker policies were applied to CST-DEV on 2026-11-10 via Supabase migration `dev_travelintrips_tools_hostname_rls_20261110`. Existing browser-wake policies were preserved.
 
-**Do not merge/deploy or enable the new consumer until a security/database owner approves a narrowly scoped, DEV-only RLS migration** for this exact worker ID, only presence heartbeat, exact read-only hostname job and its callback. Do not relax any existing browser-wake preflight or add wildcard policies.
+**RLS approval granted on 2026-11-10.** Deploy only to DEV using the authorized release workflow. Do not relax browser-wake preflight or add wildcard policies. This release also returns server-owned `source` in the claim response for worker origin verification.
 
 ## Validation completed
 - 87 focused tests PASS; TypeScript API typecheck PASS.
