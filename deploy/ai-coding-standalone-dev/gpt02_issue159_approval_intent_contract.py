@@ -96,7 +96,7 @@ def build_approval_intent_record(
         or not UUID.fullmatch(intent_id)
         or not isinstance(recorded_at_ms, int)
         or recorded_at_ms < c["issuedAt"]
-        or recorded_at_ms > c["expiresAt"]
+        or recorded_at_ms >= c["expiresAt"]
     ):
         _fail("GPT02_ISSUE159_APPROVAL_INTENT_TIME_OR_ID_INVALID")
 
