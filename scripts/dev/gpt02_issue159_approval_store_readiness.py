@@ -43,6 +43,8 @@ def result(reason: str, **extra):
         "legacyDecisionTablePresent": False,
         "approvalIntentTablePresent": False,
         "approvalIntentSchemaExact": False,
+        "approvalIntentSourceDecisionUnique": False,
+        "approvalIntentLookupIndexExact": False,
         "approvalIntentRows": 0,
         "fallbackActorRowsInIntentTable": 0,
         "operationalEvidenceAvailable": False,
@@ -105,6 +107,36 @@ def inspect(db_path: str, operational: bool = True):
                           legacyDecisionTablePresent=True,
                           approvalIntentTablePresent=True)
 
+        indexes = {}
+        for row in con.execute(f"PRAGMA index_list({TABLE})"):
+            name = row[1]
+            indexes[name] = {
+                "unique": bool(row[2]),
+                "columns": [
+                    r[2] for r in con.execute(f"PRAGMA index_info({name})")
+                ],
+            }
+        source_unique = any(
+            meta["unique"] and meta["columns"] == ["source_decision_id"]
+            for meta in indexes.values()
+        )
+        lookup_exact = any(
+            meta["columns"] == [
+                "company_id", "task_id", "command_id", "attempt_id"
+            ]
+            for meta in indexes.values()
+        )
+        if not source_unique or not lookup_exact:
+            return result(
+                "ISSUE159_APPROVAL_INTENT_INDEX_DRIFT",
+                **common,
+                legacyDecisionTablePresent=True,
+                approvalIntentTablePresent=True,
+                approvalIntentSchemaExact=True,
+                approvalIntentSourceDecisionUnique=source_unique,
+                approvalIntentLookupIndexExact=lookup_exact,
+            )
+
         total = con.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()[0]
         fallback = con.execute(
             f"SELECT COUNT(*) FROM {TABLE} "
@@ -119,6 +151,8 @@ def inspect(db_path: str, operational: bool = True):
                           legacyDecisionTablePresent=True,
                           approvalIntentTablePresent=True,
                           approvalIntentSchemaExact=True,
+                          approvalIntentSourceDecisionUnique=True,
+                          approvalIntentLookupIndexExact=True,
                           approvalIntentRows=total,
                           fallbackActorRowsInIntentTable=fallback)
 
@@ -128,6 +162,8 @@ def inspect(db_path: str, operational: bool = True):
             legacyDecisionTablePresent=True,
             approvalIntentTablePresent=True,
             approvalIntentSchemaExact=True,
+            approvalIntentSourceDecisionUnique=True,
+            approvalIntentLookupIndexExact=True,
             approvalIntentRows=total,
             fallbackActorRowsInIntentTable=0,
             operationalEvidenceAvailable=total > 0,
