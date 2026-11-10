@@ -112,8 +112,10 @@ def live_runtime_metadata():
     except OSError:
         pass
     writer_integrated = (
-        "gpt02_issue159_approval_intent" in api_source
-        and "record_issue159_approval_intent" in api_source
+        "from gpt02_issue159_approval_http import handle_issue159_approval_intent"
+        in api_source
+        and "handle_issue159_approval_intent(" in api_source
+        and "issue159_identity_verifier" in api_source
     )
     return {
         "approvalReaderSourceInstalled": os.path.isfile(reader_path),
