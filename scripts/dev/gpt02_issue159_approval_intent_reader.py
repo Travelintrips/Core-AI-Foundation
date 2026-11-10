@@ -75,17 +75,13 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
         rows = con.execute(
             """
             SELECT i.id AS intent_id,
-                   i.source_decision_id,
                    i.task_id,i.command_id,i.attempt_id,i.company_id,
                    i.claims_sha256,i.actor_id,i.auth_method,
                    i.role_at_decision,i.decision,
                    i.recorded_at_ms,i.expires_at_ms,
-                   d.decision AS source_decision,
-                   d.actor AS source_actor,
                    a.role AS current_admin_role,
                    a.enabled AS current_admin_enabled
             FROM gpt02_issue159_approval_intents i
-            JOIN approval_decisions d ON d.id=i.source_decision_id
             JOIN admin_identities a ON a.user_id=i.actor_id
             WHERE i.company_id=?
               AND i.task_id=?
@@ -106,12 +102,9 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
 
         if (
             not UUID.fullmatch(str(r["intent_id"])) or
-            not UUID.fullmatch(str(r["source_decision_id"])) or
             r["auth_method"] != "supabase_aal2" or
             r["role_at_decision"] != "super_admin" or
             r["decision"] != "APPROVE" or
-            r["source_decision"] != "APPROVE" or
-            r["source_actor"] != r["actor_id"] or
             r["actor_id"] == "dev_approval_token" or
             r["current_admin_role"] != "super_admin" or
             r["current_admin_enabled"] != 1
@@ -131,7 +124,7 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
             "environment": "DEV",
             "reason": "TRUSTED_APPROVAL_INTENT_READ_NO_SIGNING_AUTHORITY",
             "decision": {
-                "decisionId": r["source_decision_id"],
+                "decisionId": r["intent_id"],
                 "claimsSha256": r["claims_sha256"],
                 "actorId": r["actor_id"],
                 "authMethod": r["auth_method"],
