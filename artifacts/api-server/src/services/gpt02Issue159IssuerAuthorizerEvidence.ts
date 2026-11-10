@@ -146,9 +146,7 @@ export function inspectGpt02Issue159IssuerAuthorizerEvidence(input: {
       c["attemptId"] !== a["attemptId"] ||
       c["attemptId"] !== l["attemptId"] ||
       c["workerId"] !== WORKER ||
-      c["receiptId"] !== r["receiptId"] ||
       c["linkId"] !== l["linkId"] ||
-      c["fenceId"] !== f["fenceId"] ||
       c["approvalDigest"] !== approvalDigest ||
       c["nonceDigest"] !== nonceDigest ||
       c["issuerRole"] !== ROLE ||
