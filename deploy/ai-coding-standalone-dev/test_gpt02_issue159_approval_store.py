@@ -179,8 +179,8 @@ class Issue159ApprovalStoreTests(unittest.TestCase):
             "urllib.request",
             "http://",
             "https://",
-            "dispatchPermitted": True",
-            "authorizationGranted": True",
+            '"dispatchPermitted": True',
+            '"authorizationGranted": True',
         ):
             self.assertNotIn(forbidden, source)
 
