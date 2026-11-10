@@ -18,7 +18,6 @@ TABLE = "gpt02_issue159_approval_intents"
 
 EXPECTED_COLUMNS = [
     ("id", "TEXT", 0, 1),
-    ("source_decision_id", "TEXT", 1, 0),
     ("task_id", "INTEGER", 1, 0),
     ("command_id", "TEXT", 1, 0),
     ("attempt_id", "TEXT", 1, 0),
@@ -43,7 +42,7 @@ def result(reason: str, **extra):
         "legacyDecisionTablePresent": False,
         "approvalIntentTablePresent": False,
         "approvalIntentSchemaExact": False,
-        "approvalIntentSourceDecisionUnique": False,
+        "approvalIntentSelfContainedDecision": False,
         "approvalIntentLookupIndexExact": False,
         "approvalIntentRows": 0,
         "fallbackActorRowsInIntentTable": 0,
@@ -89,12 +88,9 @@ def inspect(db_path: str, operational: bool = True):
             )
         }
         legacy = "approval_decisions" in tables
-        if not legacy:
-            return result("LEGACY_APPROVAL_DECISION_TABLE_MISSING",
-                          **common, legacyDecisionTablePresent=False)
         if TABLE not in tables:
             return result("ISSUE159_APPROVAL_INTENT_TABLE_MISSING",
-                          **common, legacyDecisionTablePresent=True)
+                          **common, legacyDecisionTablePresent=legacy)
 
         cols = [
             (r[1], str(r[2]).upper(), int(r[3]), int(r[5]))
@@ -104,7 +100,7 @@ def inspect(db_path: str, operational: bool = True):
         if not exact:
             return result("ISSUE159_APPROVAL_INTENT_SCHEMA_DRIFT",
                           **common,
-                          legacyDecisionTablePresent=True,
+                          legacyDecisionTablePresent=legacy,
                           approvalIntentTablePresent=True)
 
         indexes = {}
@@ -116,25 +112,22 @@ def inspect(db_path: str, operational: bool = True):
                     r[2] for r in con.execute(f"PRAGMA index_info({name})")
                 ],
             }
-        source_unique = any(
-            meta["unique"] and meta["columns"] == ["source_decision_id"]
-            for meta in indexes.values()
-        )
         lookup_exact = any(
             meta["columns"] == [
-                "company_id", "task_id", "command_id", "attempt_id"
+                "company_id", "task_id", "command_id", "attempt_id",
+                "claims_sha256", "actor_id"
             ]
             for meta in indexes.values()
         )
-        if not source_unique or not lookup_exact:
+        if not lookup_exact:
             return result(
                 "ISSUE159_APPROVAL_INTENT_INDEX_DRIFT",
                 **common,
-                legacyDecisionTablePresent=True,
+                legacyDecisionTablePresent=legacy,
                 approvalIntentTablePresent=True,
                 approvalIntentSchemaExact=True,
-                approvalIntentSourceDecisionUnique=source_unique,
-                approvalIntentLookupIndexExact=lookup_exact,
+                approvalIntentSelfContainedDecision=True,
+                approvalIntentLookupIndexExact=False,
             )
 
         total = con.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()[0]
@@ -148,10 +141,10 @@ def inspect(db_path: str, operational: bool = True):
         if fallback:
             return result("ISSUE159_APPROVAL_INTENT_PROVENANCE_INVALID",
                           **common,
-                          legacyDecisionTablePresent=True,
+                          legacyDecisionTablePresent=legacy,
                           approvalIntentTablePresent=True,
                           approvalIntentSchemaExact=True,
-                          approvalIntentSourceDecisionUnique=True,
+                          approvalIntentSelfContainedDecision=True,
                           approvalIntentLookupIndexExact=True,
                           approvalIntentRows=total,
                           fallbackActorRowsInIntentTable=fallback)
@@ -159,10 +152,10 @@ def inspect(db_path: str, operational: bool = True):
         return result(
             "ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY",
             **common,
-            legacyDecisionTablePresent=True,
+            legacyDecisionTablePresent=legacy,
             approvalIntentTablePresent=True,
             approvalIntentSchemaExact=True,
-            approvalIntentSourceDecisionUnique=True,
+            approvalIntentSelfContainedDecision=True,
             approvalIntentLookupIndexExact=True,
             approvalIntentRows=total,
             fallbackActorRowsInIntentTable=0,
