@@ -75,12 +75,11 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         )
         con.execute(
             """INSERT INTO gpt02_issue159_approval_intents
-            (id,source_decision_id,task_id,command_id,attempt_id,company_id,
+            (id,task_id,command_id,attempt_id,company_id,
              claims_sha256,actor_id,auth_method,role_at_decision,decision,
              recorded_at_ms,expires_at_ms)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            ("99999999-9999-4999-8999-999999999999",
-             "88888888-8888-4888-8888-888888888888",137,
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("99999999-9999-4999-8999-999999999999",137,
              "11111111-1111-4111-8111-111111111111",
              "22222222-2222-4222-8222-222222222222","default",
              "a"*64,"user-1","supabase_aal2","super_admin","APPROVE",1000,2000),
@@ -92,7 +91,7 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         self.assertEqual(out["reason"],
                          "ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY")
         self.assertTrue(out["approvalIntentSchemaExact"])
-        self.assertTrue(out["approvalIntentSourceDecisionUnique"])
+        self.assertTrue(out["approvalIntentSelfContainedDecision"])
         self.assertTrue(out["approvalIntentLookupIndexExact"])
         self.assertEqual(out["approvalIntentRows"], 1)
         self.assertTrue(out["operationalEvidenceAvailable"])
@@ -111,33 +110,35 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         self.assertEqual(out["reason"],
                          "ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY")
         self.assertTrue(out["approvalIntentSchemaExact"])
-        self.assertTrue(out["approvalIntentSourceDecisionUnique"])
+        self.assertTrue(out["approvalIntentSelfContainedDecision"])
         self.assertTrue(out["approvalIntentLookupIndexExact"])
         self.assertEqual(out["approvalIntentRows"], 0)
         self.assertFalse(out["operationalEvidenceAvailable"])
         self.assertFalse(out["trustedPersistedReadReady"])
 
-    def test_missing_source_decision_unique_index_fails_closed(self):
+    def test_missing_lookup_index_fails_closed(self):
         path = self.db()
         con = sqlite3.connect(path)
         schema = SCHEMA_PATH.read_text().replace(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_gpt02_issue159_approval_intents_source_decision\n"
-            "  ON gpt02_issue159_approval_intents(source_decision_id);\n", ""
+            "CREATE INDEX IF NOT EXISTS idx_gpt02_issue159_approval_intents_lookup\n"
+            "  ON gpt02_issue159_approval_intents(\n"
+            "    company_id, task_id, command_id, attempt_id, claims_sha256, actor_id\n"
+            "  );\n", ""
         )
         con.executescript(schema)
         con.commit()
         con.close()
         out = probe.inspect(path, operational=False)
         self.assertEqual(out["reason"], "ISSUE159_APPROVAL_INTENT_INDEX_DRIFT")
-        self.assertFalse(out["approvalIntentSourceDecisionUnique"])
-        self.assertTrue(out["approvalIntentLookupIndexExact"])
+        self.assertTrue(out["approvalIntentSelfContainedDecision"])
+        self.assertFalse(out["approvalIntentLookupIndexExact"])
         self.assertFalse(out["trustedPersistedReadReady"])
 
     def test_schema_drift_fails_closed(self):
         path = self.db()
         con = sqlite3.connect(path)
         con.execute("""CREATE TABLE gpt02_issue159_approval_intents (
-          id TEXT PRIMARY KEY, source_decision_id TEXT NOT NULL
+          id TEXT PRIMARY KEY, task_id INTEGER NOT NULL
         )""")
         con.commit()
         con.close()
