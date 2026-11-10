@@ -52,6 +52,9 @@ def record_issue159_approval_intent(
         validate_approval_claims(claims)
     except ApprovalIntentContractError:
         return _denied("APPROVAL_CLAIMS_INVALID")
+    # Expired or not-yet-valid intent must fail before identity lookup.
+    if now_ms < claims["issuedAt"] or now_ms >= claims["expiresAt"]:
+        return _denied("APPROVAL_CLAIMS_INVALID")
 
     try:
         identity = identity_verifier(access_token, connection)
