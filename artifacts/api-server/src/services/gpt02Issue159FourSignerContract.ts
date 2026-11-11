@@ -1,4 +1,4 @@
-import { createHash, createPublicKey } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 
 export const GPT02_ISSUE159_SIGNER_ROLES =
   ["approval", "hub", "core", "issuer"] as const;
@@ -96,6 +96,29 @@ function publicKeyFingerprint(pem: string): string {
   return createHash("sha256")
     .update(key.export({ format: "der", type: "spki" }))
     .digest("hex");
+}
+
+/**
+ * Verify one detached Ed25519 signature against the exact role domain and
+ * canonical claims. This is verification only; it never loads a private key.
+ */
+export function verifyGpt02Issue159Signature(
+  role: Gpt02Issue159SignerRole,
+  claims: unknown,
+  signatureBase64url: string,
+  publicKeyPem: string,
+): boolean {
+  try {
+    if (typeof signatureBase64url !== "string" ||
+        !/^[A-Za-z0-9_-]{86}$/.test(signatureBase64url)) return false;
+    const signature = Buffer.from(signatureBase64url, "base64url");
+    if (signature.length !== 64) return false;
+    const key = createPublicKey(publicKeyPem);
+    if (key.asymmetricKeyType !== "ed25519") return false;
+    return verify(null, gpt02Issue159SigningBytes(role, claims), key, signature);
+  } catch {
+    return false;
+  }
 }
 
 export function inspectGpt02Issue159PublicRoots(input: {
