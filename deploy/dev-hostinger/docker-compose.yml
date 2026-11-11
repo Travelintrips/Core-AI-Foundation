@@ -19,6 +19,14 @@ services:
       GCP_OLLAMA_AUTOSTART_ENABLED: "false"
       GCP_CODING_WORKER_AUTOSTART_ENABLED: "false"
       OLLAMA_WORKER_RUNTIME_ENABLED: "false"
+      GPT02_ISSUER_READER_SOCKET_GID: "999"
+    volumes:
+      - type: bind
+        source: /run/gpt02-issuer-reader
+        target: /run/gpt02-issuer-reader
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "127.0.0.1:18082:8080"
     restart: unless-stopped

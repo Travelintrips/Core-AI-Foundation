@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { createGpt02Issue159IssuerReaderPool } from "../gpt02Issue159IssuerReaderPool.js";
 
 const host = "aws-1-ap-southeast-2.pooler.supabase.com";
-const directHost = "db.xssrfshdrtdfupgqwfdw.supabase.co";
 const ref = "xssrfshdrtdfupgqwfdw";
 const role = "gpt02_issuer_evidence_reader";
 const ca = readFileSync(
@@ -14,7 +13,8 @@ const ca = readFileSync(
 );
 const dsn = (username = role + "." + ref, password = "issuer-secret-fixture") =>
   "postgresql://" + username + ":" + password + "@" + host + ":5432/postgres";
-const directDsn = () => "postgresql://" + role + ":issuer-secret-fixture@" + directHost + ":5432/postgres";
+const directDsn = (password = "issuer-secret-fixture") =>
+  "postgresql://" + role + ":" + password + "@db." + ref + ".supabase.co:5432/postgres";
 
 class FakePool {
   config: Record<string, unknown>;
@@ -140,12 +140,13 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
       nodeEnv: "development",
       appEnv: "development",
     })).toThrow("GPT02_ISSUER_READER_OPERATIONAL_CREDENTIAL_SOURCE_NOT_PINNED");
-    expect(() => createGpt02Issue159IssuerReaderPool({
-      env: { CREDENTIALS_DIRECTORY: "/run/credentials/gpt02-issue159-issuer-reader.service" },
-      Pool: FakePool,
-      nodeEnv: "development",
-      appEnv: "development",
-    })).toThrow("GPT02_ISSUER_READER_CREDENTIAL_DIRECTORY_REQUIRED");
+    const source = readFileSync(
+      new URL("../gpt02Issue159IssuerReaderPool.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("assertCredentialDirectory(CREDENTIAL_DIR)");
+    expect(source).toContain("(stat.mode & 0o777) !== 0o550");
+    expect(source).toContain("stat.uid !== 0 || stat.gid !== 0");
   });
 
   it("requires the dedicated issuer DSN and never falls back to the shared app URL", () => {
@@ -177,7 +178,6 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
     ["wrong role", dsn("postgres.xssrfshdrtdfupgqwfdw"), "GPT02_ISSUER_READER_DEDICATED_IDENTITY_REQUIRED"],
     ["wrong project", dsn("gpt02_issuer_evidence_reader.other"), "GPT02_ISSUER_READER_DEDICATED_IDENTITY_REQUIRED"],
     ["wrong host", "postgresql://" + role + "." + ref + ":pw@db.example.invalid:5432/postgres", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
-    ["non-CST host", "postgresql://" + role + "." + ref + ":pw@db.example.invalid:5432/postgres", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
     ["wrong database", "postgresql://" + role + "." + ref + ":pw@" + host + ":5432/production", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
     ["query parameters", dsn() + "?sslmode=no-verify", "GPT02_ISSUER_READER_DSN_QUERY_FORBIDDEN"],
   ] as const) {

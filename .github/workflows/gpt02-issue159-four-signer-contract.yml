@@ -11,6 +11,17 @@ on:
       - 'artifacts/api-server/src/services/gpt02Issue159IssuerAuthorizerEvidence.ts'
       - 'artifacts/api-server/src/services/gpt02Issue159IssuerLedgerReadOnly.ts'
       - 'artifacts/api-server/src/services/gpt02Issue159IssuerReaderPool.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159IssuerTrustedReader.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159IssuerReaderSocketClient.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerTrustedReader.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerReaderSocketClient.test.ts'
+      - 'artifacts/api-server/src/routes/gpt02-issue159-issuer-reader.ts'
+      - 'artifacts/api-server/src/routes/index.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-issue159-issuer-reader.test.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-issue159-issuer-reader-live.test.ts'
+      - 'scripts/dev/gpt02-issuer-reader-runtime.ts'
+      - 'scripts/dev/build-gpt02-issuer-reader-runtime.sh'
+      - 'deploy/dev-hostinger/docker-compose.yml'
       - 'artifacts/api-server/src/services/gpt02Issue159SignerBoundaryReadiness.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159FourSignerContract.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerCustodyPolicy.test.ts'
@@ -80,6 +91,24 @@ jobs:
           src/services/__tests__/gpt02Issue159IssuerReaderPool.test.ts
           src/services/__tests__/gpt02Issue159PrivateKeyCustodyContract.test.ts
           src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts
+      - name: Verify issuer reader socket and admin API integration
+        working-directory: artifacts/api-server
+        run: >-
+          pnpm exec vitest run
+          src/services/__tests__/gpt02Issue159IssuerTrustedReader.test.ts
+          src/services/__tests__/gpt02Issue159IssuerReaderSocketClient.test.ts
+          src/routes/__tests__/gpt02-issue159-issuer-reader.test.ts
+          src/routes/__tests__/gpt02-issue159-issuer-reader-live.test.ts
+      - name: Build standalone read-only issuer reader runtime
+        run: |
+          bash -n scripts/dev/build-gpt02-issuer-reader-runtime.sh
+          bash scripts/dev/build-gpt02-issuer-reader-runtime.sh
+          test -s dist/issuer-reader-runtime/gpt02-issuer-reader-runtime.mjs
+          node --check dist/issuer-reader-runtime/gpt02-issuer-reader-runtime.mjs
+      - name: Verify API workspace types
+        run: |
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server run typecheck
       - name: Verify approval store readiness contract
         run: |
           python3 scripts/dev/test_gpt02_issue159_approval_store_readiness.py
