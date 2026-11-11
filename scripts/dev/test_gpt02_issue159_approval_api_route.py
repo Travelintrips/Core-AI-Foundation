@@ -209,6 +209,27 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["pending"])
         self.assertEqual(body["reason"], "PENDING_REQUEST_ALREADY_APPROVED")
 
+    def test_pending_route_returns_json_for_malformed_contract_claims(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": CLAIMS["superAdminId"],
+            "email": "fixture@example.com",
+            "role": "super_admin",
+            "auth_level": "aal1",
+        }
+        Path(self.pending).write_text(json.dumps({"claims": {"taskId": CLAIMS["taskId"]}}))
+        os.chmod(self.pending, 0o600)
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            body,
+            {
+                "environment": "DEV",
+                "pending": False,
+                "reason": "PENDING_REQUEST_INVALID",
+                "releaseDecision": "NO_GO",
+            },
+        )
+
     def test_feature_disabled_is_404_and_never_writes(self):
         status, body = self.request(AAL2_TOKEN)
         self.assertEqual((status, body), (404, {"error": "not_found"}))
