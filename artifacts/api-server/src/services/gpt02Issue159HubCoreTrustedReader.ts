@@ -404,7 +404,7 @@ export async function readGpt02Issue159HubCoreTrustedFactsFromSystemdCredentials
   signerGroupGid?: number;
 }) {
   const roots = readGpt02Issue159PublicCredentials();
-  return readGpt02Issue159HubCoreTrustedFacts({
+  const result = await readGpt02Issue159HubCoreTrustedFacts({
     query: input.query,
     publicKeys: {
       approval: roots.approvalPublicKeyPem,
@@ -413,5 +413,9 @@ export async function readGpt02Issue159HubCoreTrustedFactsFromSystemdCredentials
     },
     ...(input.socketPath === undefined ? {} : { socketPath: input.socketPath }),
     ...(input.signerGroupGid === undefined ? {} : { signerGroupGid: input.signerGroupGid }),
+  });
+  return Object.freeze({
+    ...result,
+    publicRootsVerified: roots.publicRootsVerified,
   });
 }
