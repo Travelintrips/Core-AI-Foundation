@@ -197,7 +197,8 @@ describe("GPT02 Issue159 signer boundary aggregate readiness", () => {
     expect(result.coreAuthorizerContractVerified).toBe(true);
     expect(result.issuerAuthorizerContractVerified).toBe(true);
     expect(result.blockers).toEqual([
-      "TRUSTED_PERSISTED_READ_ADAPTER_NOT_IMPLEMENTED",
+      "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
+      "REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE",
       "REAL_PRIVATE_KEY_CUSTODY_NOT_ATTESTED",
       "SIGNER_RUNTIME_NOT_MOUNTED",
       "OPERATIONAL_PUBLIC_TRUST_NOT_INSTALLED",
