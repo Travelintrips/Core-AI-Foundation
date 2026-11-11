@@ -100,6 +100,16 @@ describe("GPT02 Issue159 issuer trusted-read adapter", () => {
     expect(reader.metadata.authorizationGranted).toBe(false);
     expect(reader.metadata.dispatchPermitted).toBe(false);
 
+    const health = await reader.health();
+    expect(health.readOnlySessionVerified).toBe(true);
+    expect(health.nativeRoleAuthenticated).toBe(true);
+    expect(health.tlsVerified).toBe(true);
+    expect(health.operationalTrustedReaderRuntime).toBe(false);
+    expect(health.persistedTrustedReadProven).toBe(false);
+    expect(health.signingPermitted).toBe(false);
+    expect(health.authorizationGranted).toBe(false);
+    expect(health.dispatchPermitted).toBe(false);
+
     const result = await reader.read({ claims, observedAt: 5000 });
     expect(result.reason).toBe("ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE");
     expect(result.readOnlySessionVerified).toBe(true);
