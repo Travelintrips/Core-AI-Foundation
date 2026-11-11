@@ -37,6 +37,17 @@ The verifier was compared against the canonical sources in `Core-AI-Foundation/d
 
 An earlier verifier draft used the wrong link audience and incorrectly required Core `super_admin`. That draft was corrected before this PR update; regression tests now explicitly reject those mismatches.
 
+## Implemented persisted-approval read-only adapter (not activated)
+
+Added `deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py` and `gpt02-issue159-approval-reader.service`.
+
+- Exposes the existing `read_approval_intent` SQLite reader over a private Unix socket.
+- Runs as root only so it can read the existing root-owned 0600 DEV approval DB; the systemd unit is restricted to AF_UNIX, PrivateNetwork, NoNewPrivileges, strict filesystem protection, and read-only DB/source paths.
+- Socket responses expose only the exact decision binding and explicit NO_GO flags; missing, expired or mismatched decisions fail closed.
+- No approval decision is created or modified; no private key is loaded; no PostgreSQL connection, signing, nonce consumption or dispatch exists.
+- Isolated synthetic SQLite + Unix socket tests: 5/5 PASS; service policy tests: 2/2 PASS; systemd unit verification PASS.
+- The unit file is in the PR only. It has NOT been copied into `/etc/systemd/system`, enabled or started on the VPS. No live approval was queried or created by this adapter.
+
 ## Implemented verification ingress (not a database writer)
 
 Added:
@@ -56,7 +67,9 @@ The ingress:
 
 - Writer contract tests: 9/9 PASS.
 - Writer socket tests: 5/5 PASS.
-- Combined Issue #159 Python regression suite: 75/75 PASS.
+- Approval reader socket tests: 5/5 PASS.
+- Approval reader service policy tests: 2/2 PASS.
+- Combined Issue #159 Python regression suite: 82/82 PASS.
 - Live DEV public-root + fingerprint-manifest preflight: PASS.
 - Python compile and `git diff --check`: PASS.
 
@@ -81,6 +94,6 @@ These are isolated tests and read-only preflights. They do not prove a live sign
 
 ## Current decision
 
-The verification ingress is implemented and isolated tests pass. The database writer, restricted writer credential, six lifecycle RPCs and trusted persisted approval bridge are not implemented. Operational lifecycle migration remains NO-GO.
+The verification ingress and an unactivated read-only approval adapter are implemented and isolated tests pass. The database writer, restricted writer credential, six lifecycle RPCs and live signer-to-approval-reader integration are not implemented. Operational lifecycle migration remains NO-GO.
 
 [executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
