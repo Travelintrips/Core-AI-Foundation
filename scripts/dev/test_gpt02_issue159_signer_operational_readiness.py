@@ -66,11 +66,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
     def test_current_expected_state_is_precise_no_go(self):
         out = readiness.assess(approval(), custody(), runtime())
         self.assertTrue(out["approvalStoreSchemaReady"])
-        self.assertFalse(out["realSuperAdminApprovalEvidenceAvailable"])
+        self.assertFalse(out["realAdminApprovalEvidenceAvailable"])
         self.assertTrue(out["systemdCustodyBaselineReady"])
         self.assertFalse(out["hostCredentialSecretSecure"])
         self.assertFalse(out["fourSignerCredentialMetadataSecure"])
-        self.assertIn("REAL_SUPER_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
+        self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
         self.assertIn("APPROVAL_READER_SOURCE_NOT_INSTALLED", out["blockers"])
         self.assertIn("APPROVAL_WRITER_SOURCE_NOT_INSTALLED", out["blockers"])
         self.assertIn("APPROVAL_INTENT_WRITER_NOT_INTEGRATED", out["blockers"])
@@ -98,7 +98,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 fourSignerRuntimesMounted=True,
             ),
         )
-        self.assertTrue(out["realSuperAdminApprovalEvidenceAvailable"])
+        self.assertTrue(out["realAdminApprovalEvidenceAvailable"])
         self.assertTrue(out["hostCredentialSecretSecure"])
         self.assertTrue(out["fourSignerCredentialMetadataSecure"])
         self.assertTrue(out["hubOperationalPublicTrustInstalled"])
