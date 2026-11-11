@@ -224,7 +224,7 @@ def assess(approval, custody, runtime):
     if not approval_schema_ready:
         blockers.append("APPROVAL_STORE_SCHEMA_NOT_READY")
     if not approval_evidence:
-        blockers.append("REAL_SUPER_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE")
+        blockers.append("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE")
     if not approval_reader_source:
         blockers.append("APPROVAL_READER_SOURCE_NOT_INSTALLED")
     if not approval_writer_source:
@@ -255,7 +255,7 @@ def assess(approval, custody, runtime):
     return {
         "environment": "DEV",
         "approvalStoreSchemaReady": approval_schema_ready,
-        "realSuperAdminApprovalEvidenceAvailable": approval_evidence,
+        "realAdminApprovalEvidenceAvailable": approval_evidence,
         "approvalReaderSourceInstalled": approval_reader_source,
         "approvalWriterSourceInstalled": approval_writer_source,
         "approvalWriterIntegrated": approval_writer_integrated,
