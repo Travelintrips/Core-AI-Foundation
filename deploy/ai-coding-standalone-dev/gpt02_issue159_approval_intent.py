@@ -38,7 +38,7 @@ def record_issue159_approval_intent(
     now_ms=None,
 ):
     if not isinstance(access_token, str) or not (40 <= len(access_token) <= 8192):
-        return _denied("AAL2_SUPER_ADMIN_TOKEN_REQUIRED")
+        return _denied("ADMIN_SESSION_TOKEN_REQUIRED")
     if not isinstance(connection, sqlite3.Connection):
         return _denied("APPROVAL_DB_CONNECTION_REQUIRED")
     if not callable(identity_verifier):
