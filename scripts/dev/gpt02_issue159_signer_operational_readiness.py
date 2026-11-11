@@ -150,9 +150,9 @@ def hub_core_reader_runtime_operational():
         try:
             client.connect(socket_path)
             client.sendall(
-                b"GET /health HTTP/1.1\\r\\n"
-                b"Host: localhost\\r\\n"
-                b"Connection: close\\r\\n\\r\\n"
+                b"GET /health HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"Connection: close\r\n\r\n"
             )
             chunks = []
             size = 0
@@ -167,7 +167,7 @@ def hub_core_reader_runtime_operational():
         finally:
             client.close()
         response = b"".join(chunks)
-        header, separator, body = response.partition(b"\\r\\n\\r\\n")
+        header, separator, body = response.partition(b"\r\n\r\n")
         if not separator or not header.startswith(b"HTTP/1.1 200 "):
             return False
         payload = json.loads(body.decode("utf-8"))
