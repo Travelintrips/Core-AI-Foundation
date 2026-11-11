@@ -41,20 +41,6 @@ function credentialFile(directory: string, filename: string): string {
   }
 }
 
-function fingerprint(pem: string): string {
-  let key;
-  try {
-    key = createPublicKey(pem);
-  } catch {
-    return fail("GPT02_PUBLIC_ED25519_KEY_INVALID");
-  }
-  if (key.asymmetricKeyType !== "ed25519") {
-    return fail("GPT02_PUBLIC_ED25519_KEY_REQUIRED");
-  }
-  return createHash("sha256")
-    .update(key.export({ format: "der", type: "spki" }))
-    .digest("hex");
-}
 
 /**
  * Reads only the four public verifier keys and their pinned fingerprint
@@ -65,8 +51,9 @@ export function readGpt02Issue159PublicCredentials(input: {
 } = {}) {
   const synthetic = process.env.NODE_ENV === "test";
   const directory = input.directory ?? process.env.CREDENTIALS_DIRECTORY;
-  if (typeof directory !== "string" || !directory.startsWith("/run/credentials/") ||
-      (!synthetic && input.directory !== undefined)) {
+  if (typeof directory !== "string" ||
+      (!synthetic && (!directory.startsWith("/run/credentials/") || input.directory !== undefined)) ||
+      (synthetic && !directory.startsWith("/"))) {
     return fail("GPT02_PUBLIC_CREDENTIAL_DIRECTORY_NOT_PINNED");
   }
   const approvalPublicKeyPem = credentialFile(directory, FILES.approval);
