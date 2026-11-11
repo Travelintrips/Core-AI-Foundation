@@ -10,6 +10,9 @@ import {
 import {
   inspectGpt02Issue159OperatorAuthorizerEvidence,
 } from "./gpt02Issue159OperatorAuthorizerEvidence.js";
+import {
+  readGpt02Issue159PublicCredentials,
+} from "./gpt02Issue159PublicCredentialReader.js";
 
 const DEFAULT_SOCKET = "/run/gpt02-reader/reader.sock";
 const SIGNER_GROUP = "gpt02-issue159-signers";
@@ -387,5 +390,28 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     authorizationGranted: false as const,
     dispatchPermitted: false as const,
     releaseDecision: "NO_GO" as const,
+  });
+}
+
+
+/**
+ * Production entry point for signer services. Public roots are read only
+ * from systemd LoadCredential mounts; callers cannot inject public keys.
+ */
+export async function readGpt02Issue159HubCoreTrustedFactsFromSystemdCredentials(input: {
+  query: unknown;
+  socketPath?: string;
+  signerGroupGid?: number;
+}) {
+  const roots = readGpt02Issue159PublicCredentials();
+  return readGpt02Issue159HubCoreTrustedFacts({
+    query: input.query,
+    publicKeys: {
+      approval: roots.approvalPublicKeyPem,
+      hub: roots.hubPublicKeyPem,
+      core: roots.corePublicKeyPem,
+    },
+    ...(input.socketPath === undefined ? {} : { socketPath: input.socketPath }),
+    ...(input.signerGroupGid === undefined ? {} : { signerGroupGid: input.signerGroupGid }),
   });
 }
