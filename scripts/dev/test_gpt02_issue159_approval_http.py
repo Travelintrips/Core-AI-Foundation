@@ -52,7 +52,7 @@ class ApprovalHttpAdapterTest(unittest.TestCase):
                 "userId": CLAIMS["superAdminId"],
                 "role": "super_admin",
                 "enabled": True,
-                "authMethod": "supabase_aal2",
+                "authMethod": "supabase_admin_session",
             }
         return Mock(return_value=identity)
 
@@ -91,7 +91,7 @@ class ApprovalHttpAdapterTest(unittest.TestCase):
         self.assertEqual(status, 201)
         verify.assert_called_once()
         self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
-        self.assertEqual(body["authMethod"], "supabase_aal2")
+        self.assertEqual(body["authMethod"], "supabase_admin_session")
         self.assertEqual(body["roleAtDecision"], "super_admin")
         self.assertFalse(body["signingPermitted"])
         self.assertFalse(body["authorizationGranted"])
@@ -110,8 +110,6 @@ class ApprovalHttpAdapterTest(unittest.TestCase):
              "enabled": True, "authMethod": "static_dev_token"},
             {"userId": CLAIMS["superAdminId"], "role": "admin",
              "enabled": True, "authMethod": "supabase_admin_session"},
-            {"userId": CLAIMS["superAdminId"], "role": "super_admin",
-             "enabled": True, "authMethod": "supabase_admin_session"},
         ):
             (status, body), _ = self.call(con, verifier=self.verifier(identity))
             self.assertEqual(status, 403)
@@ -119,6 +117,22 @@ class ApprovalHttpAdapterTest(unittest.TestCase):
         (status, body), verify = self.call(con, auth="")
         self.assertEqual(status, 401)
         verify.assert_not_called()
+        con.close()
+
+    def test_aal2_admin_session_is_also_accepted(self):
+        con = self.db()
+        identity = {
+            "userId": CLAIMS["superAdminId"],
+            "role": "super_admin",
+            "enabled": True,
+            "authMethod": "supabase_aal2",
+        }
+        (status, body), _ = self.call(con, verifier=self.verifier(identity))
+        self.assertEqual(status, 201)
+        self.assertEqual(body["authMethod"], "supabase_aal2")
+        self.assertFalse(body["signingPermitted"])
+        self.assertFalse(body["authorizationGranted"])
+        self.assertFalse(body["dispatchPermitted"])
         con.close()
 
     def test_invalid_claims_fail_before_identity_and_replay_is_conflict(self):
