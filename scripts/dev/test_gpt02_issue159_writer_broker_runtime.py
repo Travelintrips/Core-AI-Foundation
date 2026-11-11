@@ -74,15 +74,15 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
            "operatorNamespace":"ai-task-hub.public.users","superAdminId":"sup-admin-test",
            "companyId":"default","issuedAt":self.now-1000,"expiresAt":self.now+120000}
         ad=hashlib.sha256(json.dumps({k:a[k] for k in APPROVAL_FIELDS},separators=(",",":")).encode()).hexdigest()
-        l={"v":1,"environment":"DEV","audience":"GPT02_OPERATOR_LINK_V1",
+        l={"v":1,"environment":"DEV","audience":"GPT02_DUAL_ACCOUNT_COMMAND_LINK",
            "linkId":"30000000-0000-4000-8000-000000000003","companyId":"default",
            "hubTaskId":140,"hubExecutionId":"40000000-0000-4000-8000-000000000004",
            "coreTaskId":"50000000-0000-4000-8000-000000000005",
            "coreCommandId":a["commandId"],"attemptId":a["attemptId"],"attemptNumber":1,
            "assigneeId":5,"accountableOwnerId":"sup-admin-test",
            "hubOperatorNamespace":"ai-task-hub.public.users","hubOperatorId":"sup-admin-test",
-           "hubRole":"super_admin","hubActive":True,"coreOperatorNamespace":"core.users",
-           "coreOperatorUserId":5,"coreRole":"super_admin","coreActive":True,
+           "hubRole":"super_admin","hubActive":True,"coreOperatorNamespace":"ai-core.ai_platform.internal_users",
+           "coreOperatorUserId":5,"coreRole":"admin","coreActive":True,
            "corePasswordChanged":True,"workerId":"openclaw-dell-chatgpt-wake-dev",
            "approvalDigest":ad,"nonce":a["nonce"],"issuedAt":self.now-900,
            "expiresAt":self.now+90000}
