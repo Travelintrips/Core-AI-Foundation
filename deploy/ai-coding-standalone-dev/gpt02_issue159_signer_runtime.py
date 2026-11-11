@@ -13,6 +13,9 @@ import hashlib
 import json
 import os
 import signal
+import socket
+import stat
+import grp
 import sys
 import time
 from pathlib import Path
@@ -70,7 +73,73 @@ def _load(role: str, credentials_dir: str):
     return key, fingerprint
 
 
-def _write_readiness(runtime_dir: str, role: str, fingerprint: str):
+
+def _unix_health(socket_path: str, expected: dict[str, object]) -> bool:
+    try:
+        signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
+        endpoint = os.lstat(socket_path)
+        parent = os.lstat(os.path.dirname(socket_path))
+        if (stat.S_ISLNK(parent.st_mode) or not stat.S_ISDIR(parent.st_mode)
+                or parent.st_gid != signer_gid or stat.S_IMODE(parent.st_mode) != 0o750
+                or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
+                or endpoint.st_gid != signer_gid or stat.S_IMODE(endpoint.st_mode) != 0o660):
+            return False
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(5)
+        try:
+            client.connect(socket_path)
+            client.sendall(
+                b"GET /health HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            chunks = []
+            total = 0
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > 8192:
+                    return False
+                chunks.append(chunk)
+        finally:
+            client.close()
+        response = b"".join(chunks)
+        header, separator, body = response.partition(b"\r\n\r\n")
+        if not separator or not header.startswith(b"HTTP/1.1 200 "):
+            return False
+        payload = json.loads(body.decode("utf-8"))
+        return all(payload.get(key) == value for key, value in expected.items())
+    except (OSError, ValueError, KeyError, socket.timeout):
+        return False
+
+
+def _probe_trusted_readers() -> dict[str, bool]:
+    hub_core = _unix_health(
+        "/run/gpt02-reader/reader.sock",
+        {
+            "ok": True, "environment": "DEV", "twoSessionsVerified": True,
+            "signingPermitted": False, "dispatchPermitted": False,
+        },
+    )
+    issuer = _unix_health(
+        "/run/gpt02-issuer-reader/reader.sock",
+        {
+            "ok": True, "environment": "DEV", "readerReady": True,
+            "issuerRole": "gpt02_issuer_evidence_reader", "tlsVerified": True,
+            "readOnly": True, "signingPermitted": False,
+            "authorizationGranted": False, "dispatchPermitted": False,
+            "releaseDecision": "NO_GO",
+        },
+    )
+    return {
+        "hubCoreReaderOperational": hub_core,
+        "issuerReaderOperational": issuer,
+        "trustedReaderConnectivityVerified": hub_core and issuer,
+    }
+
+def _write_readiness(runtime_dir: str, role: str, fingerprint: str, readers: dict[str, bool]):
     root = Path(runtime_dir)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = root / "readiness.json"
@@ -81,6 +150,9 @@ def _write_readiness(runtime_dir: str, role: str, fingerprint: str):
         "fingerprintMatched": True,
         "privateCredentialMounted": True,
         "businessEvidenceRead": False,
+        "hubCoreReaderOperational": readers["hubCoreReaderOperational"],
+        "issuerReaderOperational": readers["issuerReaderOperational"],
+        "trustedReaderConnectivityVerified": readers["trustedReaderConnectivityVerified"],
         "authorizerOperational": False,
         "signingPermitted": False,
         "authorizationGranted": False,
@@ -106,7 +178,8 @@ def main() -> int:
         _deny("GPT02_ISSUE159_SYSTEMD_RUNTIME_REQUIRED")
 
     key, fingerprint = _load(role, credentials_dir)
-    _write_readiness(runtime_dir, role, fingerprint)
+    readers = _probe_trusted_readers()
+    _write_readiness(runtime_dir, role, fingerprint, readers)
 
     # The key is intentionally loaded so systemd credential mounting and public
     # fingerprint binding are real. There is deliberately no signing API.
@@ -121,8 +194,16 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    last_readers = readers
+    next_probe = time.monotonic() + 5
     while not stopped:
         time.sleep(1)
+        if time.monotonic() >= next_probe:
+            readers = _probe_trusted_readers()
+            if readers != last_readers:
+                _write_readiness(runtime_dir, role, fingerprint, readers)
+                last_readers = readers
+            next_probe = time.monotonic() + 5
     # Keep key alive until shutdown; never serialize or print it.
     del key
     return 0
