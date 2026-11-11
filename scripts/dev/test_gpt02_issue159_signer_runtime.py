@@ -170,6 +170,7 @@ class RuntimeBoundaryTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source, forbidden)
         self.assertIn("socket.AF_UNIX", source)
+        self.assertIn("client.settimeout(35)", source)
         self.assertIn('os.path.realpath(parent_path) != "/run/private/gpt02-issuer-reader"', source)
 
     def test_issuer_runtime_accepts_only_safe_systemd_dynamicuser_mapping(self):
