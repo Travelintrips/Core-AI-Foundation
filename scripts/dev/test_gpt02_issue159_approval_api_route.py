@@ -58,6 +58,8 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         con.close()
         os.chmod(self.db, 0o600)
         api.DB = self.db
+        self.packet = self.db + ".approved.json"
+        api.ISSUE159_APPROVED_PACKET = self.packet
         api.TOKEN = STATIC_TOKEN
         api.ISSUE159_APPROVAL_INTENT_ENABLED = False
         api.admin_identity = lambda token, connection: None
@@ -72,6 +74,8 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.thread.join(timeout=2)
         if os.path.exists(self.db):
             os.unlink(self.db)
+        if os.path.exists(self.packet):
+            os.unlink(self.packet)
 
     def request(self, token=None, claims=None):
         data = json.dumps({"claims": CLAIMS if claims is None else claims}).encode()
@@ -100,6 +104,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         status, body = self.request(AAL2_TOKEN)
         self.assertEqual((status, body), (404, {"error": "not_found"}))
         self.assertEqual(self.count(), 0)
+        self.assertFalse(os.path.exists(self.packet))
 
     def test_static_fallback_token_cannot_create_issue159_intent(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
@@ -107,6 +112,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(body, {"error": "aal2_super_admin_required"})
         self.assertEqual(self.count(), 0)
+        self.assertFalse(os.path.exists(self.packet))
 
     def test_verified_aal2_super_admin_records_intent_but_stays_no_go(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
@@ -124,6 +130,17 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["dispatchPermitted"])
         self.assertEqual(body["releaseDecision"], "NO_GO")
         self.assertEqual(self.count(), 1)
+        self.assertTrue(os.path.exists(self.packet))
+        self.assertEqual(os.stat(self.packet).st_mode & 0o777, 0o600)
+        packet = json.loads(Path(self.packet).read_text())
+        self.assertEqual(packet["claims"], CLAIMS)
+        self.assertEqual(packet["intentId"], body["intentId"])
+        self.assertEqual(packet["claimsSha256"], body["claimsSha256"])
+        self.assertEqual(packet["actorId"], CLAIMS["superAdminId"])
+        self.assertFalse(packet["signingPermitted"])
+        self.assertFalse(packet["authorizationGranted"])
+        self.assertFalse(packet["dispatchPermitted"])
+        self.assertEqual(packet["releaseDecision"], "NO_GO")
 
     def test_admin_role_and_missing_bearer_are_rejected(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
