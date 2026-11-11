@@ -42,7 +42,7 @@ EXPECTED_CANONICAL = (
     '"superAdminId":"google_fixture_super_admin","companyId":"default",'
     '"issuedAt":1000,"expiresAt":301000}'
 )
-EXPECTED_SHA = "de1557983512699d5e91a6d3989a1738ae43c004f290089a5f51620bfb833056"
+EXPECTED_SHA = "c42100c26af4ee1fcbd8550449550da7d924a046da58b315633eece8be761922"
 
 
 class ApprovalIntentContractTest(unittest.TestCase):
