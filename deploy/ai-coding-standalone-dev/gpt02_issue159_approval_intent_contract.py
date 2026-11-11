@@ -87,7 +87,7 @@ def build_approval_intent_record(
         or identity["userId"] == "dev_approval_token"
         or identity["role"] != "super_admin"
         or identity["enabled"] is not True
-        or identity["authMethod"] not in ("supabase_admin_session", "supabase_aal2")
+        or identity["authMethod"] != "supabase_aal2"
     ):
         _fail("GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED")
 
