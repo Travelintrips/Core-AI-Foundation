@@ -10,6 +10,7 @@ import {
   canonicalGpt02Issue159OperatorLink,
   canonicalGpt02Issue159IssuerEvidence,
   gpt02Issue159SigningBytes,
+  verifyGpt02Issue159Signature,
   inspectGpt02Issue159PublicRoots,
 } from "../gpt02Issue159FourSignerContract.js";
 
@@ -133,6 +134,20 @@ describe("GPT02 Issue159 four-signer nonmounted contract", () => {
       null, gpt02Issue159SigningBytes("hub", operatorLink),
       coreKey.publicKey, signatures[2],
     )).toBe(false);
+  });
+
+  it("verifies exact detached role signatures and rejects cross-role or tampered evidence", () => {
+    const hub = generateKeyPairSync("ed25519");
+    const core = generateKeyPairSync("ed25519");
+    const hubSig = sign(null, gpt02Issue159SigningBytes("hub", operatorLink), hub.privateKey)
+      .toString("base64url");
+    const coreSig = sign(null, gpt02Issue159SigningBytes("core", operatorLink), core.privateKey)
+      .toString("base64url");
+    expect(verifyGpt02Issue159Signature("hub", operatorLink, hubSig, publicPem(hub.publicKey))).toBe(true);
+    expect(verifyGpt02Issue159Signature("core", operatorLink, coreSig, publicPem(core.publicKey))).toBe(true);
+    expect(verifyGpt02Issue159Signature("core", operatorLink, hubSig, publicPem(hub.publicKey))).toBe(false);
+    expect(verifyGpt02Issue159Signature("hub", {...operatorLink, hubActive:false}, hubSig, publicPem(hub.publicKey))).toBe(false);
+    expect(verifyGpt02Issue159Signature("hub", operatorLink, "broken", publicPem(hub.publicKey))).toBe(false);
   });
 
   it("requires four unique Ed25519 public roots and returns no authority", () => {
