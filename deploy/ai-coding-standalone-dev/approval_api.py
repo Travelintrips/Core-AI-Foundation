@@ -40,9 +40,9 @@ def persist_issue159_approved_packet(claims,result):
  return packet
 def issue159_identity_verifier(token,connection):
  identity=admin_identity(token,connection)
- if not identity or identity.get('auth_level')!='aal2':return None
+ if not identity or identity.get('role')!='super_admin' or identity.get('auth_level') not in ('aal1','aal2'):return None
  return {'userId':identity['user_id'],'role':identity['role'],
-         'enabled':True,'authMethod':'supabase_aal2'}
+         'enabled':True,'authMethod':'supabase_admin_session'}
 def conn():
  c=sqlite3.connect(DB,timeout=10)
  c.execute('PRAGMA busy_timeout=10000')
