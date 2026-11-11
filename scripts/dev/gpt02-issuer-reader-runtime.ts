@@ -205,10 +205,15 @@ export async function startIssuerReaderRuntime() {
       const resolved = fs.realpathSync(parent);
       const expected = path.join("/run/private", path.basename(parent));
       const privateRoot = fs.lstatSync("/run/private");
+      const privateRootMode = privateRoot.mode & 0o777;
+      // systemd may expose /run/private as 0755 inside a DynamicUser mount
+      // namespace even though the host view is 0700. Both modes are safe here
+      // only because the parent is root:root and never group/world writable.
       if (resolved !== expected ||
           !privateRoot.isDirectory() || privateRoot.isSymbolicLink() ||
           privateRoot.uid !== 0 || privateRoot.gid !== 0 ||
-          (privateRoot.mode & 0o777) !== 0o700) {
+          ![0o700, 0o755].includes(privateRootMode) ||
+          (privateRootMode & 0o022) !== 0) {
         return fail("ISSUER_READER_SYSTEMD_RUNTIME_MAPPING_INVALID");
       }
       directoryPath = resolved;
