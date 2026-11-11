@@ -57,7 +57,7 @@ describe("GPT02 Issue159 public trust handoff", () => {
       issuer: "issuer-public.pem",
     });
     expect(GPT02_ISSUE159_HUB_PUBLIC_TRUST_TARGETS).toEqual({
-      publicKeyDirectory: "/run/credentials/gpt02-dev",
+      publicKeyDirectory: "/etc/gpt02-dev/public",
       fingerprintManifest: "/etc/gpt02-dev/trust-fingerprints.json",
     });
 
