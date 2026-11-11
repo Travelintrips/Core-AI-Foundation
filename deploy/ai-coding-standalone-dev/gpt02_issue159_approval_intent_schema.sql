@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS gpt02_issue159_approval_intents (
   actor_id TEXT NOT NULL CHECK (
     actor_id <> '' AND actor_id <> 'dev_approval_token'
   ),
-  auth_method TEXT NOT NULL CHECK (auth_method = 'supabase_aal2'),
+  auth_method TEXT NOT NULL CHECK (auth_method IN ('supabase_admin_session','supabase_aal2')),
   role_at_decision TEXT NOT NULL CHECK (role_at_decision = 'super_admin'),
   decision TEXT NOT NULL CHECK (decision = 'APPROVE'),
   recorded_at_ms INTEGER NOT NULL CHECK (recorded_at_ms > 0),
