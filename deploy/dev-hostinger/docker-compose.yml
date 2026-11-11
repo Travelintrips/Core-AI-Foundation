@@ -20,6 +20,8 @@ services:
       GCP_CODING_WORKER_AUTOSTART_ENABLED: "false"
       OLLAMA_WORKER_RUNTIME_ENABLED: "false"
       GPT02_ISSUER_READER_SOCKET_GID: "999"
+    group_add:
+      - "999"
     volumes:
       - type: bind
         source: /run/gpt02-issuer-reader
