@@ -4,6 +4,10 @@ After=local-fs.target gpt02-issue159-reader.service
 ConditionPathExists=/run/gpt02-reader/reader.sock
 ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-%i-private-key.pkcs8
 ConditionPathExists=/etc/gpt02-dev/trust-fingerprints.json
+ConditionPathExists=/etc/gpt02-dev/public/approval-public.pem
+ConditionPathExists=/etc/gpt02-dev/public/hub-identity-public.pem
+ConditionPathExists=/etc/gpt02-dev/public/core-identity-public.pem
+ConditionPathExists=/etc/gpt02-dev/public/issuer-public.pem
 
 [Service]
 Type=simple
@@ -12,6 +16,10 @@ Environment=GPT02_ISSUE159_SIGNER_ROLE=%i
 Environment=GPT02_ISSUE159_SIGNING_ENABLED=false
 LoadCredentialEncrypted=private-key.pkcs8:/etc/credstore.encrypted/gpt02-issue159-%i-private-key.pkcs8
 LoadCredential=manifest.json:/etc/gpt02-dev/trust-fingerprints.json
+LoadCredential=approval-public.pem:/etc/gpt02-dev/public/approval-public.pem
+LoadCredential=hub-identity-public.pem:/etc/gpt02-dev/public/hub-identity-public.pem
+LoadCredential=core-identity-public.pem:/etc/gpt02-dev/public/core-identity-public.pem
+LoadCredential=issuer-public.pem:/etc/gpt02-dev/public/issuer-public.pem
 ExecStart=/usr/bin/python3 /opt/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py
 RuntimeDirectory=gpt02-issue159-signer-%i
 RuntimeDirectoryMode=0700
