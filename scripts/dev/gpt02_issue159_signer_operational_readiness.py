@@ -36,13 +36,13 @@ ISSUER_READER_SOCKET_DIR = "/run/gpt02-issuer-reader"
 ISSUER_READER_SOCKET = "/run/gpt02-issuer-reader/reader.sock"
 APPROVAL_API_SOURCE = Path(LIVE_RUNTIME) / "approval_api.py"
 APPROVAL_READER_SOURCE = Path(LIVE_RUNTIME) / "gpt02_issue159_approval_intent_reader.py"
-HUB_CORE_AUTHORZER_SOURCE = Path(
+HUB_CORE_AUTHORIZER_SOURCE = Path(
     "/opt/gpt02-reader-runtime/artifacts/api-server/src/lib/gpt02-trusted-facts-readonly.mjs"
 )
-ISSUER_LEDGER_AUTHORZER_SOURCE = Path(
+ISSUER_LEDGER_AUTHORIZER_SOURCE = Path(
     "/opt/gpt02-reader-runtime/artifacts/api-server/src/services/gpt02Issue159IssuerLedgerReadOnly.ts"
 )
-ISSUER_AUTHORZER_SOURCE = Path(
+ISSUER_AUTHORIZER_SOURCE = Path(
     "/opt/gpt02-reader-runtime/artifacts/api-server/src/services/gpt02Issue159IssuerAuthorizerEvidence.ts"
 )
 
@@ -291,9 +291,9 @@ def authorizer_adapters_installed():
     try:
         approval_api = APPROVAL_API_SOURCE.read_text(encoding="utf-8")
         approval_reader = APPROVAL_READER_SOURCE.read_text(encoding="utf-8")
-        hub_core = HUB_CORE_AUTHORZER_SOURCE.read_text(encoding="utf-8")
-        issuer_ledger = ISSUER_LEDGER_AUTHORZER_SOURCE.read_text(encoding="utf-8")
-        issuer_authorizer = ISSUER_AUTHORZER_SOURCE.read_text(encoding="utf-8")
+        hub_core = HUB_CORE_AUTHORIZER_SOURCE.read_text(encoding="utf-8")
+        issuer_ledger = ISSUER_LEDGER_AUTHORIZER_SOURCE.read_text(encoding="utf-8")
+        issuer_authorizer = ISSUER_AUTHORIZER_SOURCE.read_text(encoding="utf-8")
     except OSError:
         return False
 
@@ -317,8 +317,9 @@ def authorizer_adapters_installed():
     issuer_integrated = (
         "inspectGpt02Issue159IssuerAuthorizerEvidence" in issuer_ledger
         and "inspectGpt02Issue159IssuerAuthorizerEvidence" in issuer_authorizer
-        and "NONCE_RECEIPT_NOT_VERIFIED" in issuer_authorizer
-        and "POST_CONSUMPTION_FENCE_NOT_VERIFIED" in issuer_authorizer
+        and "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH" in issuer_authorizer
+        and "GPT02_ISSUE159_FENCE_BINDING_MISMATCH" in issuer_authorizer
+        and "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND" in issuer_authorizer
     )
     return all((
         approval_writer_integrated,
