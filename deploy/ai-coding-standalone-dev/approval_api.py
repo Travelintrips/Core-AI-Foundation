@@ -1,10 +1,11 @@
-import hashlib,hmac,json,os,sqlite3,uuid
+import hashlib,hmac,json,os,sqlite3,stat,time,uuid
 from datetime import datetime,timezone
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 from pathlib import Path
 from admin_identity import admin_identity
 from gpt02_issue159_approval_http import handle_issue159_approval_intent
+from gpt02_issue159_approval_intent_contract import validate_approval_claims
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
 ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
@@ -13,6 +14,10 @@ ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
 ISSUE159_APPROVED_PACKET=os.environ.get(
  'GPT02_ISSUE159_APPROVED_PACKET',
  '/opt/ai-coding-standalone-dev/gpt02_issue159_approved_claims.json'
+)
+ISSUE159_PENDING_CLAIMS=os.environ.get(
+ 'GPT02_ISSUE159_PENDING_CLAIMS',
+ '/opt/ai-coding-standalone-dev/gpt02_issue159_pending_claims.json'
 )
 def now(): return datetime.now(timezone.utc).isoformat()
 def persist_issue159_approved_packet(claims,result):
@@ -43,6 +48,46 @@ def issue159_identity_verifier(token,connection):
  if not identity or identity.get('role')!='super_admin' or identity.get('auth_level') not in ('aal1','aal2'):return None
  return {'userId':identity['user_id'],'role':identity['role'],
          'enabled':True,'authMethod':'supabase_admin_session'}
+def load_issue159_pending_claims(actor_id):
+ try:
+  st=os.lstat(ISSUE159_PENDING_CLAIMS)
+ except FileNotFoundError:
+  return {'environment':'DEV','pending':False,'reason':'NO_PENDING_REQUEST','releaseDecision':'NO_GO'}
+ except OSError:
+  return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_READ_FAILED','releaseDecision':'NO_GO'}
+ if (stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode)
+     or st.st_uid!=0 or st.st_gid!=0 or stat.S_IMODE(st.st_mode)!=0o600):
+  return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_FILE_SECURITY_INVALID','releaseDecision':'NO_GO'}
+ try:
+  payload=json.loads(Path(ISSUE159_PENDING_CLAIMS).read_text(encoding='utf-8'))
+  if not isinstance(payload,dict) or set(payload)!={'claims'} or not isinstance(payload['claims'],dict):
+   raise ValueError('pending claims shape invalid')
+  claims=payload['claims']
+  validated=validate_approval_claims(claims)
+  if claims['superAdminId']!=actor_id:
+   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_ACTOR_MISMATCH','releaseDecision':'NO_GO'}
+  observed=int(time.time()*1000)
+  if observed<claims['issuedAt'] or observed>=claims['expiresAt']:
+   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  con=sqlite3.connect('file:'+DB+'?mode=ro',uri=True,timeout=2)
+  try:
+   con.execute('PRAGMA query_only=ON')
+   row=con.execute(
+    'SELECT count(*) FROM gpt02_issue159_approval_intents WHERE task_id=? AND command_id=? AND attempt_id=? AND claims_sha256=? AND actor_id=?',
+    (claims['taskId'],claims['commandId'],claims['attemptId'],validated['claimsSha256'],actor_id)
+   ).fetchone()
+  finally:
+   con.close()
+  if not row or row[0]!=0:
+   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_ALREADY_APPROVED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  return {
+   'environment':'DEV','pending':True,'taskId':claims['taskId'],
+   'commandId':claims['commandId'],'expiresAt':claims['expiresAt'],
+   'claims':claims,'signingPermitted':False,'authorizationGranted':False,
+   'dispatchPermitted':False,'releaseDecision':'NO_GO'
+  }
+ except (OSError,ValueError,TypeError,KeyError,sqlite3.Error):
+  return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_INVALID','releaseDecision':'NO_GO'}
 def conn():
  c=sqlite3.connect(DB,timeout=10)
  c.execute('PRAGMA busy_timeout=10000')
@@ -86,6 +131,14 @@ class Handler(BaseHTTPRequestHandler):
    return
   if not self.authorized(): return self.send(401,{'error':'unauthorized'})
   p=urlparse(self.path).path
+  if p=='/api/gpt02/issue159/approval-intent/pending':
+   auth=self.headers.get('Authorization','')
+   if not auth.startswith('Bearer '):return self.send(401,{'error':'unauthorized'})
+   with conn() as c:
+    identity=admin_identity(auth[7:],c)
+   if not identity or identity.get('role')!='super_admin':
+    return self.send(403,{'error':'active_super_admin_required'})
+   return self.send(200,load_issue159_pending_claims(identity['user_id']))
   if p=='/api/dashboard':
    with conn() as c:
     jobs=c.execute('SELECT status,COUNT(*) FROM jobs GROUP BY status').fetchall()
