@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
+import { dirname } from "node:path";
 import {
   canonicalGpt02Issue159Approval,
   canonicalGpt02Issue159OperatorLink,
@@ -67,8 +68,9 @@ function resolveSignerGroupGid(): number {
 function assertReaderSocket(socketPath: string, signerGroupGid: number): void {
   let directory;
   let socket;
+  const parentPath = socketPath === DEFAULT_SOCKET ? "/run/gpt02-reader" : dirname(socketPath);
   try {
-    directory = lstatSync("/run/gpt02-reader");
+    directory = lstatSync(parentPath);
     socket = lstatSync(socketPath);
   } catch {
     return fail("GPT02_TRUSTED_READER_SOCKET_REQUIRED");
@@ -241,12 +243,12 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
   }
 
   const q = input.query;
-  const prepared = facts.prepared;
-  const core = facts.core;
-  const hub = facts.hubOperator;
-  const assignment = facts.hubAssignment;
+  const prepared = facts.prepared as RecordValue;
+  const core = facts.core as RecordValue;
+  const hub = facts.hubOperator as RecordValue;
+  const assignment = facts.hubAssignment as RecordValue;
   const approvalClaims = approval.claims;
-  const linkClaims = link.claims;
+  const linkClaims = link.claims as RecordValue;
   if (!exactObject(approvalClaims, [
     "v", "environment", "audience", "taskId", "commandId", "attemptId",
     "nonce", "operatorNamespace", "superAdminId", "companyId", "issuedAt", "expiresAt",
@@ -255,7 +257,11 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
       prepared.hubTaskId !== q.hubTaskId ||
       prepared.commandCandidateId !== q.commandCandidateId ||
       prepared.attemptId !== q.attemptId ||
-      prepared.hubExecutionId !== core.taskId && prepared.hubExecutionId === "" ||
+      prepared.coreTaskId !== core.taskId ||
+      prepared.hubExecutionId !== linkClaims.hubExecutionId ||
+      prepared.coreTaskId !== linkClaims.coreTaskId ||
+      prepared.memberId !== hub.memberId ||
+      prepared.hubExecutionId === "" ||
       link.linkDigest !== q.linkDigest ||
       approval.digest !== q.approvalDigest ||
       approvalClaims.taskId !== q.hubTaskId ||
