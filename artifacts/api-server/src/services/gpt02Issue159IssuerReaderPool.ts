@@ -2,7 +2,7 @@ import { X509Certificate } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 
 const PROJECT_REF = "xssrfshdrtdfupgqwfdw";
-const POOLER_HOST = "aws-1-ap-southeast-2.pooler.supabase.com";
+const DIRECT_DB_HOST = "db.xssrfshdrtdfupgqwfdw.supabase.co";
 const DATABASE = "postgres";
 const ROLE = "gpt02_issuer_evidence_reader";
 const DSN_ENV = "GPT02_ISSUER_READER_DATABASE_URL_DEV";
@@ -107,7 +107,7 @@ function parseIssuerReaderDsn(value: string | undefined) {
 
   if (
     (url.protocol !== "postgresql:" && url.protocol !== "postgres:") ||
-    url.hostname !== POOLER_HOST ||
+    url.hostname !== DIRECT_DB_HOST ||
     Number(url.port || 5432) !== 5432 ||
     url.pathname !== "/" + DATABASE
   ) {
@@ -121,7 +121,7 @@ function parseIssuerReaderDsn(value: string | undefined) {
     return fail("GPT02_ISSUER_READER_DSN_INVALID");
   }
 
-  if (username !== ROLE + "." + PROJECT_REF || !url.password) {
+  if (username !== ROLE || !url.password) {
     return fail("GPT02_ISSUER_READER_DEDICATED_IDENTITY_REQUIRED");
   }
   if (url.hash || url.searchParams.size !== 0) {
@@ -213,9 +213,8 @@ export function createGpt02Issue159IssuerReaderPool({
     options:
       "-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000 -c idle_in_transaction_session_timeout=10000 -c row_security=on",
     application_name: "gpt02-issuer-evidence-reader",
-    // Supabase's session pooler rejects search_path in libpq startup options.
-    // Apply the safe path after the connection is established and before it
-    // can be handed to a caller (same verified pool initialization hook used by the existing application DB).
+    // Keep the search path pinned after TLS connection establishment and before
+    // handing the connection to the read-only issuer ledger adapter.
     verify: (client: { query(sql: string): Promise<unknown> }, done: (error?: Error) => void) => {
       client.query("SET search_path TO pg_catalog")
         .then(() => done())
@@ -234,7 +233,7 @@ export function createGpt02Issue159IssuerReaderPool({
     metadata: Object.freeze({
       environment: "DEV" as const,
       projectRef: PROJECT_REF,
-      host: POOLER_HOST,
+      host: DIRECT_DB_HOST,
       database: DATABASE,
       role: ROLE,
       maxConnections: 1 as const,
