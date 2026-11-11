@@ -90,10 +90,17 @@ def _unix_json_request(socket_path: str, route: str, payload: dict[str, object])
             parent = os.stat(parent_path)
         else:
             parent = parent_entry
-        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid == 0
+        approval_socket = socket_path == "/run/gpt02-approval-reader/reader.sock"
+        if approval_socket and parent_path != "/run/gpt02-approval-reader":
+            return None
+        if (not stat.S_ISDIR(parent.st_mode)
+                or (parent.st_uid == 0 and not approval_socket)
+                or (parent.st_uid != 0 and approval_socket)
                 or parent.st_gid != signer_gid or stat.S_IMODE(parent.st_mode) != 0o750
                 or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
-                or endpoint.st_uid == 0 or endpoint.st_gid != signer_gid
+                or (endpoint.st_uid == 0 and not approval_socket)
+                or (endpoint.st_uid != 0 and approval_socket)
+                or endpoint.st_gid != signer_gid
                 or stat.S_IMODE(endpoint.st_mode) != 0o660):
             return None
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -160,6 +167,20 @@ def _issuer_probe_payload() -> dict[str, object]:
     }
 
 
+def _approval_probe_payload() -> dict[str, object]:
+    """Build a valid but deliberately absent approval lookup for read-only preflight."""
+    return {
+        "observedAtMs": int(time.time() * 1000),
+        "lookup": {
+            "claimsSha256": "a" * 64,
+            "taskId": 2_147_483_647,
+            "commandId": str(uuid.uuid4()),
+            "attemptId": str(uuid.uuid4()),
+            "companyId": "default",
+            "superAdminId": "gpt02-approval-read-probe",
+        },
+    }
+
 def _probe_trusted_readers() -> dict[str, bool]:
     hub_result = _unix_json_request(
         "/run/gpt02-reader/reader.sock", "/trusted-facts", {},
@@ -189,10 +210,31 @@ def _probe_trusted_readers() -> dict[str, bool]:
         and issuer_payload.get("dispatchPermitted") is False
         and issuer_payload.get("releaseDecision") == "NO_GO"
     )
+    approval_result = _unix_json_request(
+        "/run/gpt02-approval-reader/reader.sock", "/approval-intent",
+        _approval_probe_payload(),
+    )
+    approval_payload = approval_result[1] if approval_result else {}
+    approval_detail = approval_payload.get("result") or {}
+    approval = bool(
+        approval_result and approval_result[0] == 409
+        and approval_payload.get("environment") == "DEV"
+        and approval_payload.get("ok") is False
+        and approval_payload.get("persistedTrustedReadProven") is False
+        and approval_detail.get("reason") == "APPROVAL_INTENT_NOT_UNIQUE_OR_MISSING"
+        and approval_detail.get("approvalBindingMatched") is False
+        and approval_detail.get("adminApprovalMatched") is False
+        and approval_payload.get("signingPermitted") is False
+        and approval_payload.get("authorizationGranted") is False
+        and approval_payload.get("dispatchPermitted") is False
+        and approval_payload.get("releaseDecision") == "NO_GO"
+    )
     return {
         "hubCoreReaderOperational": hub_core,
         "issuerReaderOperational": issuer,
-        "trustedReaderConnectivityVerified": hub_core and issuer,
+        "approvalReaderOperational": approval,
+        "trustedReaderConnectivityVerified": hub_core and issuer and approval,
+        "authorizerOperational": hub_core and issuer and approval,
     }
 
 def _write_readiness(runtime_dir: str, role: str, fingerprint: str, readers: dict[str, bool]):
@@ -208,8 +250,9 @@ def _write_readiness(runtime_dir: str, role: str, fingerprint: str, readers: dic
         "businessEvidenceRead": False,
         "hubCoreReaderOperational": readers["hubCoreReaderOperational"],
         "issuerReaderOperational": readers["issuerReaderOperational"],
+        "approvalReaderOperational": readers["approvalReaderOperational"],
         "trustedReaderConnectivityVerified": readers["trustedReaderConnectivityVerified"],
-        "authorizerOperational": False,
+        "authorizerOperational": readers["authorizerOperational"],
         "signingPermitted": False,
         "authorizationGranted": False,
         "dispatchPermitted": False,
@@ -236,7 +279,8 @@ def main() -> int:
     key, fingerprint = _load(role, credentials_dir)
     readers = (
         {"hubCoreReaderOperational": False, "issuerReaderOperational": False,
-         "trustedReaderConnectivityVerified": False}
+         "approvalReaderOperational": False, "trustedReaderConnectivityVerified": False,
+         "authorizerOperational": False}
         if args.once else _probe_trusted_readers()
     )
     _write_readiness(runtime_dir, role, fingerprint, readers)
