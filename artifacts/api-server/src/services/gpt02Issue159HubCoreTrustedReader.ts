@@ -218,6 +218,11 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
         "operatorSubject", "coreTaskId", "hubExecutionId",
         "commandCandidateId", "attemptId", "expiresAt",
       ]) ||
+      !exactObject(facts.job, [
+        "companyId", "taskId", "executionId", "status", "commandId",
+        "workerCommandCount", "attemptNumber", "dispatchStarted",
+        "memberId", "memberAuditId", "operatorSubject",
+      ]) ||
       !exactObject(facts.core, [
         "taskId", "commandCandidateId", "attemptId", "status",
         "commandCount", "runCount", "workerId", "operatorUserId",
@@ -244,6 +249,7 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
 
   const q = input.query;
   const prepared = facts.prepared as RecordValue;
+  const job = facts.job as RecordValue;
   const core = facts.core as RecordValue;
   const hub = facts.hubOperator as RecordValue;
   const assignment = facts.hubAssignment as RecordValue;
@@ -268,7 +274,18 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
       approvalClaims.commandId !== q.commandCandidateId ||
       approvalClaims.attemptId !== q.attemptId ||
       approvalClaims.companyId !== q.companyId ||
-      approvalClaims.superAdminId !== hub.subject) {
+      approvalClaims.superAdminId !== hub.subject ||
+      job.companyId !== q.companyId ||
+      job.taskId !== q.hubTaskId ||
+      job.executionId !== prepared.hubExecutionId ||
+      job.status !== "prepared" ||
+      job.commandId !== null ||
+      job.workerCommandCount !== 0 ||
+      job.attemptNumber !== 1 ||
+      job.dispatchStarted !== false ||
+      job.memberId !== prepared.memberId ||
+      job.memberAuditId !== prepared.memberAuditId ||
+      job.operatorSubject !== prepared.operatorSubject) {
     fail("GPT02_HUB_CORE_REQUEST_BINDING_MISMATCH");
   }
 
