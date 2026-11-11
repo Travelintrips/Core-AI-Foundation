@@ -2,7 +2,7 @@
 Description=GPT02 DEV independent issuer evidence reader (read-only, Unix socket only)
 Documentation=https://github.com/Travelintrips/Core-AI-Foundation/pull/1702
 Wants=network-online.target
-After=network-online.target systemd-sysusers.service
+After=network-online.target systemd-sysusers.service systemd-tmpfiles-setup.service
 StartLimitIntervalSec=60s
 StartLimitBurst=3
 ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-issuer-reader-dsn
