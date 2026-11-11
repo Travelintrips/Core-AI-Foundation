@@ -177,5 +177,3 @@ GRANT EXECUTE ON FUNCTION gpt02_fixture_store.reserve_post_consumption_fence(big
 GRANT EXECUTE ON FUNCTION gpt02_fixture_store.record_issuer_evidence(bigint,uuid,uuid,text) TO gpt02_fixture_writer;
 GRANT EXECUTE ON FUNCTION gpt02_fixture_store.consume_issuer_lease(bigint,uuid,uuid) TO gpt02_fixture_writer;
 COMMIT;
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
