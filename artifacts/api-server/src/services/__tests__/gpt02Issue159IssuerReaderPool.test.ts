@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync, chmodSync, symlinkSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createGpt02Issue159IssuerReaderPool } from "../gpt02Issue159IssuerReaderPool.js";
 
 const host = "aws-1-ap-southeast-2.pooler.supabase.com";
@@ -71,6 +73,62 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
     expect(JSON.stringify(value.metadata)).not.toContain("issuer-secret-fixture");
     await value.close();
     expect(pool.ended).toBe(true);
+  });
+
+  it("loads synthetic issuer credentials from separate restricted files", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gpt02-issuer-reader-files-"));
+    try {
+      writeFileSync(join(dir, "issuer-reader-dsn"), dsn(), { mode: 0o600 });
+      writeFileSync(join(dir, "supabase-root-ca-2021.crt"), ca, { mode: 0o600 });
+      chmodSync(join(dir, "issuer-reader-dsn"), 0o600);
+      chmodSync(join(dir, "supabase-root-ca-2021.crt"), 0o600);
+      const value = createGpt02Issue159IssuerReaderPool({
+        env: {}, Pool: FakePool, nodeEnv: "test", appEnv: "development",
+        credentialDirectory: dir,
+      });
+      const pool = value.issuerPool as unknown as FakePool;
+      expect(pool.config.connectionString).toBe(dsn());
+      expect(value.metadata.credentialSource).toBe("systemd-credential-files");
+      expect(value.metadata.dispatchPermitted).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects issuer credential symlinks and insecure file modes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gpt02-issuer-reader-bad-files-"));
+    try {
+      writeFileSync(join(dir, "issuer-real"), dsn(), { mode: 0o600 });
+      symlinkSync(join(dir, "issuer-real"), join(dir, "issuer-reader-dsn"));
+      writeFileSync(join(dir, "supabase-root-ca-2021.crt"), ca, { mode: 0o600 });
+      chmodSync(join(dir, "issuer-real"), 0o600);
+      chmodSync(join(dir, "supabase-root-ca-2021.crt"), 0o600);
+      expect(() => createGpt02Issue159IssuerReaderPool({
+        env: {}, Pool: FakePool, nodeEnv: "test", appEnv: "development",
+        credentialDirectory: dir,
+      })).toThrow("GPT02_ISSUER_READER_CREDENTIAL_FILE_SECURITY_INVALID");
+      rmSync(join(dir, "issuer-reader-dsn"));
+      writeFileSync(join(dir, "issuer-reader-dsn"), dsn(), { mode: 0o644 });
+      chmodSync(join(dir, "issuer-reader-dsn"), 0o644);
+      expect(() => createGpt02Issue159IssuerReaderPool({
+        env: {}, Pool: FakePool, nodeEnv: "test", appEnv: "development",
+        credentialDirectory: dir,
+      })).toThrow("GPT02_ISSUER_READER_CREDENTIAL_FILE_SECURITY_INVALID");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("operational mode rejects DSNs supplied through environment variables", () => {
+    expect(() => createGpt02Issue159ReaderPool({
+      env: {
+        GPT02_ISSUER_READER_DATABASE_URL_DEV: dsn(),
+        GPT02_READER_DEV_CA: ca,
+      },
+      Pool: FakePool,
+      nodeEnv: "development",
+      appEnv: "development",
+    })).toThrow("GPT02_ISSUER_READER_OPERATIONAL_CREDENTIAL_SOURCE_NOT_PINNED");
   });
 
   it("requires the dedicated issuer DSN and never falls back to the shared app URL", () => {
