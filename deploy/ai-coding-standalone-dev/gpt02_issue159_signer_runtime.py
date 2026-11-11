@@ -74,7 +74,7 @@ def _load(role: str, credentials_dir: str):
 
 
 
-def _unix_health(socket_path: str, expected: dict[str, object]) -> bool:
+def _unix_json_request(socket_path: str, route: str, payload: dict[str, object]):
     try:
         signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
         endpoint = os.lstat(socket_path)
@@ -83,16 +83,20 @@ def _unix_health(socket_path: str, expected: dict[str, object]) -> bool:
                 or parent.st_gid != signer_gid or stat.S_IMODE(parent.st_mode) != 0o750
                 or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
                 or endpoint.st_gid != signer_gid or stat.S_IMODE(endpoint.st_mode) != 0o660):
-            return False
+            return None
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        request = (
+            f"POST {route} HTTP/1.1\r\n"
+            "Host: localhost\r\n"
+            "Connection: close\r\n"
+            "Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n\r\n"
+        ).encode("ascii") + body
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client.settimeout(12)
+        client.settimeout(5)
         try:
             client.connect(socket_path)
-            client.sendall(
-                b"GET /health HTTP/1.1\r\n"
-                b"Host: localhost\r\n"
-                b"Connection: close\r\n\r\n"
-            )
+            client.sendall(request)
             chunks = []
             total = 0
             while True:
@@ -101,37 +105,43 @@ def _unix_health(socket_path: str, expected: dict[str, object]) -> bool:
                     break
                 total += len(chunk)
                 if total > 8192:
-                    return False
+                    return None
                 chunks.append(chunk)
         finally:
             client.close()
         response = b"".join(chunks)
-        header, separator, body = response.partition(b"\r\n\r\n")
-        if not separator or not header.startswith(b"HTTP/1.1 200 "):
-            return False
-        payload = json.loads(body.decode("utf-8"))
-        return all(payload.get(key) == value for key, value in expected.items())
+        header, separator, response_body = response.partition(b"\r\n\r\n")
+        if not separator:
+            return None
+        status = int(header.split(b" ", 2)[1])
+        return status, json.loads(response_body.decode("utf-8"))
     except (OSError, ValueError, KeyError, socket.timeout):
-        return False
+        return None
 
 
 def _probe_trusted_readers() -> dict[str, bool]:
-    hub_core = _unix_health(
-        "/run/gpt02-reader/reader.sock",
-        {
-            "ok": True, "environment": "DEV", "twoSessionsVerified": True,
-            "signingPermitted": False, "dispatchPermitted": False,
-        },
+    hub_result = _unix_json_request(
+        "/run/gpt02-reader/reader.sock", "/trusted-facts", {},
     )
-    issuer = _unix_health(
-        "/run/gpt02-issuer-reader/reader.sock",
-        {
-            "ok": True, "environment": "DEV", "readerReady": True,
-            "issuerRole": "gpt02_issuer_evidence_reader", "tlsVerified": True,
-            "readOnly": True, "signingPermitted": False,
-            "authorizationGranted": False, "dispatchPermitted": False,
-            "releaseDecision": "NO_GO",
-        },
+    hub_core = bool(
+        hub_result and hub_result[0] == 400
+        and hub_result[1].get("code") == "UNTRUSTED_TASK_IDENTITY"
+        and hub_result[1].get("signingPermitted") is False
+        and hub_result[1].get("dispatchPermitted") is False
+    )
+    issuer_result = _unix_json_request(
+        "/run/gpt02-issuer-reader/reader.sock", "/issuer-evidence", {},
+    )
+    issuer_payload = issuer_result[1] if issuer_result else {}
+    issuer_detail = issuer_payload.get("result") or {}
+    issuer = bool(
+        issuer_result and issuer_result[0] == 409
+        and issuer_payload.get("ok") is False
+        and issuer_detail.get("reason") == "ISSUER_LEDGER_REQUEST_INVALID"
+        and issuer_payload.get("signingPermitted") is False
+        and issuer_payload.get("authorizationGranted") is False
+        and issuer_payload.get("dispatchPermitted") is False
+        and issuer_payload.get("releaseDecision") == "NO_GO"
     )
     return {
         "hubCoreReaderOperational": hub_core,
