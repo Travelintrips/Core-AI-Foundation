@@ -71,7 +71,7 @@ def record_issue159_approval_intent(
     except ApprovalIntentContractError as exc:
         code = str(exc)
         if code == "GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED":
-            return _denied("AAL2_SUPER_ADMIN_IDENTITY_MISMATCH")
+            return _denied("ADMIN_IDENTITY_MISMATCH")
         return _denied("APPROVAL_CLAIMS_INVALID")
 
     record = built["record"]
@@ -108,7 +108,7 @@ def record_issue159_approval_intent(
 
     return {
         "ok": True,
-        "reason": "AAL2_APPROVAL_INTENT_RECORDED_NO_SIGNING_AUTHORITY",
+        "reason": "ADMIN_APPROVAL_INTENT_RECORDED_NO_SIGNING_AUTHORITY",
         "intentId": record["id"],
         "claimsSha256": record["claims_sha256"],
         "actorId": record["actor_id"],
