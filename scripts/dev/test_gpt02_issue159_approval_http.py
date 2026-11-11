@@ -52,7 +52,7 @@ class ApprovalHttpAdapterTest(unittest.TestCase):
                 "userId": CLAIMS["superAdminId"],
                 "role": "super_admin",
                 "enabled": True,
-                "authMethod": "supabase_aal2",
+                "authMethod": "supabase_admin_session",
             }
         return Mock(return_value=identity)
 
@@ -85,13 +85,13 @@ class ApprovalHttpAdapterTest(unittest.TestCase):
         )
         con.close()
 
-    def test_aal2_super_admin_records_intent_but_response_stays_no_go(self):
+    def test_admin_session_records_intent_but_response_stays_no_go(self):
         con = self.db()
         (status, body), verify = self.call(con)
         self.assertEqual(status, 201)
         verify.assert_called_once()
         self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
-        self.assertEqual(body["authMethod"], "supabase_aal2")
+        self.assertEqual(body["authMethod"], "supabase_admin_session")
         self.assertEqual(body["roleAtDecision"], "super_admin")
         self.assertFalse(body["signingPermitted"])
         self.assertFalse(body["authorizationGranted"])
@@ -109,11 +109,11 @@ class ApprovalHttpAdapterTest(unittest.TestCase):
             {"userId": "dev_approval_token", "role": "super_admin",
              "enabled": True, "authMethod": "static_dev_token"},
             {"userId": CLAIMS["superAdminId"], "role": "admin",
-             "enabled": True, "authMethod": "supabase_aal2"},
+             "enabled": True, "authMethod": "supabase_admin_session"},
         ):
             (status, body), _ = self.call(con, verifier=self.verifier(identity))
             self.assertEqual(status, 403)
-            self.assertEqual(body, {"error": "aal2_super_admin_required"})
+            self.assertEqual(body, {"error": "active_super_admin_required"})
         (status, body), verify = self.call(con, auth="")
         self.assertEqual(status, 401)
         verify.assert_not_called()
