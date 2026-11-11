@@ -128,7 +128,6 @@ class ApprovalIntentWriterTest(unittest.TestCase):
             self.identity(CLAIMS["superAdminId"], "admin"),
             self.identity(CLAIMS["superAdminId"], "super_admin", enabled=False),
             self.identity(CLAIMS["superAdminId"], "super_admin", auth_method="static_dev_token"),
-            self.identity(CLAIMS["superAdminId"], "super_admin", auth_method="static_dev_token"),
             self.identity("another-user", "super_admin"),
         ):
             path, con = self.db()
