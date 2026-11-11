@@ -59,6 +59,8 @@ def runtime(**patch):
         "issuerReaderRuntimeOperational": False,
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": False,
+        "fourSignerTrustedReaderConnectivityVerified": False,
+        "fourSignerAuthorizersOperational": False,
         "approvalIntentTrustedReadCurrent": False,
     }
     base.update(patch)
@@ -114,6 +116,8 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertIn("ISSUER_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
         self.assertFalse(out["hubCoreIssuerTrustedReadAdaptersOperational"])
         self.assertTrue(out["fourSignerRuntimesMounted"])
+        self.assertIn("FOUR_SIGNER_READER_CONNECTIVITY_NOT_VERIFIED", out["blockers"])
+        self.assertIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
         self.assertNotIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
         self.assertFalse(out["operationalSigningReady"])
         self.assertFalse(out["dispatchPermitted"])
@@ -184,6 +188,13 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                  patch.object(readiness.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
                 self.assertTrue(readiness.hub_core_reader_runtime_operational())
             thread.join(timeout=2)
+
+    def test_issuer_reader_source_has_exact_dynamicuser_mapping_allowlist(self):
+        source = SCRIPT.read_text()
+        self.assertIn('os.path.realpath(directory_path) != "/run/private/gpt02-issuer-reader"', source)
+        self.assertIn('ISSUER_READER_SOCKET_DIR = "/run/gpt02-issuer-reader"', source)
+        self.assertIn('endpoint.st_gid != signer_gid', source)
+        self.assertIn('payload.get("tlsVerified") is True', source)
 
     def test_signer_runtime_mount_uses_exact_systemd_service_owner(self):
         user = pwd.getpwuid(os.getuid())
