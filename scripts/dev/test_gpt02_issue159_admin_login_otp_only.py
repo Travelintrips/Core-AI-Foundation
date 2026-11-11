@@ -17,7 +17,8 @@ class AdminLoginOtpOnlyTest(unittest.TestCase):
         self.assertIn("type:'email'", source)
         self.assertNotIn("grant_type=password", source)
         self.assertNotIn("'/factors/", source)
-        self.assertNotIn("totp", source.lower().replace("tidak perlu password atau kode totp tambahan", ""))
+        self.assertNotIn("/factors", source.lower())
+        self.assertNotIn("verify_mfa", source.lower())
         self.assertIn("aal1", source)
         self.assertIn("Super Admin aktif", source)
 
