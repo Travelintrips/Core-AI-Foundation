@@ -22,7 +22,7 @@ from gpt02_issue159_approval_store_readiness import inspect as inspect_approval
 from gpt02_issue159_private_key_custody_readiness import inspect as inspect_custody
 
 LIVE_RUNTIME = "/opt/ai-coding-standalone-dev"
-HUB_TRUST_DIR = "/run/credentials/gpt02-dev"
+HUB_TRUST_DIR = "/etc/gpt02-dev/public"
 HUB_MANIFEST = "/etc/gpt02-dev/trust-fingerprints.json"
 APPROVED_CLAIMS_FILE = os.path.join(
     LIVE_RUNTIME, "gpt02_issue159_approved_claims.json"
