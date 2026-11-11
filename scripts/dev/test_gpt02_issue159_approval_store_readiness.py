@@ -160,8 +160,6 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source)
 
-if __name__ == "__main__":
-    unittest.main()
 
 
     def test_verified_super_admin_session_is_valid_without_separate_aal2_challenge(self):
@@ -190,3 +188,6 @@ if __name__ == "__main__":
         self.assertTrue(out["operationalEvidenceAvailable"])
         self.assertFalse(out["signingPermitted"])
         self.assertFalse(out["dispatchPermitted"])
+
+if __name__ == "__main__":
+    unittest.main()
