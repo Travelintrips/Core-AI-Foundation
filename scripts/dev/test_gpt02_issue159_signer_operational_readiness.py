@@ -290,6 +290,70 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 with patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=gid)):
                     self.assertTrue(readiness.signer_runtime_mounted())
 
+    def test_signer_runtime_mount_accepts_only_exact_systemd_runtime_symlinks(self):
+        group_name = "gpt02-issue159-signers"
+        with tempfile.TemporaryDirectory(prefix="gpt02-dynamic-signer-link-") as root:
+            readiness.SIGNER_RUNTIME_ROOT = root
+            private = Path(root) / "private"
+            private.mkdir(mode=0o700)
+            runtime_uid = pwd.getpwnam("nobody").pw_uid if os.getuid() == 0 else os.getuid()
+            gid = os.getgid()
+            link_paths = {}
+            for role in readiness.SIGNER_ROLES:
+                target = private / f"gpt02-issue159-signer-{role}"
+                target.mkdir(mode=0o700)
+                os.chmod(target, 0o700)
+                payload = {
+                    "environment": "DEV",
+                    "role": role,
+                    "algorithm": "Ed25519",
+                    "fingerprintMatched": True,
+                    "privateCredentialMounted": True,
+                    "hubCoreReaderOperational": True,
+                    "issuerReaderOperational": True,
+                    "trustedReaderConnectivityVerified": True,
+                    "authorizerOperational": False,
+                    "signingPermitted": False,
+                    "authorizationGranted": False,
+                    "dispatchPermitted": False,
+                    "releaseDecision": "NO_GO",
+                }
+                ready = target / "readiness.json"
+                ready.write_text(json.dumps(payload))
+                os.chmod(ready, 0o600)
+                if os.getuid() == 0:
+                    os.chown(target, runtime_uid, gid)
+                    os.chown(ready, runtime_uid, gid)
+                link = Path(root) / target.name
+                link.symlink_to(target, target_is_directory=True)
+                link_paths[str(link)] = "/run/private/" + target.name
+
+            def dynamic_systemctl(args, **kwargs):
+                if args[1] == "is-active":
+                    return SimpleNamespace(returncode=0, stdout="")
+                if args[1] == "show" and args[2] == "-p" and args[3] == "User":
+                    return SimpleNamespace(returncode=0, stdout="")
+                if args[1] == "show" and args[2] == "-p" and args[3] == "Group":
+                    return SimpleNamespace(returncode=0, stdout=group_name)
+                return SimpleNamespace(returncode=1, stdout="")
+
+            real_lstat = os.lstat
+            def systemd_lstat(value):
+                key = str(value)
+                if key in link_paths:
+                    return SimpleNamespace(st_mode=stat.S_IFLNK | 0o777, st_uid=0, st_gid=0)
+                return real_lstat(value)
+
+            real_realpath = os.path.realpath
+            def systemd_realpath(value):
+                return link_paths.get(str(value), real_realpath(value))
+
+            with patch.object(readiness.subprocess, "run", side_effect=dynamic_systemctl):
+                with patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=gid)):
+                    with patch.object(readiness.os, "lstat", side_effect=systemd_lstat):
+                        with patch.object(readiness.os.path, "realpath", side_effect=systemd_realpath):
+                            self.assertTrue(readiness.signer_runtime_mounted())
+
     def test_schema_or_custody_drift_is_reported_separately(self):
         out = readiness.assess(
             approval(schema=False),
