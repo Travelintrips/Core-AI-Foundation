@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import importlib.util
 import json
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME = ROOT / "deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py"
-UNIT = ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service"
+DEPLOY = ROOT / "deploy/ai-coding-standalone-dev"
+sys.path.insert(0, str(DEPLOY))
+RUNTIME = DEPLOY / "gpt02_issue159_approval_reader_runtime.py"
+UNIT = DEPLOY / "gpt02-issue159-approval-reader.service"
 
 spec = importlib.util.spec_from_file_location("approval_reader_runtime", RUNTIME)
 runtime = importlib.util.module_from_spec(spec)
