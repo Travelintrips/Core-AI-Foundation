@@ -254,7 +254,7 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     fail("GPT02_HUB_CORE_STORED_EVIDENCE_SHAPE_INVALID");
   }
 
-  const q = query;
+  const q = query as Query;
   const prepared = facts.prepared as RecordValue;
   const job = facts.job as RecordValue;
   const core = facts.core as RecordValue;
