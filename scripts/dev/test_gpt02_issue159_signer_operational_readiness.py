@@ -281,9 +281,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 if args[1] == "is-active":
                     return SimpleNamespace(returncode=0, stdout="")
                 if args[1] == "show" and args[2] == "-p" and args[3] == "User":
-                    return SimpleNamespace(returncode=0, stdout="\\n")
+                    return SimpleNamespace(returncode=0, stdout="")
                 if args[1] == "show" and args[2] == "-p" and args[3] == "Group":
-                    return SimpleNamespace(returncode=0, stdout=group_name + "\\n")
+                    return SimpleNamespace(returncode=0, stdout=group_name)
                 return SimpleNamespace(returncode=1, stdout="")
 
             with patch.object(readiness.subprocess, "run", side_effect=dynamic_systemctl):
