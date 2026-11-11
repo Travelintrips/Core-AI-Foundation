@@ -35,7 +35,7 @@ class WriterBrokerContractTest(unittest.TestCase):
         import hashlib
         ad=hashlib.sha256(json.dumps({k:self.approval[k] for k in APPROVAL_FIELDS},separators=(",",":")).encode()).hexdigest()
         self.link={
-          "v":1,"environment":"DEV","audience":"GPT02_OPERATOR_LINK_V1",
+          "v":1,"environment":"DEV","audience":"GPT02_DUAL_ACCOUNT_COMMAND_LINK",
           "linkId":"30000000-0000-4000-8000-000000000003","companyId":"default",
           "hubTaskId":140,"hubExecutionId":"40000000-0000-4000-8000-000000000004",
           "coreTaskId":"50000000-0000-4000-8000-000000000005",
@@ -43,8 +43,8 @@ class WriterBrokerContractTest(unittest.TestCase):
           "attemptNumber":1,"assigneeId":5,"accountableOwnerId":"sup-admin-test",
           "hubOperatorNamespace":"ai-task-hub.public.users","hubOperatorId":"sup-admin-test",
           "hubRole":"super_admin","hubActive":True,
-          "coreOperatorNamespace":"core.users","coreOperatorUserId":5,
-          "coreRole":"super_admin","coreActive":True,"corePasswordChanged":True,
+          "coreOperatorNamespace":"ai-core.ai_platform.internal_users","coreOperatorUserId":5,
+          "coreRole":"admin","coreActive":True,"corePasswordChanged":True,
           "workerId":"openclaw-dell-chatgpt-wake-dev","approvalDigest":ad,
           "nonce":self.approval["nonce"],"issuedAt":self.now-900,"expiresAt":self.now+90000,
         }
@@ -107,6 +107,17 @@ class WriterBrokerContractTest(unittest.TestCase):
         body=source.read_text()
         for forbidden in ("sqlite3", "psycopg", "socket.socket", "connect(", "Ed25519PrivateKey", "INSERT INTO", "UPDATE ", "DELETE FROM", "CREATE TASK", "dispatch("):
             self.assertNotIn(forbidden,body)
+
+    def test_operator_link_uses_official_dual_account_contract(self):
+        self.assertEqual(self.link["audience"],"GPT02_DUAL_ACCOUNT_COMMAND_LINK")
+        self.assertEqual(self.link["hubRole"],"super_admin")
+        self.assertIn(self.link["coreRole"],("owner","admin"))
+        p=json.loads(json.dumps(self.packet))
+        p["hubLink"]["claims"]["audience"]="GPT02_OPERATOR_LINK_V1"
+        with self.assertRaises(BrokerAdmissionError): verify_lifecycle_evidence_packet(p,self.roots,self.now)
+        p=json.loads(json.dumps(self.packet))
+        p["hubLink"]["claims"]["coreRole"]="super_admin"
+        with self.assertRaises(BrokerAdmissionError): verify_lifecycle_evidence_packet(p,self.roots,self.now)
 
     def test_expired_approval_fails(self):
         p=json.loads(json.dumps(self.packet));p["approval"]["claims"]["expiresAt"]=self.now-1
