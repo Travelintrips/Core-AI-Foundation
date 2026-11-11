@@ -46,7 +46,7 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         return path
 
     def seed(self, path, *, actor=LOOKUP["superAdminId"],
-             recorded=1000, expires=2000):
+             recorded=1000, expires=2000, auth_method="supabase_aal2"):
         con = sqlite3.connect(path)
         con.execute(
             "INSERT INTO admin_identities(user_id,role,enabled) VALUES (?,?,?)",
@@ -61,7 +61,7 @@ class ApprovalIntentReaderTest(unittest.TestCase):
             ("44444444-4444-4444-8444-444444444444",
              LOOKUP["taskId"],LOOKUP["commandId"],LOOKUP["attemptId"],
              LOOKUP["companyId"],LOOKUP["claimsSha256"],actor,
-             "supabase_aal2","super_admin","APPROVE",recorded,expires),
+             auth_method,"super_admin","APPROVE",recorded,expires),
         )
         con.commit()
         con.close()
@@ -83,6 +83,19 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         self.assertEqual(out["releaseDecision"], "NO_GO")
         self.assertEqual(out["decision"]["actorId"], LOOKUP["superAdminId"])
         self.assertEqual(out["decision"]["claimsSha256"], LOOKUP["claimsSha256"])
+
+    def test_single_authenticated_admin_session_is_trusted_without_aal2(self):
+        path = self.db()
+        self.seed(path, auth_method="supabase_admin_session")
+        out = reader.read_approval_intent(path, LOOKUP, 1500, operational=False)
+        self.assertTrue(out["persistedTrustedReadProven"])
+        self.assertTrue(out["approvalBindingMatched"])
+        self.assertTrue(out["adminApprovalMatched"])
+        self.assertFalse(out["aal2SuperAdminMatched"])
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["authorizationGranted"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
 
     def test_missing_or_wrong_lookup_fails_closed(self):
         path = self.db()
