@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pure GPT02 Issue #159 approval-intent producer contract.
 
-Builds one exact self-contained intent row from canonical approval claims and a
+Builds one exact self-contained intent row from canonical approval claims and
 one authenticated, enabled Super Admin session. It never writes SQLite, loads keys, signs,
 creates tasks, consumes nonces, or dispatches anything.
 """
