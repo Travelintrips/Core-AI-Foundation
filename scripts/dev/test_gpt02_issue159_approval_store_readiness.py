@@ -178,6 +178,34 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         self.assertEqual(out["reason"],"ISSUE159_ADMIN_OPERATOR_MAPPING_TABLE_MISSING")
         self.assertFalse(out["trustedPersistedReadReady"])
 
+    def test_legacy_task139_actor_does_not_poison_fresh_mapping_readiness(self):
+        path=self.db()
+        con=sqlite3.connect(path)
+        legacy_schema=SCHEMA_PATH.read_text().replace(
+            "task_id INTEGER NOT NULL CHECK (task_id > 139)",
+            "task_id INTEGER NOT NULL CHECK (task_id > 136)",
+        )
+        con.executescript(legacy_schema)
+        con.commit(); con.close()
+        self.seed_mapping(path, "current-hub-admin")
+        con=sqlite3.connect(path)
+        con.execute(
+            """INSERT INTO gpt02_issue159_approval_intents
+            (id,task_id,command_id,attempt_id,company_id,claims_sha256,actor_id,
+             auth_method,role_at_decision,decision,recorded_at_ms,expires_at_ms)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("dddddddd-dddd-4ddd-8ddd-dddddddddddd",139,
+             "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+             "ffffffff-ffff-4fff-8fff-ffffffffffff","default","c"*64,
+             "legacy-auth-subject","supabase_aal2","super_admin","APPROVE",1000,2000),
+        )
+        con.commit(); con.close()
+        out=probe.inspect(path,operational=False)
+        self.assertEqual(out["reason"],"ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY")
+        self.assertTrue(out["adminOperatorMappingReady"])
+        self.assertEqual(out["fallbackActorRowsInIntentTable"],0)
+        self.assertTrue(out["trustedPersistedReadReady"])
+
     def test_operational_path_is_pinned_and_source_is_read_only(self):
         path = self.db()
         out = probe.inspect(path, operational=True)
