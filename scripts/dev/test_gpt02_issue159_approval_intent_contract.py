@@ -30,7 +30,7 @@ IDENTITY = {
     "userId": CLAIMS["superAdminId"],
     "role": "super_admin",
     "enabled": True,
-    "authMethod": "supabase_aal2",
+    "authMethod": "supabase_admin_session",
 }
 INTENT_ID = "33333333-3333-4333-8333-333333333333"
 EXPECTED_CANONICAL = (
@@ -46,7 +46,7 @@ EXPECTED_SHA = "de1557983512699d5e91a6d3989a1738ae43c004f290089a5f51620bfb833056
 
 
 class ApprovalIntentContractTest(unittest.TestCase):
-    def test_exact_aal2_super_admin_builds_self_contained_row_but_no_authority(self):
+    def test_exact_authenticated_super_admin_builds_self_contained_row_but_no_authority(self):
         out = contract.build_approval_intent_record(
             CLAIMS, IDENTITY, INTENT_ID, 2000
         )
@@ -64,7 +64,7 @@ class ApprovalIntentContractTest(unittest.TestCase):
             "company_id": "default",
             "claims_sha256": EXPECTED_SHA,
             "actor_id": CLAIMS["superAdminId"],
-            "auth_method": "supabase_aal2",
+            "auth_method": "supabase_admin_session",
             "role_at_decision": "super_admin",
             "decision": "APPROVE",
             "recorded_at_ms": 2000,
@@ -89,7 +89,7 @@ class ApprovalIntentContractTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 contract.ApprovalIntentContractError,
-                "GPT02_ISSUE159_AAL2_SUPER_ADMIN_REQUIRED",
+                "GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED",
             ):
                 contract.build_approval_intent_record(
                     CLAIMS, {**IDENTITY, **patch}, INTENT_ID, 2000
