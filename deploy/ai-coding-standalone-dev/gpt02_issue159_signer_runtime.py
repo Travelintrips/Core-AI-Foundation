@@ -171,6 +171,8 @@ def _probe_trusted_readers() -> dict[str, bool]:
         and issuer_payload.get("environment") == "DEV"
         and issuer_detail.get("reason") == "ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE"
         and issuer_detail.get("readOnlySessionVerified") is True
+        and issuer_detail.get("clientTlsVerified") is True
+        and isinstance(issuer_detail.get("backendTlsVerified"), bool)
         and issuer_detail.get("issuerLedgerMatched") is False
         and issuer_detail.get("persistedTrustedReadProven") is False
         and issuer_payload.get("signingPermitted") is False
