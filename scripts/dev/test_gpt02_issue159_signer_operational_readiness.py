@@ -52,6 +52,8 @@ def runtime(**patch):
         "approvalWriterIntegrated": False,
         "hubPublicTrustDirectoryPresent": False,
         "hubFingerprintManifestPresent": False,
+        "hubCoreReaderRuntimeOperational": False,
+        "issuerReaderRuntimeOperational": False,
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": False,
         "approvalIntentTrustedReadCurrent": False,
@@ -75,7 +77,8 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertIn("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL", out["blockers"])
         self.assertIn("SYSTEMD_HOST_CREDENTIAL_SECRET_NOT_PROVISIONED", out["blockers"])
         self.assertIn("FOUR_SIGNER_CREDENTIALS_NOT_PROVISIONED", out["blockers"])
-        self.assertIn("HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL", out["blockers"])
+        self.assertIn("HUB_CORE_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
+        self.assertIn("ISSUER_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
         self.assertFalse(out["signingPermitted"])
         self.assertFalse(out["operationalSigningReady"])
         self.assertEqual(out["releaseDecision"], "NO_GO")
@@ -90,6 +93,8 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 approvalWriterIntegrated=True,
                 hubPublicTrustDirectoryPresent=True,
                 hubFingerprintManifestPresent=True,
+                hubCoreReaderRuntimeOperational=True,
+                issuerReaderRuntimeOperational=False,
                 fourSignerRuntimesMounted=True,
             ),
         )
@@ -102,10 +107,8 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertTrue(out["approvalWriterIntegrated"])
         self.assertTrue(out["approvalTrustedReaderOperational"])
         self.assertNotIn("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL", out["blockers"])
-        self.assertIn(
-            "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
-            out["blockers"],
-        )
+        self.assertTrue(out["hubCoreReaderRuntimeOperational"])
+        self.assertIn("ISSUER_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
         self.assertFalse(out["hubCoreIssuerTrustedReadAdaptersOperational"])
         self.assertTrue(out["fourSignerRuntimesMounted"])
         self.assertNotIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
@@ -126,11 +129,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             ),
         )
         self.assertTrue(out["fourSignerRuntimesMounted"])
+        self.assertFalse(out["hubCoreReaderRuntimeOperational"])
+        self.assertFalse(out["issuerReaderRuntimeOperational"])
+        self.assertIn("HUB_CORE_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
+        self.assertIn("ISSUER_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
         self.assertFalse(out["hubCoreIssuerTrustedReadAdaptersOperational"])
-        self.assertIn(
-            "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
-            out["blockers"],
-        )
         self.assertFalse(out["signingPermitted"])
         self.assertFalse(out["authorizationGranted"])
         self.assertFalse(out["dispatchPermitted"])
