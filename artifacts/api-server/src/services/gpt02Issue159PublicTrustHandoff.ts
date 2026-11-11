@@ -13,7 +13,7 @@ export const GPT02_ISSUE159_HUB_PUBLIC_KEY_FILES = Object.freeze({
 } satisfies Record<Gpt02Issue159SignerRole, string>);
 
 export const GPT02_ISSUE159_HUB_PUBLIC_TRUST_TARGETS = Object.freeze({
-  publicKeyDirectory: "/run/credentials/gpt02-dev",
+  publicKeyDirectory: "/etc/gpt02-dev/public",
   fingerprintManifest: "/etc/gpt02-dev/trust-fingerprints.json",
 });
 
