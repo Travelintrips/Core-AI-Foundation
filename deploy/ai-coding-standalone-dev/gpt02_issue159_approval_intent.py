@@ -42,7 +42,7 @@ def record_issue159_approval_intent(
     if not isinstance(connection, sqlite3.Connection):
         return _denied("APPROVAL_DB_CONNECTION_REQUIRED")
     if not callable(identity_verifier):
-        return _denied("AAL2_IDENTITY_VERIFIER_REQUIRED")
+        return _denied("ADMIN_IDENTITY_VERIFIER_REQUIRED")
     if now_ms is None:
         now_ms = int(time.time() * 1000)
     if not isinstance(now_ms, int) or now_ms <= 0:
