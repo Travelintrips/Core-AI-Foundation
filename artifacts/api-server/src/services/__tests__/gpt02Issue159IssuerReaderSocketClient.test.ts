@@ -36,6 +36,8 @@ const health = {
   issuerRole: "gpt02_issuer_evidence_reader",
   readerReady: true,
   tlsVerified: true,
+  clientTlsVerified: true,
+  backendTlsVerified: true,
   readOnly: true,
   signingPermitted: false,
   authorizationGranted: false,
@@ -167,6 +169,20 @@ describe("GPT02 Issue159 issuer-reader Unix socket client", () => {
   it("rejects health that attempts to claim signing or business-read authority", async () => {
     const socket = await socketFixture({
       health: { signingPermitted: true, persistedTrustedReadProven: true },
+    });
+    try {
+      await expect(readGpt02Issue159IssuerReaderSocketHealth({
+        env: { NODE_ENV: "test", GPT02_ISSUER_READER_SOCKET_GID: String(socket.gid) },
+        socketPath: socket.socketPath,
+      })).rejects.toThrow("GPT02_ISSUER_READER_SOCKET_HEALTH_NOT_TRUSTED");
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("rejects a health response without verified backend TLS", async () => {
+    const socket = await socketFixture({
+      health: { backendTlsVerified: false },
     });
     try {
       await expect(readGpt02Issue159IssuerReaderSocketHealth({
