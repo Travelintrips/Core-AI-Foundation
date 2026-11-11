@@ -75,6 +75,23 @@ The ingress:
 
 These are isolated tests and read-only preflights. They do not prove a live signer output or E2E lifecycle.
 
+## Isolated two-owner RPC privilege and concurrency proof
+
+Added two disposable-only fixtures:
+
+- `scripts/dev/gpt02_issue159_split_owner_fixture.sql`
+- `scripts/dev/test_gpt02_issue159_split_owner_isolated.sh`
+
+These demonstrate a single restricted session role calling two distinct non-login SECURITY DEFINER owners with EXECUTE-only permissions, while both append-only tables have forced RLS. In disposable PostgreSQL 16 (Docker `--network none`), the harness proves:
+
+- writer has EXECUTE on the two fixture RPCs, while writer and reader have no direct INSERT/UPDATE/DELETE privileges;
+- replay fails on UNIQUE, and unauthorized fixture Super Admin value is rejected;
+- two concurrent attempts on one task yield exactly one successful insert and one reject;
+- if an approval step fails after preparation inside one transaction, the earlier preparation is rolled back;
+- UPDATE/DELETE/TRUNCATE are denied even to the fixture database owner/superuser through immutable triggers.
+
+**Test result: PASS**, no live database touched. The fixture uses deliberately fictional admin identity and UUIDs. For concurrency only, its temporary login connection limit is raised from 1 to 3; this does not modify the live DEV login. The fixture is NOT a production migration and does not implement actual cryptographic approval verification or the four additional lifecycle RPCs.
+
 ## Required next steps before operational migration
 
 1. Design and test a single restricted broker login compatible with the preparation RPC's `session_user` guard and the two distinct non-login function owners.
