@@ -67,6 +67,9 @@ class RuntimeBoundaryTest(unittest.TestCase):
                 self.assertTrue(data["fingerprintMatched"])
                 self.assertTrue(data["privateCredentialMounted"])
                 self.assertFalse(data["businessEvidenceRead"])
+                self.assertFalse(data["hubCoreReaderOperational"])
+                self.assertFalse(data["issuerReaderOperational"])
+                self.assertFalse(data["trustedReaderConnectivityVerified"])
                 self.assertFalse(data["authorizerOperational"])
                 self.assertFalse(data["signingPermitted"])
                 self.assertFalse(data["authorizationGranted"])
@@ -106,11 +109,13 @@ class RuntimeBoundaryTest(unittest.TestCase):
     def test_runtime_source_has_no_signing_network_db_or_secret_output_surface(self):
         source = RUNTIME.read_text()
         for forbidden in (
-            ".sign(", "socket.", "http://", "https://", "requests.",
+            ".sign(", "http://", "https://", "requests.",
             "sqlite3", "psycopg", "subprocess", "print(key", "private_bytes(",
             '"dispatchPermitted": true', '"signingPermitted": true',
+            "socket.AF_INET", "socket.AF_INET6", "socket.listen(",
         ):
             self.assertNotIn(forbidden, source, forbidden)
+        self.assertIn("socket.AF_UNIX", source)
 
     def test_systemd_unit_mounts_only_encrypted_private_credential_and_manifest(self):
         unit = UNIT.read_text()
