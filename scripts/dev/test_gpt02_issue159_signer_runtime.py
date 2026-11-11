@@ -9,6 +9,8 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import hashlib
+import importlib.util
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "deploy/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py"
@@ -105,6 +107,56 @@ class RuntimeBoundaryTest(unittest.TestCase):
                                     env=env, capture_output=True, text=True, timeout=5)
             self.assertEqual(result.returncode, 2)
             self.assertIn("GPT02_ISSUE159_SIGNING_MUST_REMAIN_DISABLED", result.stderr)
+
+    def test_issuer_probe_uses_valid_random_readonly_negative_lineage(self):
+        spec = importlib.util.spec_from_file_location("signer_runtime", RUNTIME)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        payload = module._issuer_probe_payload()
+        claims = payload["claims"]
+        self.assertEqual(set(payload), {"claims", "observedAt"})
+        self.assertEqual(claims["audience"], "GPT02_ISSUER_LEASE_EVIDENCE_V1")
+        self.assertEqual(claims["environment"], "DEV")
+        self.assertEqual(claims["issuerRole"], "dev_gpt02_issuer_evidence")
+        self.assertEqual(len({
+            claims[k] for k in (
+                "hubExecutionId", "coreTaskId", "commandId", "attemptId",
+                "receiptId", "linkId", "fenceId",
+            )
+        }), 7)
+        self.assertEqual(claims["issuedAt"], payload["observedAt"] - 1000)
+        self.assertEqual(claims["expiresAt"], payload["observedAt"] + 5000)
+
+        hub_response = (400, {
+            "code": "UNTRUSTED_TASK_IDENTITY",
+            "signingPermitted": False,
+            "dispatchPermitted": False,
+        })
+        issuer_response = (409, {
+            "ok": False,
+            "environment": "DEV",
+            "result": {
+                "reason": "ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE",
+                "readOnlySessionVerified": True,
+                "issuerLedgerMatched": False,
+                "persistedTrustedReadProven": False,
+                "signingPermitted": False,
+                "authorizationGranted": False,
+                "dispatchPermitted": False,
+                "commandCreated": False,
+                "releaseDecision": "NO_GO",
+            },
+            "signingPermitted": False,
+            "authorizationGranted": False,
+            "dispatchPermitted": False,
+            "releaseDecision": "NO_GO",
+        })
+        with patch.object(module, "_unix_json_request", side_effect=[hub_response, issuer_response]) as request:
+            result = module._probe_trusted_readers()
+        self.assertTrue(result["hubCoreReaderOperational"])
+        self.assertTrue(result["issuerReaderOperational"])
+        self.assertTrue(result["trustedReaderConnectivityVerified"])
+        self.assertEqual(request.call_args_list[1].args[2], payload)
 
     def test_runtime_source_has_no_signing_network_db_or_secret_output_surface(self):
         source = RUNTIME.read_text()
