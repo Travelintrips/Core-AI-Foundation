@@ -510,7 +510,7 @@ class IssuerReaderBundleRuntimeBindingTest(unittest.TestCase):
         def fake_read_bytes(path):
             if str(path) == "/proc/4242/cmdline":
                 target = command_path if command_path is not None else str(self.bundle)
-                return b"/usr/bin/node\\0" + os.fsencode(target) + b"\\0"
+                return b"/usr/bin/node\0" + os.fsencode(target) + b"\0"
             return real_read_bytes(path)
 
         def fake_read_text(path, *args, **kwargs):
@@ -524,15 +524,15 @@ class IssuerReaderBundleRuntimeBindingTest(unittest.TestCase):
         def fake_run(args, **kwargs):
             if args[:3] == ["systemctl", "is-active", "--quiet"]:
                 return SimpleNamespace(returncode=0, stdout="")
-            if args[:3] == ["systemctl", "show", "-p", "MainPID"]:
-                return SimpleNamespace(returncode=0, stdout="4242\\n")
+            if args[:4] == ["systemctl", "show", "-p", "MainPID"]:
+                return SimpleNamespace(returncode=0, stdout="4242\n")
             return SimpleNamespace(returncode=1, stdout="")
 
-        with patch.object(readiness.os, "lstat", side_effect=fake_lstat), \\
-             patch.object(readiness.Path, "read_bytes", side_effect=fake_read_bytes), \\
-             patch.object(readiness.Path, "read_text", side_effect=fake_read_text), \\
-             patch.object(readiness.subprocess, "run", side_effect=fake_run), \\
-             patch.object(readiness.os, "sysconf", return_value=100), \\
+        with patch.object(readiness.os, "lstat", side_effect=fake_lstat), \
+             patch.object(readiness.Path, "read_bytes", side_effect=fake_read_bytes), \
+             patch.object(readiness.Path, "read_text", side_effect=fake_read_text), \
+             patch.object(readiness.subprocess, "run", side_effect=fake_run), \
+             patch.object(readiness.os, "sysconf", return_value=100), \
              patch.object(readiness.time, "time", return_value=2000.0):
             return readiness.issuer_reader_bundle_matches_running_process()
 
