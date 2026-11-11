@@ -45,6 +45,9 @@ def runtime(**patch):
         "approvalWriterIntegrated": False,
         "hubPublicTrustDirectoryPresent": False,
         "hubFingerprintManifestPresent": False,
+        "hubCoreIssuerTrustedReadAdaptersOperational": False,
+        "fourSignerRuntimesMounted": False,
+        "approvalIntentTrustedReadCurrent": False,
     }
     base.update(patch)
     return base
@@ -80,6 +83,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 approvalWriterIntegrated=True,
                 hubPublicTrustDirectoryPresent=True,
                 hubFingerprintManifestPresent=True,
+                fourSignerRuntimesMounted=True,
             ),
         )
         self.assertTrue(out["realAal2ApprovalEvidenceAvailable"])
@@ -97,9 +101,34 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         )
         self.assertIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
         self.assertFalse(out["hubCoreIssuerTrustedReadAdaptersOperational"])
-        self.assertFalse(out["fourSignerRuntimesMounted"])
+        self.assertTrue(out["fourSignerRuntimesMounted"])
+        self.assertNotIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
         self.assertFalse(out["operationalSigningReady"])
         self.assertFalse(out["dispatchPermitted"])
+
+    def test_signer_mount_pass_does_not_remove_trusted_reader_blocker(self):
+        out = readiness.assess(
+            approval(evidence=True),
+            custody(host_secret=True, credentials=4),
+            runtime(
+                approvalReaderSourceInstalled=True,
+                approvalWriterSourceInstalled=True,
+                approvalWriterIntegrated=True,
+                hubPublicTrustDirectoryPresent=True,
+                hubFingerprintManifestPresent=True,
+                fourSignerRuntimesMounted=True,
+            ),
+        )
+        self.assertTrue(out["fourSignerRuntimesMounted"])
+        self.assertFalse(out["hubCoreIssuerTrustedReadAdaptersOperational"])
+        self.assertIn(
+            "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
+            out["blockers"],
+        )
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["authorizationGranted"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
 
     def test_schema_or_custody_drift_is_reported_separately(self):
         out = readiness.assess(
