@@ -130,8 +130,8 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
     def test_pending_route_requires_real_active_super_admin_session(self):
         api.admin_identity = lambda token, connection: None
         status, body = self.pending_request()
-        self.assertEqual(status, 403)
-        self.assertEqual(body, {"error": "active_super_admin_required"})
+        self.assertEqual(status, 401)
+        self.assertEqual(body, {"error": "unauthorized"})
         req = urllib.request.Request(
             self.base + "/api/gpt02/issue159/approval-intent/pending", method="GET"
         )
