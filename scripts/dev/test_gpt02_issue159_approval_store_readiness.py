@@ -54,6 +54,20 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
         return path
 
+    def seed_mapping(self, path, hub_operator_id="user-1"):
+        con=sqlite3.connect(path)
+        con.execute(
+            "INSERT OR REPLACE INTO admin_identities(user_id,role,enabled) VALUES (?,?,1)",
+            ("auth-fixture-"+hub_operator_id,"super_admin"),
+        )
+        con.execute(
+            """INSERT OR REPLACE INTO gpt02_issue159_admin_operator_links
+            (auth_user_id,hub_operator_id,email,enabled) VALUES (?,?,?,1)""",
+            ("auth-fixture-"+hub_operator_id,hub_operator_id,
+             hub_operator_id+"@example.com"),
+        )
+        con.commit(); con.close()
+
     def test_legacy_store_fails_closed_without_issue159_binding_table(self):
         path = self.db()
         out = probe.inspect(path, operational=False)
@@ -68,6 +82,9 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         path = self.db()
         con = sqlite3.connect(path)
         con.executescript(SCHEMA_PATH.read_text())
+        con.commit(); con.close()
+        self.seed_mapping(path, "user-1")
+        con = sqlite3.connect(path)
         con.execute(
             "INSERT INTO approval_decisions VALUES (?,?,?,?,?,?,?)",
             ("88888888-8888-4888-8888-888888888888","job-1","APPROVE",
@@ -106,6 +123,7 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         con.executescript(SCHEMA_PATH.read_text())
         con.commit()
         con.close()
+        self.seed_mapping(path, "empty-store-admin")
         out = probe.inspect(path, operational=False)
         self.assertEqual(out["reason"],
                          "ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY")
@@ -128,6 +146,7 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         con.executescript(schema)
         con.commit()
         con.close()
+        self.seed_mapping(path, "index-admin")
         out = probe.inspect(path, operational=False)
         self.assertEqual(out["reason"], "ISSUE159_APPROVAL_INTENT_INDEX_DRIFT")
         self.assertTrue(out["approvalIntentSelfContainedDecision"])
@@ -137,13 +156,26 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
     def test_schema_drift_fails_closed(self):
         path = self.db()
         con = sqlite3.connect(path)
+        con.executescript(SCHEMA_PATH.read_text())
+        con.execute("DROP TABLE gpt02_issue159_approval_intents")
         con.execute("""CREATE TABLE gpt02_issue159_approval_intents (
           id TEXT PRIMARY KEY, task_id INTEGER NOT NULL
         )""")
         con.commit()
         con.close()
+        self.seed_mapping(path, "drift-admin")
         out = probe.inspect(path, operational=False)
         self.assertEqual(out["reason"], "ISSUE159_APPROVAL_INTENT_SCHEMA_DRIFT")
+        self.assertFalse(out["trustedPersistedReadReady"])
+
+    def test_intent_schema_without_operator_mapping_fails_closed(self):
+        path=self.db()
+        con=sqlite3.connect(path)
+        con.executescript(SCHEMA_PATH.read_text())
+        con.execute("DROP TABLE gpt02_issue159_admin_operator_links")
+        con.commit(); con.close()
+        out=probe.inspect(path,operational=False)
+        self.assertEqual(out["reason"],"ISSUE159_ADMIN_OPERATOR_MAPPING_TABLE_MISSING")
         self.assertFalse(out["trustedPersistedReadReady"])
 
     def test_operational_path_is_pinned_and_source_is_read_only(self):
@@ -166,6 +198,9 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
         path = self.db()
         con = sqlite3.connect(path)
         con.executescript(SCHEMA_PATH.read_text())
+        con.commit(); con.close()
+        self.seed_mapping(path, "active-super-admin")
+        con = sqlite3.connect(path)
         con.execute(
             """INSERT INTO gpt02_issue159_approval_intents
             (id,task_id,command_id,attempt_id,company_id,
