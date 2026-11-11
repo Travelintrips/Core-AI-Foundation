@@ -79,7 +79,7 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
              claims_sha256,actor_id,auth_method,role_at_decision,decision,
              recorded_at_ms,expires_at_ms)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-            ("99999999-9999-4999-8999-999999999999",137,
+            ("99999999-9999-4999-8999-999999999999",140,
              "11111111-1111-4111-8111-111111111111",
              "22222222-2222-4222-8222-222222222222","default",
              "a"*64,"user-1","supabase_aal2","super_admin","APPROVE",1000,2000),
@@ -172,7 +172,7 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
              claims_sha256,actor_id,auth_method,role_at_decision,decision,
              recorded_at_ms,expires_at_ms)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-            ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",137,
+            ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",140,
              "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
              "cccccccc-cccc-4ccc-8ccc-cccccccccccc","default",
              "b"*64,"active-super-admin","supabase_admin_session",
