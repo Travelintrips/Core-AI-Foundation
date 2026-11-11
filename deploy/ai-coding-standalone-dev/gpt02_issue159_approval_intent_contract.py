@@ -2,7 +2,7 @@
 """Pure GPT02 Issue #159 approval-intent producer contract.
 
 Builds one exact self-contained intent row from canonical approval claims and a
-trusted AAL2 Super Admin identity. It never writes SQLite, loads keys, signs,
+one authenticated, enabled Super Admin session. It never writes SQLite, loads keys, signs,
 creates tasks, consumes nonces, or dispatches anything.
 """
 from __future__ import annotations
