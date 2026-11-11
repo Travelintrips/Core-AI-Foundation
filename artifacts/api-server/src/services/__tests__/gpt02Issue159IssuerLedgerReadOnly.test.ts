@@ -111,6 +111,8 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
     });
     expect(result.issuerLedgerMatched).toBe(true);
     expect(result.readOnlySessionVerified).toBe(true);
+    expect(result.clientTlsVerified).toBe(true);
+    expect(result.backendTlsVerified).toBe(true);
     expect(result.persistedTrustedReadProven).toBe(false);
     expect(result.cryptographicSignaturesVerified).toBe(false);
     expect(result.signingPermitted).toBe(false);
@@ -146,6 +148,23 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
     expect(connected).toBe(false);
   });
 
+  it("accepts pinned client TLS when the provider backend TLS flag is false", async () => {
+    const f = fixture({ identity: { db_tls: false } });
+    const result = await readGpt02Issue159IssuerLedgerReadOnly(f.pool, {
+      claims: claims(), observedAt: 5000,
+    });
+    expect(result.issuerLedgerMatched).toBe(true);
+    expect(result.readOnlySessionVerified).toBe(true);
+    expect(result.clientTlsVerified).toBe(true);
+    expect(result.tlsVerified).toBe(true);
+    expect(result.backendTlsVerified).toBe(false);
+    expect(result.signingPermitted).toBe(false);
+    expect(result.authorizationGranted).toBe(false);
+    expect(result.dispatchPermitted).toBe(false);
+    expect(result.releaseDecision).toBe("NO_GO");
+    expect(f.released()).toBe(1);
+  });
+
   it("refuses privileged role, wrong session, no TLS or altered bounds before ledger query", async () => {
     for (const patch of [
       { identity: { login: "postgres" } },
@@ -154,7 +173,6 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
       { identity: { no_privileged_routines: false } },
       { identity: { restricted_role: false } },
       { identity: { no_memberships: false } },
-      { identity: { db_tls: false } },
       { tls: false },
     ]) {
       const f = fixture(patch);
