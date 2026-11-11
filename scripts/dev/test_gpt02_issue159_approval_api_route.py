@@ -101,7 +101,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         return value
 
     def test_feature_disabled_is_404_and_never_writes(self):
-        status, body = self.request(AAL2_TOKEN)
+        status, body = self.request(ADMIN_TOKEN)
         self.assertEqual((status, body), (404, {"error": "not_found"}))
         self.assertEqual(self.count(), 0)
         self.assertFalse(os.path.exists(self.packet))
@@ -119,9 +119,9 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         api.admin_identity = lambda token, connection: (
             {"user_id": CLAIMS["superAdminId"], "email": "fixture@example.com",
              "role": "super_admin", "auth_level": "aal1"}
-            if token == AAL2_TOKEN else None
+            if token == ADMIN_TOKEN else None
         )
-        status, body = self.request(AAL2_TOKEN)
+        status, body = self.request(ADMIN_TOKEN)
         self.assertEqual(status, 201)
         self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
         self.assertEqual(body["authMethod"], "supabase_admin_session")
@@ -165,7 +165,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             "email": "fixture@example.com",
             "role": "admin",
         }
-        status, _ = self.request(AAL2_TOKEN)
+        status, _ = self.request(ADMIN_TOKEN)
         self.assertEqual(status, 403)
         status, _ = self.request(None)
         self.assertEqual(status, 401)
