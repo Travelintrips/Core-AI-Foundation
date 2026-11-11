@@ -87,24 +87,26 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 "SIGNED_LINK_LEDGER_DIGEST_MISMATCH",
                 "IMMUTABLE_PREPARATION_CONFIGURATION_MISMATCH",
             ],
-            "ISSUER_LEDGER_AUTHORIZER_SOURCE": [
-                "inspectGpt02Issue159IssuerAuthorizerEvidence",
-            ],
-            "ISSUER_AUTHORIZER_SOURCE": [
-                "inspectGpt02Issue159IssuerAuthorizerEvidence",
-                "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH",
-                "GPT02_ISSUE159_FENCE_BINDING_MISMATCH",
-                "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
-            ],
         }
         with tempfile.TemporaryDirectory(prefix="gpt02-authorizer-sources-") as root:
             for name, values in markers.items():
                 path = Path(root) / name
                 path.write_text("\\n".join(values), encoding="utf-8")
                 setattr(readiness, name, path)
-            self.assertTrue(readiness.authorizer_adapters_installed())
-            Path(root, "ISSUER_AUTHORIZER_SOURCE").write_text("missing adapter", encoding="utf-8")
-            self.assertFalse(readiness.authorizer_adapters_installed())
+            bundle = Path(root) / "issuer-reader-runtime.mjs"
+            bundle.write_text(
+                "inspectGpt02Issue159IssuerAuthorizerEvidence(input) "
+                "inspectGpt02Issue159IssuerAuthorizerEvidence({ "
+                "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH "
+                "GPT02_ISSUE159_FENCE_BINDING_MISMATCH "
+                "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
+                encoding="utf-8",
+            )
+            with patch.object(readiness, "ISSUER_READER_BUNDLE", bundle), \\
+                 patch.object(readiness, "issuer_reader_bundle_matches_running_process", return_value=True):
+                self.assertTrue(readiness.authorizer_adapters_installed())
+                bundle.write_text("missing deployed adapter", encoding="utf-8")
+                self.assertFalse(readiness.authorizer_adapters_installed())
 
     def test_current_expected_state_is_precise_no_go(self):
         out = readiness.assess(approval(), custody(), runtime())
@@ -285,7 +287,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
     def test_issuer_health_probe_uses_http_crlf_not_literal_backslashes(self):
         source = SCRIPT.read_text()
         start = source.index('def issuer_reader_runtime_operational():')
-        end = source.index('def authorizer_adapters_installed():', start)
+        end = source.index('def authorizer_adapters_installed(', start)
         function = source[start:end]
         slash = chr(92)
         self.assertIn('b"GET /health HTTP/1.1' + slash + 'r' + slash + 'n"', function)
@@ -529,8 +531,8 @@ class IssuerReaderBundleRuntimeBindingTest(unittest.TestCase):
             return SimpleNamespace(returncode=1, stdout="")
 
         with patch.object(readiness.os, "lstat", side_effect=fake_lstat), \
-             patch.object(readiness.Path, "read_bytes", side_effect=fake_read_bytes), \
-             patch.object(readiness.Path, "read_text", side_effect=fake_read_text), \
+             patch.object(readiness.Path, "read_bytes", new=fake_read_bytes), \
+             patch.object(readiness.Path, "read_text", new=fake_read_text), \
              patch.object(readiness.subprocess, "run", side_effect=fake_run), \
              patch.object(readiness.os, "sysconf", return_value=100), \
              patch.object(readiness.time, "time", return_value=2000.0):
