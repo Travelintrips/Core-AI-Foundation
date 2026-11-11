@@ -51,7 +51,7 @@ class ApprovalIntentWriterTest(unittest.TestCase):
         return path, con
 
     def identity(self, user_id=CLAIMS["superAdminId"], role="super_admin",
-                 enabled=True, auth_method="supabase_aal2"):
+                 enabled=True, auth_method="supabase_admin_session"):
         return {
             "userId": user_id, "role": role,
             "enabled": enabled, "authMethod": auth_method,
@@ -62,7 +62,7 @@ class ApprovalIntentWriterTest(unittest.TestCase):
             identity = self.identity()
         return Mock(return_value=identity)
 
-    def test_verified_aal2_super_admin_records_one_intent_but_never_authority(self):
+    def test_verified_admin_session_records_one_intent_but_never_authority(self):
         path, con = self.db()
         verify = self.verifier()
         out = writer.record_issue159_approval_intent(
@@ -85,7 +85,7 @@ class ApprovalIntentWriterTest(unittest.TestCase):
         canonical = canonical_approval(CLAIMS)
         self.assertEqual(row[0], hashlib.sha256(canonical.encode()).hexdigest())
         self.assertEqual(row[1:], (
-            CLAIMS["superAdminId"], "supabase_aal2", "super_admin",
+            CLAIMS["superAdminId"], "supabase_admin_session", "super_admin",
             "APPROVE", 2000, CLAIMS["expiresAt"],
         ))
         con.close()
@@ -122,7 +122,7 @@ class ApprovalIntentWriterTest(unittest.TestCase):
                 identity_verifier=self.verifier(identity), now_ms=2000
             )
             self.assertFalse(out["ok"])
-            self.assertEqual(out["reason"], "AAL2_SUPER_ADMIN_IDENTITY_MISMATCH")
+            self.assertEqual(out["reason"], "ADMIN_IDENTITY_MISMATCH")
             self.assertEqual(
                 con.execute("select count(*) from gpt02_issue159_approval_intents").fetchone()[0], 0
             )
@@ -153,14 +153,14 @@ class ApprovalIntentWriterTest(unittest.TestCase):
             TOKEN, con, dict(CLAIMS), now_ms=2000
         )
         self.assertFalse(out["ok"])
-        self.assertEqual(out["reason"], "AAL2_IDENTITY_VERIFIER_REQUIRED")
+        self.assertEqual(out["reason"], "ADMIN_IDENTITY_VERIFIER_REQUIRED")
 
         broken = Mock(side_effect=RuntimeError("synthetic verifier failure"))
         out = writer.record_issue159_approval_intent(
             TOKEN, con, dict(CLAIMS), identity_verifier=broken, now_ms=2000
         )
         self.assertFalse(out["ok"])
-        self.assertEqual(out["reason"], "AAL2_IDENTITY_VERIFICATION_FAILED")
+        self.assertEqual(out["reason"], "ADMIN_IDENTITY_VERIFICATION_FAILED")
         con.close()
 
     def test_source_has_no_signing_key_dispatch_or_production_surface(self):
