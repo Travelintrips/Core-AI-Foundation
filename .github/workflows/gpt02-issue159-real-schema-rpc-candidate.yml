@@ -1,0 +1,45 @@
+name: GPT02 Issue159 DEV Real-Schema RPC Candidate (No Deployment)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/dev/gpt02_issue159_operational_candidate_NOT_APPLIED.sql'
+      - 'scripts/dev/gpt02_issue159_real_schema_disposable_seed.sql'
+      - 'scripts/dev/test_gpt02_issue159_real_schema_candidate_isolated.sh'
+      - 'scripts/dev/test_gpt02_issue159_real_schema_e2e_isolated.py'
+      - '.github/workflows/gpt02-issue159-real-schema-rpc-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify candidate cannot turn on writer or dispatch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("scripts/dev/gpt02_issue159_operational_candidate_NOT_APPLIED.sql")
+          sql = p.read_text()
+          assert "DO NOT APPLY TO LIVE DEV OR PROD" in sql
+          assert "NOT rolcanlogin" in sql
+          assert "ALTER ROLE gpt02_core_prep_login LOGIN" not in sql
+          assert "dispatch_allowed boolean NOT NULL DEFAULT false CHECK(dispatch_allowed=false)" in sql
+          assert "REVOKE ALL" in sql
+          assert "SECURITY DEFINER SET search_path=pg_catalog" in sql
+          assert "FORCE ROW LEVEL SECURITY" in sql
+          assert "TO gpt02_core_prep_login" in sql
+          print("PASS: dormant-only candidate static gate")
+          PY
+      - name: Verify shell and Python syntax
+        run: |
+          bash -n scripts/dev/test_gpt02_issue159_real_schema_candidate_isolated.sh
+          python3 -m py_compile scripts/dev/test_gpt02_issue159_real_schema_e2e_isolated.py
+      - name: Verify schema and migration idempotence on disposable PostgreSQL 16
+        run: bash scripts/dev/test_gpt02_issue159_real_schema_candidate_isolated.sh
+      - name: Verify six-RPC synthetic lifecycle and adversarial guards on disposable PostgreSQL 16
+        run: python3 scripts/dev/test_gpt02_issue159_real_schema_e2e_isolated.py
