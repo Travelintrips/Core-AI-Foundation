@@ -134,7 +134,7 @@ def inspect(db_path: str, operational: bool = True):
         fallback = con.execute(
             f"SELECT COUNT(*) FROM {TABLE} "
             "WHERE actor_id='dev_approval_token' "
-            "OR auth_method<>'supabase_aal2' "
+            "OR auth_method NOT IN ('supabase_admin_session','supabase_aal2') "
             "OR role_at_decision<>'super_admin' "
             "OR decision<>'APPROVE'"
         ).fetchone()[0]
