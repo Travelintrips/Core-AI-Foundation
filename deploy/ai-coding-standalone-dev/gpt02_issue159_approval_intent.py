@@ -1,7 +1,7 @@
 """DEV-only GPT02 Issue #159 approval-intent persistence helper.
 
-The caller injects a verifier for one authenticated AAL2 Super Admin session.
-The JWT must already carry aal2; no separate in-app TOTP challenge is added. It never signs, loads keys,
+The caller injects a verifier for one authenticated, enabled Super Admin session.
+A normal Supabase admin session is sufficient; no separate AAL2/TOTP challenge is required. It never signs, loads keys,
 creates commands, dispatches workers, or touches PROD.
 """
 from __future__ import annotations
