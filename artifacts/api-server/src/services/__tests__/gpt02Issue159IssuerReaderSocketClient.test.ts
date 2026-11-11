@@ -36,8 +36,6 @@ const health = {
   issuerRole: "gpt02_issuer_evidence_reader",
   readerReady: true,
   tlsVerified: true,
-  clientTlsVerified: true,
-  backendTlsVerified: true,
   readOnly: true,
   signingPermitted: false,
   authorizationGranted: false,
@@ -180,9 +178,9 @@ describe("GPT02 Issue159 issuer-reader Unix socket client", () => {
     }
   });
 
-  it("rejects a health response without verified backend TLS", async () => {
+  it("rejects a health response without verified TLS", async () => {
     const socket = await socketFixture({
-      health: { backendTlsVerified: false },
+      health: { tlsVerified: false },
     });
     try {
       await expect(readGpt02Issue159IssuerReaderSocketHealth({
