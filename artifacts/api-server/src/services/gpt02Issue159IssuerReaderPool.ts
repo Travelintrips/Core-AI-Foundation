@@ -2,6 +2,7 @@ import { X509Certificate } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 
 const PROJECT_REF = "xssrfshdrtdfupgqwfdw";
+const CREDENTIAL_HOST = "aws-1-ap-southeast-2.pooler.supabase.com";
 const DIRECT_DB_HOST = "db.xssrfshdrtdfupgqwfdw.supabase.co";
 const DATABASE = "postgres";
 const ROLE = "gpt02_issuer_evidence_reader";
@@ -107,7 +108,7 @@ function parseIssuerReaderDsn(value: string | undefined) {
 
   if (
     (url.protocol !== "postgresql:" && url.protocol !== "postgres:") ||
-    url.hostname !== DIRECT_DB_HOST ||
+    url.hostname !== CREDENTIAL_HOST ||
     Number(url.port || 5432) !== 5432 ||
     url.pathname !== "/" + DATABASE
   ) {
@@ -121,14 +122,21 @@ function parseIssuerReaderDsn(value: string | undefined) {
     return fail("GPT02_ISSUER_READER_DSN_INVALID");
   }
 
-  if (username !== ROLE || !url.password) {
+  if (username !== ROLE + "." + PROJECT_REF || !url.password) {
     return fail("GPT02_ISSUER_READER_DEDICATED_IDENTITY_REQUIRED");
   }
   if (url.hash || url.searchParams.size !== 0) {
     return fail("GPT02_ISSUER_READER_DSN_QUERY_FORBIDDEN");
   }
 
-  return Object.freeze({ connectionString: value });
+  // The encrypted credential retains its original pooler-shaped DSN envelope.
+  // Connect directly to CST-DEV PostgreSQL so both client TLS and the database
+  // backend TLS can be verified by the issuer evidence reader.
+  const directUrl = new URL(value);
+  directUrl.hostname = DIRECT_DB_HOST;
+  directUrl.username = ROLE;
+  directUrl.port = "5432";
+  return Object.freeze({ connectionString: directUrl.toString() });
 }
 
 /**
