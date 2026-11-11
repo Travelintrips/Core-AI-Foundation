@@ -89,7 +89,7 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
         credentialDirectory: dir,
       });
       const pool = value.issuerPool as unknown as FakePool;
-      expect(pool.config.connectionString).toBe(dsn());
+      expect(pool.config.connectionString).toBe(directDsn());
       expect(value.metadata.credentialSource).toBe("systemd-credential-files");
       expect(value.metadata.dispatchPermitted).toBe(false);
     } finally {
