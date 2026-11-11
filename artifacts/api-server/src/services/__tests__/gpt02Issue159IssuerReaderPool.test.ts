@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createGpt02Issue159IssuerReaderPool } from "../gpt02Issue159IssuerReaderPool.js";
 
-const host = "aws-1-ap-southeast-2.pooler.supabase.com";
+const host = "db.xssrfshdrtdfupgqwfdw.supabase.co";
 const ref = "xssrfshdrtdfupgqwfdw";
 const role = "gpt02_issuer_evidence_reader";
 const ca = readFileSync(
   new URL("../../../../../scripts/dev/fixtures/supabase-root-ca-2021.crt", import.meta.url),
   "utf8",
 );
-const dsn = (username = role + "." + ref, password = "issuer-secret-fixture") =>
+const dsn = (username = role, password = "issuer-secret-fixture") =>
   "postgresql://" + username + ":" + password + "@" + host + ":5432/postgres";
 
 class FakePool {
@@ -172,10 +172,11 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
   });
 
   for (const [label, value, code] of [
-    ["wrong role", dsn("postgres.xssrfshdrtdfupgqwfdw"), "GPT02_ISSUER_READER_DEDICATED_IDENTITY_REQUIRED"],
+    ["wrong role", dsn("postgres"), "GPT02_ISSUER_READER_DEDICATED_IDENTITY_REQUIRED"],
     ["wrong project", dsn("gpt02_issuer_evidence_reader.other"), "GPT02_ISSUER_READER_DEDICATED_IDENTITY_REQUIRED"],
-    ["wrong host", "postgresql://" + role + "." + ref + ":pw@db.example.invalid:5432/postgres", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
-    ["wrong database", "postgresql://" + role + "." + ref + ":pw@" + host + ":5432/production", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
+    ["wrong host", "postgresql://" + role + ":pw@db.example.invalid:5432/postgres", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
+    ["Supavisor session pooler", "postgresql://" + role + ":pw@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
+    ["wrong database", "postgresql://" + role + ":pw@" + host + ":5432/production", "GPT02_ISSUER_READER_CST_DEV_TARGET_REQUIRED"],
     ["query parameters", dsn() + "?sslmode=no-verify", "GPT02_ISSUER_READER_DSN_QUERY_FORBIDDEN"],
   ] as const) {
     it("rejects " + label, () => {
