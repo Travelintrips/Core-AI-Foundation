@@ -89,7 +89,7 @@ def build_approval_intent_record(
         or identity["enabled"] is not True
         or identity["authMethod"] not in ("supabase_admin_session", "supabase_aal2")
     ):
-        _fail("GPT02_ISSUE159_AAL2_SUPER_ADMIN_REQUIRED")
+        _fail("GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED")
 
     if (
         not isinstance(intent_id, str)
