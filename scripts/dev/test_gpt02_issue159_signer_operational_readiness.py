@@ -68,6 +68,44 @@ def runtime(**patch):
 
 
 class SignerOperationalReadinessTest(unittest.TestCase):
+    def test_authorizer_adapter_source_contracts_are_verified(self):
+        markers = {
+            "APPROVAL_API_SOURCE": [
+                "issue159_identity_verifier",
+                "handle_issue159_approval_intent(",
+                "authMethod':'supabase_admin_session'",
+            ],
+            "APPROVAL_READER_SOURCE": [
+                "def read_approval_intent(",
+                'r["role_at_decision"] != "super_admin"',
+                'r["decision"] != "APPROVE"',
+                'r["auth_method"] not in ("supabase_admin_session", "supabase_aal2")',
+            ],
+            "HUB_CORE_AUTHORIZER_SOURCE": [
+                "function mapFacts(",
+                "SUPER_ADMIN_ASSIGNMENT_AUDIT_MISMATCH",
+                "SIGNED_LINK_LEDGER_DIGEST_MISMATCH",
+                "IMMUTABLE_PREPARATION_CONFIGURATION_MISMATCH",
+            ],
+            "ISSUER_LEDGER_AUTHORIZER_SOURCE": [
+                "inspectGpt02Issue159IssuerAuthorizerEvidence",
+            ],
+            "ISSUER_AUTHORIZER_SOURCE": [
+                "inspectGpt02Issue159IssuerAuthorizerEvidence",
+                "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH",
+                "GPT02_ISSUE159_FENCE_BINDING_MISMATCH",
+                "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
+            ],
+        }
+        with tempfile.TemporaryDirectory(prefix="gpt02-authorizer-sources-") as root:
+            for name, values in markers.items():
+                path = Path(root) / name
+                path.write_text("\\n".join(values), encoding="utf-8")
+                setattr(readiness, name, path)
+            self.assertTrue(readiness.authorizer_adapters_installed())
+            Path(root, "ISSUER_AUTHORIZER_SOURCE").write_text("missing adapter", encoding="utf-8")
+            self.assertFalse(readiness.authorizer_adapters_installed())
+
     def test_current_expected_state_is_precise_no_go(self):
         out = readiness.assess(approval(), custody(), runtime())
         self.assertTrue(out["approvalStoreSchemaReady"])
