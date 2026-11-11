@@ -70,7 +70,7 @@ def record_issue159_approval_intent(
         )
     except ApprovalIntentContractError as exc:
         code = str(exc)
-        if code == "GPT02_ISSUE159_AAL2_SUPER_ADMIN_REQUIRED":
+        if code == "GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED":
             return _denied("AAL2_SUPER_ADMIN_IDENTITY_MISMATCH")
         return _denied("APPROVAL_CLAIMS_INVALID")
 
