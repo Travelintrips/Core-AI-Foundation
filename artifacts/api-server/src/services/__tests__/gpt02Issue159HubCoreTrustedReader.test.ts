@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
 import {
-  chmodSync, chownSync, lstatSync, mkdtempSync, rmSync,
+  chmodSync, chownSync, lstatSync, mkdtempSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
