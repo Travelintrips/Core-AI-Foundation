@@ -60,6 +60,7 @@ def runtime(**patch):
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": False,
         "fourSignerTrustedReaderConnectivityVerified": False,
+        "issuerReaderBundleVerified": False,
         "authorizerAdaptersInstalled": False,
         "approvalIntentTrustedReadCurrent": False,
     }
@@ -176,9 +177,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 issuerReaderRuntimeOperational=True,
                 fourSignerRuntimesMounted=True,
                 fourSignerTrustedReaderConnectivityVerified=True,
+                issuerReaderBundleVerified=True,
                 authorizerAdaptersInstalled=True,
             ),
         )
+        self.assertTrue(out["issuerReaderBundleVerified"])
         self.assertTrue(out["fourSignerAuthorizersOperational"])
         self.assertNotIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
         self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
@@ -201,9 +204,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 issuerReaderRuntimeOperational=True,
                 fourSignerRuntimesMounted=True,
                 fourSignerTrustedReaderConnectivityVerified=True,
+                issuerReaderBundleVerified=False,
                 authorizerAdaptersInstalled=False,
             ),
         )
+        self.assertFalse(out["issuerReaderBundleVerified"])
         self.assertFalse(out["fourSignerAuthorizersOperational"])
         self.assertIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
         self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
