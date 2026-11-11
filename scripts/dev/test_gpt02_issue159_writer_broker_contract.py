@@ -129,5 +129,3 @@ class WriterBrokerContractTest(unittest.TestCase):
             with self.assertRaises(BrokerAdmissionError): verify_lifecycle_evidence_packet(p,self.roots,self.now)
 
 if __name__=="__main__": unittest.main()
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
