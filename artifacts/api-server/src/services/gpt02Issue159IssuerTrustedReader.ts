@@ -3,6 +3,7 @@ import {
   createGpt02Issue159IssuerReaderPool,
 } from "./gpt02Issue159IssuerReaderPool.js";
 import {
+  probeGpt02Issue159IssuerReaderReadOnly,
   readGpt02Issue159IssuerLedgerReadOnly,
 } from "./gpt02Issue159IssuerLedgerReadOnly.js";
 
@@ -117,6 +118,21 @@ export function createGpt02Issue159IssuerTrustedReader({
       dispatchPermitted: false as const,
       releaseDecision: "NO_GO" as const,
     }),
+    health: async () => {
+      const result = await probeGpt02Issue159IssuerReaderReadOnly(
+        reader.issuerPool as Parameters<typeof probeGpt02Issue159IssuerReaderReadOnly>[0],
+      );
+      return Object.freeze({
+        ...result,
+        environment: "DEV" as const,
+        operationalTrustedReaderRuntime: !synthetic && result.readOnlySessionVerified === true,
+        persistedTrustedReadProven: false as const,
+        signingPermitted: false as const,
+        authorizationGranted: false as const,
+        dispatchPermitted: false as const,
+        releaseDecision: "NO_GO" as const,
+      });
+    },
     read: async (input: unknown) => {
       const result = await readGpt02Issue159IssuerLedgerReadOnly(
         reader.issuerPool as Parameters<typeof readGpt02Issue159IssuerLedgerReadOnly>[0],
