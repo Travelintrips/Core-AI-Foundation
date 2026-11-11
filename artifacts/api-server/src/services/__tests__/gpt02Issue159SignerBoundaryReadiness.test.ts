@@ -198,7 +198,7 @@ describe("GPT02 Issue159 signer boundary aggregate readiness", () => {
     expect(result.issuerAuthorizerContractVerified).toBe(true);
     expect(result.blockers).toEqual([
       "TRUSTED_READ_RUNTIME_INTEGRATION_ATTESTATION_REQUIRED",
-      "REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE",
+      "REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE",
       "LIVE_SIGNER_CUSTODY_ATTESTATION_REQUIRED",
       "SIGNER_RUNTIME_NOT_MOUNTED",
       "OPERATIONAL_PUBLIC_TRUST_NOT_INSTALLED",
@@ -215,7 +215,7 @@ describe("GPT02 Issue159 signer boundary aggregate readiness", () => {
       const x = fixture();
       x.approval.decision.actorId = "dev_approval_token";
       expect(() => assessGpt02Issue159SignerBoundaryReadiness(x))
-        .toThrow("GPT02_ISSUE159_AAL2_SUPER_ADMIN_APPROVAL_REQUIRED");
+        .toThrow("GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED");
     }
     {
       const x = fixture();
