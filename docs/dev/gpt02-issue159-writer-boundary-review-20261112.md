@@ -1,71 +1,86 @@
-# GPT02 Issue #159 — DEV writer boundary review
+# GPT02 Issue #159 — DEV writer boundary and lifecycle migration review
 
 Date: 2026-11-12
-Scope: DEV only. Review/design record; no database or service mutation.
+Scope: DEV only. Read-only catalog review plus isolated verifier implementation. No lifecycle mutation.
 
-## Observed runtime boundary
+## Runtime boundary observed
 
 - Four signer units are active: approval, Hub, Core, Issuer.
 - Each signer has `GPT02_ISSUE159_SIGNING_ENABLED=false`.
-- Signer units run with `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX`.
-- Signers can reach the Hub/Core and Issuer read-only evidence sockets, but cannot open a PostgreSQL TCP connection.
-- Existing encrypted credential inventory contains only Hub/Core/Issuer read-only DSNs and four encrypted signer private-key files. No GPT02 lifecycle-writer DSN is provisioned.
-- The independent issuer reader uses a dedicated read-only DB login. It must remain read-only.
-- `gpt02_core_prep_login`, `gpt02_core_prep_owner`, `gpt02_store_owner`, `dev_gpt02_evidence_owner`, `dev_gpt02_attestor_evidence`, and `dev_gpt02_issuer_evidence` are NOLOGIN roles.
-- The six requested operational RPC functions are absent.
-- All six lifecycle evidence tables have ENABLE + FORCE RLS. Existing table owners are non-login. Existing reader policies are SELECT-only. Append-only triggers reject UPDATE/DELETE/TRUNCATE.
-- `prepare_core_task_dormant` is SECURITY DEFINER and explicitly checks `session_user='gpt02_core_prep_login'`; that role is currently NOLOGIN. It is not an operational RPC entry point.
+- Signer units use `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX`.
+- Signers can reach Hub/Core and Issuer read-only evidence sockets, but cannot open PostgreSQL TCP connections.
+- Encrypted credential inventory contains Hub/Core/Issuer read-only DSNs and four encrypted signer private-key files. No lifecycle-writer DSN is provisioned.
+- The independent Issuer reader uses a dedicated read-only database login. It must not be reused for writes.
 
-## Why the writer path cannot be enabled by a GRANT alone
+## Database owner split and blockers (verified from DEV catalogs)
 
-The signer processes are deliberately network-isolated and hold no database connection. Giving a SQL EXECUTE grant to a NOLOGIN role does not create a usable connection path. Granting broad table access to `service_role`, a reader login, or a signer process would break the current trust boundary. The read-only issuer DSN must not be repurposed for writes.
+- `gpt02_private.approvals`, `operator_links`, `receipts`, `core_identity_receipts`, and `post_consumption_fences` are owned by non-login `gpt02_store_owner`.
+- `gpt02_stage.core_preparations` is owned by non-login `gpt02_core_prep_owner`.
+- RLS is ENABLE + FORCE on the lifecycle tables. Reader policies are SELECT-only; owner policies are limited to the non-login table owners.
+- `gpt02_store_owner` has table DML only on its owned private evidence tables; it has no DML on `gpt02_stage.core_preparations`.
+- `gpt02_core_prep_owner` has table DML on `core_preparations`; it has no DML on private evidence tables.
+- Existing `gpt02_stage.prepare_core_task_dormant(text,integer,text,text,text,text)` is SECURITY DEFINER, owned by `gpt02_core_prep_owner`, fixed `search_path=pg_catalog`, and requires `session_user='gpt02_core_prep_login'`.
+- `gpt02_core_prep_login` is currently NOLOGIN and has no direct table DML. Simply granting EXECUTE to a different broker login will fail the function's session_user guard.
+- A single writer connection therefore needs a deliberate split-owner RPC design: preparation RPC owned by `gpt02_core_prep_owner`; evidence RPCs owned by `gpt02_store_owner`; all callable only by one dedicated broker login whose exact identity is checked in each RPC. Do not grant role membership or table DML to that login.
+- Existing checks force `core_identity_receipts.binding_verified/may_dispatch_worker/may_issue_grant/may_close_job/core_ledger_written=false` and `post_consumption_fences.dispatch_allowed/core_ledger_written=false`, with `lease_epoch=1`. Preserve these.
+- The local persisted single-Super-Admin approval intent is currently read from the DEV approval SQLite store. The Supabase private `approvals` table is a separate signed approval-evidence ledger and has no rows. Do not claim the SQLite decision is already persisted in Supabase.
 
-## Implemented safe prerequisite: signed-packet admission contract
+## Official signer contract alignment
 
-Added `deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py` and isolated tests at `scripts/dev/test_gpt02_issue159_writer_broker_contract.py`.
+The verifier was compared against the canonical sources in `Core-AI-Foundation/develop`:
 
-- Verifies canonical detached Ed25519 signatures for Approval, Hub, Core and Issuer domains.
-- Requires four distinct public-key fingerprints; same-key role impersonation is rejected.
-- Cross-binds task, command, attempt, nonce, approval digest, operator link, worker, receipt and fence identifiers.
-- Rejects expired approval/evidence and task IDs <= 136.
-- Returns evidence verification only. Database writes, nonce/lease consumption, signing, authorization and dispatch remain false / NO_GO.
-- Is deliberately pure: no socket, DB driver, filesystem credential read, private key import, task creation or dispatch surface.
-- Isolated synthetic-key tests: 8/8 PASS. These do not create any real approval or task and do not prove live signer output.
+- `GPT02_DUAL_ACCOUNT_COMMAND_LINK` is the operator-link claims audience.
+- Hub identity is `ai-task-hub.public.users`, role `super_admin`.
+- Core identity is `ai-core.ai_platform.internal_users`, role `owner` or `admin`, active with password changed.
+- The detached signature domains remain `GPT02_OPERATOR_LINK_V1:hub` and `GPT02_OPERATOR_LINK_V1:core`.
+- Issuer lineage uses the canonical approval, operator-link, nonce receipt, identity receipt and fence fields from the official authorizer.
+
+An earlier verifier draft used the wrong link audience and incorrectly required Core `super_admin`. That draft was corrected before this PR update; regression tests now explicitly reject those mismatches.
 
 ## Implemented verification ingress (not a database writer)
 
-Added `deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py`.
+Added:
+- `deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py`
+- `deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py`
+- isolated tests in `scripts/dev/test_gpt02_issue159_writer_broker_*.py`
 
-- Private Unix socket accepts only bounded `POST /verify-packet` JSON.
-- Loads the four root-owned DEV public keys and verifies each against the root-owned `trust-fingerprints.json` manifest; all four SPKI fingerprints must be distinct.
-- Calls the pure four-domain Ed25519 evidence verifier; malformed, tampered, expired, cross-role and mismatched-root packets fail closed.
-- Does not connect to PostgreSQL, read private credentials, sign, consume nonce/lease, create tasks/commands, grant authority or dispatch.
-- Socket integration tests use disposable synthetic keys and a temporary Unix socket. Runtime is not installed or enabled as a systemd service.
-- Targeted broker tests: contract 8/8 PASS; runtime 5/5 PASS. Combined Issue #159 Python suite: 74/74 PASS. Python compile and git diff check PASS.
-- Live public-root preflight against the existing DEV public keys + fingerprint manifest: PASS; no socket bound and no database connection.
+The ingress:
+- Accepts only bounded `POST /verify-packet` JSON over a private Unix socket.
+- Reads root-owned DEV public keys and verifies each against the pinned root-owned `trust-fingerprints.json`; all four SPKI fingerprints must be distinct.
+- Verifies canonical, domain-separated Ed25519 signatures and cross-binds task, command, attempt, nonce, approval digest, dual-account operator link, receipt and fence identifiers.
+- Rejects expired, tampered, cross-role, wrong-root, malformed and legacy task 135/136 packets.
+- Returns verification only. It has no PostgreSQL connection, no private key loading, no signing, no nonce/lease consumption, no task/command creation, no authorization and no dispatch.
+- Is not installed or enabled as a systemd service.
 
-This is a verification ingress prerequisite only. It is intentionally not described as an operational writer broker.
+## Local VPS verification
 
-## Required minimal bridge before operational migration
+- Writer contract tests: 9/9 PASS.
+- Writer socket tests: 5/5 PASS.
+- Combined Issue #159 Python regression suite: 75/75 PASS.
+- Live DEV public-root + fingerprint-manifest preflight: PASS.
+- Python compile and `git diff --check`: PASS.
 
-1. Add one separate DEV lifecycle-writer broker, isolated from signer private-key custody.
-2. Signers submit signed, canonical, domain-separated evidence to that broker over a local Unix socket. The broker verifies signatures against the pinned four public roots and checks the single authenticated Super Admin approval evidence through the existing read-only approval reader.
-3. The broker connects to Supabase with a new, dedicated encrypted lifecycle-writer DSN. Its database role is NOINHERIT, non-superuser, no BYPASSRLS, no CREATEDB/CREATEROLE, no memberships, connection limit 1, and has EXECUTE only on the six reviewed RPC functions. It has no direct table DML.
-4. RPC functions are SECURITY DEFINER with fixed `search_path=pg_catalog`, fully qualified object references, strict DEV/task/company/attempt/nonce/expiry checks, transaction-scoped advisory locks, unique constraints, and append-only writes. Function owners remain non-login and retain RLS policies scoped to their own exact writes.
-5. Every transition verifies the prior persisted row and exact identity tuple; caller booleans never prove a signature, consumed nonce, fence, or lease.
-6. The migration must fail on schema/owner/policy/constraint drift, preserve FORCE RLS, preserve immutability, and keep dispatch authorization false until a separately reviewed gate. No automatic dispatch is included.
+These are isolated tests and read-only preflights. They do not prove a live signer output or E2E lifecycle.
+
+## Required next steps before operational migration
+
+1. Design and test a single restricted broker login compatible with the preparation RPC's `session_user` guard and the two distinct non-login function owners.
+2. Complete the persisted approval read-back contract: one verified Supabase Super Admin session, one approval decision, no HR/Accounting approval and no additional AAL2/TOTP requirement. The writer must not accept a caller boolean or a signature alone as proof of the persisted admin decision.
+3. Define six SECURITY DEFINER RPCs with fixed `search_path=pg_catalog`, fully qualified object references, exact DEV/task/company/attempt/nonce/expiry binding, transaction-scoped locks, unique/idempotency constraints, and append-only writes.
+4. Run isolated PostgreSQL tests for rollback, duplicate/replay, concurrent transactions, RLS and negative privileges before any DEV catalog mutation.
+5. Only then provision the encrypted DEV writer credential and enable the broker-to-RPC path.
 
 ## Explicitly prohibited
 
-- Do not change the signer units' network sandbox.
-- Do not reuse the issuer-reader DSN or any reader login for writes.
-- Do not grant table DML to `authenticated`, `service_role`, signer roles, or readers.
-- Do not enable or load signer private keys for operational signing.
-- Do not create a task, command, approval, nonce receipt, signature, lease, or dispatch during this writer-boundary preparation.
+- Do not change signer network sandboxes.
+- Do not reuse reader DSNs or reader logins for writes.
+- Do not grant direct table DML to authenticated, service_role, readers or signer processes.
+- Do not remove/relax immutable evidence constraints or enable dispatch.
+- Do not create task, command, approval, nonce receipt, signature, lease or dispatch during preparation.
 - Do not change PROD.
 
 ## Current decision
 
-The signed-packet verifier contract is staged and isolated tests pass, but it is not a running broker. NO-GO for operational lifecycle migration until the dedicated writer broker, real signer evidence interface, and restricted DB credential exist and are independently verified. Existing 61/61 Issue #159 Python tests and the isolated PostgreSQL fence-receipt test remain valid for their tested contracts, but do not prove the missing writer bridge or live lifecycle.
+The verification ingress is implemented and isolated tests pass. The database writer, restricted writer credential, six lifecycle RPCs and trusted persisted approval bridge are not implemented. Operational lifecycle migration remains NO-GO.
 
 [executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
