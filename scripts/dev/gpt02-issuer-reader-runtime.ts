@@ -78,10 +78,17 @@ export function createIssuerReaderServer({
 }: {
   reader: ReturnType<typeof createGpt02Issue159IssuerTrustedReader>;
 }) {
+  // Four isolated signer processes may probe at once. Share one native
+  // database health check so the dedicated reader connection limit of 1
+  // remains sufficient without returning transient 503 responses.
+  let healthInFlight: ReturnType<typeof reader.health> | null = null;
   const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       try {
-        const health = await reader.health();
+        const healthPromise = healthInFlight ??= reader.health().finally(() => {
+          healthInFlight = null;
+        });
+        const health = await healthPromise;
         const ok = nativeHealthIsTrusted(health);
         respond(res, ok ? 200 : 503, {
           ok,
