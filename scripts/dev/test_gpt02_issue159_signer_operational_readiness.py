@@ -60,7 +60,7 @@ def runtime(**patch):
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": False,
         "fourSignerTrustedReaderConnectivityVerified": False,
-        "fourSignerAuthorizersOperational": False,
+        "authorizerAdaptersInstalled": False,
         "approvalIntentTrustedReadCurrent": False,
     }
     base.update(patch)
@@ -120,6 +120,54 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
         self.assertNotIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
         self.assertFalse(out["operationalSigningReady"])
+        self.assertFalse(out["dispatchPermitted"])
+
+    def test_authorizer_adapters_operational_requires_all_trusted_paths_but_not_a_live_approval(self):
+        out = readiness.assess(
+            approval(evidence=False),
+            custody(host_secret=True, credentials=4),
+            runtime(
+                approvalReaderSourceInstalled=True,
+                approvalWriterSourceInstalled=True,
+                approvalWriterIntegrated=True,
+                hubPublicTrustDirectoryPresent=True,
+                hubFingerprintManifestPresent=True,
+                hubCoreReaderRuntimeOperational=True,
+                issuerReaderRuntimeOperational=True,
+                fourSignerRuntimesMounted=True,
+                fourSignerTrustedReaderConnectivityVerified=True,
+                authorizerAdaptersInstalled=True,
+            ),
+        )
+        self.assertTrue(out["fourSignerAuthorizersOperational"])
+        self.assertNotIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
+        self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["authorizationGranted"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+
+    def test_authorizer_adapter_blocker_remains_when_one_trusted_path_is_missing(self):
+        out = readiness.assess(
+            approval(evidence=False),
+            custody(host_secret=True, credentials=4),
+            runtime(
+                approvalReaderSourceInstalled=True,
+                approvalWriterSourceInstalled=True,
+                approvalWriterIntegrated=True,
+                hubPublicTrustDirectoryPresent=True,
+                hubFingerprintManifestPresent=True,
+                hubCoreReaderRuntimeOperational=True,
+                issuerReaderRuntimeOperational=True,
+                fourSignerRuntimesMounted=True,
+                fourSignerTrustedReaderConnectivityVerified=True,
+                authorizerAdaptersInstalled=False,
+            ),
+        )
+        self.assertFalse(out["fourSignerAuthorizersOperational"])
+        self.assertIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
+        self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
+        self.assertFalse(out["signingPermitted"])
         self.assertFalse(out["dispatchPermitted"])
 
     def test_signer_mount_pass_does_not_remove_trusted_reader_blocker(self):
