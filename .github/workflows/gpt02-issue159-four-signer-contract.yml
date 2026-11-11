@@ -135,8 +135,8 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_signer_operational_readiness.py
           python3 scripts/dev/test_gpt02_issue159_signer_runtime.py
           python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py
-          python3 scripts/dev/test_gpt02_issue159_approval_reader_runtime.py
-          python3 scripts/dev/test_gpt02_issue159_approval_reader_service.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_reader_runtime.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_reader_service.py
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service
           python3 scripts/dev/test_gpt02_issue159_approval_http.py
           python3 scripts/dev/test_gpt02_issue159_approval_api_route.py
