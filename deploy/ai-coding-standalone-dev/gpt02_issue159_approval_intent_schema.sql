@@ -1,4 +1,4 @@
--- DEV-only additive storage contract for GPT02 Issue #159 AAL2 approval evidence.
+-- DEV-only additive storage contract for GPT02 Issue #159 single Super Admin approval evidence.
 -- NOT an execution approval, signer, key, or dispatch authority.
 -- This table is self-contained: legacy approval_decisions rows are coding_test
 -- decisions and MUST NOT be reused as Issue159 approval provenance.
