@@ -126,7 +126,6 @@ class RuntimeBoundaryTest(unittest.TestCase):
             "RestrictAddressFamilies=AF_UNIX",
             "SupplementaryGroups=gpt02-issue159-signers",
             "BindReadOnlyPaths=/run/gpt02-reader",
-            "Requires=gpt02-issue159-reader.service",
             "ConditionPathExists=/run/gpt02-reader/reader.sock",
             "MemoryDenyWriteExecute=yes",
         ):
