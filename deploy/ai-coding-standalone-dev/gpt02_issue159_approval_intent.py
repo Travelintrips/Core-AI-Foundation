@@ -59,7 +59,7 @@ def record_issue159_approval_intent(
     try:
         identity = identity_verifier(access_token, connection)
     except Exception:
-        return _denied("AAL2_IDENTITY_VERIFICATION_FAILED")
+        return _denied("ADMIN_IDENTITY_VERIFICATION_FAILED")
     if not isinstance(identity, dict):
         return _denied("AAL2_SUPER_ADMIN_IDENTITY_MISMATCH")
 
