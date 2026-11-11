@@ -169,6 +169,7 @@ class RuntimeBoundaryTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source, forbidden)
         self.assertIn("socket.AF_UNIX", source)
+        self.assertIn('os.path.realpath(parent_path) != "/run/private/gpt02-issuer-reader"', source)
 
     def test_systemd_unit_mounts_only_encrypted_private_credential_and_manifest(self):
         unit = UNIT.read_text()
