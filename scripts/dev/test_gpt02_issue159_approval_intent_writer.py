@@ -51,7 +51,7 @@ class ApprovalIntentWriterTest(unittest.TestCase):
         return path, con
 
     def identity(self, user_id=CLAIMS["superAdminId"], role="super_admin",
-                 enabled=True, auth_method="supabase_aal2"):
+                 enabled=True, auth_method="supabase_admin_session"):
         return {
             "userId": user_id, "role": role,
             "enabled": enabled, "authMethod": auth_method,
@@ -85,9 +85,23 @@ class ApprovalIntentWriterTest(unittest.TestCase):
         canonical = canonical_approval(CLAIMS)
         self.assertEqual(row[0], hashlib.sha256(canonical.encode()).hexdigest())
         self.assertEqual(row[1:], (
-            CLAIMS["superAdminId"], "supabase_aal2", "super_admin",
+            CLAIMS["superAdminId"], "supabase_admin_session", "super_admin",
             "APPROVE", 2000, CLAIMS["expiresAt"],
         ))
+        con.close()
+
+    def test_aal2_admin_session_is_also_accepted(self):
+        path, con = self.db()
+        out = writer.record_issue159_approval_intent(
+            TOKEN, con, dict(CLAIMS),
+            identity_verifier=self.verifier(self.identity(auth_method="supabase_aal2")),
+            now_ms=2000,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["authMethod"], "supabase_aal2")
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["authorizationGranted"])
+        self.assertFalse(out["dispatchPermitted"])
         con.close()
 
     def test_replay_same_claims_is_rejected_by_unique_contract(self):
@@ -114,7 +128,7 @@ class ApprovalIntentWriterTest(unittest.TestCase):
             self.identity(CLAIMS["superAdminId"], "admin"),
             self.identity(CLAIMS["superAdminId"], "super_admin", enabled=False),
             self.identity(CLAIMS["superAdminId"], "super_admin", auth_method="static_dev_token"),
-            self.identity(CLAIMS["superAdminId"], "super_admin", auth_method="supabase_admin_session"),
+            self.identity(CLAIMS["superAdminId"], "super_admin", auth_method="static_dev_token"),
             self.identity("another-user", "super_admin"),
         ):
             path, con = self.db()
