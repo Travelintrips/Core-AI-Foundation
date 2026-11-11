@@ -190,12 +190,32 @@ export async function startIssuerReaderRuntime() {
 
     server = createIssuerReaderServer({ reader });
     const parent = path.dirname(socketPath);
-    const directory = fs.lstatSync(parent);
+    const parentEntry = fs.lstatSync(parent);
     const groupName = "gpt02-issue159-signers";
     const groupLine = fs.readFileSync("/etc/group", "utf8")
       .split(/\r?\n/)
       .find((line) => line.startsWith(groupName + ":"));
     const gid = Number(groupLine?.split(":")[2]);
+
+    // DynamicUser=yes intentionally maps RuntimeDirectory through a root-owned
+    // /run/<name> symlink to /run/private/<name>. Accept only that exact
+    // systemd-managed mapping; do not accept arbitrary directory symlinks.
+    let directoryPath = parent;
+    if (parentEntry.isSymbolicLink()) {
+      const resolved = fs.realpathSync(parent);
+      const expected = path.join("/run/private", path.basename(parent));
+      const privateRoot = fs.lstatSync("/run/private");
+      if (resolved !== expected ||
+          !privateRoot.isDirectory() || privateRoot.isSymbolicLink() ||
+          privateRoot.uid !== 0 || privateRoot.gid !== 0 ||
+          (privateRoot.mode & 0o777) !== 0o700) {
+        return fail("ISSUER_READER_SYSTEMD_RUNTIME_MAPPING_INVALID");
+      }
+      directoryPath = resolved;
+    } else if (!parentEntry.isDirectory()) {
+      return fail("ISSUER_READER_SOCKET_DIRECTORY_INVALID");
+    }
+    const directory = fs.lstatSync(directoryPath);
 
     if (!Number.isSafeInteger(gid) || gid <= 0 ||
         !directory.isDirectory() || directory.isSymbolicLink() ||
@@ -245,12 +265,15 @@ export async function startIssuerReaderRuntime() {
     }) + "\n");
 
     const shutdown = () => {
-      server!.close(async () => {
-        try { await reader.close(); } catch { /* fail-closed */ }
-        try { if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath); } catch { /* fail-closed */ }
-        process.exit(0);
-      });
+      server!.close();
       server!.closeAllConnections?.();
+      // Bound pool shutdown so systemd can restart cleanly even if a pooled
+      // database connection is stale. RuntimeDirectory cleanup remains owned
+      // by systemd; no socket path outside the managed directory is touched.
+      void Promise.race([
+        reader.close().catch(() => undefined),
+        new Promise<void>((resolve) => setTimeout(resolve, 4_000)),
+      ]).finally(() => process.exit(0));
     };
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
