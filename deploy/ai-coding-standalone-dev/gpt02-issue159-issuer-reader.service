@@ -26,6 +26,7 @@ TimeoutStartSec=30s
 TimeoutStopSec=10s
 RuntimeDirectory=gpt02-issuer-reader
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 UMask=0077
 LimitNOFILE=256
 MemoryMax=256M
