@@ -92,6 +92,23 @@ These demonstrate a single restricted session role calling two distinct non-logi
 
 **Test result: PASS**, no live database touched. The fixture uses deliberately fictional admin identity and UUIDs. For concurrency only, its temporary login connection limit is raised from 1 to 3; this does not modify the live DEV login. The fixture is NOT a production migration and does not implement actual cryptographic approval verification or the four additional lifecycle RPCs.
 
+## Six-RPC ordered fixture proof (disposable PG16 only)
+
+Added:
+- `scripts/dev/gpt02_issue159_six_rpc_fixture_addon.sql`
+- `scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh`
+
+This fixture has all six named RPC stages, split across the same two non-login owners, and four synthetic append-only evidence ledgers. Isolated PostgreSQL 16 tests confirm:
+
+1. `prepare_core_task` and `record_linked_approval` create fake preparation and fake admin evidence.
+2. `consume_linked_approval` requires persisted approval and inserts one nonce receipt; nonce replay is rejected.
+3. `reserve_post_consumption_fence` requires fresh consumed nonce, exact worker and a bounded 14-second lease; fence-before-nonce and wrong worker are rejected.
+4. `record_issuer_evidence` requires the exact active fence, but the fixture deliberately accepts a **synthetic digest**; it does not verify a live issuer signature.
+5. `consume_issuer_lease` requires bound issuer evidence and the active fence, records one consumption with `dispatch_allowed=false`; replay is rejected.
+6. Forced RLS, no direct table DML by the writer, and a restricted EXECUTE-only interface are checked for the new ledgers; append-only DELETE/TRUNCATE cannot remove rows.
+
+**PASS: isolated six-stage fixture only**, with no live Supabase mutation. All fixture identities, command IDs, signatures/digests and task numbers are synthetic. These functions must NOT be migrated to live DEV: they lack the production trust bridge, native signature verification, real approval provenance, schema/owner drift gates and linked Core/Hub checks. The real six lifecycle functions remain absent from Supabase DEV. No dispatch authority was granted.
+
 ## Required next steps before operational migration
 
 1. Design and test a single restricted broker login compatible with the preparation RPC's `session_user` guard and the two distinct non-login function owners.
