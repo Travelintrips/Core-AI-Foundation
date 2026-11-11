@@ -5,6 +5,8 @@ services:
       dockerfile: deploy/dev-hostinger/Dockerfile
     image: ai-core-dev:develop
     container_name: ai-core-dev
+    group_add:
+      - "999"
     env_file:
       - ../../.env.dev
     environment:
@@ -29,4 +31,10 @@ services:
           create_host_path: false
     ports:
       - "127.0.0.1:18082:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 5
     restart: unless-stopped

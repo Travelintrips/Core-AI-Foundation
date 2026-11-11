@@ -20,6 +20,8 @@ on:
       - 'artifacts/api-server/src/routes/__tests__/gpt02-issue159-issuer-reader.test.ts'
       - 'artifacts/api-server/src/routes/__tests__/gpt02-issue159-issuer-reader-live.test.ts'
       - 'scripts/dev/gpt02-issuer-reader-runtime.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerRuntimeDirectory.test.ts'
+      - 'deploy/dev-hostinger/Dockerfile'
       - 'scripts/dev/build-gpt02-issuer-reader-runtime.sh'
       - 'deploy/dev-hostinger/docker-compose.yml'
       - 'artifacts/api-server/src/services/gpt02Issue159SignerBoundaryReadiness.ts'
@@ -99,6 +101,9 @@ jobs:
           src/services/__tests__/gpt02Issue159IssuerReaderSocketClient.test.ts
           src/routes/__tests__/gpt02-issue159-issuer-reader.test.ts
           src/routes/__tests__/gpt02-issue159-issuer-reader-live.test.ts
+      - name: Verify DynamicUser runtime directory and Docker socket access contract
+        working-directory: artifacts/api-server
+        run: pnpm exec vitest run src/services/__tests__/gpt02Issue159IssuerRuntimeDirectory.test.ts
       - name: Build standalone read-only issuer reader runtime
         run: |
           bash -n scripts/dev/build-gpt02-issuer-reader-runtime.sh

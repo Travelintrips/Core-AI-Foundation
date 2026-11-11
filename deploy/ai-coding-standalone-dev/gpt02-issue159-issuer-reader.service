@@ -26,6 +26,7 @@ TimeoutStartSec=30s
 TimeoutStopSec=10s
 RuntimeDirectory=gpt02-issuer-reader
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 UMask=0077
 LimitNOFILE=256
 MemoryMax=256M
@@ -50,7 +51,7 @@ LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
 ReadOnlyPaths=/opt/gpt02-reader-runtime
-ReadWritePaths=/run/gpt02-issuer-reader
+ReadWritePaths=/run/gpt02-issuer-reader /run/private/gpt02-issuer-reader
 StandardOutput=journal
 StandardError=journal
 

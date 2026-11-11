@@ -6,12 +6,54 @@ import {
   createGpt02Issue159IssuerTrustedReader,
 } from "../../artifacts/api-server/src/services/gpt02Issue159IssuerTrustedReader.js";
 
-const DEFAULT_SOCKET = "/run/gpt02-issuer-reader/reader.sock";
+const DEFAULT_RUNTIME_DIRECTORY = "/run/gpt02-issuer-reader";
+const DEFAULT_PRIVATE_RUNTIME_DIRECTORY = "/run/private/gpt02-issuer-reader";
+const DEFAULT_SOCKET = DEFAULT_RUNTIME_DIRECTORY + "/reader.sock";
 const MAX_BODY_BYTES = 8 * 1024;
 
 const fail = (code: string): never => {
   throw new Error(code);
 };
+
+/**
+ * systemd moves RuntimeDirectory paths for DynamicUser services below
+ * /run/private and leaves a public symlink at the configured path. Accept
+ * only that exact systemd-managed symlink target; do not follow arbitrary
+ * symlinks for the issuer socket directory.
+ */
+export function assertIssuerReaderRuntimeDirectory(
+  parentPath: string,
+  options: {
+    expectedPublicPath?: string;
+    expectedPrivatePath?: string;
+    expectedUid: number;
+    expectedGid: number;
+  },
+): string {
+  const expectedPublicPath = options.expectedPublicPath ?? DEFAULT_RUNTIME_DIRECTORY;
+  const expectedPrivatePath = options.expectedPrivatePath ?? DEFAULT_PRIVATE_RUNTIME_DIRECTORY;
+  if (parentPath !== expectedPublicPath) {
+    return fail("ISSUER_READER_SOCKET_DIRECTORY_PATH_INVALID");
+  }
+
+  const entry = fs.lstatSync(parentPath);
+  let resolvedPath = parentPath;
+  if (entry.isSymbolicLink()) {
+    resolvedPath = fs.realpathSync(parentPath);
+    if (resolvedPath !== expectedPrivatePath) {
+      return fail("ISSUER_READER_SOCKET_DIRECTORY_SYMLINK_INVALID");
+    }
+  }
+
+  const directory = fs.statSync(parentPath);
+  if (!directory.isDirectory() ||
+      directory.uid !== options.expectedUid ||
+      directory.gid !== options.expectedGid ||
+      (directory.mode & 0o777) !== 0o750) {
+    return fail("ISSUER_READER_SOCKET_DIRECTORY_SECURITY_INVALID");
+  }
+  return resolvedPath;
+}
 
 function codeOf(error: unknown): string {
   const value = error as { code?: unknown; message?: unknown };
@@ -190,7 +232,6 @@ export async function startIssuerReaderRuntime() {
 
     server = createIssuerReaderServer({ reader });
     const parent = path.dirname(socketPath);
-    const directory = fs.lstatSync(parent);
     const groupName = "gpt02-issue159-signers";
     const groupLine = fs.readFileSync("/etc/group", "utf8")
       .split(/\r?\n/)
@@ -198,12 +239,14 @@ export async function startIssuerReaderRuntime() {
     const gid = Number(groupLine?.split(":")[2]);
 
     if (!Number.isSafeInteger(gid) || gid <= 0 ||
-        !directory.isDirectory() || directory.isSymbolicLink() ||
-        directory.uid !== process.getuid?.() || directory.gid !== gid ||
-        (directory.mode & 0o777) !== 0o750 ||
+        !Number.isSafeInteger(process.getuid?.()) ||
         process.getgid?.() !== gid) {
-      return fail("ISSUER_READER_SOCKET_DIRECTORY_INVALID");
+      return fail("ISSUER_READER_SOCKET_DIRECTORY_IDENTITY_INVALID");
     }
+    assertIssuerReaderRuntimeDirectory(parent, {
+      expectedUid: process.getuid!(),
+      expectedGid: gid,
+    });
 
     if (fs.existsSync(socketPath)) {
       const existing = fs.lstatSync(socketPath);
