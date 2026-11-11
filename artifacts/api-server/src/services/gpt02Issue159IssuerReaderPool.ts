@@ -7,7 +7,8 @@ const DATABASE = "postgres";
 const ROLE = "gpt02_issuer_evidence_reader";
 const DSN_ENV = "GPT02_ISSUER_READER_DATABASE_URL_DEV";
 const CA_ENV = "GPT02_READER_DEV_CA";
-const CREDENTIAL_DIR = "/run/credentials/gpt02-dev";
+// Exact systemd credential mount for the dedicated, read-only issuer-reader unit.
+const CREDENTIAL_DIR = "/run/credentials/gpt02-issue159-issuer-reader.service";
 const DSN_CREDENTIAL = "issuer-reader-dsn";
 const CA_CREDENTIAL = "supabase-root-ca-2021.crt";
 const PINNED_ROOT_FINGERPRINT =
@@ -51,6 +52,20 @@ function pinnedReaderCa(pem: string | undefined): string {
 }
 
 
+function assertCredentialDirectory(path: string): void {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return fail("GPT02_ISSUER_READER_CREDENTIAL_DIRECTORY_REQUIRED");
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink() ||
+      stat.uid !== 0 || stat.gid !== 0 ||
+      (stat.mode & 0o777) !== 0o550) {
+    return fail("GPT02_ISSUER_READER_CREDENTIAL_DIRECTORY_SECURITY_INVALID");
+  }
+}
+
 function readCredentialFile(path: string, synthetic: boolean): string {
   let stat;
   try {
@@ -61,9 +76,9 @@ function readCredentialFile(path: string, synthetic: boolean): string {
   const mode = stat.mode & 0o777;
   const uid = synthetic ? (process.getuid?.() ?? stat.uid) : 0;
   const gid = synthetic ? (process.getgid?.() ?? stat.gid) : 0;
-  if (!stat.isFile() || stat.isSymbolicLink() ||
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 ||
       stat.uid !== uid || stat.gid !== gid ||
-      ![0o400, 0o600].includes(mode)) {
+      !(synthetic ? [0o400, 0o600] : [0o400, 0o440, 0o600]).includes(mode)) {
     return fail("GPT02_ISSUER_READER_CREDENTIAL_FILE_SECURITY_INVALID");
   }
   let value: string;
@@ -166,6 +181,7 @@ export function createGpt02Issue159IssuerReaderPool({
     }
   } else {
     if (credentialDirectory !== CREDENTIAL_DIR ||
+        env.CREDENTIALS_DIRECTORY !== CREDENTIAL_DIR ||
         typeof env[DSN_ENV] === "string" || typeof env[CA_ENV] === "string") {
       return fail("GPT02_ISSUER_READER_OPERATIONAL_CREDENTIAL_SOURCE_NOT_PINNED");
     }
