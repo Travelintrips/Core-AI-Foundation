@@ -154,13 +154,25 @@ class RuntimeBoundaryTest(unittest.TestCase):
             "dispatchPermitted": False,
             "releaseDecision": "NO_GO",
         })
+        approval_response = (409, {
+            "environment": "DEV", "ok": False, "persistedTrustedReadProven": False,
+            "result": {
+                "reason": "APPROVAL_INTENT_NOT_UNIQUE_OR_MISSING",
+                "approvalBindingMatched": False, "adminApprovalMatched": False,
+            },
+            "signingPermitted": False, "authorizationGranted": False,
+            "dispatchPermitted": False, "releaseDecision": "NO_GO",
+        })
         with patch.object(module, "_issuer_probe_payload", return_value=payload), \
-             patch.object(module, "_unix_json_request", side_effect=[hub_response, issuer_response]) as request:
+             patch.object(module, "_unix_json_request", side_effect=[hub_response, issuer_response, approval_response]) as request:
             result = module._probe_trusted_readers()
         self.assertTrue(result["hubCoreReaderOperational"])
         self.assertTrue(result["issuerReaderOperational"])
+        self.assertTrue(result["approvalReaderOperational"])
         self.assertTrue(result["trustedReaderConnectivityVerified"])
+        self.assertTrue(result["authorizerOperational"])
         self.assertEqual(request.call_args_list[1].args[2], payload)
+        self.assertEqual(request.call_args_list[2].args[0], "/run/gpt02-approval-reader/reader.sock")
 
     def test_approval_probe_uses_valid_random_negative_admin_lookup(self):
         spec = importlib.util.spec_from_file_location("signer_runtime_approval_probe", RUNTIME)
