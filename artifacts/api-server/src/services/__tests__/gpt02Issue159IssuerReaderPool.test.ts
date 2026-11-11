@@ -131,6 +131,21 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
     })).toThrow("GPT02_ISSUER_READER_OPERATIONAL_CREDENTIAL_SOURCE_NOT_PINNED");
   });
 
+  it("pins operational credentials to the dedicated systemd issuer-reader mount", () => {
+    expect(() => createGpt02Issue159IssuerReaderPool({
+      env: { CREDENTIALS_DIRECTORY: "/run/credentials/gpt02-issue159-signer@issuer.service" },
+      Pool: FakePool,
+      nodeEnv: "development",
+      appEnv: "development",
+    })).toThrow("GPT02_ISSUER_READER_OPERATIONAL_CREDENTIAL_SOURCE_NOT_PINNED");
+    expect(() => createGpt02Issue159IssuerReaderPool({
+      env: { CREDENTIALS_DIRECTORY: "/run/credentials/gpt02-issue159-issuer-reader.service" },
+      Pool: FakePool,
+      nodeEnv: "development",
+      appEnv: "development",
+    })).toThrow("GPT02_ISSUER_READER_CREDENTIAL_DIRECTORY_REQUIRED");
+  });
+
   it("requires the dedicated issuer DSN and never falls back to the shared app URL", () => {
     let constructed = 0;
     class CountPool extends FakePool {
@@ -204,6 +219,11 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
       new URL("../gpt02Issue159IssuerReaderPool.ts", import.meta.url),
       "utf8",
     );
+    expect(source).toContain("/run/credentials/gpt02-issue159-issuer-reader.service");
+    expect(source).toContain("env.CREDENTIALS_DIRECTORY !== CREDENTIAL_DIR");
+    expect(source).toContain("(stat.mode & 0o777) !== 0o550");
+    expect(source).toContain("[0o400, 0o440, 0o600]");
+    expect(source).toContain("stat.nlink !== 1");
     for (const forbidden of [
       "createPrivateKey", "sign(", "private-key.pkcs8",
       "SUPABASE_SERVICE_ROLE_KEY", "@workspace/db",
