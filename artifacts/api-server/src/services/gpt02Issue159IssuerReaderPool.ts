@@ -136,7 +136,7 @@ function parseIssuerReaderDsn(value: string | undefined) {
   directUrl.hostname = DIRECT_DB_HOST;
   directUrl.username = ROLE;
   directUrl.port = "5432";
-  return Object.freeze({ connectionString: directUrl.toString() });
+  return Object.freeze({ connectionString: directUrl.toString(), credentialString: value });
 }
 
 /**
@@ -207,7 +207,7 @@ export function createGpt02Issue159IssuerReaderPool({
     "GPT02_CORE_READER_DATABASE_URL_DEV",
   ]) {
     const shared = env[sharedName];
-    if (typeof shared === "string" && shared.length > 0 && shared === dsn.connectionString) {
+    if (typeof shared === "string" && shared.length > 0 && shared === dsn.credentialString) {
       return fail("GPT02_ISSUER_READER_SHARED_DSN_FORBIDDEN");
     }
   }
