@@ -30,6 +30,8 @@ APPROVED_CLAIMS_FILE = os.path.join(
 )
 SIGNER_ROLES = ("approval", "hub", "core", "issuer")
 SIGNER_RUNTIME_ROOT = "/run"
+HUB_CORE_READER_SOCKET_DIR = "/run/gpt02-reader"
+HUB_CORE_READER_SOCKET = "/run/gpt02-reader/reader.sock"
 
 
 def current_approval_evidence():
@@ -127,8 +129,8 @@ def signer_runtime_mounted():
 
 def hub_core_reader_runtime_operational():
     """Verify the live DEV Hub/Core read-only sidecar through its private Unix socket."""
-    socket_path = "/run/gpt02-reader/reader.sock"
-    directory_path = "/run/gpt02-reader"
+    socket_path = HUB_CORE_READER_SOCKET
+    directory_path = HUB_CORE_READER_SOCKET_DIR
     try:
         if subprocess.run(
             ["systemctl", "is-active", "--quiet", "gpt02-issue159-reader.service"],
