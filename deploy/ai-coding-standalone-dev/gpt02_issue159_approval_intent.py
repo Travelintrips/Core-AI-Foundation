@@ -1,7 +1,7 @@
 """DEV-only GPT02 Issue #159 approval-intent persistence helper.
 
 Not imported by approval_api.py yet. No route is mounted by this change.
-The caller must inject a reviewed AAL2 identity verifier. Without one, this
+The caller injects a verifier for one authenticated Super Admin session; no separate AAL2/TOTP challenge is required.
 helper fails closed. It never signs, loads keys, creates commands, dispatches
 workers, or touches PROD.
 """
