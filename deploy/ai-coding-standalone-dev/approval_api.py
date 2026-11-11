@@ -10,7 +10,34 @@ TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
 ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
  'GPT02_ISSUE159_APPROVAL_INTENT_ENABLED','false'
 ).strip().lower()=='true'
+ISSUE159_APPROVED_PACKET=os.environ.get(
+ 'GPT02_ISSUE159_APPROVED_PACKET',
+ '/opt/ai-coding-standalone-dev/gpt02_issue159_approved_claims.json'
+)
 def now(): return datetime.now(timezone.utc).isoformat()
+def persist_issue159_approved_packet(claims,result):
+ packet={
+  'claims':claims,
+  'intentId':result['intentId'],
+  'claimsSha256':result['claimsSha256'],
+  'actorId':result['actorId'],
+  'authMethod':result['authMethod'],
+  'roleAtDecision':result['roleAtDecision'],
+  'decision':result['decision'],
+  'recordedAt':result['recordedAt'],
+  'expiresAt':result['expiresAt'],
+  'signingPermitted':False,
+  'authorizationGranted':False,
+  'dispatchPermitted':False,
+  'releaseDecision':'NO_GO',
+ }
+ target=Path(ISSUE159_APPROVED_PACKET)
+ target.parent.mkdir(parents=True,exist_ok=True)
+ tmp=target.with_name('.'+target.name+'.tmp')
+ tmp.write_text(json.dumps(packet,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+ os.chmod(tmp,0o600)
+ os.replace(tmp,target)
+ return packet
 def issue159_identity_verifier(token,connection):
  identity=admin_identity(token,connection)
  if not identity:return None
@@ -83,10 +110,13 @@ class Handler(BaseHTTPRequestHandler):
     n=int(self.headers.get('Content-Length','0'))
     if n<0 or n>8192:return self.send(400,{'error':'invalid_size'})
     raw=self.rfile.read(n)
+    data=json.loads(raw.decode('utf-8'))
     with conn() as c:
      status,body=handle_issue159_approval_intent(
       self.headers.get('Authorization',''),raw,c,issue159_identity_verifier,
       enabled=ISSUE159_APPROVAL_INTENT_ENABLED)
+    if status==201 and isinstance(data,dict) and set(data)=={'claims'}:
+     persist_issue159_approved_packet(data['claims'],body)
     return self.send(status,body)
    except (ValueError,TypeError,KeyError,sqlite3.Error):
     return self.send(400,{'error':'invalid_request'})
