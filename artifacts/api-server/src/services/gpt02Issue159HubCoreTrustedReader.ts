@@ -81,7 +81,7 @@ function assertReaderSocket(socketPath: string, signerGroupGid: number, syntheti
   if ((!synthetic && socketPath !== DEFAULT_SOCKET) ||
       !directory.isDirectory() || directory.uid === 0 ||
       directory.gid !== signerGroupGid ||
-      (directory.mode & 0o7777) !== 0o2750 ||
+      (directory.mode & 0o777) !== 0o750 ||
       !socket.isSocket() || socket.uid === 0 ||
       socket.gid !== signerGroupGid ||
       (socket.mode & 0o777) !== 0o660) {
