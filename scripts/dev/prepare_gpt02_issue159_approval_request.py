@@ -18,7 +18,14 @@ import sys
 import time
 from pathlib import Path
 
-from gpt02_issue159_approval_intent_contract import validate_approval_claims
+try:
+    from gpt02_issue159_approval_intent_contract import validate_approval_claims
+except ModuleNotFoundError:
+    sys.path.insert(
+        0, str(Path(__file__).resolve().parents[2] /
+               "deploy/ai-coding-standalone-dev")
+    )
+    from gpt02_issue159_approval_intent_contract import validate_approval_claims
 
 LIVE_DB = "/opt/ai-coding-standalone-dev/tasks.db"
 LIVE_OUTPUT = "/opt/ai-coding-standalone-dev/gpt02_issue159_pending_claims.json"
