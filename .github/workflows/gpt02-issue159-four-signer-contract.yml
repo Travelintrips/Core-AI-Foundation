@@ -63,6 +63,8 @@ on:
       - 'scripts/dev/test_gpt02_issue159_writer_broker_runtime.py'
       - 'scripts/dev/gpt02_issue159_split_owner_fixture.sql'
       - 'scripts/dev/test_gpt02_issue159_split_owner_isolated.sh'
+      - 'scripts/dev/gpt02_issue159_six_rpc_fixture_addon.sql'
+      - 'scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.sysusers'
@@ -145,6 +147,8 @@ jobs:
         run: |
           bash -n scripts/dev/test_gpt02_issue159_split_owner_isolated.sh
           bash scripts/dev/test_gpt02_issue159_split_owner_isolated.sh
+          bash -n scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh
+          bash scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
