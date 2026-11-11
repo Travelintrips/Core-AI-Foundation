@@ -64,11 +64,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
     def test_current_expected_state_is_precise_no_go(self):
         out = readiness.assess(approval(), custody(), runtime())
         self.assertTrue(out["approvalStoreSchemaReady"])
-        self.assertFalse(out["realAal2ApprovalEvidenceAvailable"])
+        self.assertFalse(out["realSuperAdminApprovalEvidenceAvailable"])
         self.assertTrue(out["systemdCustodyBaselineReady"])
         self.assertFalse(out["hostCredentialSecretSecure"])
         self.assertFalse(out["fourSignerCredentialMetadataSecure"])
-        self.assertIn("REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
+        self.assertIn("REAL_SUPER_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
         self.assertIn("APPROVAL_READER_SOURCE_NOT_INSTALLED", out["blockers"])
         self.assertIn("APPROVAL_WRITER_SOURCE_NOT_INSTALLED", out["blockers"])
         self.assertIn("APPROVAL_INTENT_WRITER_NOT_INTEGRATED", out["blockers"])
