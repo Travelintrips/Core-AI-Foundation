@@ -29,6 +29,8 @@ describe.skipIf(!existsSync(socketPath))(
         reader: "gpt02_issuer_evidence_reader",
         authenticationVerified: true,
         tlsVerified: true,
+        clientTlsVerified: true,
+        backendTlsVerified: false,
         readOnlySessionVerified: true,
         businessEvidenceRead: false,
         persistedTrustedReadProven: false,
