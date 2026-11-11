@@ -138,6 +138,8 @@ class RuntimeBoundaryTest(unittest.TestCase):
             "result": {
                 "reason": "ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE",
                 "readOnlySessionVerified": True,
+                "clientTlsVerified": True,
+                "backendTlsVerified": False,
                 "issuerLedgerMatched": False,
                 "persistedTrustedReadProven": False,
                 "signingPermitted": False,
