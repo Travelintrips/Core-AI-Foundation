@@ -120,6 +120,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_private_key_custody_readiness.py
           python3 scripts/dev/test_gpt02_issue159_signer_operational_readiness.py
           python3 scripts/dev/test_gpt02_issue159_signer_runtime.py
+          python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service
           python3 scripts/dev/test_gpt02_issue159_approval_http.py
           python3 scripts/dev/test_gpt02_issue159_approval_api_route.py
