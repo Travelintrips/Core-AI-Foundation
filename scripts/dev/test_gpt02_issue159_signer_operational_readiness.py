@@ -162,9 +162,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 "signingPermitted": False, "dispatchPermitted": False,
             }).encode()
             response = (
-                b"HTTP/1.1 200 OK\\r\\n"
-                + f"content-length: {len(body)}\\r\\n".encode()
-                + b"connection: close\\r\\n\\r\\n" + body
+                b"HTTP/1.1 200 OK\r\n"
+                + f"content-length: {len(body)}\r\n".encode()
+                + b"connection: close\r\n\r\n" + body
             )
             server.listen(1)
 
@@ -172,7 +172,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 conn, _ = server.accept()
                 with conn:
                     request = conn.recv(2048)
-                    if b"GET /health HTTP/1.1\\r\\n" in request:
+                    if b"GET /health HTTP/1.1\r\n" in request:
                         conn.sendall(response)
                 server.close()
 
