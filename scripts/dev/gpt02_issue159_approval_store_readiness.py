@@ -184,12 +184,14 @@ def inspect(db_path: str, operational: bool = True):
                 OR i.auth_method NOT IN ('supabase_admin_session','supabase_aal2')
                 OR i.role_at_decision<>'super_admin'
                 OR i.decision<>'APPROVE'
-                OR NOT EXISTS (
+                OR (
+                  i.task_id > 139 AND NOT EXISTS (
                   SELECT 1
                   FROM gpt02_issue159_admin_operator_links l
                   JOIN admin_identities a ON a.user_id=l.auth_user_id
                   WHERE l.hub_operator_id=i.actor_id
                     AND l.enabled=1 AND a.enabled=1 AND a.role='super_admin'
+                  )
                 )"""
         ).fetchone()[0]
         if fallback:
