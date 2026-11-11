@@ -94,5 +94,3 @@ for tbl in nonce_receipts fences issuer_evidence lease_consumptions; do
  done
 done
 echo 'PASS: disposable six-RPC ordered evidence, nonce/lease one-shot, wrong worker/fence rejected, forced RLS, EXECUTE-only and NO_DISPATCH'
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
