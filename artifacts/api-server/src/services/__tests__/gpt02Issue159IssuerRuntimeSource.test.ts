@@ -20,6 +20,8 @@ describe("GPT02 Issue159 issuer reader DynamicUser runtime directory", () => {
     expect(source).toContain('ISSUER_READER_SYSTEMD_RUNTIME_MAPPING_INVALID');
     expect(source).toContain("let healthInFlight: ReturnType<typeof reader.health> | null = null");
     expect(source).toContain("healthInFlight ??= reader.health().finally");
+    expect(source).toContain("let databaseQueue: Promise<unknown> = Promise.resolve()");
+    expect(source).toContain("runSerialized(() => reader.read(input))");
   });
 
   it("keeps signing, authorization and dispatch disabled in the reader runtime", async () => {
