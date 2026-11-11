@@ -47,7 +47,8 @@ CLAIMS = {
     "issuedAt": BASE_NOW_MS - 1000,
     "expiresAt": BASE_NOW_MS + 120000,
 }
-AUTH_USER_ID = "auth_fixture_super_admin"\nAAL2_TOKEN = "a" * 64
+AUTH_USER_ID = "auth_fixture_super_admin"
+AAL2_TOKEN = "a" * 64
 STATIC_TOKEN = "s" * 64
 
 class ApprovalApiIssue159RouteTest(unittest.TestCase):
