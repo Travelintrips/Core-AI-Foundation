@@ -25,6 +25,7 @@ def denied(reason: str):
         "persistedTrustedReadProven": False,
         "approvalBindingMatched": False,
         "aal2SuperAdminMatched": False,
+        "adminApprovalMatched": False,
         "signingPermitted": False,
         "authorizationGranted": False,
         "dispatchPermitted": False,
@@ -102,7 +103,7 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
 
         if (
             not UUID.fullmatch(str(r["intent_id"])) or
-            r["auth_method"] != "supabase_aal2" or
+            r["auth_method"] not in ("supabase_admin_session", "supabase_aal2") or
             r["role_at_decision"] != "super_admin" or
             r["decision"] != "APPROVE" or
             r["actor_id"] == "dev_approval_token" or
@@ -134,7 +135,8 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
             },
             "persistedTrustedReadProven": True,
             "approvalBindingMatched": True,
-            "aal2SuperAdminMatched": True,
+            "aal2SuperAdminMatched": r["auth_method"] == "supabase_aal2",
+            "adminApprovalMatched": True,
             "signingPermitted": False,
             "authorizationGranted": False,
             "dispatchPermitted": False,
