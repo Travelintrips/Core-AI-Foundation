@@ -162,12 +162,14 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
       !exactObject(input, ["query", "publicKeys"])) {
     fail("GPT02_HUB_CORE_TRUSTED_READER_INPUT_INVALID");
   }
-  if (!validQuery(input.query)) fail("GPT02_UNTRUSTED_TASK_IDENTITY");
+  const query = input.query;
+  if (!validQuery(query)) fail("GPT02_UNTRUSTED_TASK_IDENTITY");
   requirePublicKeys(input.publicKeys);
+  const keys = input.publicKeys as PublicKeys;
   const synthetic = process.env.NODE_ENV === "test";
   const socketPath = synthetic ? (input.socketPath ?? DEFAULT_SOCKET) : DEFAULT_SOCKET;
   const signerGroupGid = synthetic
-    ? (input.signerGroupGid ?? process.getgid())
+    ? (input.signerGroupGid ?? process.getgid?.() ?? 1)
     : resolveSignerGroupGid();
   if (!Number.isSafeInteger(signerGroupGid) || signerGroupGid <= 0) {
     fail("GPT02_SIGNER_READER_GROUP_INVALID");
@@ -186,7 +188,7 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     fail("GPT02_HUB_CORE_READER_HEALTH_NOT_TRUSTED");
   }
 
-  const response = await requestReader(socketPath, "POST", "/trusted-facts", input.query);
+  const response = await requestReader(socketPath, "POST", "/trusted-facts", query);
   if (response.status !== 200 || response.body.ok !== true ||
       response.body.environment !== "DEV" ||
       response.body.signingPermitted !== false ||
@@ -194,11 +196,12 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     fail("GPT02_HUB_CORE_TRUSTED_READ_FAILED");
   }
 
-  const facts = response.body.facts;
-  if (!exactObject(facts, [
+  const factsValue = response.body.facts;
+  if (!exactObject(factsValue, [
     "prepared", "job", "core", "hubOperator", "hubAssignment",
     "storedEvidence", "observedAt", "trustedReadProof",
   ])) fail("GPT02_HUB_CORE_FACTS_SHAPE_INVALID");
+  const facts = factsValue as RecordValue;
 
   const proof = facts.trustedReadProof as RecordValue;
   if (!exactObject(proof, [
@@ -251,15 +254,14 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     fail("GPT02_HUB_CORE_STORED_EVIDENCE_SHAPE_INVALID");
   }
 
-  const q = input.query;
+  const q = query;
   const prepared = facts.prepared as RecordValue;
   const job = facts.job as RecordValue;
   const core = facts.core as RecordValue;
   const hub = facts.hubOperator as RecordValue;
   const assignment = facts.hubAssignment as RecordValue;
-  const approvalClaims = approval.claims;
+  const approvalClaims = approval.claims as RecordValue;
   const linkClaims = link.claims as RecordValue;
-  const keys = input.publicKeys as PublicKeys;
   if (!exactObject(approvalClaims, [
     "v", "environment", "audience", "taskId", "commandId", "attemptId",
     "nonce", "operatorNamespace", "superAdminId", "companyId", "issuedAt", "expiresAt",
@@ -296,8 +298,8 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     fail("GPT02_HUB_CORE_REQUEST_BINDING_MISMATCH");
   }
 
-  let approvalDigest: string;
-  let linkDigest: string;
+  let approvalDigest = "";
+  let linkDigest = "";
   try {
     approvalDigest = createHash("sha256")
       .update(canonicalGpt02Issue159Approval(approvalClaims)).digest("hex");
