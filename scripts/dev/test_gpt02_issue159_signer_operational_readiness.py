@@ -93,7 +93,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 fourSignerRuntimesMounted=True,
             ),
         )
-        self.assertTrue(out["realAal2ApprovalEvidenceAvailable"])
+        self.assertTrue(out["realSuperAdminApprovalEvidenceAvailable"])
         self.assertTrue(out["hostCredentialSecretSecure"])
         self.assertTrue(out["fourSignerCredentialMetadataSecure"])
         self.assertTrue(out["hubOperationalPublicTrustInstalled"])
