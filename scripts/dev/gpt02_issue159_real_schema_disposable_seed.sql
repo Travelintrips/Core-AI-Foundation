@@ -132,3 +132,10 @@ CREATE TRIGGER identity_append_only BEFORE UPDATE OR DELETE ON gpt02_private.cor
 CREATE TRIGGER fences_append_only BEFORE UPDATE OR DELETE ON gpt02_private.post_consumption_fences
  FOR EACH ROW EXECUTE FUNCTION gpt02_private.reject_mutation();
 RESET ROLE;
+
+-- Mirror Supabase-managed migration role: CREATEROLE and ADMIN membership,
+-- but SET OPTION permanently false for the two nonlogin owners.
+CREATE ROLE gpt02_fixture_migrator LOGIN CREATEROLE NOINHERIT NOBYPASSRLS;
+GRANT gpt02_core_prep_owner TO gpt02_fixture_migrator WITH ADMIN TRUE, SET FALSE, INHERIT FALSE;
+GRANT gpt02_store_owner TO gpt02_fixture_migrator WITH ADMIN TRUE, SET FALSE, INHERIT FALSE;
+GRANT USAGE ON SCHEMA extensions TO gpt02_fixture_migrator WITH GRANT OPTION;
