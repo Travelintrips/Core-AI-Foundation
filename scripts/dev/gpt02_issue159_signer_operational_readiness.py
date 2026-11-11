@@ -34,6 +34,8 @@ HUB_CORE_READER_SOCKET_DIR = "/run/gpt02-reader"
 HUB_CORE_READER_SOCKET = "/run/gpt02-reader/reader.sock"
 ISSUER_READER_SOCKET_DIR = "/run/gpt02-issuer-reader"
 ISSUER_READER_SOCKET = "/run/gpt02-issuer-reader/reader.sock"
+APPROVAL_READER_SOCKET_DIR = "/run/gpt02-approval-reader"
+APPROVAL_READER_SOCKET = "/run/gpt02-approval-reader/reader.sock"
 
 
 def current_approval_evidence():
@@ -129,8 +131,9 @@ def signer_runtime_mounted():
                     or data.get("privateCredentialMounted") is not True
                     or data.get("hubCoreReaderOperational") is not True
                     or data.get("issuerReaderOperational") is not True
+                    or data.get("approvalReaderOperational") is not True
                     or data.get("trustedReaderConnectivityVerified") is not True
-                    or data.get("authorizerOperational") is not False
+                    or data.get("authorizerOperational") is not True
                     or data.get("signingPermitted") is not False
                     or data.get("authorizationGranted") is not False
                     or data.get("dispatchPermitted") is not False
@@ -270,6 +273,63 @@ def issuer_reader_runtime_operational():
         return False
 
 
+def approval_reader_runtime_operational():
+    """Verify the root-owned, read-only DEV approval intent Unix reader."""
+    try:
+        if subprocess.run(
+            ["systemctl", "is-active", "--quiet", "gpt02-issue159-approval-reader.service"],
+            timeout=2, check=False,
+        ).returncode != 0:
+            return False
+        signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
+        directory = os.lstat(APPROVAL_READER_SOCKET_DIR)
+        endpoint = os.lstat(APPROVAL_READER_SOCKET)
+        if (stat.S_ISLNK(directory.st_mode) or not stat.S_ISDIR(directory.st_mode)
+                or directory.st_uid != 0 or directory.st_gid != signer_gid
+                or stat.S_IMODE(directory.st_mode) != 0o750
+                or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
+                or endpoint.st_uid != 0 or endpoint.st_gid != signer_gid
+                or stat.S_IMODE(endpoint.st_mode) != 0o660):
+            return False
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(8)
+        try:
+            client.connect(APPROVAL_READER_SOCKET)
+            client.sendall(
+                b"GET /health HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            chunks = []
+            size = 0
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > 8192:
+                    return False
+                chunks.append(chunk)
+        finally:
+            client.close()
+        response = b"".join(chunks)
+        header, separator, body = response.partition(b"\r\n\r\n")
+        if not separator or not header.startswith(b"HTTP/1.1 200 "):
+            return False
+        payload = json.loads(body.decode("utf-8"))
+        return (
+            payload.get("ok") is True
+            and payload.get("environment") == "DEV"
+            and payload.get("approvalReaderReady") is True
+            and payload.get("readOnly") is True
+            and payload.get("signingPermitted") is False
+            and payload.get("authorizationGranted") is False
+            and payload.get("dispatchPermitted") is False
+            and payload.get("releaseDecision") == "NO_GO"
+        )
+    except (KeyError, OSError, ValueError, socket.timeout, subprocess.SubprocessError):
+        return False
+
 def four_signer_authorizers_operational():
     """Require an explicit authorizer attestation from every isolated signer."""
     for role in SIGNER_ROLES:
@@ -277,6 +337,10 @@ def four_signer_authorizers_operational():
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
             if (data.get("environment") != "DEV" or data.get("role") != role
+                    or data.get("approvalReaderOperational") is not True
+                    or data.get("hubCoreReaderOperational") is not True
+                    or data.get("issuerReaderOperational") is not True
+                    or data.get("trustedReaderConnectivityVerified") is not True
                     or data.get("authorizerOperational") is not True
                     or data.get("signingPermitted") is not False
                     or data.get("authorizationGranted") is not False
@@ -299,10 +363,12 @@ def assess(approval, custody, runtime):
     )
     approval_evidence = approval.get("operationalEvidenceAvailable") is True
     approval_reader_source = runtime.get("approvalReaderSourceInstalled") is True
+    approval_reader_runtime = runtime.get("approvalReaderRuntimeOperational") is True
     approval_reader_operational = (
         approval_schema_ready
         and approval.get("trustedPersistedReadReady") is True
         and approval_reader_source
+        and approval_reader_runtime
     )
     approval_writer_source = runtime.get("approvalWriterSourceInstalled") is True
     approval_writer_integrated = runtime.get("approvalWriterIntegrated") is True
@@ -330,6 +396,8 @@ def assess(approval, custody, runtime):
         blockers.append("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE")
     if not approval_reader_source:
         blockers.append("APPROVAL_READER_SOURCE_NOT_INSTALLED")
+    if not approval_reader_runtime:
+        blockers.append("APPROVAL_READER_RUNTIME_NOT_OPERATIONAL")
     if not approval_writer_source:
         blockers.append("APPROVAL_WRITER_SOURCE_NOT_INSTALLED")
     if not approval_writer_integrated:
@@ -366,6 +434,7 @@ def assess(approval, custody, runtime):
         "approvalStoreSchemaReady": approval_schema_ready,
         "realAdminApprovalEvidenceAvailable": approval_evidence,
         "approvalReaderSourceInstalled": approval_reader_source,
+        "approvalReaderRuntimeOperational": approval_reader_runtime,
         "approvalWriterSourceInstalled": approval_writer_source,
         "approvalWriterIntegrated": approval_writer_integrated,
         "approvalTrustedReaderOperational": approval_reader_operational,
@@ -408,17 +477,22 @@ def live_runtime_metadata():
         and "handle_issue159_approval_intent(" in api_source
         and "issue159_identity_verifier" in api_source
     )
+    hub_core_reader = hub_core_reader_runtime_operational()
+    issuer_reader = issuer_reader_runtime_operational()
+    approval_reader = approval_reader_runtime_operational()
+    signer_runtimes = signer_runtime_mounted()
     return {
         "approvalReaderSourceInstalled": os.path.isfile(reader_path),
+        "approvalReaderRuntimeOperational": approval_reader,
         "approvalWriterSourceInstalled": os.path.isfile(writer_path),
         "approvalWriterIntegrated": writer_integrated,
         "hubPublicTrustDirectoryPresent": os.path.isdir(HUB_TRUST_DIR),
         "hubFingerprintManifestPresent": os.path.isfile(HUB_MANIFEST),
-        "hubCoreReaderRuntimeOperational": hub_core_reader_runtime_operational(),
-        "issuerReaderRuntimeOperational": issuer_reader_runtime_operational(),
-        "hubCoreIssuerTrustedReadAdaptersOperational": False,
-        "fourSignerRuntimesMounted": signer_runtime_mounted(),
-        "fourSignerTrustedReaderConnectivityVerified": signer_runtime_mounted(),
+        "hubCoreReaderRuntimeOperational": hub_core_reader,
+        "issuerReaderRuntimeOperational": issuer_reader,
+        "hubCoreIssuerTrustedReadAdaptersOperational": hub_core_reader and issuer_reader,
+        "fourSignerRuntimesMounted": signer_runtimes,
+        "fourSignerTrustedReaderConnectivityVerified": signer_runtimes,
         "fourSignerAuthorizersOperational": four_signer_authorizers_operational(),
         "approvalIntentTrustedReadCurrent": current_approval_evidence(),
     }
