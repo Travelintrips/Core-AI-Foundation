@@ -245,6 +245,51 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             with patch.object(readiness.subprocess, "run", side_effect=wrong_owner):
                 self.assertFalse(readiness.signer_runtime_mounted())
 
+    def test_signer_runtime_mount_uses_dynamicuser_runtime_directory_owner(self):
+        group_name = "gpt02-issue159-signers"
+        with tempfile.TemporaryDirectory(prefix="gpt02-dynamic-signer-") as root:
+            readiness.SIGNER_RUNTIME_ROOT = root
+            runtime_uid = pwd.getpwnam("nobody").pw_uid if os.getuid() == 0 else os.getuid()
+            gid = os.getgid()
+            for role in readiness.SIGNER_ROLES:
+                directory = Path(root) / f"gpt02-issue159-signer-{role}"
+                directory.mkdir(mode=0o700)
+                os.chmod(directory, 0o700)
+                payload = {
+                    "environment": "DEV",
+                    "role": role,
+                    "algorithm": "Ed25519",
+                    "fingerprintMatched": True,
+                    "privateCredentialMounted": True,
+                    "hubCoreReaderOperational": True,
+                    "issuerReaderOperational": True,
+                    "trustedReaderConnectivityVerified": True,
+                    "authorizerOperational": False,
+                    "signingPermitted": False,
+                    "authorizationGranted": False,
+                    "dispatchPermitted": False,
+                    "releaseDecision": "NO_GO",
+                }
+                path = directory / "readiness.json"
+                path.write_text(json.dumps(payload))
+                os.chmod(path, 0o600)
+                if os.getuid() == 0:
+                    os.chown(directory, runtime_uid, gid)
+                    os.chown(path, runtime_uid, gid)
+
+            def dynamic_systemctl(args, **kwargs):
+                if args[1] == "is-active":
+                    return SimpleNamespace(returncode=0, stdout="")
+                if args[1] == "show" and args[2] == "-p" and args[3] == "User":
+                    return SimpleNamespace(returncode=0, stdout="\\n")
+                if args[1] == "show" and args[2] == "-p" and args[3] == "Group":
+                    return SimpleNamespace(returncode=0, stdout=group_name + "\\n")
+                return SimpleNamespace(returncode=1, stdout="")
+
+            with patch.object(readiness.subprocess, "run", side_effect=dynamic_systemctl):
+                with patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=gid)):
+                    self.assertTrue(readiness.signer_runtime_mounted())
+
     def test_schema_or_custody_drift_is_reported_separately(self):
         out = readiness.assess(
             approval(schema=False),
