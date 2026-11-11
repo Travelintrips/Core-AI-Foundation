@@ -313,7 +313,7 @@ describe("GPT02 Issue159 Hub/Core persisted trusted reader", () => {
       const result = await readGpt02Issue159HubCoreTrustedFactsFromSystemdCredentials({
         query, socketPath: socket.socketPath, signerGroupGid: socket.signerGroupGid,
       });
-      expect(result.publicRootsVerified).toBeUndefined();
+      expect(result.publicRootsVerified).toBe(true);
       expect(result.approvalSignatureVerified).toBe(true);
       expect(result.hubSignatureVerified).toBe(true);
       expect(result.coreSignatureVerified).toBe(true);
