@@ -73,7 +73,7 @@ export function assessGpt02Issue159SignerBoundaryReadiness(input: unknown) {
     publicTrustHandoffContractVerified: true as const,
     blockers: Object.freeze([
       "TRUSTED_READ_RUNTIME_INTEGRATION_ATTESTATION_REQUIRED",
-      "REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE",
+      "REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE",
       "LIVE_SIGNER_CUSTODY_ATTESTATION_REQUIRED",
       "SIGNER_RUNTIME_NOT_MOUNTED",
       "OPERATIONAL_PUBLIC_TRUST_NOT_INSTALLED",
