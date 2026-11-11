@@ -30,7 +30,7 @@ IDENTITY = {
     "userId": CLAIMS["superAdminId"],
     "role": "super_admin",
     "enabled": True,
-    "authMethod": "supabase_admin_session",
+    "authMethod": "supabase_aal2",
 }
 INTENT_ID = "33333333-3333-4333-8333-333333333333"
 EXPECTED_CANONICAL = (
@@ -64,7 +64,7 @@ class ApprovalIntentContractTest(unittest.TestCase):
             "company_id": "default",
             "claims_sha256": EXPECTED_SHA,
             "actor_id": CLAIMS["superAdminId"],
-            "auth_method": "supabase_admin_session",
+            "auth_method": "supabase_aal2",
             "role_at_decision": "super_admin",
             "decision": "APPROVE",
             "recorded_at_ms": 2000,
@@ -83,6 +83,7 @@ class ApprovalIntentContractTest(unittest.TestCase):
         for patch in (
             {"userId": "dev_approval_token"},
             {"authMethod": "static_dev_token"},
+            {"authMethod": "supabase_admin_session"},
             {"role": "admin"},
             {"enabled": False},
             {"userId": "another-user"},
