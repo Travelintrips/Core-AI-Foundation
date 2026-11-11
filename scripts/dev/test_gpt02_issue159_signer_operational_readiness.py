@@ -99,7 +99,6 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
             out["blockers"],
         )
-        self.assertIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
         self.assertFalse(out["hubCoreIssuerTrustedReadAdaptersOperational"])
         self.assertTrue(out["fourSignerRuntimesMounted"])
         self.assertNotIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
