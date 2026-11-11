@@ -1,9 +1,8 @@
 """DEV-only GPT02 Issue #159 approval-intent persistence helper.
 
-Not imported by approval_api.py yet. No route is mounted by this change.
-The caller injects a verifier for one authenticated Super Admin session; no separate AAL2/TOTP challenge is required.
-helper fails closed. It never signs, loads keys, creates commands, dispatches
-workers, or touches PROD.
+The caller injects a verifier for one authenticated Super Admin session.
+No separate AAL2/TOTP challenge is required. It never signs, loads keys,
+creates commands, dispatches workers, or touches PROD.
 """
 from __future__ import annotations
 import sqlite3
