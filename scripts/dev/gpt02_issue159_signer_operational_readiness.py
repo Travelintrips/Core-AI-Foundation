@@ -86,18 +86,21 @@ def signer_runtime_mounted():
                 return False
             user_name = user_result.stdout.strip()
             group_name = group_result.stdout.strip()
+            runtime_dir = os.path.join(
+                SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}"
+            )
+            runtime_stat = os.lstat(runtime_dir)
             if user_name:
                 account = pwd.getpwnam(user_name)
                 expected_uid = account.pw_uid
                 expected_gid = grp.getgrnam(group_name).gr_gid if group_name else account.pw_gid
             else:
-                expected_uid = 0
-                expected_gid = grp.getgrnam(group_name).gr_gid if group_name else 0
-
-            runtime_dir = os.path.join(
-                SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}"
-            )
-            runtime_stat = os.lstat(runtime_dir)
+                # DynamicUser=yes leaves User= empty; systemd owns the private
+                # RuntimeDirectory with the allocated non-root UID.
+                expected_uid = runtime_stat.st_uid
+                expected_gid = grp.getgrnam(group_name).gr_gid if group_name else runtime_stat.st_gid
+                if expected_uid == 0:
+                    return False
             path = os.path.join(runtime_dir, "readiness.json")
             st = os.lstat(path)
             if (not active or stat.S_ISLNK(runtime_stat.st_mode)
