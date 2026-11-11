@@ -13,6 +13,8 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy/ai-coding-standalone-dev"
@@ -110,9 +112,18 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             headers={"Authorization": "Bearer " + token},
             method="GET",
         )
+        real_lstat = os.lstat
+        def secure_pending_lstat(path):
+            result = real_lstat(path)
+            if os.fspath(path) == self.pending:
+                return SimpleNamespace(
+                    st_mode=result.st_mode, st_uid=0, st_gid=0
+                )
+            return result
         try:
-            with urllib.request.urlopen(req, timeout=3) as res:
-                return res.status, json.load(res)
+            with patch.object(api.os, "lstat", side_effect=secure_pending_lstat):
+                with urllib.request.urlopen(req, timeout=3) as res:
+                    return res.status, json.load(res)
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read().decode())
 
@@ -121,7 +132,6 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         status, body = self.pending_request()
         self.assertEqual(status, 403)
         self.assertEqual(body, {"error": "active_super_admin_required"})
-        status, body = self.pending_request(token=None) if False else (None, None)
         req = urllib.request.Request(
             self.base + "/api/gpt02/issue159/approval-intent/pending", method="GET"
         )
