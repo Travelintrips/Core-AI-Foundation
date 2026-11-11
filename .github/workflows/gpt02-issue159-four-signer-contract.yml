@@ -10,6 +10,7 @@ on:
       - 'artifacts/api-server/src/services/gpt02Issue159OperatorAuthorizerEvidence.ts'
       - 'artifacts/api-server/src/services/gpt02Issue159IssuerAuthorizerEvidence.ts'
       - 'artifacts/api-server/src/services/gpt02Issue159IssuerLedgerReadOnly.ts'
+      - 'artifacts/api-server/src/services/gpt02Issue159IssuerReaderPool.ts'
       - 'artifacts/api-server/src/services/gpt02Issue159SignerBoundaryReadiness.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159FourSignerContract.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerCustodyPolicy.test.ts'
@@ -18,6 +19,7 @@ on:
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerLedgerReadOnly.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02Issue159IssuerReaderPool.test.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent_schema.sql'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent.py'
@@ -40,6 +42,7 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service'
       - 'scripts/dev/test_gpt02_issue159_signer_runtime.py'
+      - 'scripts/dev/fixtures/supabase-root-ca-2021.crt'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
 
@@ -73,6 +76,7 @@ jobs:
           src/services/__tests__/gpt02Issue159OperatorAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159IssuerAuthorizerEvidence.test.ts
           src/services/__tests__/gpt02Issue159IssuerLedgerReadOnly.test.ts
+          src/services/__tests__/gpt02Issue159IssuerReaderPool.test.ts
           src/services/__tests__/gpt02Issue159PrivateKeyCustodyContract.test.ts
           src/services/__tests__/gpt02Issue159SignerBoundaryReadiness.test.ts
       - name: Verify approval store readiness contract
@@ -99,5 +103,6 @@ jobs:
           src/services/gpt02Issue159OperatorAuthorizerEvidence.ts
           src/services/gpt02Issue159IssuerAuthorizerEvidence.ts
           src/services/gpt02Issue159IssuerLedgerReadOnly.ts
+          src/services/gpt02Issue159IssuerReaderPool.ts
           src/services/gpt02Issue159PrivateKeyCustodyContract.ts
           src/services/gpt02Issue159SignerBoundaryReadiness.ts
