@@ -91,7 +91,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="gpt02-authorizer-sources-") as root:
             for name, values in markers.items():
                 path = Path(root) / name
-                path.write_text("\\n".join(values), encoding="utf-8")
+                path.write_text("\n".join(values), encoding="utf-8")
                 setattr(readiness, name, path)
             bundle = Path(root) / "issuer-reader-runtime.mjs"
             bundle.write_text(
@@ -102,7 +102,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
                 encoding="utf-8",
             )
-            with patch.object(readiness, "ISSUER_READER_BUNDLE", bundle), \\
+            with patch.object(readiness, "ISSUER_READER_BUNDLE", bundle), \
                  patch.object(readiness, "issuer_reader_bundle_matches_running_process", return_value=True):
                 self.assertTrue(readiness.authorizer_adapters_installed())
                 bundle.write_text("missing deployed adapter", encoding="utf-8")
