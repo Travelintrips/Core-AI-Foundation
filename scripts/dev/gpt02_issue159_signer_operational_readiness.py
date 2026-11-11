@@ -32,7 +32,7 @@ SIGNER_RUNTIME_ROOT = "/run"
 
 
 def current_approval_evidence():
-    """Read the exact persisted AAL2 intent; expired approvals do not count."""
+    """Read the exact persisted single-Super-Admin intent; expired approvals do not count."""
     try:
         st = os.lstat(APPROVED_CLAIMS_FILE)
         if (stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode)
@@ -163,7 +163,7 @@ def assess(approval, custody, runtime):
     if not approval_schema_ready:
         blockers.append("APPROVAL_STORE_SCHEMA_NOT_READY")
     if not approval_evidence:
-        blockers.append("REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE")
+        blockers.append("REAL_SUPER_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE")
     if not approval_reader_source:
         blockers.append("APPROVAL_READER_SOURCE_NOT_INSTALLED")
     if not approval_writer_source:
@@ -190,7 +190,7 @@ def assess(approval, custody, runtime):
     return {
         "environment": "DEV",
         "approvalStoreSchemaReady": approval_schema_ready,
-        "realAal2ApprovalEvidenceAvailable": approval_evidence,
+        "realSuperAdminApprovalEvidenceAvailable": approval_evidence,
         "approvalReaderSourceInstalled": approval_reader_source,
         "approvalWriterSourceInstalled": approval_writer_source,
         "approvalWriterIntegrated": approval_writer_integrated,
