@@ -580,10 +580,10 @@ class IssuerReaderBundleRuntimeBindingTest(unittest.TestCase):
                 "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
                 encoding="utf-8",
             )
-            with patch.object(readiness, "APPROVAL_API_SOURCE", approval_api), \\
-                 patch.object(readiness, "APPROVAL_READER_SOURCE", approval_reader), \\
-                 patch.object(readiness, "HUB_CORE_AUTHORIZER_SOURCE", hub_core), \\
-                 patch.object(readiness, "ISSUER_READER_BUNDLE", bundle), \\
+            with patch.object(readiness, "APPROVAL_API_SOURCE", approval_api), \
+                 patch.object(readiness, "APPROVAL_READER_SOURCE", approval_reader), \
+                 patch.object(readiness, "HUB_CORE_AUTHORIZER_SOURCE", hub_core), \
+                 patch.object(readiness, "ISSUER_READER_BUNDLE", bundle), \
                  patch.object(readiness, "issuer_reader_bundle_matches_running_process", return_value=True):
                 self.assertTrue(readiness.authorizer_adapters_installed())
                 bundle.write_text(
