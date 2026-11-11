@@ -1,7 +1,6 @@
 [Unit]
 Description=GPT02 Issue159 DEV signer custody boundary (%i)
 Requires=gpt02-issue159-reader.service
-Requires=gpt02-issue159-reader.service
 After=local-fs.target gpt02-issue159-reader.service
 ConditionPathExists=/run/gpt02-reader/reader.sock gpt02-issue159-reader.service
 ConditionPathExists=/run/gpt02-reader/reader.sock
