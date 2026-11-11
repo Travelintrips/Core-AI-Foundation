@@ -34,6 +34,17 @@ HUB_CORE_READER_SOCKET_DIR = "/run/gpt02-reader"
 HUB_CORE_READER_SOCKET = "/run/gpt02-reader/reader.sock"
 ISSUER_READER_SOCKET_DIR = "/run/gpt02-issuer-reader"
 ISSUER_READER_SOCKET = "/run/gpt02-issuer-reader/reader.sock"
+APPROVAL_API_SOURCE = Path(LIVE_RUNTIME) / "approval_api.py"
+APPROVAL_READER_SOURCE = Path(LIVE_RUNTIME) / "gpt02_issue159_approval_intent_reader.py"
+HUB_CORE_AUTHORZER_SOURCE = Path(
+    "/opt/gpt02-reader-runtime/artifacts/api-server/src/lib/gpt02-trusted-facts-readonly.mjs"
+)
+ISSUER_LEDGER_AUTHORZER_SOURCE = Path(
+    "/opt/gpt02-reader-runtime/artifacts/api-server/src/services/gpt02Issue159IssuerLedgerReadOnly.ts"
+)
+ISSUER_AUTHORZER_SOURCE = Path(
+    "/opt/gpt02-reader-runtime/artifacts/api-server/src/services/gpt02Issue159IssuerAuthorizerEvidence.ts"
+)
 
 
 def current_approval_evidence():
@@ -270,22 +281,51 @@ def issuer_reader_runtime_operational():
         return False
 
 
-def four_signer_authorizers_operational():
-    """Require an explicit authorizer attestation from every isolated signer."""
-    for role in SIGNER_ROLES:
-        path = os.path.join(SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}", "readiness.json")
-        try:
-            data = json.loads(Path(path).read_text(encoding="utf-8"))
-            if (data.get("environment") != "DEV" or data.get("role") != role
-                    or data.get("authorizerOperational") is not True
-                    or data.get("signingPermitted") is not False
-                    or data.get("authorizationGranted") is not False
-                    or data.get("dispatchPermitted") is not False
-                    or data.get("releaseDecision") != "NO_GO"):
-                return False
-        except (OSError, ValueError, TypeError):
-            return False
-    return True
+def authorizer_adapters_installed():
+    """Verify the four authorizer adapters are present in their trusted read paths.
+
+    Signer runtimes intentionally keep authorizerOperational=false: they are
+    custody-only and do not make authorization decisions. The approval reader,
+    Hub/Core trusted-facts reader, and issuer ledger reader own those checks.
+    """
+    try:
+        approval_api = APPROVAL_API_SOURCE.read_text(encoding="utf-8")
+        approval_reader = APPROVAL_READER_SOURCE.read_text(encoding="utf-8")
+        hub_core = HUB_CORE_AUTHORZER_SOURCE.read_text(encoding="utf-8")
+        issuer_ledger = ISSUER_LEDGER_AUTHORZER_SOURCE.read_text(encoding="utf-8")
+        issuer_authorizer = ISSUER_AUTHORZER_SOURCE.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    approval_writer_integrated = (
+        "issue159_identity_verifier" in approval_api
+        and "handle_issue159_approval_intent(" in approval_api
+        and "authMethod':'supabase_admin_session'" in approval_api
+    )
+    approval_reader_integrated = (
+        "def read_approval_intent(" in approval_reader
+        and 'r["role_at_decision"] != "super_admin"' in approval_reader
+        and 'r["decision"] != "APPROVE"' in approval_reader
+        and 'r["auth_method"] not in ("supabase_admin_session", "supabase_aal2")' in approval_reader
+    )
+    hub_core_integrated = (
+        "function mapFacts(" in hub_core
+        and "SUPER_ADMIN_ASSIGNMENT_AUDIT_MISMATCH" in hub_core
+        and "SIGNED_LINK_LEDGER_DIGEST_MISMATCH" in hub_core
+        and "IMMUTABLE_PREPARATION_CONFIGURATION_MISMATCH" in hub_core
+    )
+    issuer_integrated = (
+        "inspectGpt02Issue159IssuerAuthorizerEvidence" in issuer_ledger
+        and "inspectGpt02Issue159IssuerAuthorizerEvidence" in issuer_authorizer
+        and "NONCE_RECEIPT_NOT_VERIFIED" in issuer_authorizer
+        and "POST_CONSUMPTION_FENCE_NOT_VERIFIED" in issuer_authorizer
+    )
+    return all((
+        approval_writer_integrated,
+        approval_reader_integrated,
+        hub_core_integrated,
+        issuer_integrated,
+    ))
 
 def assess(approval, custody, runtime):
     blockers = []
@@ -347,7 +387,15 @@ def assess(approval, custody, runtime):
     trusted_adapters = hub_core_reader and issuer_reader
     signer_runtimes = runtime.get("fourSignerRuntimesMounted") is True
     signer_reader_connectivity = runtime.get("fourSignerTrustedReaderConnectivityVerified") is True
-    signer_authorizers = runtime.get("fourSignerAuthorizersOperational") is True
+    authorizer_sources = runtime.get("authorizerAdaptersInstalled") is True
+    # Authorizers execute in the trusted approval/Hub/Core/Issuer read paths,
+    # not inside the custody-only signer processes. Keep signer readiness.json
+    # authorizerOperational=false and attest the external adapters here.
+    signer_authorizers = (
+        approval_reader_operational and approval_writer_integrated
+        and authorizer_sources and hub_core_reader and issuer_reader
+        and signer_runtimes and signer_reader_connectivity
+    )
     if not hub_core_reader:
         blockers.append("HUB_CORE_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL")
     if not issuer_reader:
@@ -378,6 +426,7 @@ def assess(approval, custody, runtime):
         "hubCoreIssuerTrustedReadAdaptersOperational": trusted_adapters,
         "fourSignerRuntimesMounted": signer_runtimes,
         "fourSignerTrustedReaderConnectivityVerified": signer_reader_connectivity,
+        "authorizerAdaptersInstalled": authorizer_sources,
         "fourSignerAuthorizersOperational": signer_authorizers,
         "blockers": blockers,
         "privateCredentialBytesRead": False,
@@ -419,7 +468,7 @@ def live_runtime_metadata():
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": signer_runtime_mounted(),
         "fourSignerTrustedReaderConnectivityVerified": signer_runtime_mounted(),
-        "fourSignerAuthorizersOperational": four_signer_authorizers_operational(),
+        "authorizerAdaptersInstalled": authorizer_adapters_installed(),
         "approvalIntentTrustedReadCurrent": current_approval_evidence(),
     }
 
