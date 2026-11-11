@@ -120,7 +120,7 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
   });
 
   it("operational mode rejects DSNs supplied through environment variables", () => {
-    expect(() => createGpt02Issue159ReaderPool({
+    expect(() => createGpt02Issue159IssuerReaderPool({
       env: {
         GPT02_ISSUER_READER_DATABASE_URL_DEV: dsn(),
         GPT02_READER_DEV_CA: ca,
