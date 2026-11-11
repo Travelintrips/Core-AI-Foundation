@@ -179,11 +179,18 @@ def inspect(db_path: str, operational: bool = True):
 
         total = con.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()[0]
         fallback = con.execute(
-            f"SELECT COUNT(*) FROM {TABLE} "
-            "WHERE actor_id='dev_approval_token' "
-            "OR auth_method NOT IN ('supabase_admin_session','supabase_aal2') "
-            "OR role_at_decision<>'super_admin' "
-            "OR decision<>'APPROVE'"
+            f"""SELECT COUNT(*) FROM {TABLE} i
+                WHERE i.actor_id='dev_approval_token'
+                OR i.auth_method NOT IN ('supabase_admin_session','supabase_aal2')
+                OR i.role_at_decision<>'super_admin'
+                OR i.decision<>'APPROVE'
+                OR NOT EXISTS (
+                  SELECT 1
+                  FROM gpt02_issue159_admin_operator_links l
+                  JOIN admin_identities a ON a.user_id=l.auth_user_id
+                  WHERE l.hub_operator_id=i.actor_id
+                    AND l.enabled=1 AND a.enabled=1 AND a.role='super_admin'
+                )"""
         ).fetchone()[0]
         if fallback:
             return result("ISSUE159_APPROVAL_INTENT_PROVENANCE_INVALID",
