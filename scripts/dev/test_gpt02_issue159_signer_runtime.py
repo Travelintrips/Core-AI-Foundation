@@ -151,7 +151,8 @@ class RuntimeBoundaryTest(unittest.TestCase):
             "dispatchPermitted": False,
             "releaseDecision": "NO_GO",
         })
-        with patch.object(module, "_unix_json_request", side_effect=[hub_response, issuer_response]) as request:
+        with patch.object(module, "_issuer_probe_payload", return_value=payload), \
+             patch.object(module, "_unix_json_request", side_effect=[hub_response, issuer_response]) as request:
             result = module._probe_trusted_readers()
         self.assertTrue(result["hubCoreReaderOperational"])
         self.assertTrue(result["issuerReaderOperational"])
