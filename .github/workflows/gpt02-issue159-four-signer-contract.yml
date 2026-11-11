@@ -52,6 +52,11 @@ on:
       - 'scripts/dev/gpt02_issue159_signer_operational_readiness.py'
       - 'scripts/dev/test_gpt02_issue159_signer_operational_readiness.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py'
+      - 'scripts/dev/gpt02_issue159_lifecycle_catalog_preflight.sql'
+      - 'scripts/dev/test_gpt02_issue159_writer_broker_contract.py'
+      - 'scripts/dev/test_gpt02_issue159_writer_broker_runtime.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.sysusers'
@@ -125,6 +130,9 @@ jobs:
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service
           python3 scripts/dev/test_gpt02_issue159_approval_http.py
           python3 scripts/dev/test_gpt02_issue159_approval_api_route.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_contract.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_runtime.py' -v
+          python3 -m py_compile deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
