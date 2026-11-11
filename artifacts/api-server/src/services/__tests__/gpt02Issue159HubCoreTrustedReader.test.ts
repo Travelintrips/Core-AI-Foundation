@@ -6,7 +6,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  createHash, generateKeyPairSync, sign,
+  createHash, createPublicKey, generateKeyPairSync, sign,
 } from "node:crypto";
 import {
   canonicalGpt02Issue159Approval,
@@ -14,6 +14,7 @@ import {
 } from "../gpt02Issue159FourSignerContract.js";
 import {
   readGpt02Issue159HubCoreTrustedFacts,
+  readGpt02Issue159HubCoreTrustedFactsFromSystemdCredentials,
 } from "../gpt02Issue159HubCoreTrustedReader.js";
 
 const worker = "openclaw-dell-chatgpt-wake-dev";
@@ -28,6 +29,7 @@ const keys = {
   approval: generateKeyPairSync("ed25519"),
   hub: generateKeyPairSync("ed25519"),
   core: generateKeyPairSync("ed25519"),
+  issuer: generateKeyPairSync("ed25519"),
 };
 const pem = (key: ReturnType<typeof generateKeyPairSync>["publicKey"]) =>
   key.export({ format: "pem", type: "spki" }).toString();
@@ -279,6 +281,47 @@ describe("GPT02 Issue159 Hub/Core persisted trusted reader", () => {
       expect(result.releaseDecision).toBe("NO_GO");
     } finally {
       await socket.close();
+    }
+  });
+
+
+
+  it("loads all public roots from systemd credentials for the production reader entry point", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const { facts, query } = fixture();
+    const socket = await socketFixture(facts);
+    const credentials = mkdtempSync(join(tmpdir(), "gpt02-signer-public-creds-"));
+    try {
+      const names = {
+        approval: "approval-public.pem",
+        hub: "hub-identity-public.pem",
+        core: "core-identity-public.pem",
+        issuer: "issuer-public.pem",
+      };
+      const manifest: Record<string, string> = {};
+      for (const role of ["approval", "hub", "core", "issuer"] as const) {
+        const publicKeyPem = pem(keys[role].publicKey);
+        writeFileSync(join(credentials, names[role]), publicKeyPem, { mode: 0o600 });
+        chmodSync(join(credentials, names[role]), 0o600);
+        const key = createPublicKey(publicKeyPem);
+        manifest[role] = createHash("sha256")
+          .update(key.export({ format: "der", type: "spki" })).digest("hex");
+      }
+      writeFileSync(join(credentials, "manifest.json"), JSON.stringify(manifest), { mode: 0o600 });
+      chmodSync(join(credentials, "manifest.json"), 0o600);
+      vi.stubEnv("CREDENTIALS_DIRECTORY", credentials);
+      const result = await readGpt02Issue159HubCoreTrustedFactsFromSystemdCredentials({
+        query, socketPath: socket.socketPath, signerGroupGid: socket.signerGroupGid,
+      });
+      expect(result.publicRootsVerified).toBeUndefined();
+      expect(result.approvalSignatureVerified).toBe(true);
+      expect(result.hubSignatureVerified).toBe(true);
+      expect(result.coreSignatureVerified).toBe(true);
+      expect(result.persistedTrustedReadProven).toBe(true);
+      expect(result.signingPermitted).toBe(false);
+    } finally {
+      await socket.close();
+      rmSync(credentials, { recursive: true, force: true });
     }
   });
 
