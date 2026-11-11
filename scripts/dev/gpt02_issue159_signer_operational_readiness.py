@@ -89,7 +89,15 @@ def signer_runtime_mounted():
             runtime_dir = os.path.join(
                 SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}"
             )
-            runtime_stat = os.lstat(runtime_dir)
+            runtime_entry = os.lstat(runtime_dir)
+            if stat.S_ISLNK(runtime_entry.st_mode):
+                expected_private = os.path.join("/run/private", os.path.basename(runtime_dir))
+                if (runtime_entry.st_uid != 0 or runtime_entry.st_gid != 0
+                        or os.path.realpath(runtime_dir) != expected_private):
+                    return False
+                runtime_stat = os.stat(runtime_dir)
+            else:
+                runtime_stat = runtime_entry
             if user_name:
                 account = pwd.getpwnam(user_name)
                 expected_uid = account.pw_uid
@@ -103,8 +111,7 @@ def signer_runtime_mounted():
                     return False
             path = os.path.join(runtime_dir, "readiness.json")
             st = os.lstat(path)
-            if (not active or stat.S_ISLNK(runtime_stat.st_mode)
-                    or not stat.S_ISDIR(runtime_stat.st_mode)
+            if (not active or not stat.S_ISDIR(runtime_stat.st_mode)
                     or runtime_stat.st_uid != expected_uid
                     or runtime_stat.st_gid != expected_gid
                     or stat.S_IMODE(runtime_stat.st_mode) != 0o700
