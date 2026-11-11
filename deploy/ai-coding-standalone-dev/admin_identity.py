@@ -1,6 +1,6 @@
 """Authenticated DEV admin identity verifier for approval actions.
 
-A normal Supabase password-authenticated session is sufficient. No separate
+A normal verified Supabase email-OTP session is sufficient. No separate
 AAL2/TOTP challenge is required for a single Super Admin approval. The server
 still verifies the signed JWT, issuer, audience, subject, and active role.
 """
