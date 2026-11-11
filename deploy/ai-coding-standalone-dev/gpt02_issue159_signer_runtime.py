@@ -18,6 +18,7 @@ import stat
 import grp
 import sys
 import time
+import uuid
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -119,6 +120,35 @@ def _unix_json_request(socket_path: str, route: str, payload: dict[str, object])
         return None
 
 
+def _issuer_probe_payload() -> dict[str, object]:
+    """Build a non-persisted, random lineage probe for the read-only Issuer reader."""
+    now_ms = int(time.time() * 1000)
+    return {
+        "observedAt": now_ms,
+        "claims": {
+            "v": 1,
+            "environment": "DEV",
+            "audience": "GPT02_ISSUER_LEASE_EVIDENCE_V1",
+            "companyId": "default",
+            "hubTaskId": 2_147_483_647,
+            "hubExecutionId": str(uuid.uuid4()),
+            "coreTaskId": str(uuid.uuid4()),
+            "commandId": str(uuid.uuid4()),
+            "attemptId": str(uuid.uuid4()),
+            "workerId": "openclaw-dell-chatgpt-wake-dev",
+            "receiptId": str(uuid.uuid4()),
+            "linkId": str(uuid.uuid4()),
+            "fenceId": str(uuid.uuid4()),
+            "approvalDigest": "0" * 64,
+            "nonceDigest": "1" * 64,
+            "issuerRole": "dev_gpt02_issuer_evidence",
+            "leaseEpoch": 1,
+            "issuedAt": now_ms - 1_000,
+            "expiresAt": now_ms + 5_000,
+        },
+    }
+
+
 def _probe_trusted_readers() -> dict[str, bool]:
     hub_result = _unix_json_request(
         "/run/gpt02-reader/reader.sock", "/trusted-facts", {},
@@ -130,14 +160,19 @@ def _probe_trusted_readers() -> dict[str, bool]:
         and hub_result[1].get("dispatchPermitted") is False
     )
     issuer_result = _unix_json_request(
-        "/run/gpt02-issuer-reader/reader.sock", "/issuer-evidence", {},
+        "/run/gpt02-issuer-reader/reader.sock", "/issuer-evidence",
+        _issuer_probe_payload(),
     )
     issuer_payload = issuer_result[1] if issuer_result else {}
     issuer_detail = issuer_payload.get("result") or {}
     issuer = bool(
         issuer_result and issuer_result[0] == 409
         and issuer_payload.get("ok") is False
-        and issuer_detail.get("reason") == "ISSUER_LEDGER_REQUEST_INVALID"
+        and issuer_payload.get("environment") == "DEV"
+        and issuer_detail.get("reason") == "ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE"
+        and issuer_detail.get("readOnlySessionVerified") is True
+        and issuer_detail.get("issuerLedgerMatched") is False
+        and issuer_detail.get("persistedTrustedReadProven") is False
         and issuer_payload.get("signingPermitted") is False
         and issuer_payload.get("authorizationGranted") is False
         and issuer_payload.get("dispatchPermitted") is False
