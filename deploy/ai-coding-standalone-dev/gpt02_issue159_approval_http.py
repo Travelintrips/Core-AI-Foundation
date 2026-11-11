@@ -1,7 +1,7 @@
 """HTTP adapter contract for DEV GPT02 Issue #159 approval intent.
 
 This module is route-ready but not a signer. The caller must provide the
-existing SQLite connection and AAL2 identity verifier. Feature is disabled
+existing SQLite connection and authenticated admin identity verifier. Feature is disabled
 unless explicitly enabled by the host approval API.
 """
 from __future__ import annotations
@@ -64,11 +64,11 @@ def handle_issue159_approval_intent(
 
     reason = result.get("reason")
     if reason in {
-        "AAL2_SUPER_ADMIN_TOKEN_REQUIRED",
-        "AAL2_SUPER_ADMIN_IDENTITY_MISMATCH",
-        "AAL2_IDENTITY_VERIFICATION_FAILED",
+        "ADMIN_SESSION_TOKEN_REQUIRED",
+        "ADMIN_IDENTITY_MISMATCH",
+        "ADMIN_IDENTITY_VERIFICATION_FAILED",
     }:
-        return _response(403, {"error": "aal2_super_admin_required"})
+        return _response(403, {"error": "active_super_admin_required"})
     if reason == "APPROVAL_INTENT_REPLAY_OR_CONFLICT":
         return _response(409, {"error": "approval_intent_conflict"})
     if reason in {"APPROVAL_CLAIMS_INVALID", "APPROVAL_TIME_INVALID"}:
