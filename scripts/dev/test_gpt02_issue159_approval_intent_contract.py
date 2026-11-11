@@ -79,10 +79,9 @@ class ApprovalIntentContractTest(unittest.TestCase):
         self.assertFalse(out["dispatchPermitted"])
         self.assertEqual(out["releaseDecision"], "NO_GO")
 
-    def test_static_token_non_aal2_admin_or_disabled_identity_is_rejected(self):
+    def test_static_token_non_admin_or_disabled_identity_is_rejected(self):
         for patch in (
             {"userId": "dev_approval_token"},
-            {"authMethod": "static_dev_token"},
             {"authMethod": "static_dev_token"},
             {"role": "admin"},
             {"enabled": False},
