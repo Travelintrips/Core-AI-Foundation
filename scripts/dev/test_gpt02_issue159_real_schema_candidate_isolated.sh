@@ -16,10 +16,12 @@ for i in $(seq 1 100);do
 done
 test "$ready" = 1 || exit 1
 docker cp "$root/scripts/dev/gpt02_issue159_real_schema_disposable_seed.sql" "$name:/tmp/seed.sql"
-docker cp "$root/scripts/dev/gpt02_issue159_operational_candidate_NOT_APPLIED.sql" "$name:/tmp/candidate.sql"
+sed 's/postgres/gpt02_fixture_migrator/g' \
+  "$root/scripts/dev/gpt02_issue159_operational_candidate_NOT_APPLIED.sql" > "$tmp/candidate-migrator.sql"
+docker cp "$tmp/candidate-migrator.sql" "$name:/tmp/candidate.sql"
 docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/seed.sql >"$tmp/seed.log" 2>&1 || { tail -50 "$tmp/seed.log";exit 1; }
-docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/migration.log" 2>&1 || { tail -65 "$tmp/migration.log";exit 1; }
-docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/idempotent.log" 2>&1 || { tail -65 "$tmp/idempotent.log";exit 1; }
+docker exec "$name" psql -U gpt02_fixture_migrator -d postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/migration.log" 2>&1 || { tail -65 "$tmp/migration.log";exit 1; }
+docker exec "$name" psql -U gpt02_fixture_migrator -d postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/idempotent.log" 2>&1 || { tail -65 "$tmp/idempotent.log";exit 1; }
 docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -Atqc "
 DO \$g\$
 DECLARE x record;
@@ -46,15 +48,20 @@ BEGIN
  THEN RAISE EXCEPTION 'ISSUER_SIDECAR_MISSING';END IF;
 END \$g\$;
 " >/dev/null
+# Non-superuser migrator must finish with no SET permission for either owner.
+role_set="$(docker exec "$name" psql -U postgres -Atqc "
+ SELECT pg_has_role('gpt02_fixture_migrator','gpt02_core_prep_owner','SET')::text || ':' ||
+ pg_has_role('gpt02_fixture_migrator','gpt02_store_owner','SET')::text;")"
+test "$role_set" = 'false:false' || { echo "MIGRATOR_SET_ROLE_NOT_RESTORED_$role_set"; exit 1; }
 # Regression: refusing schema drift is required, even for an idempotent migration.
 docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -Atqc "ALTER TABLE gpt02_private.approvals NO FORCE ROW LEVEL SECURITY" >/dev/null
-if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/drift" 2>&1; then
+if docker exec "$name" psql -U gpt02_fixture_migrator -d postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/drift" 2>&1; then
  echo 'FAIL: FORCE_RLS_DRIFT_ACCEPTED'; exit 1
 fi
 grep -q 'GPT02_LIFECYCLE_SCHEMA_DRIFT' "$tmp/drift"
 docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -Atqc "ALTER TABLE gpt02_private.approvals FORCE ROW LEVEL SECURITY" >/dev/null
 docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -Atqc "ALTER ROLE gpt02_core_prep_login LOGIN CONNECTION LIMIT 3" >/dev/null
-if docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/login-drift" 2>&1; then
+if docker exec "$name" psql -U gpt02_fixture_migrator -d postgres -v ON_ERROR_STOP=1 -f /tmp/candidate.sql >"$tmp/login-drift" 2>&1; then
  echo 'FAIL: WRITER_LOGIN_DRIFT_ACCEPTED'; exit 1
 fi
 grep -q 'DEV_WRITER_ROLE_NOT_DORMANT' "$tmp/login-drift"
