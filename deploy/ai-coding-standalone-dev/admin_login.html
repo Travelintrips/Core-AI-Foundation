@@ -13,6 +13,7 @@
 <p id="loginStatus" class="status" role="status"></p><small>Hanya akun dengan role Super Admin aktif yang dapat masuk. Persetujuan tidak memberi izin PROD.</small>
 </section>
 <section id="work" class="hidden">
+<p id="workStatus" class="status" role="status"></p>
 <div class="actions" style="justify-content:space-between;align-items:center"><h2>Dashboard AI Coding DEV</h2><button id="logout" class="secondary">Keluar</button></div>
 <p>Workspace DEV. Inspeksi repository dan coding test terisolasi tersedia; persetujuan Super Admin tidak otomatis menjalankan deployment.</p>
 <nav><a href="#approvals">Persetujuan DEV</a> · <a href="#issue159">Persetujuan signer Issue #159</a></nav>
@@ -27,7 +28,7 @@
 <script>
 const BASE='https://xssrfshdrtdfupgqwfdw.supabase.co/auth/v1',KEY='sb_publishable_gICBqyiTKNQkqlAAB8w0KA_tUYnUUh_';
 let access='',refreshToken='',verified=false,pendingApprovals=[];
-const el=id=>document.getElementById(id),status=s=>{el('loginStatus').textContent=s};
+const el=id=>document.getElementById(id),status=s=>{const target=el('loginPanel').classList.contains('hidden')?'workStatus':'loginStatus';el(target).textContent=s};
 async function auth(path,data,token){
  const r=await fetch(BASE+path,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(data),cache:'no-store'});
  const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{}
@@ -43,8 +44,9 @@ async function activateSession(d){
  const u=await fetch(BASE+'/user',{headers:{apikey:KEY,Authorization:'Bearer '+access},cache:'no-store'});
  if(!u.ok)throw Error('Sesi Supabase tidak dapat diverifikasi.');
  const user=await u.json();if(!user.email_confirmed_at)throw Error('Email admin belum terverifikasi.');
+ verified=true;await api('/api/dashboard');
  refreshToken=d.refresh_token||'';if(refreshToken)sessionStorage.setItem('dev_refresh',refreshToken);
- verified=true;el('loginPanel').classList.add('hidden');el('work').classList.remove('hidden');status('');await load();
+ el('loginPanel').classList.add('hidden');el('work').classList.remove('hidden');status('');await load();
 }
 async function sendOtp(){const email=el('email').value.trim();if(!email||!el('email').checkValidity())throw Error('Masukkan email admin yang valid.');await auth('/otp',{email,create_user:false});el('otpStep').classList.remove('hidden');status('Jika email terdaftar, kode OTP telah diminta. Periksa inbox dan spam.');el('otpCode').focus()}
 el('sendOtp').onclick=async()=>{try{el('sendOtp').disabled=true;await sendOtp()}catch(e){status(e.message)}finally{el('sendOtp').disabled=false}};
