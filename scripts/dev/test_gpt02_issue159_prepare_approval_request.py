@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[2]
 DEPLOY=ROOT/"deploy/ai-coding-standalone-dev"
-SCRIPT=DEPLOY/"prepare_gpt02_issue159_approval_request.py"
+SCRIPT=ROOT/"scripts/dev/prepare_gpt02_issue159_approval_request.py"
 SCHEMA=DEPLOY/"gpt02_issue159_approval_intent_schema.sql"
 import sys
 sys.path.insert(0,str(DEPLOY))
