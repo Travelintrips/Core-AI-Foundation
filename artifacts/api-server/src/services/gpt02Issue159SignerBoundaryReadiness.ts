@@ -24,8 +24,9 @@ function exactObject(value: unknown, fields: readonly string[]): value is Record
  * Source/readiness aggregator only.
  *
  * It proves that every signer domain has a matching non-authorizing contract.
- * It can NEVER declare operational signing ready because this phase contains
- * no trusted persisted-read adapters and no real private-key custody.
+ * It can NEVER declare operational signing ready. Approval trusted-read source
+ * now exists, but Hub/Core/issuer trusted-read adapters and live signer/runtime
+ * attestations remain outside this source-only contract.
  */
 export function assessGpt02Issue159SignerBoundaryReadiness(input: unknown) {
   if (!exactObject(input, [
@@ -71,7 +72,8 @@ export function assessGpt02Issue159SignerBoundaryReadiness(input: unknown) {
     issuerAuthorizerContractVerified: true as const,
     publicTrustHandoffContractVerified: true as const,
     blockers: Object.freeze([
-      "TRUSTED_PERSISTED_READ_ADAPTER_NOT_IMPLEMENTED",
+      "HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL",
+      "REAL_AAL2_APPROVAL_INTENT_NOT_AVAILABLE",
       "REAL_PRIVATE_KEY_CUSTODY_NOT_ATTESTED",
       "SIGNER_RUNTIME_NOT_MOUNTED",
       "OPERATIONAL_PUBLIC_TRUST_NOT_INSTALLED",
