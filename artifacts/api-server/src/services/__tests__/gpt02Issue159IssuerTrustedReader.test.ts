@@ -8,14 +8,14 @@ import {
   GPT02_ISSUE159_ISSUER_LEDGER_SQL,
 } from "../gpt02Issue159IssuerLedgerReadOnly.js";
 
-const host = "aws-1-ap-southeast-2.pooler.supabase.com";
+const host = "db.xssrfshdrtdfupgqwfdw.supabase.co";
 const ref = "xssrfshdrtdfupgqwfdw";
 const role = "gpt02_issuer_evidence_reader";
 const ca = readFileSync(
   new URL("../../../../../scripts/dev/fixtures/supabase-root-ca-2021.crt", import.meta.url),
   "utf8",
 );
-const dsn = "postgresql://" + role + "." + ref +
+const dsn = "postgresql://" + role +
   ":issuer-secret-fixture@" + host + ":5432/postgres";
 
 const claims = {
