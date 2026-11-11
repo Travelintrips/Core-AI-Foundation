@@ -15,6 +15,13 @@ import sys
 
 LIVE_DB = "/opt/ai-coding-standalone-dev/tasks.db"
 TABLE = "gpt02_issue159_approval_intents"
+MAPPING_TABLE = "gpt02_issue159_admin_operator_links"
+MAPPING_COLUMNS = [
+    ("auth_user_id", "TEXT", 0, 1),
+    ("hub_operator_id", "TEXT", 1, 0),
+    ("email", "TEXT", 1, 0),
+    ("enabled", "INTEGER", 1, 0),
+]
 
 EXPECTED_COLUMNS = [
     ("id", "TEXT", 0, 1),
@@ -42,6 +49,10 @@ def result(reason: str, **extra):
         "legacyDecisionTablePresent": False,
         "approvalIntentTablePresent": False,
         "approvalIntentSchemaExact": False,
+        "adminOperatorMappingTablePresent": False,
+        "adminOperatorMappingSchemaExact": False,
+        "activeAdminOperatorMappings": 0,
+        "adminOperatorMappingReady": False,
         "approvalIntentSelfContainedDecision": False,
         "approvalIntentLookupIndexExact": False,
         "approvalIntentRows": 0,
@@ -91,6 +102,42 @@ def inspect(db_path: str, operational: bool = True):
         if TABLE not in tables:
             return result("ISSUE159_APPROVAL_INTENT_TABLE_MISSING",
                           **common, legacyDecisionTablePresent=legacy)
+
+        if MAPPING_TABLE not in tables:
+            return result(
+                "ISSUE159_ADMIN_OPERATOR_MAPPING_TABLE_MISSING",
+                **common,
+                legacyDecisionTablePresent=legacy,
+                approvalIntentTablePresent=True,
+            )
+        mapping_cols = [
+            (r[1], str(r[2]).upper(), int(r[3]), int(r[5]))
+            for r in con.execute(f"PRAGMA table_info({MAPPING_TABLE})")
+        ]
+        if mapping_cols != MAPPING_COLUMNS:
+            return result(
+                "ISSUE159_ADMIN_OPERATOR_MAPPING_SCHEMA_DRIFT",
+                **common,
+                legacyDecisionTablePresent=legacy,
+                approvalIntentTablePresent=True,
+                adminOperatorMappingTablePresent=True,
+            )
+        active_mapping = con.execute(
+            """SELECT COUNT(*)
+               FROM gpt02_issue159_admin_operator_links l
+               JOIN admin_identities a ON a.user_id=l.auth_user_id
+               WHERE l.enabled=1 AND a.enabled=1 AND a.role='super_admin'"""
+        ).fetchone()[0]
+        if active_mapping != 1:
+            return result(
+                "ISSUE159_ADMIN_OPERATOR_MAPPING_NOT_READY",
+                **common,
+                legacyDecisionTablePresent=legacy,
+                approvalIntentTablePresent=True,
+                adminOperatorMappingTablePresent=True,
+                adminOperatorMappingSchemaExact=True,
+                activeAdminOperatorMappings=active_mapping,
+            )
 
         cols = [
             (r[1], str(r[2]).upper(), int(r[3]), int(r[5]))
@@ -155,6 +202,10 @@ def inspect(db_path: str, operational: bool = True):
             legacyDecisionTablePresent=legacy,
             approvalIntentTablePresent=True,
             approvalIntentSchemaExact=True,
+            adminOperatorMappingTablePresent=True,
+            adminOperatorMappingSchemaExact=True,
+            activeAdminOperatorMappings=1,
+            adminOperatorMappingReady=True,
             approvalIntentSelfContainedDecision=True,
             approvalIntentLookupIndexExact=True,
             approvalIntentRows=total,
