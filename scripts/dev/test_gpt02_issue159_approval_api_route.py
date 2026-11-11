@@ -114,17 +114,17 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(self.count(), 0)
         self.assertFalse(os.path.exists(self.packet))
 
-    def test_verified_admin_session_records_intent_but_stays_no_go(self):
+    def test_verified_aal2_super_admin_records_intent_but_stays_no_go(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
         api.admin_identity = lambda token, connection: (
             {"user_id": CLAIMS["superAdminId"], "email": "fixture@example.com",
-             "role": "super_admin"}
+             "role": "super_admin", "auth_level": "aal2"}
             if token == AAL2_TOKEN else None
         )
         status, body = self.request(AAL2_TOKEN)
         self.assertEqual(status, 201)
         self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
-        self.assertEqual(body["authMethod"], "supabase_admin_session")
+        self.assertEqual(body["authMethod"], "supabase_aal2")
         self.assertFalse(body["signingPermitted"])
         self.assertFalse(body["authorizationGranted"])
         self.assertFalse(body["dispatchPermitted"])
@@ -141,6 +141,32 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(packet["authorizationGranted"])
         self.assertFalse(packet["dispatchPermitted"])
         self.assertEqual(packet["releaseDecision"], "NO_GO")
+
+    def test_aal1_super_admin_is_rejected_before_intent_write(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": CLAIMS["superAdminId"],
+            "email": "fixture@example.com",
+            "role": "super_admin",
+            "auth_level": "aal1",
+        }
+        status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 403)
+        self.assertEqual(body, {"error": "active_super_admin_required"})
+        self.assertEqual(self.count(), 0)
+        self.assertFalse(os.path.exists(self.packet))
+
+    def test_missing_auth_level_is_rejected_before_intent_write(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": CLAIMS["superAdminId"],
+            "email": "fixture@example.com",
+            "role": "super_admin",
+        }
+        status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 403)
+        self.assertEqual(body, {"error": "active_super_admin_required"})
+        self.assertEqual(self.count(), 0)
 
     def test_admin_role_and_missing_bearer_are_rejected(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
