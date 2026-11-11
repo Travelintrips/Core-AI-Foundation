@@ -7,8 +7,10 @@ nonce, creates a task/command, or dispatches a worker.
 """
 from __future__ import annotations
 
+import grp
 import json
 import os
+import pwd
 import stat
 import subprocess
 import sys
@@ -26,6 +28,7 @@ APPROVED_CLAIMS_FILE = os.path.join(
     LIVE_RUNTIME, "gpt02_issue159_approved_claims.json"
 )
 SIGNER_ROLES = ("approval", "hub", "core", "issuer")
+SIGNER_RUNTIME_ROOT = "/run"
 
 
 def current_approval_evidence():
@@ -58,7 +61,7 @@ def current_approval_evidence():
 
 
 def signer_runtime_mounted():
-    """Metadata-only proof that all four systemd signer units are mounted."""
+    """Metadata-only proof of active signer units and their private runtime files."""
     for role in SIGNER_ROLES:
         unit = f"gpt02-issue159-signer@{role}.service"
         try:
@@ -66,11 +69,41 @@ def signer_runtime_mounted():
                 ["systemctl", "is-active", "--quiet", unit],
                 timeout=2, check=False,
             ).returncode == 0
-            path = f"/run/gpt02-issue159-signer-{role}/readiness.json"
+            user_result = subprocess.run(
+                ["systemctl", "show", "-p", "User", "--value", unit],
+                capture_output=True, text=True, timeout=2, check=False,
+            )
+            group_result = subprocess.run(
+                ["systemctl", "show", "-p", "Group", "--value", unit],
+                capture_output=True, text=True, timeout=2, check=False,
+            )
+            if user_result.returncode != 0 or group_result.returncode != 0:
+                return False
+            user_name = user_result.stdout.strip()
+            group_name = group_result.stdout.strip()
+            if user_name:
+                account = pwd.getpwnam(user_name)
+                expected_uid = account.pw_uid
+                expected_gid = grp.getgrnam(group_name).gr_gid if group_name else account.pw_gid
+            else:
+                expected_uid = 0
+                expected_gid = grp.getgrnam(group_name).gr_gid if group_name else 0
+
+            runtime_dir = os.path.join(
+                SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}"
+            )
+            runtime_stat = os.lstat(runtime_dir)
+            path = os.path.join(runtime_dir, "readiness.json")
             st = os.lstat(path)
-            if (not active or stat.S_ISLNK(st.st_mode)
+            if (not active or stat.S_ISLNK(runtime_stat.st_mode)
+                    or not stat.S_ISDIR(runtime_stat.st_mode)
+                    or runtime_stat.st_uid != expected_uid
+                    or runtime_stat.st_gid != expected_gid
+                    or stat.S_IMODE(runtime_stat.st_mode) != 0o700
+                    or stat.S_ISLNK(st.st_mode)
                     or not stat.S_ISREG(st.st_mode)
-                    or st.st_uid != 0 or st.st_gid != 0
+                    or st.st_uid != expected_uid
+                    or st.st_gid != expected_gid
                     or stat.S_IMODE(st.st_mode) != 0o600):
                 return False
             data = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -85,7 +118,7 @@ def signer_runtime_mounted():
                     or data.get("dispatchPermitted") is not False
                     or data.get("releaseDecision") != "NO_GO"):
                 return False
-        except (OSError, ValueError, subprocess.SubprocessError):
+        except (KeyError, OSError, ValueError, subprocess.SubprocessError):
             return False
     return True
 
