@@ -9,15 +9,85 @@ from __future__ import annotations
 
 import json
 import os
+import stat
+import subprocess
 import sys
+import time
 from pathlib import Path
 
+from gpt02_issue159_approval_intent_reader import read_approval_intent
 from gpt02_issue159_approval_store_readiness import inspect as inspect_approval
 from gpt02_issue159_private_key_custody_readiness import inspect as inspect_custody
 
 LIVE_RUNTIME = "/opt/ai-coding-standalone-dev"
 HUB_TRUST_DIR = "/run/credentials/gpt02-dev"
 HUB_MANIFEST = "/etc/gpt02-dev/trust-fingerprints.json"
+APPROVED_CLAIMS_FILE = os.path.join(
+    LIVE_RUNTIME, "gpt02_issue159_approved_claims.json"
+)
+SIGNER_ROLES = ("approval", "hub", "core", "issuer")
+
+
+def current_approval_evidence():
+    """Read the exact persisted AAL2 intent; expired approvals do not count."""
+    try:
+        st = os.lstat(APPROVED_CLAIMS_FILE)
+        if (stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode)
+                or st.st_uid != 0 or st.st_gid != 0
+                or stat.S_IMODE(st.st_mode) != 0o600):
+            return False
+        payload = json.loads(Path(APPROVED_CLAIMS_FILE).read_text(encoding="utf-8"))
+        claims = payload["claims"]
+        lookup = {
+            "claimsSha256": payload["claimsSha256"],
+            "taskId": claims["taskId"],
+            "commandId": claims["commandId"],
+            "attemptId": claims["attemptId"],
+            "companyId": claims["companyId"],
+            "superAdminId": claims["superAdminId"],
+        }
+        result = read_approval_intent(
+            os.path.join(LIVE_RUNTIME, "tasks.db"),
+            lookup,
+            int(time.time() * 1000),
+            operational=True,
+        )
+        return result.get("persistedTrustedReadProven") is True
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+def signer_runtime_mounted():
+    """Metadata-only proof that all four systemd signer units are mounted."""
+    for role in SIGNER_ROLES:
+        unit = f"gpt02-issue159-signer@{role}.service"
+        try:
+            active = subprocess.run(
+                ["systemctl", "is-active", "--quiet", unit],
+                timeout=2, check=False,
+            ).returncode == 0
+            path = f"/run/gpt02-issue159-signer-{role}/readiness.json"
+            st = os.lstat(path)
+            if (not active or stat.S_ISLNK(st.st_mode)
+                    or not stat.S_ISREG(st.st_mode)
+                    or st.st_uid != 0 or st.st_gid != 0
+                    or stat.S_IMODE(st.st_mode) != 0o600):
+                return False
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            if (data.get("environment") != "DEV"
+                    or data.get("role") != role
+                    or data.get("algorithm") != "Ed25519"
+                    or data.get("fingerprintMatched") is not True
+                    or data.get("privateCredentialMounted") is not True
+                    or data.get("authorizerOperational") is not False
+                    or data.get("signingPermitted") is not False
+                    or data.get("authorizationGranted") is not False
+                    or data.get("dispatchPermitted") is not False
+                    or data.get("releaseDecision") != "NO_GO"):
+                return False
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return False
+    return True
 
 
 def assess(approval, custody, runtime):
@@ -75,8 +145,12 @@ def assess(approval, custody, runtime):
         blockers.append("SYSTEMD_HOST_CREDENTIAL_SECRET_NOT_PROVISIONED")
     if not four_credentials:
         blockers.append("FOUR_SIGNER_CREDENTIALS_NOT_PROVISIONED")
-    blockers.append("HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL")
-    blockers.append("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED")
+    trusted_adapters = runtime.get("hubCoreIssuerTrustedReadAdaptersOperational") is True
+    signer_runtimes = runtime.get("fourSignerRuntimesMounted") is True
+    if not trusted_adapters:
+        blockers.append("HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL")
+    if not signer_runtimes:
+        blockers.append("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED")
     if not public_trust:
         blockers.append("OPERATIONAL_PUBLIC_TRUST_NOT_INSTALLED")
 
@@ -92,8 +166,8 @@ def assess(approval, custody, runtime):
         "hostCredentialSecretSecure": host_secret,
         "fourSignerCredentialMetadataSecure": four_credentials,
         "hubOperationalPublicTrustInstalled": public_trust,
-        "hubCoreIssuerTrustedReadAdaptersOperational": False,
-        "fourSignerRuntimesMounted": False,
+        "hubCoreIssuerTrustedReadAdaptersOperational": trusted_adapters,
+        "fourSignerRuntimesMounted": signer_runtimes,
         "blockers": blockers,
         "privateCredentialBytesRead": False,
         "signingPermitted": False,
@@ -129,15 +203,25 @@ def live_runtime_metadata():
         "approvalWriterIntegrated": writer_integrated,
         "hubPublicTrustDirectoryPresent": os.path.isdir(HUB_TRUST_DIR),
         "hubFingerprintManifestPresent": os.path.isfile(HUB_MANIFEST),
+        "hubCoreIssuerTrustedReadAdaptersOperational": False,
+        "fourSignerRuntimesMounted": signer_runtime_mounted(),
+        "approvalIntentTrustedReadCurrent": current_approval_evidence(),
     }
 
 
 def inspect_live():
+    approval = inspect_approval("/opt/ai-coding-standalone-dev/tasks.db",
+                                operational=True)
+    runtime = live_runtime_metadata()
+    # A row in the store is not enough: the exact approved binding must still
+    # pass the pinned read-only reader and remain inside its validity window.
+    approval["operationalEvidenceAvailable"] = (
+        runtime["approvalIntentTrustedReadCurrent"]
+    )
     return assess(
-        inspect_approval("/opt/ai-coding-standalone-dev/tasks.db",
-                         operational=True),
+        approval,
         inspect_custody(operational=True),
-        live_runtime_metadata(),
+        runtime,
     )
 
 
