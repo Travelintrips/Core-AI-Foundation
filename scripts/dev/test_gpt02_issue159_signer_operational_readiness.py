@@ -60,7 +60,7 @@ def runtime(**patch):
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": False,
         "fourSignerTrustedReaderConnectivityVerified": False,
-        "fourSignerAuthorizersOperational": False,
+        "authorizerAdaptersInstalled": False,
         "approvalIntentTrustedReadCurrent": False,
     }
     base.update(patch)
@@ -68,6 +68,44 @@ def runtime(**patch):
 
 
 class SignerOperationalReadinessTest(unittest.TestCase):
+    def test_authorizer_adapter_source_contracts_are_verified(self):
+        markers = {
+            "APPROVAL_API_SOURCE": [
+                "issue159_identity_verifier",
+                "handle_issue159_approval_intent(",
+                "authMethod':'supabase_admin_session'",
+            ],
+            "APPROVAL_READER_SOURCE": [
+                "def read_approval_intent(",
+                'r["role_at_decision"] != "super_admin"',
+                'r["decision"] != "APPROVE"',
+                'r["auth_method"] not in ("supabase_admin_session", "supabase_aal2")',
+            ],
+            "HUB_CORE_AUTHORIZER_SOURCE": [
+                "function mapFacts(",
+                "SUPER_ADMIN_ASSIGNMENT_AUDIT_MISMATCH",
+                "SIGNED_LINK_LEDGER_DIGEST_MISMATCH",
+                "IMMUTABLE_PREPARATION_CONFIGURATION_MISMATCH",
+            ],
+            "ISSUER_LEDGER_AUTHORIZER_SOURCE": [
+                "inspectGpt02Issue159IssuerAuthorizerEvidence",
+            ],
+            "ISSUER_AUTHORIZER_SOURCE": [
+                "inspectGpt02Issue159IssuerAuthorizerEvidence",
+                "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH",
+                "GPT02_ISSUE159_FENCE_BINDING_MISMATCH",
+                "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
+            ],
+        }
+        with tempfile.TemporaryDirectory(prefix="gpt02-authorizer-sources-") as root:
+            for name, values in markers.items():
+                path = Path(root) / name
+                path.write_text("\\n".join(values), encoding="utf-8")
+                setattr(readiness, name, path)
+            self.assertTrue(readiness.authorizer_adapters_installed())
+            Path(root, "ISSUER_AUTHORIZER_SOURCE").write_text("missing adapter", encoding="utf-8")
+            self.assertFalse(readiness.authorizer_adapters_installed())
+
     def test_current_expected_state_is_precise_no_go(self):
         out = readiness.assess(approval(), custody(), runtime())
         self.assertTrue(out["approvalStoreSchemaReady"])
@@ -120,6 +158,54 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
         self.assertNotIn("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED", out["blockers"])
         self.assertFalse(out["operationalSigningReady"])
+        self.assertFalse(out["dispatchPermitted"])
+
+    def test_authorizer_adapters_operational_requires_all_trusted_paths_but_not_a_live_approval(self):
+        out = readiness.assess(
+            approval(evidence=False),
+            custody(host_secret=True, credentials=4),
+            runtime(
+                approvalReaderSourceInstalled=True,
+                approvalWriterSourceInstalled=True,
+                approvalWriterIntegrated=True,
+                hubPublicTrustDirectoryPresent=True,
+                hubFingerprintManifestPresent=True,
+                hubCoreReaderRuntimeOperational=True,
+                issuerReaderRuntimeOperational=True,
+                fourSignerRuntimesMounted=True,
+                fourSignerTrustedReaderConnectivityVerified=True,
+                authorizerAdaptersInstalled=True,
+            ),
+        )
+        self.assertTrue(out["fourSignerAuthorizersOperational"])
+        self.assertNotIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
+        self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["authorizationGranted"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+
+    def test_authorizer_adapter_blocker_remains_when_one_trusted_path_is_missing(self):
+        out = readiness.assess(
+            approval(evidence=False),
+            custody(host_secret=True, credentials=4),
+            runtime(
+                approvalReaderSourceInstalled=True,
+                approvalWriterSourceInstalled=True,
+                approvalWriterIntegrated=True,
+                hubPublicTrustDirectoryPresent=True,
+                hubFingerprintManifestPresent=True,
+                hubCoreReaderRuntimeOperational=True,
+                issuerReaderRuntimeOperational=True,
+                fourSignerRuntimesMounted=True,
+                fourSignerTrustedReaderConnectivityVerified=True,
+                authorizerAdaptersInstalled=False,
+            ),
+        )
+        self.assertFalse(out["fourSignerAuthorizersOperational"])
+        self.assertIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
+        self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
+        self.assertFalse(out["signingPermitted"])
         self.assertFalse(out["dispatchPermitted"])
 
     def test_signer_mount_pass_does_not_remove_trusted_reader_blocker(self):
@@ -199,7 +285,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
     def test_issuer_health_probe_uses_http_crlf_not_literal_backslashes(self):
         source = SCRIPT.read_text()
         start = source.index('def issuer_reader_runtime_operational():')
-        end = source.index('def four_signer_authorizers_operational():', start)
+        end = source.index('def authorizer_adapters_installed():', start)
         function = source[start:end]
         slash = chr(92)
         self.assertIn('b"GET /health HTTP/1.1' + slash + 'r' + slash + 'n"', function)

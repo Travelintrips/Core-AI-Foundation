@@ -41,7 +41,9 @@ function good() {
 }
 
 describe("GPT02 Issue159 signer custody provenance policy", () => {
-  it("pins four independent custody slots and authorizer sources but stays NO_GO", () => {
+  it("pins four independent custody slots and single-admin authorizer sources but stays NO_GO", () => {
+    expect(GPT02_ISSUE159_CUSTODY_POLICY.approval.authorizerSource)
+      .toBe("authenticated-super-admin-approval-audit");
     const result = assessGpt02Issue159SignerProvenance(good());
     expect(result.provenancePolicyVerified).toBe(true);
     expect(result.distinctCustodySlots).toBe(true);

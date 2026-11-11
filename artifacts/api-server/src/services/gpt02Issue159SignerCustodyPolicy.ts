@@ -8,7 +8,7 @@ import {
 export const GPT02_ISSUE159_CUSTODY_POLICY = Object.freeze({
   approval: Object.freeze({
     custodySlot: "gpt02-issue159-approval-dev",
-    authorizerSource: "aal2-super-admin-approval-audit",
+    authorizerSource: "authenticated-super-admin-approval-audit",
   }),
   hub: Object.freeze({
     custodySlot: "gpt02-issue159-hub-operator-dev",
