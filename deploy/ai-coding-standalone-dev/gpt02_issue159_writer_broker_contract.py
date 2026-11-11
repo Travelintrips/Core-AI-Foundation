@@ -152,14 +152,19 @@ def verify_lifecycle_evidence_packet(packet: Any, public_roots: Any,
         raise BrokerAdmissionError("APPROVAL_SCOPE_OR_TIME_INVALID")
 
     if (hc != cc or hc["v"] != 1 or hc["environment"] != "DEV"
-        or hc["audience"] != "GPT02_OPERATOR_LINK_V1"
+        or hc["audience"] != "GPT02_DUAL_ACCOUNT_COMMAND_LINK"
         or hc["companyId"] != ac["companyId"] or hc["hubTaskId"] != ac["taskId"]
         or hc["coreCommandId"] != ac["commandId"] or hc["attemptId"] != ac["attemptId"]
         or hc["approvalDigest"] != ad or hc["nonce"] != ac["nonce"]
         or hc["attemptNumber"] != 1 or hc["workerId"] != WORKER
         or hc["hubRole"] != "super_admin" or hc["hubActive"] is not True
-        or hc["coreRole"] != "super_admin" or hc["coreActive"] is not True
+        or hc["coreRole"] not in ("owner", "admin") or hc["coreActive"] is not True
         or hc["corePasswordChanged"] is not True
+        or hc["hubOperatorNamespace"] != "ai-task-hub.public.users"
+        or hc["coreOperatorNamespace"] != "ai-core.ai_platform.internal_users"
+        or not isinstance(hc["coreOperatorUserId"], int) or hc["coreOperatorUserId"] <= 0
+        or not isinstance(hc["issuedAt"], int) or not isinstance(hc["expiresAt"], int)
+        or hc["issuedAt"] < ac["issuedAt"] or hc["expiresAt"] > ac["expiresAt"]
         or hc["issuedAt"] > observed_at_ms or hc["expiresAt"] <= observed_at_ms
         or hc["expiresAt"] <= hc["issuedAt"]
         or hc["expiresAt"] - hc["issuedAt"] > 300000
