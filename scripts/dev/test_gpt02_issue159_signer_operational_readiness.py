@@ -285,7 +285,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
     def test_issuer_health_probe_uses_http_crlf_not_literal_backslashes(self):
         source = SCRIPT.read_text()
         start = source.index('def issuer_reader_runtime_operational():')
-        end = source.index('def four_signer_authorizers_operational():', start)
+        end = source.index('def authorizer_adapters_installed():', start)
         function = source[start:end]
         slash = chr(92)
         self.assertIn('b"GET /health HTTP/1.1' + slash + 'r' + slash + 'n"', function)
