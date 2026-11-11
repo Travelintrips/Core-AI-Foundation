@@ -96,5 +96,3 @@ SELECT (SELECT count(*) FROM gpt02_fixture_prep.preparations)::text || ':' ||
 test "$counts" = '2:1' || { echo "FAIL: COUNTS_$counts";exit 1; }
 # Roles have no direct table privileges after all fixture calls.
 echo 'PASS: PG16 split owners, EXECUTE-only writer, forced RLS, replay denial, invalid admin denial, concurrent exactly-one, atomic rollback, append-only UPDATE/DELETE/TRUNCATE denied; NO LIVE DB'
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
