@@ -12,6 +12,7 @@ import json
 import os
 import pwd
 import stat
+import socket
 import subprocess
 import sys
 import time
@@ -123,6 +124,66 @@ def signer_runtime_mounted():
     return True
 
 
+
+def hub_core_reader_runtime_operational():
+    """Verify the live DEV Hub/Core read-only sidecar through its private Unix socket."""
+    socket_path = "/run/gpt02-reader/reader.sock"
+    directory_path = "/run/gpt02-reader"
+    try:
+        if subprocess.run(
+            ["systemctl", "is-active", "--quiet", "gpt02-issue159-reader.service"],
+            timeout=2, check=False,
+        ).returncode != 0:
+            return False
+        signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
+        directory = os.lstat(directory_path)
+        endpoint = os.lstat(socket_path)
+        if (stat.S_ISLNK(directory.st_mode) or not stat.S_ISDIR(directory.st_mode)
+                or directory.st_gid != signer_gid
+                or stat.S_IMODE(directory.st_mode) != 0o750
+                or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
+                or endpoint.st_uid == 0 or endpoint.st_gid != signer_gid
+                or stat.S_IMODE(endpoint.st_mode) != 0o660):
+            return False
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(8)
+        try:
+            client.connect(socket_path)
+            client.sendall(
+                b"GET /health HTTP/1.1\\r\\n"
+                b"Host: localhost\\r\\n"
+                b"Connection: close\\r\\n\\r\\n"
+            )
+            chunks = []
+            size = 0
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > 8192:
+                    return False
+                chunks.append(chunk)
+        finally:
+            client.close()
+        response = b"".join(chunks)
+        header, separator, body = response.partition(b"\\r\\n\\r\\n")
+        if not separator or not header.startswith(b"HTTP/1.1 200 "):
+            return False
+        payload = json.loads(body.decode("utf-8"))
+        return (
+            payload.get("ok") is True
+            and payload.get("environment") == "DEV"
+            and payload.get("readerReady") is True
+            and payload.get("hubRole") == "gpt02_hub_evidence_reader"
+            and payload.get("coreRole") == "gpt02_core_evidence_reader"
+            and payload.get("twoSessionsVerified") is True
+            and payload.get("signingPermitted") is False
+            and payload.get("dispatchPermitted") is False
+        )
+    except (KeyError, OSError, ValueError, socket.timeout, subprocess.SubprocessError):
+        return False
+
 def assess(approval, custody, runtime):
     blockers = []
 
@@ -178,10 +239,14 @@ def assess(approval, custody, runtime):
         blockers.append("SYSTEMD_HOST_CREDENTIAL_SECRET_NOT_PROVISIONED")
     if not four_credentials:
         blockers.append("FOUR_SIGNER_CREDENTIALS_NOT_PROVISIONED")
-    trusted_adapters = runtime.get("hubCoreIssuerTrustedReadAdaptersOperational") is True
+    hub_core_reader = runtime.get("hubCoreReaderRuntimeOperational") is True
+    issuer_reader = runtime.get("issuerReaderRuntimeOperational") is True
+    trusted_adapters = hub_core_reader and issuer_reader
     signer_runtimes = runtime.get("fourSignerRuntimesMounted") is True
-    if not trusted_adapters:
-        blockers.append("HUB_CORE_ISSUER_TRUSTED_READ_ADAPTERS_NOT_OPERATIONAL")
+    if not hub_core_reader:
+        blockers.append("HUB_CORE_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL")
+    if not issuer_reader:
+        blockers.append("ISSUER_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL")
     if not signer_runtimes:
         blockers.append("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED")
     if not public_trust:
@@ -199,6 +264,8 @@ def assess(approval, custody, runtime):
         "hostCredentialSecretSecure": host_secret,
         "fourSignerCredentialMetadataSecure": four_credentials,
         "hubOperationalPublicTrustInstalled": public_trust,
+        "hubCoreReaderRuntimeOperational": hub_core_reader,
+        "issuerReaderRuntimeOperational": issuer_reader,
         "hubCoreIssuerTrustedReadAdaptersOperational": trusted_adapters,
         "fourSignerRuntimesMounted": signer_runtimes,
         "blockers": blockers,
@@ -236,6 +303,8 @@ def live_runtime_metadata():
         "approvalWriterIntegrated": writer_integrated,
         "hubPublicTrustDirectoryPresent": os.path.isdir(HUB_TRUST_DIR),
         "hubFingerprintManifestPresent": os.path.isfile(HUB_MANIFEST),
+        "hubCoreReaderRuntimeOperational": hub_core_reader_runtime_operational(),
+        "issuerReaderRuntimeOperational": False,
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": signer_runtime_mounted(),
         "approvalIntentTrustedReadCurrent": current_approval_evidence(),
