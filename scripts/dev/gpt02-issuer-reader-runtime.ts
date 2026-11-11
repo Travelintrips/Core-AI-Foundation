@@ -78,14 +78,20 @@ export function createIssuerReaderServer({
 }: {
   reader: ReturnType<typeof createGpt02Issue159IssuerTrustedReader>;
 }) {
-  // Four isolated signer processes may probe at once. Share one native
-  // database health check so the dedicated reader connection limit of 1
-  // remains sufficient without returning transient 503 responses.
-  let healthInFlight: ReturnType<typeof reader.health> | null = null;
+  // The issuer role has CONNECTION LIMIT 1. Serialize every native database
+  // operation; coalesce concurrent health probes so four signers do not race
+  // each other for the single allowed PostgreSQL session.
+  let databaseQueue: Promise<unknown> = Promise.resolve();
+  const runSerialized = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = databaseQueue.then(operation, operation);
+    databaseQueue = result.then(() => undefined, () => undefined);
+    return result;
+  };
+  let healthInFlight: Promise<Awaited<ReturnType<typeof reader.health>>> | null = null;
   const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       try {
-        const healthPromise = healthInFlight ??= reader.health().finally(() => {
+        const healthPromise = healthInFlight ??= runSerialized(() => reader.health()).finally(() => {
           healthInFlight = null;
         });
         const health = await healthPromise;
@@ -134,7 +140,7 @@ export function createIssuerReaderServer({
       }
 
       try {
-        const result = await reader.read(input);
+        const result = await runSerialized(() => reader.read(input));
         const ok = result.persistedTrustedReadProven === true &&
           result.signingPermitted === false &&
           result.authorizationGranted === false &&
