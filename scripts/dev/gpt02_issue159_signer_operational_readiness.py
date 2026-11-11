@@ -32,6 +32,8 @@ SIGNER_ROLES = ("approval", "hub", "core", "issuer")
 SIGNER_RUNTIME_ROOT = "/run"
 HUB_CORE_READER_SOCKET_DIR = "/run/gpt02-reader"
 HUB_CORE_READER_SOCKET = "/run/gpt02-reader/reader.sock"
+ISSUER_READER_SOCKET_DIR = "/run/gpt02-issuer-reader"
+ISSUER_READER_SOCKET = "/run/gpt02-issuer-reader/reader.sock"
 
 
 def current_approval_evidence():
@@ -84,22 +86,32 @@ def signer_runtime_mounted():
                 return False
             user_name = user_result.stdout.strip()
             group_name = group_result.stdout.strip()
+            runtime_dir = os.path.join(
+                SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}"
+            )
+            runtime_entry = os.lstat(runtime_dir)
+            if stat.S_ISLNK(runtime_entry.st_mode):
+                expected_private = os.path.join("/run/private", os.path.basename(runtime_dir))
+                if (runtime_entry.st_uid != 0 or runtime_entry.st_gid != 0
+                        or os.path.realpath(runtime_dir) != expected_private):
+                    return False
+                runtime_stat = os.stat(runtime_dir)
+            else:
+                runtime_stat = runtime_entry
             if user_name:
                 account = pwd.getpwnam(user_name)
                 expected_uid = account.pw_uid
                 expected_gid = grp.getgrnam(group_name).gr_gid if group_name else account.pw_gid
             else:
-                expected_uid = 0
-                expected_gid = grp.getgrnam(group_name).gr_gid if group_name else 0
-
-            runtime_dir = os.path.join(
-                SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}"
-            )
-            runtime_stat = os.lstat(runtime_dir)
+                # DynamicUser=yes leaves User= empty; systemd owns the private
+                # RuntimeDirectory with the allocated non-root UID.
+                expected_uid = runtime_stat.st_uid
+                expected_gid = grp.getgrnam(group_name).gr_gid if group_name else runtime_stat.st_gid
+                if expected_uid == 0:
+                    return False
             path = os.path.join(runtime_dir, "readiness.json")
             st = os.lstat(path)
-            if (not active or stat.S_ISLNK(runtime_stat.st_mode)
-                    or not stat.S_ISDIR(runtime_stat.st_mode)
+            if (not active or not stat.S_ISDIR(runtime_stat.st_mode)
                     or runtime_stat.st_uid != expected_uid
                     or runtime_stat.st_gid != expected_gid
                     or stat.S_IMODE(runtime_stat.st_mode) != 0o700
@@ -115,6 +127,9 @@ def signer_runtime_mounted():
                     or data.get("algorithm") != "Ed25519"
                     or data.get("fingerprintMatched") is not True
                     or data.get("privateCredentialMounted") is not True
+                    or data.get("hubCoreReaderOperational") is not True
+                    or data.get("issuerReaderOperational") is not True
+                    or data.get("trustedReaderConnectivityVerified") is not True
                     or data.get("authorizerOperational") is not False
                     or data.get("signingPermitted") is not False
                     or data.get("authorizationGranted") is not False
@@ -186,6 +201,92 @@ def hub_core_reader_runtime_operational():
     except (KeyError, OSError, ValueError, socket.timeout, subprocess.SubprocessError):
         return False
 
+
+def issuer_reader_runtime_operational():
+    """Verify the issuer sidecar and only the exact systemd DynamicUser mapping."""
+    socket_path = ISSUER_READER_SOCKET
+    directory_path = ISSUER_READER_SOCKET_DIR
+    try:
+        if subprocess.run(
+            ["systemctl", "is-active", "--quiet", "gpt02-issue159-issuer-reader.service"],
+            timeout=2, check=False,
+        ).returncode != 0:
+            return False
+        signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
+        link = os.lstat(directory_path)
+        if stat.S_ISLNK(link.st_mode):
+            if os.path.realpath(directory_path) != "/run/private/gpt02-issuer-reader":
+                return False
+            directory = os.stat(directory_path)
+        else:
+            directory = link
+        endpoint = os.lstat(socket_path)
+        if (not stat.S_ISDIR(directory.st_mode) or directory.st_uid == 0
+                or directory.st_gid != signer_gid
+                or stat.S_IMODE(directory.st_mode) != 0o750
+                or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
+                or endpoint.st_uid == 0 or endpoint.st_gid != signer_gid
+                or stat.S_IMODE(endpoint.st_mode) != 0o660):
+            return False
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(12)
+        try:
+            client.connect(socket_path)
+            client.sendall(
+                b"GET /health HTTP/1.1\\r\\n"
+                b"Host: localhost\\r\\n"
+                b"Connection: close\\r\\n\\r\\n"
+            )
+            chunks = []
+            size = 0
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > 8192:
+                    return False
+                chunks.append(chunk)
+        finally:
+            client.close()
+        response = b"".join(chunks)
+        header, separator, body = response.partition(b"\\r\\n\\r\\n")
+        if not separator or not header.startswith(b"HTTP/1.1 200 "):
+            return False
+        payload = json.loads(body.decode("utf-8"))
+        return (
+            payload.get("ok") is True
+            and payload.get("environment") == "DEV"
+            and payload.get("readerReady") is True
+            and payload.get("issuerRole") == "gpt02_issuer_evidence_reader"
+            and payload.get("tlsVerified") is True
+            and payload.get("readOnly") is True
+            and payload.get("signingPermitted") is False
+            and payload.get("authorizationGranted") is False
+            and payload.get("dispatchPermitted") is False
+            and payload.get("releaseDecision") == "NO_GO"
+        )
+    except (KeyError, OSError, ValueError, socket.timeout, subprocess.SubprocessError):
+        return False
+
+
+def four_signer_authorizers_operational():
+    """Require an explicit authorizer attestation from every isolated signer."""
+    for role in SIGNER_ROLES:
+        path = os.path.join(SIGNER_RUNTIME_ROOT, f"gpt02-issue159-signer-{role}", "readiness.json")
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            if (data.get("environment") != "DEV" or data.get("role") != role
+                    or data.get("authorizerOperational") is not True
+                    or data.get("signingPermitted") is not False
+                    or data.get("authorizationGranted") is not False
+                    or data.get("dispatchPermitted") is not False
+                    or data.get("releaseDecision") != "NO_GO"):
+                return False
+        except (OSError, ValueError, TypeError):
+            return False
+    return True
+
 def assess(approval, custody, runtime):
     blockers = []
 
@@ -245,12 +346,18 @@ def assess(approval, custody, runtime):
     issuer_reader = runtime.get("issuerReaderRuntimeOperational") is True
     trusted_adapters = hub_core_reader and issuer_reader
     signer_runtimes = runtime.get("fourSignerRuntimesMounted") is True
+    signer_reader_connectivity = runtime.get("fourSignerTrustedReaderConnectivityVerified") is True
+    signer_authorizers = runtime.get("fourSignerAuthorizersOperational") is True
     if not hub_core_reader:
         blockers.append("HUB_CORE_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL")
     if not issuer_reader:
         blockers.append("ISSUER_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL")
     if not signer_runtimes:
         blockers.append("FOUR_SIGNER_RUNTIMES_NOT_MOUNTED")
+    if not signer_reader_connectivity:
+        blockers.append("FOUR_SIGNER_READER_CONNECTIVITY_NOT_VERIFIED")
+    if not signer_authorizers:
+        blockers.append("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED")
     if not public_trust:
         blockers.append("OPERATIONAL_PUBLIC_TRUST_NOT_INSTALLED")
 
@@ -270,6 +377,8 @@ def assess(approval, custody, runtime):
         "issuerReaderRuntimeOperational": issuer_reader,
         "hubCoreIssuerTrustedReadAdaptersOperational": trusted_adapters,
         "fourSignerRuntimesMounted": signer_runtimes,
+        "fourSignerTrustedReaderConnectivityVerified": signer_reader_connectivity,
+        "fourSignerAuthorizersOperational": signer_authorizers,
         "blockers": blockers,
         "privateCredentialBytesRead": False,
         "signingPermitted": False,
@@ -306,9 +415,11 @@ def live_runtime_metadata():
         "hubPublicTrustDirectoryPresent": os.path.isdir(HUB_TRUST_DIR),
         "hubFingerprintManifestPresent": os.path.isfile(HUB_MANIFEST),
         "hubCoreReaderRuntimeOperational": hub_core_reader_runtime_operational(),
-        "issuerReaderRuntimeOperational": False,
+        "issuerReaderRuntimeOperational": issuer_reader_runtime_operational(),
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": signer_runtime_mounted(),
+        "fourSignerTrustedReaderConnectivityVerified": signer_runtime_mounted(),
+        "fourSignerAuthorizersOperational": four_signer_authorizers_operational(),
         "approvalIntentTrustedReadCurrent": current_approval_evidence(),
     }
 

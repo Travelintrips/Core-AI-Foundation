@@ -78,10 +78,23 @@ export function createIssuerReaderServer({
 }: {
   reader: ReturnType<typeof createGpt02Issue159IssuerTrustedReader>;
 }) {
+  // The issuer role has CONNECTION LIMIT 1. Serialize every native database
+  // operation; coalesce concurrent health probes so four signers do not race
+  // each other for the single allowed PostgreSQL session.
+  let databaseQueue: Promise<unknown> = Promise.resolve();
+  const runSerialized = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = databaseQueue.then(operation, operation);
+    databaseQueue = result.then(() => undefined, () => undefined);
+    return result;
+  };
+  let healthInFlight: Promise<Awaited<ReturnType<typeof reader.health>>> | null = null;
   const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       try {
-        const health = await reader.health();
+        const healthPromise = healthInFlight ??= runSerialized(() => reader.health()).finally(() => {
+          healthInFlight = null;
+        });
+        const health = await healthPromise;
         const ok = nativeHealthIsTrusted(health);
         respond(res, ok ? 200 : 503, {
           ok,
@@ -127,7 +140,7 @@ export function createIssuerReaderServer({
       }
 
       try {
-        const result = await reader.read(input);
+        const result = await runSerialized(() => reader.read(input));
         const ok = result.persistedTrustedReadProven === true &&
           result.signingPermitted === false &&
           result.authorizationGranted === false &&
@@ -205,10 +218,15 @@ export async function startIssuerReaderRuntime() {
       const resolved = fs.realpathSync(parent);
       const expected = path.join("/run/private", path.basename(parent));
       const privateRoot = fs.lstatSync("/run/private");
+      const privateRootMode = privateRoot.mode & 0o777;
+      // systemd may expose /run/private as 0755 inside a DynamicUser mount
+      // namespace even though the host view is 0700. Both modes are safe here
+      // only because the parent is root:root and never group/world writable.
       if (resolved !== expected ||
           !privateRoot.isDirectory() || privateRoot.isSymbolicLink() ||
           privateRoot.uid !== 0 || privateRoot.gid !== 0 ||
-          (privateRoot.mode & 0o777) !== 0o700) {
+          ![0o700, 0o755].includes(privateRootMode) ||
+          (privateRootMode & 0o022) !== 0) {
         return fail("ISSUER_READER_SYSTEMD_RUNTIME_MAPPING_INVALID");
       }
       directoryPath = resolved;

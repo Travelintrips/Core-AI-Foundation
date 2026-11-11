@@ -79,11 +79,22 @@ def _unix_json_request(socket_path: str, route: str, payload: dict[str, object])
     try:
         signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
         endpoint = os.lstat(socket_path)
-        parent = os.lstat(os.path.dirname(socket_path))
-        if (stat.S_ISLNK(parent.st_mode) or not stat.S_ISDIR(parent.st_mode)
+        parent_path = os.path.dirname(socket_path)
+        parent_entry = os.lstat(parent_path)
+        if stat.S_ISLNK(parent_entry.st_mode):
+            # DynamicUser=yes uses a root-owned /run symlink for this one
+            # systemd RuntimeDirectory. Accept only the exact issuer mapping.
+            if (socket_path != "/run/gpt02-issuer-reader/reader.sock"
+                    or os.path.realpath(parent_path) != "/run/private/gpt02-issuer-reader"):
+                return None
+            parent = os.stat(parent_path)
+        else:
+            parent = parent_entry
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid == 0
                 or parent.st_gid != signer_gid or stat.S_IMODE(parent.st_mode) != 0o750
                 or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
-                or endpoint.st_gid != signer_gid or stat.S_IMODE(endpoint.st_mode) != 0o660):
+                or endpoint.st_uid == 0 or endpoint.st_gid != signer_gid
+                or stat.S_IMODE(endpoint.st_mode) != 0o660):
             return None
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         request = (
@@ -94,7 +105,7 @@ def _unix_json_request(socket_path: str, route: str, payload: dict[str, object])
             f"Content-Length: {len(body)}\r\n\r\n"
         ).encode("ascii") + body
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client.settimeout(5)
+        client.settimeout(35)
         try:
             client.connect(socket_path)
             client.sendall(request)

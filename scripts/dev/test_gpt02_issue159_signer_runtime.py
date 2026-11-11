@@ -15,6 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "deploy/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py"
 UNIT = ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service"
+ISSUER_RUNTIME = ROOT / "scripts/dev/gpt02-issuer-reader-runtime.ts"
 ROLES = ("approval", "hub", "core", "issuer")
 
 
@@ -169,7 +170,16 @@ class RuntimeBoundaryTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source, forbidden)
         self.assertIn("socket.AF_UNIX", source)
+        self.assertIn("client.settimeout(35)", source)
+        self.assertIn('os.path.realpath(parent_path) != "/run/private/gpt02-issuer-reader"', source)
 
+    def test_issuer_runtime_accepts_only_safe_systemd_dynamicuser_mapping(self):
+        source = ISSUER_RUNTIME.read_text()
+        self.assertIn("resolved !== expected", source)
+        self.assertIn('path.join("/run/private", path.basename(parent))', source)
+        self.assertIn("[0o700, 0o755].includes(privateRootMode)", source)
+        self.assertIn("(privateRootMode & 0o022) !== 0", source)
+        self.assertIn("privateRoot.uid !== 0 || privateRoot.gid !== 0", source)
     def test_systemd_unit_mounts_only_encrypted_private_credential_and_manifest(self):
         unit = UNIT.read_text()
         for required in (
