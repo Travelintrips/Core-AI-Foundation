@@ -197,7 +197,7 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     "storedEvidence", "observedAt", "trustedReadProof",
   ])) fail("GPT02_HUB_CORE_FACTS_SHAPE_INVALID");
 
-  const proof = facts.trustedReadProof;
+  const proof = facts.trustedReadProof as RecordValue;
   if (!exactObject(proof, [
     "source", "environment", "hubRole", "coreRole", "separateBackends",
     "clientTlsVerified", "readOnly", "dispatchPermitted", "signingPermitted",
@@ -211,7 +211,7 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     fail("GPT02_HUB_CORE_PERSISTED_READ_PROOF_INVALID");
   }
 
-  const observedAt = facts.observedAt;
+  const observedAt = facts.observedAt as number;
   if (!Number.isSafeInteger(observedAt) || Number(observedAt) <= 0 ||
       !exactObject(facts.prepared, [
         "companyId", "hubTaskId", "memberId", "memberAuditId",
@@ -238,8 +238,9 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
     fail("GPT02_HUB_CORE_FACT_BINDING_INVALID");
   }
 
-  const approval = facts.storedEvidence.approval;
-  const link = facts.storedEvidence.operatorLink;
+  const stored = facts.storedEvidence as RecordValue;
+  const approval = stored.approval as RecordValue;
+  const link = stored.operatorLink as RecordValue;
   if (!exactObject(approval, ["claims", "signatureBase64url", "digest"]) ||
       !exactObject(link, [
         "claims", "linkDigest", "hubSignatureBase64url", "coreSignatureBase64url",
@@ -255,6 +256,7 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
   const assignment = facts.hubAssignment as RecordValue;
   const approvalClaims = approval.claims;
   const linkClaims = link.claims as RecordValue;
+  const keys = input.publicKeys as PublicKeys;
   if (!exactObject(approvalClaims, [
     "v", "environment", "audience", "taskId", "commandId", "attemptId",
     "nonce", "operatorNamespace", "superAdminId", "companyId", "issuedAt", "expiresAt",
@@ -268,6 +270,8 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
       prepared.coreTaskId !== linkClaims.coreTaskId ||
       prepared.memberId !== hub.memberId ||
       prepared.hubExecutionId === "" ||
+      !Number.isSafeInteger(prepared.expiresAt) ||
+      observedAt > Number(prepared.expiresAt) ||
       link.linkDigest !== q.linkDigest ||
       approval.digest !== q.approvalDigest ||
       approvalClaims.taskId !== q.hubTaskId ||
@@ -310,13 +314,13 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
 
   const approvalSignatureVerified = verifyGpt02Issue159Signature(
     "approval", approvalClaims, String(approval.signatureBase64url),
-    input.publicKeys.approval,
+    keys.approval,
   );
   const hubSignatureVerified = verifyGpt02Issue159Signature(
-    "hub", linkClaims, String(link.hubSignatureBase64url), input.publicKeys.hub,
+    "hub", linkClaims, String(link.hubSignatureBase64url), keys.hub,
   );
   const coreSignatureVerified = verifyGpt02Issue159Signature(
-    "core", linkClaims, String(link.coreSignatureBase64url), input.publicKeys.core,
+    "core", linkClaims, String(link.coreSignatureBase64url), keys.core,
   );
   if (!approvalSignatureVerified || !hubSignatureVerified || !coreSignatureVerified) {
     fail("GPT02_HUB_CORE_DETACHED_SIGNATURE_INVALID");
