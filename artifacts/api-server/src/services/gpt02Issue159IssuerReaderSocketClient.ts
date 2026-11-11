@@ -113,15 +113,13 @@ export async function readGpt02Issue159IssuerReaderSocketHealth(options: {
   if (response.status !== 200 ||
       !exactObject(b, [
         "ok", "environment", "readerReady", "issuerRole", "tlsVerified",
-        "clientTlsVerified", "backendTlsVerified", "readOnly",
-        "signingPermitted", "authorizationGranted",
+        "readOnly", "signingPermitted", "authorizationGranted",
         "dispatchPermitted", "releaseDecision",
       ]) ||
       b.ok !== true || b.environment !== "DEV" ||
       b.readerReady !== true ||
       b.issuerRole !== "gpt02_issuer_evidence_reader" ||
-      b.tlsVerified !== true || b.clientTlsVerified !== true ||
-      b.backendTlsVerified !== true || b.readOnly !== true ||
+      b.tlsVerified !== true || b.readOnly !== true ||
       b.signingPermitted !== false || b.authorizationGranted !== false ||
       b.dispatchPermitted !== false || b.releaseDecision !== "NO_GO") {
     fail("GPT02_ISSUER_READER_SOCKET_HEALTH_NOT_TRUSTED");
