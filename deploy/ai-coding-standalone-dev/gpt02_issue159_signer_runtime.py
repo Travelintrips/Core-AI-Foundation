@@ -85,7 +85,7 @@ def _unix_health(socket_path: str, expected: dict[str, object]) -> bool:
                 or endpoint.st_gid != signer_gid or stat.S_IMODE(endpoint.st_mode) != 0o660):
             return False
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client.settimeout(5)
+        client.settimeout(12)
         try:
             client.connect(socket_path)
             client.sendall(
@@ -199,7 +199,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     last_readers = readers
-    next_probe = time.monotonic() + 5
+    next_probe = time.monotonic() + 30
     while not stopped:
         time.sleep(1)
         if time.monotonic() >= next_probe:
@@ -207,7 +207,7 @@ def main() -> int:
             if readers != last_readers:
                 _write_readiness(runtime_dir, role, fingerprint, readers)
                 last_readers = readers
-            next_probe = time.monotonic() + 5
+            next_probe = time.monotonic() + 30
     # Keep key alive until shutdown; never serialize or print it.
     del key
     return 0
