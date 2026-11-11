@@ -45,7 +45,19 @@ describe("GPT02 Issue159 dedicated issuer reader pool", () => {
     expect(pool.config.connectionString).toBe(dsn());
     expect(pool.config.ssl).toEqual({ ca, rejectUnauthorized: true });
     expect(pool.config.options).toContain("default_transaction_read_only=on");
-    expect(pool.config.options).toContain("search_path=pg_catalog");
+    expect(pool.config.options).not.toContain("search_path");
+    const verify = pool.config.verify as (
+      client: { query(sql: string): Promise<unknown> },
+      done: (error?: Error) => void,
+    ) => void;
+    const verifiedQueries: string[] = [];
+    await new Promise<void>((resolve, reject) => {
+      verify({ query: async (sql) => { verifiedQueries.push(sql); } }, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    expect(verifiedQueries).toEqual(["SET search_path TO pg_catalog"]);
     expect(pool.config.options).toContain("statement_timeout=5000");
     expect(pool.config.options).toContain("lock_timeout=1000");
     expect(pool.config.options).toContain("idle_in_transaction_session_timeout=10000");
