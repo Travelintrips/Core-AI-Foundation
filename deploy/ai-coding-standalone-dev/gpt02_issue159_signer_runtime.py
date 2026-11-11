@@ -105,7 +105,7 @@ def _unix_json_request(socket_path: str, route: str, payload: dict[str, object])
             f"Content-Length: {len(body)}\r\n\r\n"
         ).encode("ascii") + body
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client.settimeout(5)
+        client.settimeout(35)
         try:
             client.connect(socket_path)
             client.sendall(request)
