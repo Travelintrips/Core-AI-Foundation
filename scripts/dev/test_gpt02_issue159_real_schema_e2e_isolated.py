@@ -104,12 +104,25 @@ def main() -> None:
             ("gpt02_issue159_operational_candidate_NOT_APPLIED.sql","migration.sql"),
         ]
         for file,dst in paths:
-            run("docker","cp",str(ROOT/"scripts/dev"/file),f"{NAME}:/tmp/{dst}")
-        for dst in ("seed.sql","migration.sql"):
-            run("docker","exec",NAME,"psql","-U","postgres",
-                "-v","ON_ERROR_STOP=1","-f",f"/tmp/{dst}")
+            if dst=="migration.sql":
+                source=(ROOT/"scripts/dev"/file).read_text()
+                from tempfile import NamedTemporaryFile
+                with NamedTemporaryFile(mode="w",suffix=".sql",delete=True) as projected:
+                    projected.write(source.replace("postgres","gpt02_fixture_migrator"))
+                    projected.flush()
+                    run("docker","cp",projected.name,f"{NAME}:/tmp/{dst}")
+            else:
+                run("docker","cp",str(ROOT/"scripts/dev"/file),f"{NAME}:/tmp/{dst}")
+        run("docker","exec",NAME,"psql","-U","postgres",
+            "-v","ON_ERROR_STOP=1","-f","/tmp/seed.sql")
+        run("docker","exec",NAME,"psql","-U","gpt02_fixture_migrator","-d","postgres",
+            "-v","ON_ERROR_STOP=1","-f","/tmp/migration.sql")
         check(query("SELECT rolcanlogin FROM pg_roles WHERE rolname='gpt02_core_prep_login'",
                     "postgres").stdout.strip()=="f","WRITER_DORMANT_GATE")
+        migrator_set=query("SELECT pg_has_role('gpt02_fixture_migrator','gpt02_core_prep_owner','SET')::text || ':' ||"
+            "pg_has_role('gpt02_fixture_migrator','gpt02_store_owner','SET')::text",
+            "postgres").stdout.strip()
+        check(migrator_set=="false:false","MIGRATOR_ROLE_ESCROW_NOT_RESTORED")
         # Only disposable writer becomes a login so its session_user can run the actual RPC.
         query("ALTER ROLE gpt02_core_prep_login LOGIN CONNECTION LIMIT 3", "postgres")
         prepare(140,COMMAND,ATTEMPT,LINK,HUB,CORE)
