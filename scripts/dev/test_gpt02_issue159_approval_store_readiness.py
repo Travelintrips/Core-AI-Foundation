@@ -162,3 +162,31 @@ class ApprovalStoreReadinessTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_verified_super_admin_session_is_valid_without_separate_aal2_challenge(self):
+        path = self.db()
+        con = sqlite3.connect(path)
+        con.executescript(SCHEMA_PATH.read_text())
+        con.execute(
+            """INSERT INTO gpt02_issue159_approval_intents
+            (id,task_id,command_id,attempt_id,company_id,
+             claims_sha256,actor_id,auth_method,role_at_decision,decision,
+             recorded_at_ms,expires_at_ms)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",137,
+             "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+             "cccccccc-cccc-4ccc-8ccc-cccccccccccc","default",
+             "b"*64,"active-super-admin","supabase_admin_session",
+             "super_admin","APPROVE",1000,2000),
+        )
+        con.commit()
+        con.close()
+        out = probe.inspect(path, operational=False)
+        self.assertEqual(out["reason"],
+                         "ISSUE159_APPROVAL_STORE_READY_NO_SIGNING_AUTHORITY")
+        self.assertEqual(out["approvalIntentRows"], 1)
+        self.assertEqual(out["fallbackActorRowsInIntentTable"], 0)
+        self.assertTrue(out["operationalEvidenceAvailable"])
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["dispatchPermitted"])
