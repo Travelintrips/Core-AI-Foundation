@@ -140,8 +140,16 @@ export function createGpt02Issue159IssuerReaderPool({
     connectionTimeoutMillis: 5_000,
     ssl: { ca, rejectUnauthorized: true },
     options:
-      "-c default_transaction_read_only=on -c search_path=pg_catalog -c statement_timeout=5000 -c lock_timeout=1000 -c idle_in_transaction_session_timeout=10000 -c row_security=on",
+      "-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000 -c idle_in_transaction_session_timeout=10000 -c row_security=on",
     application_name: "gpt02-issuer-evidence-reader",
+    // Supabase's session pooler rejects search_path in libpq startup options.
+    // Apply the safe path after the connection is established and before it
+    // can be handed to a caller (same verified pg-pool hook as @workspace/db).
+    verify: (client: { query(sql: string): Promise<unknown> }, done: (error?: Error) => void) => {
+      client.query("SET search_path TO pg_catalog")
+        .then(() => done())
+        .catch((error: unknown) => done(error instanceof Error ? error : new Error("GPT02_ISSUER_READER_SESSION_INIT_FAILED")));
+    },
     allowExitOnIdle: true,
   });
 
