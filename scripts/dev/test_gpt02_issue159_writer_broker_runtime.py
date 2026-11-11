@@ -102,17 +102,23 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
           "issuerEvidence":{"claims":i,"signature":sign(self.keys["issuer"],i,ISSUER_FIELDS,b"GPT02_ISSUER_LEASE_EVIDENCE_V1\n")},
         }
 
+    def _pin_synthetic_public_roots(self):
+        files=[str(p) for p in self.public.iterdir()]+[str(self.manifest)]
+        if os.geteuid()!=0:
+            subprocess.run(["sudo","-n","chown","root:root",*files],check=True)
+            subprocess.run(["sudo","-n","chmod","0644",*files],check=True)
+
     def _start(self):
         runtime=Path(__file__).parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py"
         env=dict(os.environ)
         env["PYTHONPATH"]=str(runtime.parent)
-        prefix=[] if os.geteuid()==0 else ["sudo","-n"]
-        if prefix:
-            subprocess.run(prefix+["chown","root:root",*[str(p) for p in self.public.iterdir()],str(self.manifest)],check=True)
-            subprocess.run(prefix+["chmod","0644",*[str(p) for p in self.public.iterdir()],str(self.manifest)],check=True)
+        self._pin_synthetic_public_roots()
         import grp
         socket_group=grp.getgrgid(os.getgid()).gr_name
-        self.proc=subprocess.Popen(prefix+[ 
+        # The private Unix socket directory must belong to the service identity.
+        # Never elevate the socket listener: only the synthetic public roots are
+        # made root-owned for the explicit production ownership preflight.
+        self.proc=subprocess.Popen([
             sys.executable,str(runtime),"--socket",str(self.socket_path),
             "--public-roots",str(self.public),"--fingerprint-manifest",str(self.manifest),
             "--socket-group",socket_group,
@@ -173,16 +179,12 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertIn(b"404",data.split(b"\r\n",1)[0])
 
     def test_public_root_manifest_drift_fails_closed(self):
-        import hashlib
-        if os.geteuid()!=0:
-            subprocess.run(["sudo","-n","chown",f"{os.getuid()}:{os.getgid()}",str(self.manifest)],check=True)
         roots=json.loads(self.manifest.read_text())
         roots["approval"]="0"*64
         self.manifest.write_text(json.dumps(roots))
-        if os.geteuid()!=0:
-            subprocess.run(["sudo","-n","chown","root:root",str(self.manifest)],check=True)
+        self._pin_synthetic_public_roots()
         from gpt02_issue159_writer_broker_runtime import _load_public_roots
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError,"PUBLIC_ROOT_FINGERPRINT_PIN_MISMATCH"):
             _load_public_roots(str(self.public),str(self.manifest))
 
     def test_runtime_source_has_no_database_or_dispatch_surface(self):
