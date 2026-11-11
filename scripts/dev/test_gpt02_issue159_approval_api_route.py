@@ -59,7 +59,9 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         os.chmod(self.db, 0o600)
         api.DB = self.db
         self.packet = self.db + ".approved.json"
+        self.pending = self.db + ".pending.json"
         api.ISSUE159_APPROVED_PACKET = self.packet
+        api.ISSUE159_PENDING_CLAIMS = self.pending
         api.TOKEN = STATIC_TOKEN
         api.ISSUE159_APPROVAL_INTENT_ENABLED = False
         api.admin_identity = lambda token, connection: None
@@ -76,6 +78,8 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             os.unlink(self.db)
         if os.path.exists(self.packet):
             os.unlink(self.packet)
+        if os.path.exists(self.pending):
+            os.unlink(self.pending)
 
     def request(self, token=None, claims=None):
         data = json.dumps({"claims": CLAIMS if claims is None else claims}).encode()
@@ -99,6 +103,101 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         ).fetchone()[0]
         con.close()
         return value
+
+    def pending_request(self, token=AAL2_TOKEN):
+        req = urllib.request.Request(
+            self.base + "/api/gpt02/issue159/approval-intent/pending",
+            headers={"Authorization": "Bearer " + token},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=3) as res:
+                return res.status, json.load(res)
+        except urllib.error.HTTPError as exc:
+            return exc.code, json.loads(exc.read().decode())
+
+    def test_pending_route_requires_real_active_super_admin_session(self):
+        api.admin_identity = lambda token, connection: None
+        status, body = self.pending_request()
+        self.assertEqual(status, 403)
+        self.assertEqual(body, {"error": "active_super_admin_required"})
+        status, body = self.pending_request(token=None) if False else (None, None)
+        req = urllib.request.Request(
+            self.base + "/api/gpt02/issue159/approval-intent/pending", method="GET"
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=3)
+        self.assertEqual(ctx.exception.code, 401)
+
+    def test_pending_route_returns_only_current_bound_request(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": CLAIMS["superAdminId"], "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        Path(self.pending).write_text(json.dumps({"claims": CLAIMS}))
+        os.chmod(self.pending, 0o600)
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertTrue(body["pending"])
+        self.assertEqual(body["taskId"], CLAIMS["taskId"])
+        self.assertEqual(body["claims"], CLAIMS)
+        self.assertFalse(body["signingPermitted"])
+        self.assertFalse(body["authorizationGranted"])
+        self.assertFalse(body["dispatchPermitted"])
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+
+    def test_pending_route_rejects_wrong_actor_expired_and_insecure_file(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": CLAIMS["superAdminId"], "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        wrong = {**CLAIMS, "superAdminId": "another-super-admin"}
+        Path(self.pending).write_text(json.dumps({"claims": wrong}))
+        os.chmod(self.pending, 0o600)
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertFalse(body["pending"])
+        self.assertEqual(body["reason"], "PENDING_REQUEST_ACTOR_MISMATCH")
+
+        expired = {**CLAIMS, "issuedAt": BASE_NOW_MS - 300000,
+                   "expiresAt": BASE_NOW_MS - 1}
+        Path(self.pending).write_text(json.dumps({"claims": expired}))
+        os.chmod(self.pending, 0o600)
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertEqual(body["reason"], "PENDING_REQUEST_EXPIRED")
+
+        Path(self.pending).write_text(json.dumps({"claims": CLAIMS}))
+        os.chmod(self.pending, 0o644)
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertEqual(body["reason"], "PENDING_REQUEST_FILE_SECURITY_INVALID")
+
+    def test_pending_route_detects_already_approved_binding(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": CLAIMS["superAdminId"], "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        Path(self.pending).write_text(json.dumps({"claims": CLAIMS}))
+        os.chmod(self.pending, 0o600)
+        digest = api.validate_approval_claims(CLAIMS)["claimsSha256"]
+        con = sqlite3.connect(self.db)
+        con.execute(
+            """INSERT INTO gpt02_issue159_approval_intents
+            (id,task_id,command_id,attempt_id,company_id,claims_sha256,
+             actor_id,auth_method,role_at_decision,decision,recorded_at_ms,expires_at_ms)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("33333333-3333-4333-8333-333333333333", CLAIMS["taskId"],
+             CLAIMS["commandId"], CLAIMS["attemptId"], CLAIMS["companyId"],
+             digest, CLAIMS["superAdminId"], "supabase_admin_session",
+             "super_admin", "APPROVE", BASE_NOW_MS, CLAIMS["expiresAt"]),
+        )
+        con.commit()
+        con.close()
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertFalse(body["pending"])
+        self.assertEqual(body["reason"], "PENDING_REQUEST_ALREADY_APPROVED")
 
     def test_feature_disabled_is_404_and_never_writes(self):
         status, body = self.request(AAL2_TOKEN)
