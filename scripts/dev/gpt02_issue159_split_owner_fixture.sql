@@ -82,5 +82,3 @@ GRANT USAGE ON SCHEMA gpt02_fixture_prep,gpt02_fixture_store TO gpt02_fixture_wr
 GRANT EXECUTE ON FUNCTION gpt02_fixture_prep.prepare_core_task(bigint,uuid,text) TO gpt02_fixture_writer;
 GRANT EXECUTE ON FUNCTION gpt02_fixture_store.record_linked_approval(bigint,uuid,text,text) TO gpt02_fixture_writer;
 COMMIT;
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
