@@ -196,6 +196,14 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertIn('endpoint.st_gid != signer_gid', source)
         self.assertIn('payload.get("tlsVerified") is True', source)
 
+    def test_issuer_health_probe_uses_http_crlf_not_literal_backslashes(self):
+        source = SCRIPT.read_text()
+        start = source.index('def issuer_reader_runtime_operational():')
+        end = source.index('def four_signer_authorizers_operational():', start)
+        function = source[start:end]
+        slash = chr(92)
+        self.assertIn('b"GET /health HTTP/1.1' + slash + 'r' + slash + 'n"', function)
+        self.assertNotIn(slash + slash + 'r' + slash + slash + 'n', function)
     def test_signer_runtime_mount_uses_exact_systemd_service_owner(self):
         user = pwd.getpwuid(os.getuid())
         group = grp.getgrgid(os.getgid())
