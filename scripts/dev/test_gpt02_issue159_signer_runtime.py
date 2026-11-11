@@ -108,7 +108,7 @@ class RuntimeBoundaryTest(unittest.TestCase):
         for forbidden in (
             ".sign(", "socket.", "http://", "https://", "requests.",
             "sqlite3", "psycopg", "subprocess", "print(key", "private_bytes(",
-            "dispatchPermitted": True", "signingPermitted": True",
+            '"dispatchPermitted": true', '"signingPermitted": true',
         ):
             self.assertNotIn(forbidden, source, forbidden)
 
