@@ -11,7 +11,7 @@ type Decision = {
   decisionId: string;
   claimsSha256: string;
   actorId: string;
-  authMethod: "supabase_aal2";
+  authMethod: "supabase_admin_session" | "supabase_aal2";
   roleAtDecision: "super_admin";
   decision: "APPROVE";
   recordedAt: number;
@@ -53,12 +53,12 @@ export function inspectGpt02Issue159ApprovalAuthorizerEvidence(input: {
       !HEX.test(decision.claimsSha256) ||
       typeof decision.actorId !== "string" || !SUBJECT.test(decision.actorId) ||
       decision.actorId === "dev_approval_token" ||
-      decision.authMethod !== "supabase_aal2" ||
+      !["supabase_admin_session", "supabase_aal2"].includes(decision.authMethod) ||
       decision.roleAtDecision !== "super_admin" ||
       decision.decision !== "APPROVE" ||
       !Number.isSafeInteger(decision.recordedAt) ||
       !Number.isSafeInteger(input.observedAt)) {
-    throw new Error("GPT02_ISSUE159_AAL2_SUPER_ADMIN_APPROVAL_REQUIRED");
+    throw new Error("GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED");
   }
 
   const digest = createHash("sha256").update(canonical).digest("hex");
@@ -76,7 +76,8 @@ export function inspectGpt02Issue159ApprovalAuthorizerEvidence(input: {
   return Object.freeze({
     environment: "DEV" as const,
     approvalBindingMatched: true as const,
-    aal2SuperAdminMatched: true as const,
+    aal2SuperAdminMatched: decision.authMethod === "supabase_aal2",
+    adminApprovalMatched: true as const,
     claimsSha256: digest,
     persistedTrustedReadProven: false as const,
     privateKeyLoaded: false as const,
