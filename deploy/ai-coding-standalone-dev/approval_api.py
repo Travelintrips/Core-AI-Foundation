@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from pathlib import Path
 from admin_identity import admin_identity
 from gpt02_issue159_approval_http import handle_issue159_approval_intent
-from gpt02_issue159_approval_intent_contract import validate_approval_claims
+from gpt02_issue159_approval_intent_contract import ApprovalIntentContractError, validate_approval_claims
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
 ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
@@ -86,7 +86,7 @@ def load_issue159_pending_claims(actor_id):
    'claims':claims,'signingPermitted':False,'authorizationGranted':False,
    'dispatchPermitted':False,'releaseDecision':'NO_GO'
   }
- except (OSError,ValueError,TypeError,KeyError,sqlite3.Error):
+ except (ApprovalIntentContractError,OSError,ValueError,TypeError,KeyError,sqlite3.Error):
   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_INVALID','releaseDecision':'NO_GO'}
 def conn():
  c=sqlite3.connect(DB,timeout=10)

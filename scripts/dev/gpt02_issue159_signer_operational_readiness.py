@@ -39,11 +39,8 @@ APPROVAL_READER_SOURCE = Path(LIVE_RUNTIME) / "gpt02_issue159_approval_intent_re
 HUB_CORE_AUTHORIZER_SOURCE = Path(
     "/opt/gpt02-reader-runtime/artifacts/api-server/src/lib/gpt02-trusted-facts-readonly.mjs"
 )
-ISSUER_LEDGER_AUTHORIZER_SOURCE = Path(
-    "/opt/gpt02-reader-runtime/artifacts/api-server/src/services/gpt02Issue159IssuerLedgerReadOnly.ts"
-)
-ISSUER_AUTHORIZER_SOURCE = Path(
-    "/opt/gpt02-reader-runtime/artifacts/api-server/src/services/gpt02Issue159IssuerAuthorizerEvidence.ts"
+ISSUER_READER_BUNDLE = Path(
+    "/opt/gpt02-reader-runtime/scripts/dev/gpt02-issuer-reader-runtime.mjs"
 )
 
 
@@ -281,19 +278,72 @@ def issuer_reader_runtime_operational():
         return False
 
 
-def authorizer_adapters_installed():
-    """Verify the four authorizer adapters are present in their trusted read paths.
+def issuer_reader_bundle_matches_running_process():
+    """Prove the live issuer reader process loaded the exact deployed bundle.
+
+    The bundle is root-owned and not group/world writable. Its mtime must be
+    no later than the running process start time, and /proc cmdline must show
+    that systemd launched this exact absolute bundle path.
+    """
+    try:
+        bundle_path = str(ISSUER_READER_BUNDLE)
+        bundle_stat = os.lstat(bundle_path)
+        if (stat.S_ISLNK(bundle_stat.st_mode) or not stat.S_ISREG(bundle_stat.st_mode)
+                or bundle_stat.st_uid != 0 or bundle_stat.st_gid != 0
+                or (stat.S_IMODE(bundle_stat.st_mode) & 0o022)):
+            return False
+        unit = "gpt02-issue159-issuer-reader.service"
+        if subprocess.run(
+            ["systemctl", "is-active", "--quiet", unit],
+            timeout=2, check=False,
+        ).returncode != 0:
+            return False
+        pid_result = subprocess.run(
+            ["systemctl", "show", "-p", "MainPID", "--value", unit],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        if pid_result.returncode != 0:
+            return False
+        pid = int(pid_result.stdout.strip())
+        if pid <= 1:
+            return False
+        command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+        if os.fsencode(bundle_path) not in command:
+            return False
+        process_stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        closing = process_stat.rfind(")")
+        if closing < 0:
+            return False
+        fields = process_stat[closing + 2:].split()
+        if len(fields) <= 19:
+            return False
+        start_ticks = int(fields[19])
+        uptime = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+        ticks_per_second = int(os.sysconf("SC_CLK_TCK"))
+        if ticks_per_second <= 0:
+            return False
+        process_started_ns = int(
+            (time.time() - uptime + start_ticks / ticks_per_second) * 1_000_000_000
+        )
+        return bundle_stat.st_mtime_ns <= process_started_ns
+    except (KeyError, OSError, ValueError, IndexError, subprocess.SubprocessError, OverflowError):
+        return False
+
+
+def authorizer_adapters_installed(issuer_bundle_verified=None):
+    """Verify authorizer adapters in trusted read paths and the live issuer bundle.
 
     Signer runtimes intentionally keep authorizerOperational=false: they are
     custody-only and do not make authorization decisions. The approval reader,
     Hub/Core trusted-facts reader, and issuer ledger reader own those checks.
     """
+    if issuer_bundle_verified is None:
+        issuer_bundle_verified = issuer_reader_bundle_matches_running_process()
     try:
         approval_api = APPROVAL_API_SOURCE.read_text(encoding="utf-8")
         approval_reader = APPROVAL_READER_SOURCE.read_text(encoding="utf-8")
         hub_core = HUB_CORE_AUTHORIZER_SOURCE.read_text(encoding="utf-8")
-        issuer_ledger = ISSUER_LEDGER_AUTHORIZER_SOURCE.read_text(encoding="utf-8")
-        issuer_authorizer = ISSUER_AUTHORIZER_SOURCE.read_text(encoding="utf-8")
+        issuer_bundle = ISSUER_READER_BUNDLE.read_text(encoding="utf-8")
     except OSError:
         return False
 
@@ -315,11 +365,11 @@ def authorizer_adapters_installed():
         and "IMMUTABLE_PREPARATION_CONFIGURATION_MISMATCH" in hub_core
     )
     issuer_integrated = (
-        "inspectGpt02Issue159IssuerAuthorizerEvidence" in issuer_ledger
-        and "inspectGpt02Issue159IssuerAuthorizerEvidence" in issuer_authorizer
-        and "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH" in issuer_authorizer
-        and "GPT02_ISSUE159_FENCE_BINDING_MISMATCH" in issuer_authorizer
-        and "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND" in issuer_authorizer
+        issuer_bundle_verified
+        and issuer_bundle.count("inspectGpt02Issue159IssuerAuthorizerEvidence(") >= 2
+        and "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH" in issuer_bundle
+        and "GPT02_ISSUE159_FENCE_BINDING_MISMATCH" in issuer_bundle
+        and "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND" in issuer_bundle
     )
     return all((
         approval_writer_integrated,
@@ -427,6 +477,7 @@ def assess(approval, custody, runtime):
         "hubCoreIssuerTrustedReadAdaptersOperational": trusted_adapters,
         "fourSignerRuntimesMounted": signer_runtimes,
         "fourSignerTrustedReaderConnectivityVerified": signer_reader_connectivity,
+        "issuerReaderBundleVerified": runtime.get("issuerReaderBundleVerified") is True,
         "authorizerAdaptersInstalled": authorizer_sources,
         "fourSignerAuthorizersOperational": signer_authorizers,
         "blockers": blockers,
@@ -458,6 +509,7 @@ def live_runtime_metadata():
         and "handle_issue159_approval_intent(" in api_source
         and "issue159_identity_verifier" in api_source
     )
+    issuer_bundle_verified = issuer_reader_bundle_matches_running_process()
     return {
         "approvalReaderSourceInstalled": os.path.isfile(reader_path),
         "approvalWriterSourceInstalled": os.path.isfile(writer_path),
@@ -469,7 +521,8 @@ def live_runtime_metadata():
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": signer_runtime_mounted(),
         "fourSignerTrustedReaderConnectivityVerified": signer_runtime_mounted(),
-        "authorizerAdaptersInstalled": authorizer_adapters_installed(),
+        "issuerReaderBundleVerified": issuer_bundle_verified,
+        "authorizerAdaptersInstalled": authorizer_adapters_installed(issuer_bundle_verified),
         "approvalIntentTrustedReadCurrent": current_approval_evidence(),
     }
 
