@@ -30,7 +30,7 @@ IDENTITY = {
     "userId": CLAIMS["superAdminId"],
     "role": "super_admin",
     "enabled": True,
-    "authMethod": "supabase_aal2",
+    "authMethod": "supabase_admin_session",
 }
 INTENT_ID = "33333333-3333-4333-8333-333333333333"
 EXPECTED_CANONICAL = (
@@ -64,7 +64,7 @@ class ApprovalIntentContractTest(unittest.TestCase):
             "company_id": "default",
             "claims_sha256": EXPECTED_SHA,
             "actor_id": CLAIMS["superAdminId"],
-            "auth_method": "supabase_aal2",
+            "auth_method": "supabase_admin_session",
             "role_at_decision": "super_admin",
             "decision": "APPROVE",
             "recorded_at_ms": 2000,
@@ -79,11 +79,12 @@ class ApprovalIntentContractTest(unittest.TestCase):
         self.assertFalse(out["dispatchPermitted"])
         self.assertEqual(out["releaseDecision"], "NO_GO")
 
-    def test_static_token_non_aal2_admin_or_disabled_identity_is_rejected(self):
+    def test_static_token_non_super_admin_or_disabled_identity_is_rejected(self):
         for patch in (
             {"userId": "dev_approval_token"},
             {"authMethod": "static_dev_token"},
-            {"authMethod": "supabase_admin_session"},
+            {"authMethod": "static_dev_token"},
+            {"authMethod": "supabase_aal3"},
             {"role": "admin"},
             {"enabled": False},
             {"userId": "another-user"},
