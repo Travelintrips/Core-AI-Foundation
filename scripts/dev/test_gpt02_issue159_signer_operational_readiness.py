@@ -4,7 +4,10 @@ import importlib.util
 import json
 import os
 import pwd
+import socket
+import stat
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -138,6 +141,49 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertFalse(out["authorizationGranted"])
         self.assertFalse(out["dispatchPermitted"])
         self.assertEqual(out["releaseDecision"], "NO_GO")
+
+    def test_hub_core_reader_runtime_requires_live_private_socket_health(self):
+        with tempfile.TemporaryDirectory(prefix="gpt02-reader-health-") as root:
+            directory = Path(root) / "gpt02-reader"
+            directory.mkdir(mode=0o750)
+            os.chmod(directory, 0o750)
+            endpoint = directory / "reader.sock"
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(str(endpoint))
+            os.chmod(endpoint, 0o660)
+            if os.getuid() == 0:
+                nobody = pwd.getpwnam("nobody")
+                os.chown(endpoint, nobody.pw_uid, os.getgid())
+            body = json.dumps({
+                "ok": True, "environment": "DEV", "readerReady": True,
+                "hubRole": "gpt02_hub_evidence_reader",
+                "coreRole": "gpt02_core_evidence_reader",
+                "twoSessionsVerified": True,
+                "signingPermitted": False, "dispatchPermitted": False,
+            }).encode()
+            response = (
+                b"HTTP/1.1 200 OK\\r\\n"
+                + f"content-length: {len(body)}\\r\\n".encode()
+                + b"connection: close\\r\\n\\r\\n" + body
+            )
+            server.listen(1)
+
+            def serve():
+                conn, _ = server.accept()
+                with conn:
+                    request = conn.recv(2048)
+                    if b"GET /health HTTP/1.1\\r\\n" in request:
+                        conn.sendall(response)
+                server.close()
+
+            thread = threading.Thread(target=serve, daemon=True)
+            thread.start()
+            with patch.object(readiness, "HUB_CORE_READER_SOCKET_DIR", str(directory)), \\
+                 patch.object(readiness, "HUB_CORE_READER_SOCKET", str(endpoint)), \\
+                 patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())), \\
+                 patch.object(readiness.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                self.assertTrue(readiness.hub_core_reader_runtime_operational())
+            thread.join(timeout=2)
 
     def test_signer_runtime_mount_uses_exact_systemd_service_owner(self):
         user = pwd.getpwuid(os.getuid())
