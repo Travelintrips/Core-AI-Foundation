@@ -169,6 +169,7 @@ export function createGpt02Issue159IssuerReaderPool({
         typeof env[DSN_ENV] === "string" || typeof env[CA_ENV] === "string") {
       return fail("GPT02_ISSUER_READER_OPERATIONAL_CREDENTIAL_SOURCE_NOT_PINNED");
     }
+    assertCredentialDirectory(CREDENTIAL_DIR);
     dsnValue = readCredentialFile(`${CREDENTIAL_DIR}/${DSN_CREDENTIAL}`, false);
     caValue = readCredentialFile(`${CREDENTIAL_DIR}/${CA_CREDENTIAL}`, false);
   }
