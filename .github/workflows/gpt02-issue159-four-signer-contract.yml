@@ -54,6 +54,7 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.sysusers'
       - 'scripts/dev/test_gpt02_issue159_signer_runtime.py'
       - 'scripts/dev/fixtures/supabase-root-ca-2021.crt'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
