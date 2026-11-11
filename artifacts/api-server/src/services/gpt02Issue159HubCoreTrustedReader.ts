@@ -68,7 +68,7 @@ function resolveSignerGroupGid(): number {
   return gid;
 }
 
-function assertReaderSocket(socketPath: string, signerGroupGid: number): void {
+function assertReaderSocket(socketPath: string, signerGroupGid: number, synthetic = false): void {
   let directory;
   let socket;
   const parentPath = socketPath === DEFAULT_SOCKET ? "/run/gpt02-reader" : dirname(socketPath);
@@ -78,7 +78,7 @@ function assertReaderSocket(socketPath: string, signerGroupGid: number): void {
   } catch {
     return fail("GPT02_TRUSTED_READER_SOCKET_REQUIRED");
   }
-  if (socketPath !== DEFAULT_SOCKET ||
+  if ((!synthetic && socketPath !== DEFAULT_SOCKET) ||
       !directory.isDirectory() || directory.uid === 0 ||
       directory.gid !== signerGroupGid ||
       (directory.mode & 0o7777) !== 0o2750 ||
@@ -174,7 +174,7 @@ export async function readGpt02Issue159HubCoreTrustedFacts(input: {
   if (!Number.isSafeInteger(signerGroupGid) || signerGroupGid <= 0) {
     fail("GPT02_SIGNER_READER_GROUP_INVALID");
   }
-  assertReaderSocket(socketPath, signerGroupGid);
+  assertReaderSocket(socketPath, signerGroupGid, synthetic);
 
   const health = await requestReader(socketPath, "GET", "/health");
   if (health.status !== 200 || health.body.ok !== true ||
