@@ -30,6 +30,20 @@ def migrate(db_path: str, backup_path: str, *, operational: bool = True) -> dict
     if os.path.exists(backup_path):
         raise RuntimeError("ADMIN_APPROVAL_BACKUP_ALREADY_EXISTS")
 
+    check = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+    try:
+        schema_row = check.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (TABLE,),
+        ).fetchone()
+        if not schema_row:
+            raise RuntimeError("ADMIN_APPROVAL_TABLE_MISSING")
+        if "supabase_admin_session" in schema_row[0]:
+            rows = check.execute(f"SELECT count(*) FROM {TABLE}").fetchone()[0]
+            return {"status": "already_migrated", "rows": rows, "backup": None}
+    finally:
+        check.close()
+
     src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
     backup = sqlite3.connect(backup_path)
     try:
