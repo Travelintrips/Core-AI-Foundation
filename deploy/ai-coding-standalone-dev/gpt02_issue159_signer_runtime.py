@@ -178,7 +178,11 @@ def main() -> int:
         _deny("GPT02_ISSUE159_SYSTEMD_RUNTIME_REQUIRED")
 
     key, fingerprint = _load(role, credentials_dir)
-    readers = _probe_trusted_readers()
+    readers = (
+        {"hubCoreReaderOperational": False, "issuerReaderOperational": False,
+         "trustedReaderConnectivityVerified": False}
+        if args.once else _probe_trusted_readers()
+    )
     _write_readiness(runtime_dir, role, fingerprint, readers)
 
     # The key is intentionally loaded so systemd credential mounting and public
