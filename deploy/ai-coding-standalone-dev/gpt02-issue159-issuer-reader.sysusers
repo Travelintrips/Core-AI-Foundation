@@ -1,0 +1,3 @@
+# Stable unprivileged identity for the read-only GPT02 Issue159 issuer reader.
+# The service unit sets Group=gpt02-issue159-signers (GID 999) at runtime.
+u gpt02-issuer-reader 994 "GPT02 Issue159 issuer reader" /nonexistent /usr/sbin/nologin
