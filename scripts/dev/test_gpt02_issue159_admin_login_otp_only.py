@@ -30,6 +30,11 @@ class AdminLoginOtpOnlyTest(unittest.TestCase):
         self.assertIn("Signing, authorization, dan dispatch tetap NO-GO", source)
         self.assertNotIn("dev_approval_token", source)
 
+    def test_invalid_pending_request_has_clear_status_message(self):
+        source = PAGE.read_text()
+        self.assertIn("PENDING_REQUEST_INVALID:", source)
+        self.assertIn("Permintaan approval tidak valid.", source)
+
     def test_inline_javascript_parses(self):
         source = PAGE.read_text()
         match = re.search(r"<script>([\s\S]*?)</script>", source)
