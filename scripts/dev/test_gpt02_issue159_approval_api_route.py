@@ -110,11 +110,11 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
         status, body = self.request(STATIC_TOKEN)
         self.assertEqual(status, 403)
-        self.assertEqual(body, {"error": "aal2_super_admin_required"})
+        self.assertEqual(body, {"error": "active_super_admin_required"})
         self.assertEqual(self.count(), 0)
         self.assertFalse(os.path.exists(self.packet))
 
-    def test_verified_aal2_super_admin_records_intent_but_stays_no_go(self):
+    def test_verified_admin_session_records_intent_but_stays_no_go(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
         api.admin_identity = lambda token, connection: (
             {"user_id": CLAIMS["superAdminId"], "email": "fixture@example.com",
@@ -124,7 +124,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         status, body = self.request(AAL2_TOKEN)
         self.assertEqual(status, 201)
         self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
-        self.assertEqual(body["authMethod"], "supabase_aal2")
+        self.assertEqual(body["authMethod"], "supabase_admin_session")
         self.assertFalse(body["signingPermitted"])
         self.assertFalse(body["authorizationGranted"])
         self.assertFalse(body["dispatchPermitted"])
