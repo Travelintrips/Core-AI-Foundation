@@ -165,9 +165,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 if args[1] == "is-active":
                     return SimpleNamespace(returncode=0, stdout="")
                 if args[1] == "show" and args[2] == "-p" and args[3] == "User":
-                    return SimpleNamespace(returncode=0, stdout=user.pw_name + "\\n")
+                    return SimpleNamespace(returncode=0, stdout=user.pw_name + "\n")
                 if args[1] == "show" and args[2] == "-p" and args[3] == "Group":
-                    return SimpleNamespace(returncode=0, stdout=group.gr_name + "\\n")
+                    return SimpleNamespace(returncode=0, stdout=group.gr_name + "\n")
                 return SimpleNamespace(returncode=1, stdout="")
 
             with patch.object(readiness.subprocess, "run", side_effect=systemctl):
@@ -176,7 +176,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             def wrong_owner(args, **kwargs):
                 result = systemctl(args, **kwargs)
                 if args[1] == "show" and args[3] == "User":
-                    return SimpleNamespace(returncode=0, stdout="root\\n")
+                    return SimpleNamespace(returncode=0, stdout="root\n")
                 return result
 
             with patch.object(readiness.subprocess, "run", side_effect=wrong_owner):
