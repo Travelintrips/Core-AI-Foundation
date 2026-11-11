@@ -157,6 +157,53 @@ function identityMatches(r: Row, client: Client) {
     stream?.authorized === true && !stream.authorizationError;
 }
 
+
+/**
+ * Native health probe only. It verifies the dedicated role, TLS and read-only
+ * session without accepting task/approval claims or reading business rows.
+ * It never asserts persisted business-evidence provenance or grants authority.
+ */
+export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
+  let client: Client | undefined;
+  let began = false;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN READ ONLY");
+    began = true;
+    await client.query("SET LOCAL search_path=pg_catalog");
+    await client.query("SET LOCAL statement_timeout='5s'");
+    await client.query("SET LOCAL lock_timeout='1s'");
+    await client.query("SET LOCAL idle_in_transaction_session_timeout='10s'");
+    await client.query("SET LOCAL row_security=on");
+    const identity = await client.query(GPT02_ISSUE159_ISSUER_IDENTITY_SQL);
+    if (identity.rows.length !== 1 || !identityMatches(identity.rows[0], client)) {
+      return Object.freeze({
+        ...denied("ISSUER_RESTRICTED_READER_IDENTITY_NOT_VERIFIED"),
+        nativeRoleAuthenticated: false as const,
+        tlsVerified: false as const,
+      });
+    }
+    return Object.freeze({
+      ...denied("ISSUER_READER_NATIVE_SESSION_VERIFIED", true),
+      nativeRoleAuthenticated: true as const,
+      tlsVerified: true as const,
+      readOnlySessionVerified: true as const,
+      businessEvidenceRead: false as const,
+    });
+  } catch {
+    return Object.freeze({
+      ...denied("ISSUER_READER_HEALTH_PROBE_FAILED_CLOSED"),
+      nativeRoleAuthenticated: false as const,
+      tlsVerified: false as const,
+    });
+  } finally {
+    if (client) {
+      if (began) try { await client.query("ROLLBACK"); } catch { /* fail-closed */ }
+      try { client.release(true); } catch { /* fail-closed */ }
+    }
+  }
+}
+
 function mapEvidence(row: Row) {
   return {
     approvalClaims: row.approval_claims,
