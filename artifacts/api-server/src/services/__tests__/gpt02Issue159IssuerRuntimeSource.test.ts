@@ -18,8 +18,8 @@ describe("GPT02 Issue159 issuer reader DynamicUser runtime directory", () => {
     expect(source).toContain('directory.uid !== process.getuid?.() || directory.gid !== gid');
     expect(source).toContain('(directory.mode & 0o777) !== 0o750');
     expect(source).toContain('ISSUER_READER_SYSTEMD_RUNTIME_MAPPING_INVALID');
-    expect(source).toContain("let healthInFlight: ReturnType<typeof reader.health> | null = null");
-    expect(source).toContain("healthInFlight ??= reader.health().finally");
+    expect(source).toContain("let healthInFlight: Promise<Awaited<ReturnType");
+    expect(source).toContain("healthInFlight ??= runSerialized(() => reader.health()).finally");
     expect(source).toContain("let databaseQueue: Promise<unknown> = Promise.resolve()");
     expect(source).toContain("runSerialized(() => reader.read(input))");
   });
