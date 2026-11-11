@@ -110,10 +110,12 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         if prefix:
             subprocess.run(prefix+["chown","root:root",*[str(p) for p in self.public.iterdir()],str(self.manifest)],check=True)
             subprocess.run(prefix+["chmod","0644",*[str(p) for p in self.public.iterdir()],str(self.manifest)],check=True)
+        import grp
+        socket_group=grp.getgrgid(os.getgid()).gr_name
         self.proc=subprocess.Popen(prefix+[ 
             sys.executable,str(runtime),"--socket",str(self.socket_path),
             "--public-roots",str(self.public),"--fingerprint-manifest",str(self.manifest),
-            "--socket-group","root",
+            "--socket-group",socket_group,
         ],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         deadline=time.time()+5
         while time.time()<deadline and not self.socket_path.exists():
