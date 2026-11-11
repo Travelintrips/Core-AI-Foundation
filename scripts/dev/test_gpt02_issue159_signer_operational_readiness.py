@@ -51,6 +51,7 @@ def custody(*, host_secret=False, credentials=0, baseline=True):
 def runtime(**patch):
     base = {
         "approvalReaderSourceInstalled": False,
+        "approvalReaderRuntimeOperational": False,
         "approvalWriterSourceInstalled": False,
         "approvalWriterIntegrated": False,
         "hubPublicTrustDirectoryPresent": False,
@@ -80,6 +81,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertIn("APPROVAL_WRITER_SOURCE_NOT_INSTALLED", out["blockers"])
         self.assertIn("APPROVAL_INTENT_WRITER_NOT_INTEGRATED", out["blockers"])
         self.assertIn("APPROVAL_TRUSTED_READER_NOT_OPERATIONAL", out["blockers"])
+        self.assertIn("APPROVAL_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
         self.assertIn("SYSTEMD_HOST_CREDENTIAL_SECRET_NOT_PROVISIONED", out["blockers"])
         self.assertIn("FOUR_SIGNER_CREDENTIALS_NOT_PROVISIONED", out["blockers"])
         self.assertIn("HUB_CORE_TRUSTED_READER_RUNTIME_NOT_OPERATIONAL", out["blockers"])
@@ -94,6 +96,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             custody(host_secret=True, credentials=4),
             runtime(
                 approvalReaderSourceInstalled=True,
+                approvalReaderRuntimeOperational=True,
                 approvalWriterSourceInstalled=True,
                 approvalWriterIntegrated=True,
                 hubPublicTrustDirectoryPresent=True,
@@ -204,6 +207,79 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         slash = chr(92)
         self.assertIn('b"GET /health HTTP/1.1' + slash + 'r' + slash + 'n"', function)
         self.assertNotIn(slash + slash + 'r' + slash + slash + 'n', function)
+    def test_approval_reader_runtime_requires_live_root_owned_private_socket_health(self):
+        with tempfile.TemporaryDirectory(prefix="gpt02-approval-reader-health-") as root:
+            directory = Path(root) / "gpt02-approval-reader"
+            directory.mkdir(mode=0o750)
+            os.chmod(directory, 0o750)
+            endpoint = directory / "reader.sock"
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(str(endpoint))
+            os.chmod(endpoint, 0o660)
+            body = json.dumps({
+                "ok": True, "environment": "DEV", "approvalReaderReady": True,
+                "readOnly": True, "signingPermitted": False,
+                "authorizationGranted": False, "dispatchPermitted": False,
+                "releaseDecision": "NO_GO",
+            }).encode()
+            response = (
+                b"HTTP/1.1 200 OK\r\n"
+                + f"content-length: {len(body)}\r\n".encode()
+                + b"connection: close\r\n\r\n" + body
+            )
+            server.listen(1)
+
+            def serve():
+                conn, _ = server.accept()
+                with conn:
+                    request = conn.recv(2048)
+                    if b"GET /health HTTP/1.1\r\n" in request:
+                        conn.sendall(response)
+                server.close()
+
+            thread = threading.Thread(target=serve, daemon=True)
+            thread.start()
+            real_lstat = os.lstat
+
+            def root_owned_lstat(path):
+                actual = real_lstat(path)
+                if str(path) in (str(directory), str(endpoint)):
+                    return SimpleNamespace(st_mode=actual.st_mode, st_uid=0, st_gid=os.getgid())
+                return actual
+
+            with patch.object(readiness, "APPROVAL_READER_SOCKET_DIR", str(directory)), \
+                 patch.object(readiness, "APPROVAL_READER_SOCKET", str(endpoint)), \
+                 patch.object(readiness.os, "lstat", side_effect=root_owned_lstat), \
+                 patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())), \
+                 patch.object(readiness.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                self.assertTrue(readiness.approval_reader_runtime_operational())
+            thread.join(timeout=2)
+
+    def test_four_signer_authorizers_require_all_reader_attestations_and_no_authority(self):
+        with tempfile.TemporaryDirectory(prefix="gpt02-four-authorizer-") as root:
+            readiness.SIGNER_RUNTIME_ROOT = root
+            for role in readiness.SIGNER_ROLES:
+                directory = Path(root) / f"gpt02-issue159-signer-{role}"
+                directory.mkdir()
+                (directory / "readiness.json").write_text(json.dumps({
+                    "environment": "DEV", "role": role,
+                    "approvalReaderOperational": True,
+                    "hubCoreReaderOperational": True,
+                    "issuerReaderOperational": True,
+                    "trustedReaderConnectivityVerified": True,
+                    "authorizerOperational": True,
+                    "signingPermitted": False,
+                    "authorizationGranted": False,
+                    "dispatchPermitted": False,
+                    "releaseDecision": "NO_GO",
+                }))
+            self.assertTrue(readiness.four_signer_authorizers_operational())
+            path = Path(root) / "gpt02-issue159-signer-approval" / "readiness.json"
+            data = json.loads(path.read_text())
+            data["approvalReaderOperational"] = False
+            path.write_text(json.dumps(data))
+            self.assertFalse(readiness.four_signer_authorizers_operational())
+
     def test_signer_runtime_mount_uses_exact_systemd_service_owner(self):
         user = pwd.getpwuid(os.getuid())
         group = grp.getgrgid(os.getgid())
@@ -216,8 +292,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 "privateCredentialMounted": True,
                 "hubCoreReaderOperational": True,
                 "issuerReaderOperational": True,
+                "approvalReaderOperational": True,
                 "trustedReaderConnectivityVerified": True,
-                "authorizerOperational": False,
+                "authorizerOperational": True,
                 "signingPermitted": False,
                 "authorizationGranted": False,
                 "dispatchPermitted": False,
@@ -271,8 +348,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                     "privateCredentialMounted": True,
                     "hubCoreReaderOperational": True,
                     "issuerReaderOperational": True,
+                    "approvalReaderOperational": True,
                     "trustedReaderConnectivityVerified": True,
-                    "authorizerOperational": False,
+                    "authorizerOperational": True,
                     "signingPermitted": False,
                     "authorizationGranted": False,
                     "dispatchPermitted": False,
