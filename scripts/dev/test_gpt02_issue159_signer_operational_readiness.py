@@ -178,9 +178,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
 
             thread = threading.Thread(target=serve, daemon=True)
             thread.start()
-            with patch.object(readiness, "HUB_CORE_READER_SOCKET_DIR", str(directory)), \\
-                 patch.object(readiness, "HUB_CORE_READER_SOCKET", str(endpoint)), \\
-                 patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())), \\
+            with patch.object(readiness, "HUB_CORE_READER_SOCKET_DIR", str(directory)), \
+                 patch.object(readiness, "HUB_CORE_READER_SOCKET", str(endpoint)), \
+                 patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())), \
                  patch.object(readiness.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
                 self.assertTrue(readiness.hub_core_reader_runtime_operational())
             thread.join(timeout=2)
