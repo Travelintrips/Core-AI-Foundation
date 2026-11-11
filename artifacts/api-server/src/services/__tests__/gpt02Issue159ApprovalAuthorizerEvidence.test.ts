@@ -66,8 +66,23 @@ describe("GPT02 Issue159 approval signer authorizer evidence", () => {
         claims,
         decision: { ...decision(), ...patch },
         observedAt: 2500,
-      })).toThrow("GPT02_ISSUE159_AAL2_SUPER_ADMIN_APPROVAL_REQUIRED");
+      })).toThrow("GPT02_ISSUE159_ADMIN_APPROVAL_REQUIRED");
     }
+  });
+
+  it("accepts one normal authenticated Super Admin session without a separate AAL2 challenge", () => {
+    const result = inspectGpt02Issue159ApprovalAuthorizerEvidence({
+      claims,
+      decision: { ...decision(), authMethod: "supabase_admin_session" },
+      observedAt: 2500,
+    });
+    expect(result.approvalBindingMatched).toBe(true);
+    expect(result.adminApprovalMatched).toBe(true);
+    expect(result.aal2SuperAdminMatched).toBe(false);
+    expect(result.signingPermitted).toBe(false);
+    expect(result.authorizationGranted).toBe(false);
+    expect(result.dispatchPermitted).toBe(false);
+    expect(result.releaseDecision).toBe("NO_GO");
   });
 
   it("rejects wrong claim digest, actor or decision timing", () => {
