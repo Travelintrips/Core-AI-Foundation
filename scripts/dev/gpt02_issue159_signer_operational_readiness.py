@@ -477,6 +477,7 @@ def assess(approval, custody, runtime):
         "hubCoreIssuerTrustedReadAdaptersOperational": trusted_adapters,
         "fourSignerRuntimesMounted": signer_runtimes,
         "fourSignerTrustedReaderConnectivityVerified": signer_reader_connectivity,
+        "issuerReaderBundleVerified": runtime.get("issuerReaderBundleVerified") is True,
         "authorizerAdaptersInstalled": authorizer_sources,
         "fourSignerAuthorizersOperational": signer_authorizers,
         "blockers": blockers,
