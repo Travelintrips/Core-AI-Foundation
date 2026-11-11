@@ -307,7 +307,7 @@ def issuer_reader_bundle_matches_running_process():
         pid = int(pid_result.stdout.strip())
         if pid <= 1:
             return False
-        command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\\0")
+        command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
         if os.fsencode(bundle_path) not in command:
             return False
         process_stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
