@@ -64,7 +64,7 @@ async function loadIssue159(){
   b.onclick=async()=>{if(!confirm('Setujui Task #'+d.taskId+' sebagai Super Admin?'))return;b.disabled=true;try{await api('/api/gpt02/issue159/approval-intent',{claims:d.claims});el('issue159Status').textContent='Persetujuan tersimpan untuk Task #'+d.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.';await loadIssue159()}catch(e){el('issue159Status').textContent='Persetujuan gagal: '+e.message;b.disabled=false}};
   root.append(b);
  }else{
-  const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
+  const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
   el('issue159Status').textContent=messages[d.reason]||'Tidak ada permintaan yang dapat disetujui: '+(d.reason||'status tidak diketahui')+'. Signing dan dispatch tetap NO-GO.';
  }
 }
