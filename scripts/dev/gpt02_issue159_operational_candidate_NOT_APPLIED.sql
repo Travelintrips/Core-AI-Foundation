@@ -7,6 +7,18 @@
 BEGIN;
 SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '15s';
+-- Role-membership SET escrows are transaction-local and must be restored
+-- to the original NO-SET boundary BEFORE COMMIT. Migration account is postgres.
+DO $role_preflight$
+BEGIN
+ IF current_user<>'postgres' OR session_user<>'postgres' OR
+ pg_has_role('postgres','gpt02_core_prep_owner','SET') OR
+ pg_has_role('postgres','gpt02_store_owner','SET') THEN
+  RAISE EXCEPTION 'MIGRATOR_ROLE_CUSTODY_BASELINE_MISMATCH';
+ END IF;
+END $role_preflight$;
+GRANT gpt02_core_prep_owner TO postgres WITH SET TRUE;
+GRANT gpt02_store_owner TO postgres WITH SET TRUE;
 DO $guard$
 DECLARE r record; v_functions integer;
 BEGIN
@@ -47,9 +59,9 @@ END $guard$;
 
 -- The private storage owner may read immutable preparation lineage, not write it.
 GRANT USAGE ON SCHEMA extensions TO gpt02_store_owner;
-GRANT USAGE ON SCHEMA gpt02_stage TO gpt02_store_owner;
-GRANT SELECT ON gpt02_stage.core_preparations TO gpt02_store_owner;
 SET ROLE gpt02_core_prep_owner;
+GRANT USAGE ON SCHEMA gpt02_stage TO gpt02_store_owner,gpt02_core_prep_login;
+GRANT SELECT ON gpt02_stage.core_preparations TO gpt02_store_owner;
 DO $policy$
 BEGIN
  IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='gpt02_stage'
@@ -79,6 +91,8 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION gpt02_stage.prepare_core_task(text,integer,text,text,text,text)
  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION gpt02_stage.prepare_core_task(text,integer,text,text,text,text)
+ TO gpt02_core_prep_login;
 RESET ROLE;
 
 SET ROLE gpt02_store_owner;
@@ -411,13 +425,7 @@ BEGIN
  RETURN 'LEASE_CONSUMED_NO_DISPATCH';
 END $fn$;
 REVOKE ALL ON FUNCTION gpt02_private.consume_issuer_lease(uuid,uuid,uuid) FROM PUBLIC;
-RESET ROLE;
-
--- All six entry points are accessible ONLY to a currently-NOLOGIN writer role.
-GRANT USAGE ON SCHEMA gpt02_stage,gpt02_private TO gpt02_core_prep_login;
-GRANT EXECUTE ON FUNCTION
- gpt02_stage.prepare_core_task(text,integer,text,text,text,text)
- TO gpt02_core_prep_login;
+GRANT USAGE ON SCHEMA gpt02_private TO gpt02_core_prep_login;
 GRANT EXECUTE ON FUNCTION
  gpt02_private.record_linked_approval(jsonb,text,text,jsonb,text,text,text),
  gpt02_private.consume_linked_approval(uuid,uuid,uuid,text),
@@ -425,4 +433,16 @@ GRANT EXECUTE ON FUNCTION
  gpt02_private.record_issuer_evidence(jsonb,text,text),
  gpt02_private.consume_issuer_lease(uuid,uuid,uuid)
  TO gpt02_core_prep_login;
+RESET ROLE;
+-- All six entry points remain inaccessible until the dedicated writer logs in.
+-- Return both role memberships to their pre-existing SET=FALSE state.
+GRANT gpt02_core_prep_owner TO postgres WITH SET FALSE;
+GRANT gpt02_store_owner TO postgres WITH SET FALSE;
+DO $role_postflight$
+BEGIN
+ IF pg_has_role('postgres','gpt02_core_prep_owner','SET') OR
+ pg_has_role('postgres','gpt02_store_owner','SET') THEN
+  RAISE EXCEPTION 'MIGRATOR_ROLE_SET_OPTION_NOT_RESTORED';
+ END IF;
+END $role_postflight$;
 COMMIT;
