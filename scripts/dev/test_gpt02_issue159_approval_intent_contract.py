@@ -30,7 +30,7 @@ IDENTITY = {
     "userId": CLAIMS["superAdminId"],
     "role": "super_admin",
     "enabled": True,
-    "authMethod": "supabase_aal2",
+    "authMethod": "supabase_admin_session",
 }
 INTENT_ID = "33333333-3333-4333-8333-333333333333"
 EXPECTED_CANONICAL = (
@@ -64,7 +64,7 @@ class ApprovalIntentContractTest(unittest.TestCase):
             "company_id": "default",
             "claims_sha256": EXPECTED_SHA,
             "actor_id": CLAIMS["superAdminId"],
-            "auth_method": "supabase_aal2",
+            "auth_method": "supabase_admin_session",
             "role_at_decision": "super_admin",
             "decision": "APPROVE",
             "recorded_at_ms": 2000,
@@ -83,7 +83,7 @@ class ApprovalIntentContractTest(unittest.TestCase):
         for patch in (
             {"userId": "dev_approval_token"},
             {"authMethod": "static_dev_token"},
-            {"authMethod": "supabase_admin_session"},
+            {"authMethod": "static_dev_token"},
             {"role": "admin"},
             {"enabled": False},
             {"userId": "another-user"},
@@ -95,6 +95,15 @@ class ApprovalIntentContractTest(unittest.TestCase):
                 contract.build_approval_intent_record(
                     CLAIMS, {**IDENTITY, **patch}, INTENT_ID, 2000
                 )
+
+    def test_aal2_super_admin_session_is_also_valid(self):
+        out = contract.build_approval_intent_record(
+            CLAIMS, {**IDENTITY, "authMethod": "supabase_aal2"}, INTENT_ID, 2000
+        )
+        self.assertEqual(out["record"]["auth_method"], "supabase_aal2")
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["authorizationGranted"])
+        self.assertFalse(out["dispatchPermitted"])
 
     def test_claim_scope_and_shape_drift_is_rejected(self):
         for patch in (
