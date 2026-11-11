@@ -124,7 +124,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         status, body = self.request(AAL2_TOKEN)
         self.assertEqual(status, 201)
         self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
-        self.assertEqual(body["authMethod"], "supabase_aal2")
+        self.assertEqual(body["authMethod"], "supabase_admin_session")
         self.assertFalse(body["signingPermitted"])
         self.assertFalse(body["authorizationGranted"])
         self.assertFalse(body["dispatchPermitted"])
@@ -142,7 +142,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(packet["dispatchPermitted"])
         self.assertEqual(packet["releaseDecision"], "NO_GO")
 
-    def test_aal1_super_admin_is_rejected_before_intent_write(self):
+    def test_aal1_super_admin_records_intent_without_aal2_requirement(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
         api.admin_identity = lambda token, connection: {
             "user_id": CLAIMS["superAdminId"],
@@ -151,10 +151,15 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             "auth_level": "aal1",
         }
         status, body = self.request(AAL2_TOKEN)
-        self.assertEqual(status, 403)
-        self.assertEqual(body, {"error": "active_super_admin_required"})
-        self.assertEqual(self.count(), 0)
-        self.assertFalse(os.path.exists(self.packet))
+        self.assertEqual(status, 201)
+        self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
+        self.assertEqual(body["authMethod"], "supabase_admin_session")
+        self.assertFalse(body["signingPermitted"])
+        self.assertFalse(body["authorizationGranted"])
+        self.assertFalse(body["dispatchPermitted"])
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+        self.assertTrue(os.path.exists(self.packet))
 
     def test_missing_auth_level_is_rejected_before_intent_write(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
