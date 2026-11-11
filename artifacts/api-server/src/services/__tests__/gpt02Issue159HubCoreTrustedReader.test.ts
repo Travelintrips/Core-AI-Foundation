@@ -201,7 +201,7 @@ async function socketFixture(
 ) {
   const dir = mkdtempSync(join(tmpdir(), "gpt02-hub-core-reader-"));
   chownSync(dir, process.getuid!(), process.getgid!());
-  chmodSync(dir, 0o2750);
+  chmodSync(dir, 0o750);
   const socketPath = join(dir, "reader.sock");
   const server = createServer((req, res) => {
     const send = (status: number, body: unknown) => {
