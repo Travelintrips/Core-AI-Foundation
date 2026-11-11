@@ -66,6 +66,7 @@ function nativeHealthIsTrusted(health: Awaited<ReturnType<ReturnType<
   return health.readOnlySessionVerified === true &&
     health.nativeRoleAuthenticated === true &&
     health.tlsVerified === true &&
+    health.clientTlsVerified === true &&
     health.operationalTrustedReaderRuntime === true &&
     health.signingPermitted === false &&
     health.authorizationGranted === false &&
@@ -89,6 +90,8 @@ export function createIssuerReaderServer({
           readerReady: ok,
           issuerRole: "gpt02_issuer_evidence_reader",
           tlsVerified: ok,
+          clientTlsVerified: ok,
+          backendTlsVerified: ok ? health.backendTlsVerified === true : false,
           readOnly: ok,
           signingPermitted: false,
           authorizationGranted: false,
@@ -100,6 +103,10 @@ export function createIssuerReaderServer({
           ok: false,
           readerReady: false,
           code: codeOf(error),
+          tlsVerified: false,
+          clientTlsVerified: false,
+          backendTlsVerified: false,
+          readOnly: false,
           signingPermitted: false,
           authorizationGranted: false,
           dispatchPermitted: false,
