@@ -23,7 +23,9 @@ CREATE TABLE admin_identities (
 );
 """
 
-AUTH_USER_ID = "auth_fixture_super_admin"\n\nLOOKUP = {
+AUTH_USER_ID = "auth_fixture_super_admin"
+
+LOOKUP = {
     "claimsSha256": "a" * 64,
     "taskId": 140,
     "commandId": "11111111-1111-4111-8111-111111111111",
