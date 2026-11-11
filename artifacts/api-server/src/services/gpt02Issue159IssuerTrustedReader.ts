@@ -119,7 +119,7 @@ export function createGpt02Issue159IssuerTrustedReader({
     }),
     read: async (input: unknown) => {
       const result = await readGpt02Issue159IssuerLedgerReadOnly(
-        reader.issuerPool as never,
+        reader.issuerPool as Parameters<typeof readGpt02Issue159IssuerLedgerReadOnly>[0],
         input,
       );
       if (synthetic ||
