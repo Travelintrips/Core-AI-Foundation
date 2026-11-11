@@ -144,7 +144,7 @@ export function createGpt02Issue159IssuerReaderPool({
     application_name: "gpt02-issuer-evidence-reader",
     // Supabase's session pooler rejects search_path in libpq startup options.
     // Apply the safe path after the connection is established and before it
-    // can be handed to a caller (same verified pg-pool hook as @workspace/db).
+    // can be handed to a caller (same verified pool initialization hook used by the existing application DB).
     verify: (client: { query(sql: string): Promise<unknown> }, done: (error?: Error) => void) => {
       client.query("SET search_path TO pg_catalog")
         .then(() => done())
