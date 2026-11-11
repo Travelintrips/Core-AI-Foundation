@@ -1,4 +1,5 @@
 import { X509Certificate } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
 
 const PROJECT_REF = "xssrfshdrtdfupgqwfdw";
 const POOLER_HOST = "aws-1-ap-southeast-2.pooler.supabase.com";
@@ -6,6 +7,9 @@ const DATABASE = "postgres";
 const ROLE = "gpt02_issuer_evidence_reader";
 const DSN_ENV = "GPT02_ISSUER_READER_DATABASE_URL_DEV";
 const CA_ENV = "GPT02_READER_DEV_CA";
+const CREDENTIAL_DIR = "/run/credentials/gpt02-dev";
+const DSN_CREDENTIAL = "issuer-reader-dsn";
+const CA_CREDENTIAL = "supabase-root-ca-2021.crt";
 const PINNED_ROOT_FINGERPRINT =
   "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa";
 
@@ -44,6 +48,34 @@ function pinnedReaderCa(pem: string | undefined): string {
     return fail("GPT02_ISSUER_READER_PINNED_CA_REQUIRED");
   }
   return pem;
+}
+
+
+function readCredentialFile(path: string, synthetic: boolean): string {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return fail("GPT02_ISSUER_READER_CREDENTIAL_FILE_REQUIRED");
+  }
+  const mode = stat.mode & 0o777;
+  const uid = synthetic ? (process.getuid?.() ?? stat.uid) : 0;
+  const gid = synthetic ? (process.getgid?.() ?? stat.gid) : 0;
+  if (!stat.isFile() || stat.isSymbolicLink() ||
+      stat.uid !== uid || stat.gid !== gid ||
+      ![0o400, 0o600].includes(mode)) {
+    return fail("GPT02_ISSUER_READER_CREDENTIAL_FILE_SECURITY_INVALID");
+  }
+  let value: string;
+  try {
+    value = readFileSync(path, "utf8");
+  } catch {
+    return fail("GPT02_ISSUER_READER_CREDENTIAL_FILE_REQUIRED");
+  }
+  if (!value || value.length > 8192) {
+    return fail("GPT02_ISSUER_READER_CREDENTIAL_FILE_INVALID");
+  }
+  return value;
 }
 
 function parseIssuerReaderDsn(value: string | undefined) {
@@ -100,11 +132,13 @@ export function createGpt02Issue159IssuerReaderPool({
   Pool,
   nodeEnv = process.env.NODE_ENV,
   appEnv = process.env.APP_ENV,
+  credentialDirectory = CREDENTIAL_DIR,
 }: {
   env?: ReaderEnvironment;
   Pool: PoolConstructor;
   nodeEnv?: string;
   appEnv?: string;
+  credentialDirectory?: string;
 }) {
   const synthetic = nodeEnv === "test" && appEnv !== "production";
 
@@ -118,8 +152,28 @@ export function createGpt02Issue159IssuerReaderPool({
     return fail("GPT02_ISSUER_READER_POOL_FACTORY_REQUIRED");
   }
 
-  const ca = pinnedReaderCa(env[CA_ENV]);
-  const dsn = parseIssuerReaderDsn(env[DSN_ENV]);
+  let dsnValue: string | undefined;
+  let caValue: string | undefined;
+  if (synthetic) {
+    const hasSyntheticEnv = typeof env[DSN_ENV] === "string" ||
+      typeof env[CA_ENV] === "string";
+    if (hasSyntheticEnv) {
+      dsnValue = env[DSN_ENV];
+      caValue = env[CA_ENV];
+    } else {
+      dsnValue = readCredentialFile(`${credentialDirectory}/${DSN_CREDENTIAL}`, true);
+      caValue = readCredentialFile(`${credentialDirectory}/${CA_CREDENTIAL}`, true);
+    }
+  } else {
+    if (credentialDirectory !== CREDENTIAL_DIR ||
+        typeof env[DSN_ENV] === "string" || typeof env[CA_ENV] === "string") {
+      return fail("GPT02_ISSUER_READER_OPERATIONAL_CREDENTIAL_SOURCE_NOT_PINNED");
+    }
+    dsnValue = readCredentialFile(`${CREDENTIAL_DIR}/${DSN_CREDENTIAL}`, false);
+    caValue = readCredentialFile(`${CREDENTIAL_DIR}/${CA_CREDENTIAL}`, false);
+  }
+  const ca = pinnedReaderCa(caValue);
+  const dsn = parseIssuerReaderDsn(dsnValue);
 
   for (const sharedName of [
     "SUPABASE_DATABASE_URL_DEV",
@@ -168,6 +222,8 @@ export function createGpt02Issue159IssuerReaderPool({
       role: ROLE,
       maxConnections: 1 as const,
       independentCredentialsRequired: true as const,
+      credentialSource: "systemd-credential-files" as const,
+      credentialDirectory: CREDENTIAL_DIR,
       readOnlyByDefault: true as const,
       tlsPinned: true as const,
       sharedPoolFallback: false as const,
