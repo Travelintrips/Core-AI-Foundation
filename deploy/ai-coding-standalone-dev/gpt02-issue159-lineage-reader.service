@@ -5,6 +5,7 @@ After=network-online.target systemd-sysusers.service
 Wants=network-online.target
 ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-lineage-reader-dsn
 ConditionPathExists=/etc/gpt02-dev/supabase-root-ca-2021.crt
+ConditionPathExists=/opt/gpt02-lineage-reader/.venv/bin/python3
 ConditionPathExists=/opt/gpt02-lineage-reader/gpt02_issue159_lineage_reader_runtime.py
 ConditionPathExists=/opt/gpt02-lineage-reader/gpt02_issue159_lineage_db_reader.py
 ConditionPathExists=/opt/gpt02-lineage-reader/gpt02_issue159_lineage_readback_contract.py
@@ -18,7 +19,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 LoadCredentialEncrypted=lineage-reader-dsn:/etc/credstore.encrypted/gpt02-issue159-lineage-reader-dsn
 LoadCredential=supabase-root-ca-2021.crt:/etc/gpt02-dev/supabase-root-ca-2021.crt
-ExecStart=/opt/gpt02-lineage-reader/.venv/bin/python3 -u /opt/gpt02-lineage-reader/gpt02_issue159_lineage_reader_runtime.py --socket /run/gpt02-lineage-reader/reader.sock --allowed-verifier-uid=995
+ExecStart=/usr/bin/env /opt/gpt02-lineage-reader/.venv/bin/python3 -u /opt/gpt02-lineage-reader/gpt02_issue159_lineage_reader_runtime.py --socket /run/gpt02-lineage-reader/reader.sock --allowed-verifier-uid=995
 Restart=on-failure
 RestartSec=5s
 TimeoutStartSec=20s
