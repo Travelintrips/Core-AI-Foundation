@@ -1,5 +1,6 @@
 [Unit]
 Description=GPT02 DEV trusted lineage reader (READ ONLY, NO_DISPATCH)
+# Isolated runtime: psycopg[binary]==3.2.12, cryptography==44.0.3; never use global Python.
 After=network-online.target systemd-sysusers.service
 Wants=network-online.target
 ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-lineage-reader-dsn
@@ -17,7 +18,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 LoadCredentialEncrypted=lineage-reader-dsn:/etc/credstore.encrypted/gpt02-issue159-lineage-reader-dsn
 LoadCredential=supabase-root-ca-2021.crt:/etc/gpt02-dev/supabase-root-ca-2021.crt
-ExecStart=/usr/bin/python3 -u /opt/gpt02-lineage-reader/gpt02_issue159_lineage_reader_runtime.py --socket /run/gpt02-lineage-reader/reader.sock --allowed-verifier-uid=995
+ExecStart=/opt/gpt02-lineage-reader/.venv/bin/python3 -u /opt/gpt02-lineage-reader/gpt02_issue159_lineage_reader_runtime.py --socket /run/gpt02-lineage-reader/reader.sock --allowed-verifier-uid=995
 Restart=on-failure
 RestartSec=5s
 TimeoutStartSec=20s
