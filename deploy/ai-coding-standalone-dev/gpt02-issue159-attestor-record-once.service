@@ -3,6 +3,7 @@ Description=GPT02 Issue159 DEV single attestor record RPC after authenticated th
 After=gpt02-issue159-verifier.service gpt02-issue159-approval-reader.service
 Requires=gpt02-issue159-verifier.service gpt02-issue159-approval-reader.service
 ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_attestor_record_once.py
+ConditionPathExists=/opt/gpt02-lineage-reader/.venv/bin/python3
 ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_attestor_preflight.py
 ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_writer_broker_contract.py
 ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_approved_claims.json
@@ -22,7 +23,7 @@ Environment=GPT02_ATTESTOR_RECORD_ONCE=explicit-approved
 Environment=PYTHONDONTWRITEBYTECODE=1
 LoadCredentialEncrypted=attestor-dsn:/etc/credstore.encrypted/gpt02-issue159-attestor-dsn
 WorkingDirectory=/opt/ai-coding-standalone-dev
-ExecStart=/usr/bin/python3 -B /opt/ai-coding-standalone-dev/gpt02_issue159_attestor_record_once.py
+ExecStart=/opt/gpt02-lineage-reader/.venv/bin/python3 -B /opt/ai-coding-standalone-dev/gpt02_issue159_attestor_record_once.py
 TimeoutStartSec=15s
 Restart=no
 UMask=0077
