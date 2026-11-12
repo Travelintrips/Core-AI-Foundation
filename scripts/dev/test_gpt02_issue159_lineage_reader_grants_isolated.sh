@@ -118,3 +118,102 @@ WHERE a.company_id='default' AND a.task_id=140
   AND a.digest=repeat('a',64);
 ROLLBACK;
 SQL
+
+# Nonempty, synthetic-only fixture: validate real FORCE RLS visibility.
+docker exec -i "$name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null <<'SQL'
+INSERT INTO gpt02_private.approvals
+ (task_id,company_id,attempt_id,command_id,digest,nonce,expires_at,claims)
+VALUES
+ (140,'default','20000000-0000-4000-8000-000000000002',
+ '10000000-0000-4000-8000-000000000001',repeat('a',64),repeat('N',40),
+ now()+interval '2 minutes','{"environment":"DEV"}'::jsonb),
+ (141,'default','20000000-0000-4000-8000-000000000003',
+ '10000000-0000-4000-8000-000000000002',repeat('b',64),repeat('N',40),
+ now()+interval '2 minutes','{"environment":"PROD"}'::jsonb);
+INSERT INTO gpt02_private.operator_links
+ (link_id,command_id,attempt_id,company_id,hub_task_id,approval_digest,
+ hub_execution_id,core_task_id,link_digest,expires_at,attempt_number,claims)
+VALUES
+ ('30000000-0000-4000-8000-000000000003',
+ '10000000-0000-4000-8000-000000000001',
+ '20000000-0000-4000-8000-000000000002','default',140,
+ repeat('a',64),'40000000-0000-4000-8000-000000000004',
+ '50000000-0000-4000-8000-000000000005',repeat('c',64),
+ now()+interval '90 seconds',1,'{"environment":"DEV"}'::jsonb),
+ ('30000000-0000-4000-8000-000000000004',
+ '10000000-0000-4000-8000-000000000002',
+ '20000000-0000-4000-8000-000000000003','default',141,
+ repeat('b',64),'40000000-0000-4000-8000-000000000005',
+ '50000000-0000-4000-8000-000000000006',repeat('d',64),
+ now()+interval '90 seconds',1,'{"environment":"PROD"}'::jsonb);
+INSERT INTO gpt02_private.receipts
+ (id,command_id,nonce,digest,consumed_at)
+VALUES
+ ('60000000-0000-4000-8000-000000000006',
+ '10000000-0000-4000-8000-000000000001',repeat('N',40),repeat('a',64),now()),
+ ('60000000-0000-4000-8000-000000000007',
+ '10000000-0000-4000-8000-000000000002',repeat('N',40),repeat('b',64),now());
+INSERT INTO gpt02_private.core_identity_receipts
+ (receipt_id,command_id,link_id,link_digest,binding_verified,
+ may_dispatch_worker,may_issue_grant,may_close_job,core_ledger_written)
+VALUES
+ ('60000000-0000-4000-8000-000000000006',
+ '10000000-0000-4000-8000-000000000001',
+ '30000000-0000-4000-8000-000000000003',repeat('c',64),false,false,false,false,false),
+ ('60000000-0000-4000-8000-000000000007',
+ '10000000-0000-4000-8000-000000000002',
+ '30000000-0000-4000-8000-000000000004',repeat('d',64),false,false,false,false,false);
+INSERT INTO gpt02_private.post_consumption_fences
+ (fence_id,receipt_id,command_id,link_id,attempt_id,hub_execution_id,
+ core_task_id,worker_id,lease_epoch,lease_started_at,lease_expires_at,
+ dispatch_allowed,core_ledger_written)
+VALUES
+ ('70000000-0000-4000-8000-000000000007',
+ '60000000-0000-4000-8000-000000000006',
+ '10000000-0000-4000-8000-000000000001',
+ '30000000-0000-4000-8000-000000000003',
+ '20000000-0000-4000-8000-000000000002',
+ '40000000-0000-4000-8000-000000000004',
+ '50000000-0000-4000-8000-000000000005',
+ 'openclaw-dell-chatgpt-wake-dev',1,now(),now()+interval '10 seconds',false,false),
+ ('70000000-0000-4000-8000-000000000008',
+ '60000000-0000-4000-8000-000000000007',
+ '10000000-0000-4000-8000-000000000002',
+ '30000000-0000-4000-8000-000000000004',
+ '20000000-0000-4000-8000-000000000003',
+ '40000000-0000-4000-8000-000000000005',
+ '50000000-0000-4000-8000-000000000006',
+ 'openclaw-dell-chatgpt-wake-dev',1,now(),now()+interval '10 seconds',false,false);
+SQL
+docker exec -i "$name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+BEGIN READ ONLY;
+SET LOCAL ROLE dev_gpt02_lineage_reader;
+DO $$
+DECLARE v_allowed integer; v_denied integer;
+BEGIN
+ SELECT count(*) INTO v_allowed
+ FROM gpt02_private.approvals a
+ JOIN gpt02_private.operator_links l
+  ON l.command_id=a.command_id AND l.attempt_id=a.attempt_id
+  AND l.company_id=a.company_id AND l.hub_task_id=a.task_id
+  AND l.approval_digest=a.digest
+ JOIN gpt02_private.receipts r
+  ON r.command_id=a.command_id AND r.nonce=a.nonce AND r.digest=a.digest
+ JOIN gpt02_private.core_identity_receipts i
+  ON i.receipt_id=r.id AND i.command_id=r.command_id
+  AND i.link_id=l.link_id AND i.link_digest=l.link_digest
+ JOIN gpt02_private.post_consumption_fences f
+  ON f.receipt_id=r.id AND f.command_id=a.command_id
+  AND f.link_id=l.link_id AND f.attempt_id=a.attempt_id
+  AND f.hub_execution_id=l.hub_execution_id AND f.core_task_id=l.core_task_id
+ WHERE a.company_id='default' AND a.task_id=140
+   AND a.command_id='10000000-0000-4000-8000-000000000001'::uuid;
+ SELECT count(*) INTO v_denied FROM gpt02_private.approvals
+ WHERE task_id=141;
+ IF v_allowed<>1 OR v_denied<>0 THEN
+   RAISE EXCEPTION 'RLS_NONEMPTY_VISIBILITY_FAILED valid=% invalid=%',v_allowed,v_denied;
+ END IF;
+END $$;
+ROLLBACK;
+SELECT 'POPULATED_READER_RLS_PASS' AS result;
+SQL
