@@ -3,7 +3,10 @@
 -- activation. Never use the existing issuer reader login or signer credentials.
 -- Never run on PROD.
 BEGIN;
-DO $$
+-- Temporary owner SET permission used only inside this transaction.
+-- Based on Supabase documented custom-role administration; revoke before COMMIT.
+GRANT gpt02_store_owner TO postgres WITH SET TRUE, INHERIT FALSE;
+DO $
 BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='gpt02_store_owner')
  OR NOT pg_catalog.pg_has_role(current_user,'gpt02_store_owner','SET') THEN
@@ -20,6 +23,7 @@ BEGIN
    NOINHERIT NOREPLICATION NOBYPASSRLS;
 END $$;
 
+SET ROLE gpt02_store_owner;
 GRANT USAGE ON SCHEMA gpt02_private TO dev_gpt02_lineage_reader;
 
 GRANT SELECT (
@@ -42,8 +46,6 @@ GRANT SELECT (
  dispatch_allowed,core_ledger_written
 ) ON gpt02_private.post_consumption_fences TO dev_gpt02_lineage_reader;
 
-SET ROLE gpt02_store_owner;
-
 CREATE POLICY dev_gpt02_lineage_reader_select
 ON gpt02_private.approvals FOR SELECT TO dev_gpt02_lineage_reader
 USING (company_id='default' AND task_id>139 AND claims->>'environment'='DEV');
@@ -63,6 +65,13 @@ ON gpt02_private.post_consumption_fences FOR SELECT TO dev_gpt02_lineage_reader
 USING (worker_id='openclaw-dell-chatgpt-wake-dev'
  AND lease_epoch=1 AND NOT dispatch_allowed AND NOT core_ledger_written);
 RESET ROLE;
+REVOKE gpt02_store_owner FROM postgres;
+DO $restore_guard$
+BEGIN
+ IF pg_catalog.pg_has_role('postgres','gpt02_store_owner','SET') THEN
+   RAISE EXCEPTION 'TEMPORARY_OWNER_SET_NOT_REVOKED';
+ END IF;
+END $restore_guard$;
 COMMIT;
 
 -- Expected: role NOLOGIN/NOBYPASSRLS, five FORCE RLS tables,
