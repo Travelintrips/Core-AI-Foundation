@@ -41,6 +41,9 @@ on:
       - 'scripts/dev/test_gpt02_issue159_approval_store_readiness.py'
       - 'scripts/dev/gpt02_issue159_approval_intent_reader.py'
       - 'scripts/dev/test_gpt02_issue159_approval_intent_reader.py'
+      - 'scripts/vps/deploy_dev_release.py'
+      - 'deploy/vps-dev/cst-vps-dev-release.py'
+      - 'scripts/dev/test_gpt02_issue159_dev_approval_page_release.py'
       - 'scripts/dev/test_gpt02_issue159_approval_intent_writer.py'
       - 'scripts/dev/test_gpt02_issue159_approval_intent_contract.py'
       - 'scripts/dev/test_gpt02_issue159_approval_http.py'
@@ -156,6 +159,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_approval_store_readiness.py
           python3 scripts/dev/test_gpt02_issue159_lifecycle_catalog_preflight.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_reader.py
+          python3 scripts/dev/test_gpt02_issue159_dev_approval_page_release.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_writer.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_contract.py
           python3 scripts/dev/test_gpt02_issue159_private_key_custody_readiness.py
