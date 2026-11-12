@@ -69,6 +69,7 @@ on:
       - 'scripts/dev/test_gpt02_issue159_lineage_db_reader.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_db_reader.py'
       - 'scripts/dev/gpt02_issue159_lineage_reader_nologin_grants.sql'
+      - 'scripts/dev/test_gpt02_issue159_lineage_reader_grants_isolated.sh'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_readback_contract.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_staged_admission.py'
       - 'scripts/dev/test_gpt02_issue159_cross_language_vectors.py'
@@ -169,6 +170,8 @@ jobs:
           bash scripts/dev/test_gpt02_issue159_split_owner_isolated.sh
           bash -n scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh
           bash scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh
+          bash -n scripts/dev/test_gpt02_issue159_lineage_reader_grants_isolated.sh
+          bash scripts/dev/test_gpt02_issue159_lineage_reader_grants_isolated.sh
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
