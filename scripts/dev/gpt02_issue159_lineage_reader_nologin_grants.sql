@@ -3,7 +3,14 @@
 -- activation. Never use the existing issuer reader login or signer credentials.
 -- Never run on PROD.
 BEGIN;
-DO $$
+DO $
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='gpt02_store_owner')
+ OR NOT pg_catalog.pg_has_role(current_user,'gpt02_store_owner','SET') THEN
+   RAISE EXCEPTION 'STORE_OWNER_SET_PRIVILEGE_REQUIRED_FOR_RLS_POLICY';
+ END IF;
+END $;
+DO $
 BEGIN
  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'dev_gpt02_lineage_reader') THEN
    RAISE EXCEPTION 'LINEAGE_READER_ROLE_ALREADY_EXISTS_REVIEW_FIRST';
@@ -35,6 +42,8 @@ GRANT SELECT (
  dispatch_allowed,core_ledger_written
 ) ON gpt02_private.post_consumption_fences TO dev_gpt02_lineage_reader;
 
+SET ROLE gpt02_store_owner;
+
 CREATE POLICY dev_gpt02_lineage_reader_select
 ON gpt02_private.approvals FOR SELECT TO dev_gpt02_lineage_reader
 USING (company_id='default' AND task_id>139 AND claims->>'environment'='DEV');
@@ -53,6 +62,7 @@ CREATE POLICY dev_gpt02_lineage_reader_select
 ON gpt02_private.post_consumption_fences FOR SELECT TO dev_gpt02_lineage_reader
 USING (worker_id='openclaw-dell-chatgpt-wake-dev'
  AND lease_epoch=1 AND NOT dispatch_allowed AND NOT core_ledger_written);
+RESET ROLE;
 COMMIT;
 
 -- Expected: role NOLOGIN/NOBYPASSRLS, five FORCE RLS tables,
