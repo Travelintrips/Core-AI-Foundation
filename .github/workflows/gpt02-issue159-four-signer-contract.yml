@@ -48,6 +48,8 @@ on:
       - 'scripts/dev/test_gpt02_issue159_approval_intent_contract.py'
       - 'scripts/dev/test_gpt02_issue159_approval_http.py'
       - 'scripts/dev/test_gpt02_issue159_approval_api_route.py'
+      - 'deploy/ai-coding-standalone-dev/admin_login.html'
+      - 'scripts/dev/test_gpt02_issue159_magic_link_callback.mjs'
       - 'scripts/dev/prepare_gpt02_issue159_approval_request.py'
       - 'scripts/dev/test_gpt02_issue159_approval_request_prepare.py'
       - 'artifacts/api-server/src/services/gpt02Issue159PrivateKeyCustodyContract.ts'
@@ -173,6 +175,7 @@ jobs:
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service
           python3 scripts/dev/test_gpt02_issue159_approval_http.py
           python3 scripts/dev/test_gpt02_issue159_approval_api_route.py
+          node scripts/dev/test_gpt02_issue159_magic_link_callback.mjs
           PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_contract.py' -v
           GPT02_TEST_TSX_BINARY=artifacts/api-server/node_modules/.bin/tsx PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_cross_language_vectors.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_staged_admission.py' -v
