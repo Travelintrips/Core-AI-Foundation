@@ -58,7 +58,7 @@ BEGIN
   AND NOT rolcanlogin AND NOT rolbypassrls AND NOT rolcreaterole AND NOT rolsuper)
  THEN RAISE EXCEPTION 'NOLOGIN_ROLE_CHECK_FAILED'; END IF;
  FOR r IN
-  SELECT relname,oid FROM pg_class c
+  SELECT c.relname,c.oid FROM pg_class c
   JOIN pg_namespace n ON c.relnamespace=n.oid
   WHERE n.nspname='gpt02_private' AND c.relkind='r'
  LOOP
