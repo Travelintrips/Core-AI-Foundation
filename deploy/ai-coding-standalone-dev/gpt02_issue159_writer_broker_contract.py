@@ -136,13 +136,14 @@ def verify_lifecycle_evidence_packet(packet: Any, public_roots: Any,
 
     if (ac["v"] != 2 or ac["environment"] != "DEV"
         or ac["audience"] != "GPT02_NEW_TASK_SINGLE_COMMAND_APPROVAL"
-        or not isinstance(ac["taskId"], int) or ac["taskId"] <= 136
+        or type(ac["taskId"]) is not int or ac["taskId"] <= 139
         or not isinstance(ac["commandId"], str) or not UUID.fullmatch(ac["commandId"])
         or not isinstance(ac["attemptId"], str) or not UUID.fullmatch(ac["attemptId"])
         or ac["commandId"] == ac["attemptId"]
         or not isinstance(ac["nonce"], str) or not NONCE.fullmatch(ac["nonce"])
         or ac["operatorNamespace"] != "ai-task-hub.public.users"
-        or not isinstance(ac["superAdminId"], str) or not ac["superAdminId"]
+        or not isinstance(ac["superAdminId"], str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}", ac["superAdminId"])
         or ac["superAdminId"] == "dev_approval_token"
         or ac["companyId"] != "default"
         or not isinstance(ac["issuedAt"], int) or not isinstance(ac["expiresAt"], int)
@@ -156,18 +157,20 @@ def verify_lifecycle_evidence_packet(packet: Any, public_roots: Any,
         or hc["companyId"] != ac["companyId"] or hc["hubTaskId"] != ac["taskId"]
         or hc["coreCommandId"] != ac["commandId"] or hc["attemptId"] != ac["attemptId"]
         or hc["approvalDigest"] != ad or hc["nonce"] != ac["nonce"]
+        or hc["hubOperatorId"] != ac["superAdminId"]
         or hc["attemptNumber"] != 1 or hc["workerId"] != WORKER
         or hc["hubRole"] != "super_admin" or hc["hubActive"] is not True
         or hc["coreRole"] not in ("owner", "admin") or hc["coreActive"] is not True
         or hc["corePasswordChanged"] is not True
         or hc["hubOperatorNamespace"] != "ai-task-hub.public.users"
         or hc["coreOperatorNamespace"] != "ai-core.ai_platform.internal_users"
-        or not isinstance(hc["coreOperatorUserId"], int) or hc["coreOperatorUserId"] <= 0
+        or type(hc["coreOperatorUserId"]) is not int or hc["coreOperatorUserId"] <= 0
+        or type(hc["assigneeId"]) is not int or hc["assigneeId"] <= 0
         or not isinstance(hc["issuedAt"], int) or not isinstance(hc["expiresAt"], int)
         or hc["issuedAt"] < ac["issuedAt"] or hc["expiresAt"] > ac["expiresAt"]
         or hc["issuedAt"] > observed_at_ms or hc["expiresAt"] <= observed_at_ms
         or hc["expiresAt"] <= hc["issuedAt"]
-        or hc["expiresAt"] - hc["issuedAt"] > 300000
+        or hc["expiresAt"] - hc["issuedAt"] > 120000
         or not UUID.fullmatch(str(hc["linkId"]))
         or not UUID.fullmatch(str(hc["hubExecutionId"]))
         or not UUID.fullmatch(str(hc["coreTaskId"]))):

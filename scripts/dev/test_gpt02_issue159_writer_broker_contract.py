@@ -128,4 +128,53 @@ class WriterBrokerContractTest(unittest.TestCase):
             p=json.loads(json.dumps(self.packet));p["approval"]["claims"]["taskId"]=task
             with self.assertRaises(BrokerAdmissionError): verify_lifecycle_evidence_packet(p,self.roots,self.now)
 
+    def _resign_valid_packet(self, packet):
+        import hashlib
+        ac = packet["approval"]["claims"]
+        digest = hashlib.sha256(json.dumps({k: ac[k] for k in APPROVAL_FIELDS}, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+        for role in ("hubLink", "coreLink"):
+            packet[role]["claims"]["approvalDigest"] = digest
+        packet["issuerEvidence"]["claims"]["approvalDigest"] = digest
+        packet["approval"]["signature"] = sign(self.keys["approval"], ac, APPROVAL_FIELDS)
+        for role, key, domain in (("hubLink", "hub", b"GPT02_OPERATOR_LINK_V1:hub\n"), ("coreLink", "core", b"GPT02_OPERATOR_LINK_V1:core\n")):
+            packet[role]["signature"] = sign(self.keys[key], packet[role]["claims"], LINK_FIELDS, domain)
+        packet["issuerEvidence"]["signature"] = sign(self.keys["issuer"], packet["issuerEvidence"]["claims"], ISSUER_FIELDS, b"GPT02_ISSUER_LEASE_EVIDENCE_V1\n")
+        return packet
+
+    def test_signed_legacy_task_137_to_139_rejected(self):
+        for task in (137, 138, 139):
+            with self.subTest(task=task):
+                p = json.loads(json.dumps(self.packet))
+                p["approval"]["claims"]["taskId"] = task
+                for role in ("hubLink", "coreLink", "issuerEvidence"):
+                    p[role]["claims"]["hubTaskId"] = task
+                self._resign_valid_packet(p)
+                with self.assertRaises(BrokerAdmissionError):
+                    verify_lifecycle_evidence_packet(p, self.roots, self.now)
+
+    def test_validly_signed_mismatched_hub_operator_rejected(self):
+        p = json.loads(json.dumps(self.packet))
+        for role in ("hubLink", "coreLink"):
+            p[role]["claims"]["hubOperatorId"] = "other-admin"
+        self._resign_valid_packet(p)
+        with self.assertRaises(BrokerAdmissionError):
+            verify_lifecycle_evidence_packet(p, self.roots, self.now)
+
+    def test_validly_signed_overlong_link_ttl_rejected(self):
+        p = json.loads(json.dumps(self.packet))
+        p["approval"]["claims"]["expiresAt"] = self.now + 250000
+        for role in ("hubLink", "coreLink"):
+            p[role]["claims"]["expiresAt"] = self.now + 200000
+        self._resign_valid_packet(p)
+        with self.assertRaises(BrokerAdmissionError):
+            verify_lifecycle_evidence_packet(p, self.roots, self.now)
+
+    def test_validly_signed_invalid_assignee_rejected(self):
+        p = json.loads(json.dumps(self.packet))
+        for role in ("hubLink", "coreLink"):
+            p[role]["claims"]["assigneeId"] = 0
+        self._resign_valid_packet(p)
+        with self.assertRaises(BrokerAdmissionError):
+            verify_lifecycle_evidence_packet(p, self.roots, self.now)
+
 if __name__=="__main__": unittest.main()
