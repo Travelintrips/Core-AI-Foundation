@@ -185,7 +185,7 @@ jobs:
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_hub_core_signer_guard.py' -v
           # The live Hub/Core reader unit is owned by AI-Task-Hub, not this repo.
           # Stub only its dependency name in CI; never install/start this stub.
-          printf '[Unit]\\nDescription=CI-only Hub Core reader dependency stub\\n[Service]\\nType=oneshot\\nExecStart=/usr/bin/true\\n' > "$RUNNER_TEMP/gpt02-issue159-reader.service"
+          printf '%s\n' '[Unit]' 'Description=CI-only Hub Core reader dependency stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "$RUNNER_TEMP/gpt02-issue159-reader.service"
           systemd-analyze verify "$RUNNER_TEMP/gpt02-issue159-reader.service" deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service 'deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-operator@.service'
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once_service_policy.py
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-approval.service
