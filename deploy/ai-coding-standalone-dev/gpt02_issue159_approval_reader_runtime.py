@@ -13,6 +13,7 @@ import os
 import signal
 import socketserver
 import stat
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -90,10 +91,14 @@ class _Handler(socketserver.StreamRequestHandler):
             lookup=req["lookup"]
             if not isinstance(lookup,dict) or set(lookup)!=set(LOOKUP_FIELDS):
                 raise ValueError("LOOKUP_SHAPE_INVALID")
-            if not isinstance(req["observedAt"],int) or isinstance(req["observedAt"],bool):
-                raise ValueError("OBSERVATION_TIME_INVALID")
+            # Do not let the requester backdate approval expiry checks.
+            server_now_ms = int(time.time() * 1000)
+            client_now_ms = req["observedAt"]
+            if (type(client_now_ms) is not int
+                    or abs(client_now_ms - server_now_ms) > 5000):
+                raise ValueError("UNTRUSTED_APPROVAL_OBSERVATION_TIME")
             reader=type(self).approval_reader_fn or _load_reader()
-            result=reader(self.db_path,lookup,req["observedAt"],operational=self.operational)
+            result=reader(self.db_path,lookup,server_now_ms,operational=self.operational)
             proven=result.get("persistedTrustedReadProven") is True
             self.wfile.write(_response(200 if proven else 404,{
                 "ok":proven,"environment":"DEV","result":result,
@@ -133,7 +138,7 @@ def serve(socket_path:str,group_name:str,once:bool=False)->int:
     if stat.S_ISLNK(pst.st_mode) or not stat.S_ISDIR(pst.st_mode) or pst.st_uid!=os.getuid() or stat.S_IMODE(pst.st_mode)!=0o700:
         raise RuntimeError("SOCKET_DIRECTORY_INVALID")
     if os.path.lexists(socket_path): raise RuntimeError("SOCKET_PATH_ALREADY_EXISTS")
-    _Handler.reader=reader
+    _Handler.approval_reader_fn=reader
     server=_UnixServer(socket_path,_Handler)
     gid=grp.getgrnam(group_name).gr_gid
     os.chown(socket_path,os.getuid(),gid);os.chmod(socket_path,0o660)
@@ -166,3 +171,4 @@ def main():
 
 if __name__=="__main__":
     raise SystemExit(main())
+
