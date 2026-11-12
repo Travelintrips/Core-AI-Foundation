@@ -54,4 +54,4 @@ ReadOnlyPaths=/opt/ai-coding-standalone-dev/gpt02_issue159_sign_once.py /opt/ai-
 StandardOutput=journal
 StandardError=journal
 
-# Deliberately no [Install] section. Only an explicit one-shot request can run.
+# No boot-install section; this unit remains an explicit, one-shot operation.
