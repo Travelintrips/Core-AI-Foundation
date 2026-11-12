@@ -82,7 +82,7 @@ class OneShotApprovalSystemdPolicyTest(unittest.TestCase):
         self.assertIn('GPT02_ISSUE159_SIGNING_ENABLED") != "approved-once"',source)
         self.assertIn('if args.role == "issuer"',source)
         self.assertIn('require_hub_core_facts(args.role, claims, approved, now_ms=now_ms)',source)
-        self.assertIn('persisted_approval_fresh(claims, now_ms=now_ms)',source)
+        self.assertIn('persisted_approval_fresh(approved, now_ms=now_ms)',source)
         self.assertIn('signed_digest != payload["claimsSha256"]',source)
         self.assertIn('MIN_VALIDITY_MS = 30_000',gate)
         self.assertIn('SO_PEERCRED',gate)
