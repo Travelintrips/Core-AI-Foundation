@@ -31,7 +31,7 @@ class FakeReaderHandler(socketserver.StreamRequestHandler):
         }
         if self.server.mutate:
             payload.update(self.server.mutate)
-        self.wfile.write(json.dumps(payload, separators=(",", ":")).encode() + b"\\n")
+        self.wfile.write(json.dumps(payload, separators=(",", ":")).encode() + b"\n")
 
 
 class LineageSocketBridgeTests(unittest.TestCase):
