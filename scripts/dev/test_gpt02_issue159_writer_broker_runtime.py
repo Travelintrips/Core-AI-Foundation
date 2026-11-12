@@ -1,4 +1,7 @@
 import base64
+import hashlib
+import sqlite3
+import threading
 import json
 import os
 import socket
@@ -16,6 +19,10 @@ from gpt02_issue159_writer_broker_contract import (
     APPROVAL_FIELDS, LINK_FIELDS, ISSUER_FIELDS,
 )
 from gpt02_issue159_writer_broker_runtime import ROOT_FILES
+from gpt02_issue159_approval_reader_runtime import (
+    _Handler as ApprovalHandler, _UnixServer as ApprovalUnixServer,
+)
+from gpt02_issue159_approval_intent_reader import read_approval_intent
 
 
 def b64(value):
@@ -35,6 +42,8 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.public.mkdir(mode=0o700)
         self.socket_path=self.root/"run"/"verify.sock"
         self.manifest=self.root/"trust-fingerprints.json"
+        self.approval_socket_path=self.root/"approval-run"/"approval.sock"
+        self.approval_socket_path.parent.mkdir(mode=0o700)
         self.socket_path.parent.mkdir(mode=0o700)
         self.keys={r:Ed25519PrivateKey.generate() for r in ROOT_FILES}
         fingerprints={}
@@ -57,6 +66,9 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.packet=self._packet()
 
     def tearDown(self):
+        if getattr(self,"approval_server",None):
+            self.approval_server.shutdown()
+            self.approval_server.server_close()
         if getattr(self,"proc",None) and self.proc.poll() is None:
             self.proc.terminate()
             try:self.proc.wait(timeout=3)
@@ -108,6 +120,55 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
             subprocess.run(["sudo","-n","chown","root:root",*files],check=True)
             subprocess.run(["sudo","-n","chmod","0644",*files],check=True)
 
+    def _start_approval_reader(self, *, stored_digest=None, mapping_enabled=1):
+        """Use the real read-only approval reader with a synthetic SQLite store."""
+        approval=self.packet["approval"]["claims"]
+        digest=hashlib.sha256(json.dumps(
+            {k:approval[k] for k in APPROVAL_FIELDS},
+            separators=(",",":"),
+        ).encode()).hexdigest()
+        db=self.root/"approval-intents.db"
+        con=sqlite3.connect(db)
+        con.executescript("""
+        CREATE TABLE admin_identities(
+          user_id TEXT PRIMARY KEY, role TEXT NOT NULL, enabled INTEGER NOT NULL
+        );
+        CREATE TABLE gpt02_issue159_admin_operator_links(
+          auth_user_id TEXT PRIMARY KEY,
+          hub_operator_id TEXT NOT NULL UNIQUE,
+          email TEXT NOT NULL, enabled INTEGER NOT NULL
+        );
+        CREATE TABLE gpt02_issue159_approval_intents(
+          id TEXT PRIMARY KEY, task_id INTEGER NOT NULL,
+          command_id TEXT NOT NULL, attempt_id TEXT NOT NULL,
+          company_id TEXT NOT NULL, claims_sha256 TEXT NOT NULL,
+          actor_id TEXT NOT NULL, auth_method TEXT NOT NULL,
+          role_at_decision TEXT NOT NULL, decision TEXT NOT NULL,
+          recorded_at_ms INTEGER NOT NULL, expires_at_ms INTEGER NOT NULL
+        );
+        """)
+        con.execute("INSERT INTO admin_identities VALUES(?,?,?)",
+                    ("fixture-auth-user","super_admin",1))
+        con.execute("INSERT INTO gpt02_issue159_admin_operator_links VALUES(?,?,?,?)",
+                    ("fixture-auth-user",approval["superAdminId"],
+                     "fixture@example.invalid",mapping_enabled))
+        con.execute(
+            "INSERT INTO gpt02_issue159_approval_intents VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("88888888-8888-4888-8888-888888888888",
+             approval["taskId"],approval["commandId"],approval["attemptId"],
+             approval["companyId"],stored_digest or digest,
+             approval["superAdminId"],"supabase_admin_session",
+             "super_admin","APPROVE",self.now-1000,self.now+120000)
+        )
+        con.commit()
+        con.close()
+        ApprovalHandler.approval_reader_fn=read_approval_intent
+        ApprovalHandler.db_path=str(db)
+        ApprovalHandler.operational=False
+        self.approval_server=ApprovalUnixServer(str(self.approval_socket_path),ApprovalHandler)
+        os.chmod(self.approval_socket_path,0o660)
+        threading.Thread(target=self.approval_server.serve_forever,daemon=True).start()
+
     def _start(self):
         runtime=Path(__file__).parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py"
         env=dict(os.environ)
@@ -122,6 +183,7 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
             sys.executable,str(runtime),"--socket",str(self.socket_path),
             "--public-roots",str(self.public),"--fingerprint-manifest",str(self.manifest),
             "--socket-group",socket_group,
+            "--approval-reader-socket",str(self.approval_socket_path),
         ],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         deadline=time.time()+5
         while time.time()<deadline and not self.socket_path.exists():
@@ -130,9 +192,9 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
             time.sleep(.025)
         self.assertTrue(self.socket_path.exists())
 
-    def _post(self,packet):
+    def _post(self,packet,route="/verify-packet"):
         body=json.dumps({"packet":packet,"observedAt":self.now},separators=(",",":")).encode()
-        request=(b"POST /verify-packet HTTP/1.1\r\nHost: localhost\r\n"
+        request=(("POST "+route+" HTTP/1.1\r\nHost: localhost\r\n").encode()+
                  b"Content-Type: application/json\r\nContent-Length: "+str(len(body)).encode()+
                  b"\r\nConnection: close\r\n\r\n"+body)
         client=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);client.settimeout(3)
@@ -168,6 +230,68 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertFalse(out["ok"])
         self.assertEqual(out["releaseDecision"],"NO_GO")
 
+    def test_socket_rejects_backdated_client_observation(self):
+        self._start()
+        original_now=self.now
+        try:
+            self.now-=600000
+            status,out=self._post(self.packet)
+        finally:
+            self.now=original_now
+        self.assertEqual(status,400)
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_socket_rejects_future_client_observation(self):
+        self._start()
+        original_now=self.now
+        try:
+            self.now+=600000
+            status,out=self._post(self.packet)
+        finally:
+            self.now=original_now
+        self.assertEqual(status,400)
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_approved_route_requires_real_persisted_readback_socket(self):
+        self._start()
+        status,out=self._post(self.packet,"/verify-approved-packet")
+        self.assertEqual(status,503)
+        self.assertFalse(out["ok"])
+        self.assertFalse(out["dispatchPermitted"])
+
+    def test_approved_route_binds_signatures_to_persisted_super_admin(self):
+        self._start_approval_reader()
+        self._start()
+        status,out=self._post(self.packet,"/verify-approved-packet")
+        self.assertEqual(status,200,out)
+        self.assertTrue(out["result"]["packetVerified"])
+        self.assertTrue(out["result"]["persistedAdminApprovalReadBack"])
+        self.assertFalse(out["writerEnabled"])
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["authorizationGranted"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+        # A second readback is still read-only and confers no new authority.
+        second,out2=self._post(self.packet,"/verify-approved-packet")
+        self.assertEqual(second,200,out2)
+        self.assertFalse(out2["dispatchPermitted"])
+
+    def test_approved_route_rejects_wrong_stored_approval_digest(self):
+        self._start_approval_reader(stored_digest="f"*64)
+        self._start()
+        status,out=self._post(self.packet,"/verify-approved-packet")
+        self.assertEqual(status,403,out)
+        self.assertFalse(out["ok"])
+        self.assertFalse(out["dispatchPermitted"])
+
+    def test_approved_route_rejects_revoked_admin_mapping(self):
+        self._start_approval_reader(mapping_enabled=0)
+        self._start()
+        status,out=self._post(self.packet,"/verify-approved-packet")
+        self.assertEqual(status,403,out)
+        self.assertFalse(out["ok"])
+        self.assertFalse(out["dispatchPermitted"])
+
     def test_unknown_route_rejected(self):
         self._start()
         c=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);c.settimeout(3)
@@ -194,3 +318,4 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
             self.assertNotIn(forbidden,body)
 
 if __name__=="__main__":unittest.main()
+
