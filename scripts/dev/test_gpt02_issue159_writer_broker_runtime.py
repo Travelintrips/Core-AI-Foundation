@@ -184,6 +184,7 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
             "--public-roots",str(self.public),"--fingerprint-manifest",str(self.manifest),
             "--socket-group",socket_group,
             "--approval-reader-socket",str(self.approval_socket_path),
+            "--lineage-reader-socket",str(self.root/"absent-lineage"/"reader.sock"),
         ],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         deadline=time.time()+5
         while time.time()<deadline and not self.socket_path.exists():
