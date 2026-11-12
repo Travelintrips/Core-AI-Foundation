@@ -44,6 +44,16 @@ class AdminLoginOtpOnlyTest(unittest.TestCase):
         self.assertIn("PENDING_REQUEST_INVALID:", source)
         self.assertIn("Permintaan approval tidak valid.", source)
 
+    def test_expired_request_guides_new_hub_task_without_bypass(self):
+        source = PAGE.read_text()
+        self.assertIn("d.reason==='NO_PENDING_REQUEST'", source)
+        self.assertIn("d.reason==='PENDING_REQUEST_EXPIRED'", source)
+        self.assertIn("https://dev-ai-task.cstlogistic.co.id/", source)
+        self.assertIn("noopener noreferrer", source)
+        self.assertIn("Jangan gunakan ulang task lama atau task proyek lain", source)
+        self.assertNotIn("autoApprove", source)
+        self.assertNotIn("autoDispatch", source)
+
     def test_inline_javascript_parses(self):
         source = PAGE.read_text()
         match = re.search(r"<script>([\s\S]*?)</script>", source)
