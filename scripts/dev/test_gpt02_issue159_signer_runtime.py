@@ -172,69 +172,76 @@ class RuntimeBoundaryTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source, forbidden)
         self.assertIn("socket.AF_UNIX", source)
+        self.assertNotIn('"/run/gpt02-reader/reader.sock", "/trusted-facts"', source)
         self.assertIn("client.settimeout(35)", source)
-        self.assertIn('"/run/gpt02-reader/reader.sock": "/run/private/gpt02-reader"', source)
-        self.assertIn('"/run/gpt02-issuer-reader/reader.sock": "/run/private/gpt02-issuer-reader"', source)
-        self.assertIn("parent_entry.st_uid != 0 or parent_entry.st_gid != 0", source)
-        self.assertIn("os.path.realpath(parent_path) != exact.get(socket_path)", source)
+        self.assertIn('"/run/gpt02-hub-reader-bound/reader.sock"', source)
+        self.assertIn('"/run/gpt02-issuer-reader/reader.sock"', source)
+        self.assertIn('os.path.realpath(parent_path) != "/run/private/gpt02-issuer-reader"', source)
+        self.assertNotIn('"/run/gpt02-reader/reader.sock", "/trusted-facts"', source)
+        self.assertIn('parent_entry.st_uid != 0 or parent_entry.st_gid != 0', source)
 
-    def test_reader_socket_alias_validates_exact_root_owned_runtime_mapping(self):
-        spec = importlib.util.spec_from_file_location("signer_alias_guard", RUNTIME)
+    def test_reader_socket_uses_bound_hub_directory_and_exact_issuer_alias(self):
+        spec = importlib.util.spec_from_file_location("signer_bound_hub_guard", RUNTIME)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         gid = 4444
         dir_mode = stat.S_IFDIR | 0o750
         link_mode = stat.S_IFLNK | 0o777
         sock_mode = stat.S_IFSOCK | 0o660
-        owner_ok = SimpleNamespace(st_uid=0, st_gid=0, st_mode=link_mode)
         dir_ok = SimpleNamespace(st_uid=70001, st_gid=gid, st_mode=dir_mode)
         sock_ok = SimpleNamespace(st_uid=70001, st_gid=gid, st_mode=sock_mode)
         body = b'{"code":"UNTRUSTED_TASK_IDENTITY","signingPermitted":false,"dispatchPermitted":false}'
-        answer = (b"HTTP/1.1 400 Bad Request\r\n"
-                  + b"content-type: application/json\r\n"
+        crlf=bytes((13,10))
+        answer = (b"HTTP/1.1 400 Bad Request"+crlf
+                  + b"content-type: application/json"+crlf
                   + b"content-length: " + str(len(body)).encode()
-                  + b"\r\n\r\n" + body)
-        answer = answer.replace(b"\\\\r\\\\n", b"\r\n")
-        pairs = [
-            ("/run/gpt02-reader/reader.sock", "/run/private/gpt02-reader"),
-            ("/run/gpt02-issuer-reader/reader.sock", "/run/private/gpt02-issuer-reader"),
+                  + crlf+crlf+body)
+        aliases = [
+            ("/run/gpt02-hub-reader-bound/reader.sock", False),
+            ("/run/gpt02-issuer-reader/reader.sock", True),
         ]
-        for path, target in pairs:
-            for invalid in (False, True):
-                parent = SimpleNamespace(
-                    st_uid=12 if invalid else 0, st_gid=0, st_mode=link_mode)
-                with self.subTest(path=path, invalid_owner=invalid):
+        for path, alias in aliases:
+            for invalid_owner in (False, True):
+                if alias:
+                    parent = SimpleNamespace(
+                        st_uid=12 if invalid_owner else 0,
+                        st_gid=0, st_mode=link_mode)
+                else:
+                    parent = SimpleNamespace(
+                        st_uid=0 if invalid_owner else 70001,
+                        st_gid=gid, st_mode=dir_mode)
+                with self.subTest(path=path, invalid_owner=invalid_owner):
                     fake_socket = MagicMock()
                     fake_socket.recv.side_effect = [answer, b""]
                     def entry(q):
-                        if q == path:
-                            return sock_ok
-                        if q == os.path.dirname(path):
-                            return parent
+                        if q == path: return sock_ok
+                        if q == os.path.dirname(path): return parent
                         raise AssertionError("unexpected stat path")
                     with patch.object(module.grp, "getgrnam",
                                       return_value=SimpleNamespace(gr_gid=gid)), \
                          patch.object(module.os, "lstat", side_effect=entry), \
                          patch.object(module.os, "stat", return_value=dir_ok), \
-                         patch.object(module.os.path, "realpath", return_value=target), \
+                         patch.object(module.os.path, "realpath",
+                                      return_value="/run/private/gpt02-issuer-reader"), \
                          patch.object(module.socket, "socket", return_value=fake_socket) as called:
                         result = module._unix_json_request(path, "/trusted-facts", {})
-                    if invalid:
+                    if invalid_owner:
                         self.assertIsNone(result)
                         called.assert_not_called()
                     else:
-                        self.assertEqual(result[0], 400)
-                        self.assertEqual(result[1]["code"], "UNTRUSTED_TASK_IDENTITY")
+                        self.assertEqual(result[0],400)
+                        self.assertEqual(result[1]["code"],"UNTRUSTED_TASK_IDENTITY")
                         fake_socket.sendall.assert_called_once()
-        # Never follow an unexpected root-owned link even if its target exists.
+
+        # Exact original Hub/Core symlink must NOT be usable by the signer,
+        # even if root owns it. It traverses /run/private mode 0700.
+        old_path="/run/gpt02-reader/reader.sock"
+        with patch.object(module.socket, "socket") as called:
+            self.assertIsNone(module._unix_json_request(old_path,"/trusted-facts",{}))
+            called.assert_not_called()
         unknown="/run/untrusted-reader/reader.sock"
-        with patch.object(module.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=gid)), \
-             patch.object(module.os, "lstat", side_effect=lambda q:
-               sock_ok if q==unknown else owner_ok), \
-             patch.object(module.os.path, "realpath",
-                          return_value="/run/private/untrusted-reader"), \
-             patch.object(module.socket, "socket") as called:
-            self.assertIsNone(module._unix_json_request(unknown, "/trusted-facts", {}))
+        with patch.object(module.socket, "socket") as called:
+            self.assertIsNone(module._unix_json_request(unknown,"/trusted-facts",{}))
             called.assert_not_called()
 
     def test_issuer_runtime_accepts_only_safe_systemd_dynamicuser_mapping(self):
@@ -256,8 +263,10 @@ class RuntimeBoundaryTest(unittest.TestCase):
             "ProtectHome=yes",
             "CapabilityBoundingSet=",
             "RestrictAddressFamilies=AF_UNIX",
+            "BindReadOnlyPaths=/run/private/gpt02-reader:/run/gpt02-hub-reader-bound",
+            "BindReadOnlyPaths=/run/gpt02-issuer-reader",
             "SupplementaryGroups=gpt02-issue159-signers",
-            "BindReadOnlyPaths=/run/gpt02-reader",
+            "BindReadOnlyPaths=/run/private/gpt02-reader:/run/gpt02-hub-reader-bound",
             "BindReadOnlyPaths=/run/gpt02-issuer-reader",
             "ConditionPathExists=/run/gpt02-reader/reader.sock",
             "ConditionPathExists=/run/gpt02-issuer-reader/reader.sock",

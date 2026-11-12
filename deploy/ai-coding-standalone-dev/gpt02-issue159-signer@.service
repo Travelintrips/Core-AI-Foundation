@@ -27,7 +27,9 @@ ExecStart=/usr/bin/python3 /opt/ai-coding-standalone-dev/gpt02_issue159_signer_r
 RuntimeDirectory=gpt02-issue159-signer-%i
 RuntimeDirectoryMode=0700
 SupplementaryGroups=gpt02-issue159-signers
-BindReadOnlyPaths=/run/gpt02-reader
+# Directly bind the group-private Hub/Core directory inside the signer
+# mount namespace. Never traverse /run/private (0700 root) as DynamicUser.
+BindReadOnlyPaths=/run/private/gpt02-reader:/run/gpt02-hub-reader-bound
 BindReadOnlyPaths=/run/gpt02-issuer-reader
 UMask=0077
 NoNewPrivileges=yes

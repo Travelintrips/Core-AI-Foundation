@@ -77,19 +77,24 @@ def _load(role: str, credentials_dir: str):
 
 def _unix_json_request(socket_path: str, route: str, payload: dict[str, object]):
     try:
+        # Do not follow Hub/Core's root-private DynamicUser symlink.
+        # systemd binds only the reviewed Hub/Core reader directory at this
+        # group-traversable path INSIDE the custody mount namespace.
+        if socket_path not in (
+                "/run/gpt02-hub-reader-bound/reader.sock",
+                "/run/gpt02-issuer-reader/reader.sock"):
+            return None
         signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
         endpoint = os.lstat(socket_path)
         parent_path = os.path.dirname(socket_path)
         parent_entry = os.lstat(parent_path)
         if stat.S_ISLNK(parent_entry.st_mode):
-            # systemd DynamicUser exposes exact, root-owned runtime aliases.
-            # Accept only these two reader sockets, never caller paths.
-            exact = {
-                "/run/gpt02-reader/reader.sock": "/run/private/gpt02-reader",
-                "/run/gpt02-issuer-reader/reader.sock": "/run/private/gpt02-issuer-reader",
-            }
-            if (parent_entry.st_uid != 0 or parent_entry.st_gid != 0
-                    or os.path.realpath(parent_path) != exact.get(socket_path)):
+            # The issuer alias is allowed only if root owns the exact
+            # expected systemd RuntimeDirectory symlink. The Hub/Core
+            # reader MUST be a directly bound 0750 directory, not a symlink.
+            if (socket_path != "/run/gpt02-issuer-reader/reader.sock"
+                    or parent_entry.st_uid != 0 or parent_entry.st_gid != 0
+                    or os.path.realpath(parent_path) != "/run/private/gpt02-issuer-reader"):
                 return None
             parent = os.stat(parent_path)
         else:
@@ -166,7 +171,7 @@ def _issuer_probe_payload() -> dict[str, object]:
 
 def _probe_trusted_readers() -> dict[str, bool]:
     hub_result = _unix_json_request(
-        "/run/gpt02-reader/reader.sock", "/trusted-facts", {},
+        "/run/gpt02-hub-reader-bound/reader.sock", "/trusted-facts", {},
     )
     hub_core = bool(
         hub_result and hub_result[0] == 400
