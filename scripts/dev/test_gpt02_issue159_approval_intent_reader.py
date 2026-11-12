@@ -21,9 +21,13 @@ CREATE TABLE admin_identities (
  role TEXT NOT NULL,
  enabled INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE gpt02_issue159_admin_operator_links(
+ auth_user_id TEXT PRIMARY KEY,
+ hub_operator_id TEXT NOT NULL UNIQUE,
+ email TEXT NOT NULL,
+ enabled INTEGER NOT NULL DEFAULT 1
+);
 """
-
-AUTH_USER_ID = "auth_fixture_super_admin"
 
 LOOKUP = {
     "claimsSha256": "a" * 64,
@@ -52,12 +56,11 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         con = sqlite3.connect(path)
         con.execute(
             "INSERT INTO admin_identities(user_id,role,enabled) VALUES (?,?,?)",
-            (AUTH_USER_ID,"super_admin",1),
+            ("auth-fixture-user","super_admin",1),
         )
         con.execute(
-            """INSERT INTO gpt02_issue159_admin_operator_links
-            (auth_user_id,hub_operator_id,email,enabled) VALUES (?,?,?,1)""",
-            (AUTH_USER_ID,actor,"fixture@example.com"),
+            "INSERT INTO gpt02_issue159_admin_operator_links(auth_user_id,hub_operator_id,email,enabled) VALUES(?,?,?,?)",
+            ("auth-fixture-user",actor,"fixture@example.invalid",1),
         )
         con.execute(
             """INSERT INTO gpt02_issue159_approval_intents
@@ -126,7 +129,7 @@ class ApprovalIntentReaderTest(unittest.TestCase):
             con = sqlite3.connect(path)
             con.execute(
                 "UPDATE admin_identities SET role=?,enabled=? WHERE user_id=?",
-                (role, enabled, AUTH_USER_ID),
+                (role, enabled, "auth-fixture-user"),
             )
             con.commit()
             con.close()
@@ -138,15 +141,27 @@ class ApprovalIntentReaderTest(unittest.TestCase):
             )
             self.assertFalse(out["persistedTrustedReadProven"])
 
-    def test_disabled_operator_mapping_fails_closed(self):
+    def test_disabled_operator_link_blocks_trusted_read(self):
         path = self.db()
         self.seed(path)
-        con=sqlite3.connect(path)
+        con = sqlite3.connect(path)
         con.execute("UPDATE gpt02_issue159_admin_operator_links SET enabled=0")
-        con.commit(); con.close()
-        out=reader.read_approval_intent(path,LOOKUP,1500,operational=False)
-        self.assertEqual(out["reason"],"APPROVAL_INTENT_PROVENANCE_MISMATCH")
+        con.commit()
+        con.close()
+        out = reader.read_approval_intent(path, LOOKUP, 1500, operational=False)
         self.assertFalse(out["persistedTrustedReadProven"])
+        self.assertEqual(out["reason"], "APPROVAL_INTENT_PROVENANCE_MISMATCH")
+
+    def test_unlinked_hub_operator_blocks_trusted_read(self):
+        path = self.db()
+        self.seed(path)
+        con = sqlite3.connect(path)
+        con.execute("DELETE FROM gpt02_issue159_admin_operator_links")
+        con.commit()
+        con.close()
+        out = reader.read_approval_intent(path, LOOKUP, 1500, operational=False)
+        self.assertFalse(out["persistedTrustedReadProven"])
+        self.assertEqual(out["reason"], "APPROVAL_INTENT_NOT_UNIQUE_OR_MISSING")
 
     def test_expired_or_future_observation_fails_closed(self):
         path = self.db()
@@ -172,3 +187,4 @@ class ApprovalIntentReaderTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

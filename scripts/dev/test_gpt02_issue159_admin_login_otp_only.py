@@ -12,7 +12,11 @@ class AdminLoginOtpOnlyTest(unittest.TestCase):
     def test_login_uses_email_otp_without_password_or_totp_challenge(self):
         source = PAGE.read_text()
         self.assertIn("Kirim OTP ke email", source)
-        self.assertIn("auth('/otp'", source)
+        self.assertIn("auth('/otp?redirect_to='", source)
+        self.assertIn("encodeURIComponent(GPT02_EMAIL_REDIRECT)", source)
+        self.assertIn("const GPT02_EMAIL_REDIRECT='https://dev.cstlogistic.co.id/gpt02-approval.html';", source)
+        self.assertNotIn("await auth('/otp',{email,create_user:false})", source)
+        self.assertNotIn("bizportal", source.lower())
         self.assertIn("auth('/verify'", source)
         self.assertIn("type:'email'", source)
         self.assertNotIn("grant_type=password", source)
@@ -43,6 +47,16 @@ class AdminLoginOtpOnlyTest(unittest.TestCase):
         source = PAGE.read_text()
         self.assertIn("PENDING_REQUEST_INVALID:", source)
         self.assertIn("Permintaan approval tidak valid.", source)
+
+    def test_expired_request_guides_new_hub_task_without_bypass(self):
+        source = PAGE.read_text()
+        self.assertIn("d.reason==='NO_PENDING_REQUEST'", source)
+        self.assertIn("d.reason==='PENDING_REQUEST_EXPIRED'", source)
+        self.assertIn("https://dev-ai-task.cstlogistic.co.id/", source)
+        self.assertIn("noopener noreferrer", source)
+        self.assertIn("Jangan gunakan ulang task lama atau task proyek lain", source)
+        self.assertNotIn("autoApprove", source)
+        self.assertNotIn("autoDispatch", source)
 
     def test_inline_javascript_parses(self):
         source = PAGE.read_text()

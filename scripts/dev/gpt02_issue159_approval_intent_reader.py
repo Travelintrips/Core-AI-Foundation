@@ -11,6 +11,7 @@ import os
 import re
 import sqlite3
 import stat
+import time
 import sys
 
 LIVE_DB = "/opt/ai-coding-standalone-dev/tasks.db"
@@ -61,8 +62,14 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
                          operational: bool = True):
     if operational and db_path != LIVE_DB:
         return denied("OPERATIONAL_DB_PATH_NOT_PINNED")
-    if not _lookup_valid(lookup) or not isinstance(observed_at_ms, int) or observed_at_ms <= 0:
+    if not _lookup_valid(lookup) or type(observed_at_ms) is not int or observed_at_ms <= 0:
         return denied("APPROVAL_INTENT_LOOKUP_INVALID")
+    if operational:
+        # The trusted approval record may never be made fresh by caller time.
+        server_now_ms = int(time.time() * 1000)
+        if abs(observed_at_ms - server_now_ms) > 5000:
+            return denied("APPROVAL_INTENT_OBSERVATION_TIME_UNTRUSTED")
+        observed_at_ms = server_now_ms
     try:
         if not _secure_file(db_path, operational):
             return denied("APPROVAL_DB_FILE_SECURITY_NOT_VERIFIED")
@@ -184,3 +191,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

@@ -41,10 +41,15 @@ on:
       - 'scripts/dev/test_gpt02_issue159_approval_store_readiness.py'
       - 'scripts/dev/gpt02_issue159_approval_intent_reader.py'
       - 'scripts/dev/test_gpt02_issue159_approval_intent_reader.py'
+      - 'scripts/vps/deploy_dev_release.py'
+      - 'deploy/vps-dev/cst-vps-dev-release.py'
+      - 'scripts/dev/test_gpt02_issue159_dev_approval_page_release.py'
       - 'scripts/dev/test_gpt02_issue159_approval_intent_writer.py'
       - 'scripts/dev/test_gpt02_issue159_approval_intent_contract.py'
       - 'scripts/dev/test_gpt02_issue159_approval_http.py'
       - 'scripts/dev/test_gpt02_issue159_approval_api_route.py'
+      - 'deploy/ai-coding-standalone-dev/admin_login.html'
+      - 'scripts/dev/test_gpt02_issue159_magic_link_callback.mjs'
       - 'scripts/dev/prepare_gpt02_issue159_approval_request.py'
       - 'scripts/dev/test_gpt02_issue159_approval_request_prepare.py'
       - 'artifacts/api-server/src/services/gpt02Issue159PrivateKeyCustodyContract.ts'
@@ -54,11 +59,62 @@ on:
       - 'scripts/dev/gpt02_issue159_signer_operational_readiness.py'
       - 'scripts/dev/test_gpt02_issue159_signer_operational_readiness.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.sysusers'
+      - 'scripts/dev/test_gpt02_issue159_verifier_service.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service'
+      - 'scripts/dev/test_gpt02_issue159_approval_reader_runtime.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_reader_service.py'
+      - 'scripts/dev/gpt02_issue159_lifecycle_catalog_preflight.sql'
+      - 'scripts/dev/test_gpt02_issue159_lifecycle_catalog_preflight.py'
+      - 'scripts/dev/test_gpt02_issue159_writer_broker_contract.py'
+      - 'scripts/dev/test_gpt02_issue159_staged_admission.py'
+      - 'scripts/dev/test_gpt02_issue159_lineage_readback_contract.py'
+      - 'scripts/dev/test_gpt02_issue159_lineage_db_reader.py'
+      - 'scripts/dev/test_gpt02_issue159_lineage_reader_runtime.py'
+      - 'scripts/dev/test_gpt02_issue159_lineage_socket_bridge.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_attestor_preflight.py'
+      - 'scripts/dev/test_gpt02_issue159_attestor_preflight.py'
+      - 'scripts/dev/gpt02_issue159_provision_lineage_reader_interactive.py'
+      - 'scripts/dev/test_gpt02_issue159_provision_lineage_reader_interactive.py'
+      - 'scripts/dev/gpt02_issue159_prepare_lineage_sql_editor.py'
+      - 'scripts/dev/test_gpt02_issue159_prepare_lineage_sql_editor.py'
+      - 'scripts/dev/gpt02_issue159_stage_core_prep_sql_editor.py'
+      - 'scripts/dev/test_gpt02_issue159_stage_core_prep_sql_editor.py'
+      - 'scripts/dev/test_gpt02_issue159_lineage_service_policy.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-lineage-reader.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-lineage-reader.sysusers'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_reader_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_db_reader.py'
+      - 'scripts/dev/gpt02_issue159_lineage_reader_nologin_grants.sql'
+      - 'scripts/dev/test_gpt02_issue159_lineage_reader_grants_isolated.sh'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_readback_contract.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_staged_admission.py'
+      - 'scripts/dev/test_gpt02_issue159_cross_language_vectors.py'
+      - 'scripts/dev/gpt02_issue159_ts_signing_vectors.ts'
+      - 'scripts/dev/test_gpt02_issue159_writer_broker_runtime.py'
+      - 'scripts/dev/gpt02_issue159_split_owner_fixture.sql'
+      - 'scripts/dev/test_gpt02_issue159_split_owner_isolated.sh'
+      - 'scripts/dev/gpt02_issue159_six_rpc_fixture_addon.sql'
+      - 'scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.sysusers'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.tmpfiles'
       - 'scripts/dev/test_gpt02_issue159_signer_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_sign_once.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_signer_approval_guard.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_hub_core_signer_guard.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-operator@.service'
+      - 'scripts/dev/test_gpt02_issue159_hub_core_signer_guard.py'
+      - 'scripts/dev/gpt02_issue159_assemble_hub_core_link.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-approval.service'
+      - 'scripts/dev/test_gpt02_issue159_sign_once.py'
+      - 'scripts/dev/test_gpt02_issue159_signer_approval_guard.py'
+      - 'scripts/dev/test_gpt02_issue159_sign_once_service_policy.py'
       - 'scripts/dev/fixtures/supabase-root-ca-2021.crt'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
@@ -117,16 +173,55 @@ jobs:
       - name: Verify approval store readiness contract
         run: |
           python3 scripts/dev/test_gpt02_issue159_approval_store_readiness.py
+          python3 scripts/dev/test_gpt02_issue159_lifecycle_catalog_preflight.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_reader.py
+          python3 scripts/dev/test_gpt02_issue159_dev_approval_page_release.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_writer.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_contract.py
           python3 scripts/dev/test_gpt02_issue159_private_key_custody_readiness.py
           python3 scripts/dev/test_gpt02_issue159_signer_operational_readiness.py
           python3 scripts/dev/test_gpt02_issue159_signer_runtime.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_signer_approval_guard.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_hub_core_signer_guard.py' -v
+          # The live Hub/Core reader unit is owned by AI-Task-Hub, not this repo.
+          # Stub only its dependency name in CI; never install/start this stub.
+          printf '%s\n' '[Unit]' 'Description=CI-only Hub Core reader dependency stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "$RUNNER_TEMP/gpt02-issue159-reader.service"
+          systemd-analyze verify "$RUNNER_TEMP/gpt02-issue159-reader.service" deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service 'deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-operator@.service'
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once_service_policy.py
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-approval.service
           python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py
-          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_reader_runtime.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_reader_service.py
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-signer@.service
           python3 scripts/dev/test_gpt02_issue159_approval_http.py
           python3 scripts/dev/test_gpt02_issue159_approval_api_route.py
+          node scripts/dev/test_gpt02_issue159_magic_link_callback.mjs
+          PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_contract.py' -v
+          GPT02_TEST_TSX_BINARY=artifacts/api-server/node_modules/.bin/tsx PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_cross_language_vectors.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_staged_admission.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_readback_contract.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_db_reader.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_reader_runtime.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_socket_bridge.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_attestor_preflight.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_provision_lineage_reader_interactive.py' -v
+          PYTHONPATH=scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_prepare_lineage_sql_editor.py' -v
+          PYTHONPATH=scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_stage_core_prep_sql_editor.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_service_policy.py' -v
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-lineage-reader.service
+          PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_runtime.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_verifier_service.py
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service
+          python3 -m py_compile deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py deploy/ai-coding-standalone-dev/gpt02_issue159_staged_admission.py deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_readback_contract.py deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_db_reader.py deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_reader_runtime.py deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py
+      - name: Verify split-owner writer boundary in isolated PostgreSQL 16
+        run: |
+          bash -n scripts/dev/test_gpt02_issue159_split_owner_isolated.sh
+          bash scripts/dev/test_gpt02_issue159_split_owner_isolated.sh
+          bash -n scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh
+          bash scripts/dev/test_gpt02_issue159_six_rpc_isolated.sh
+          bash -n scripts/dev/test_gpt02_issue159_lineage_reader_grants_isolated.sh
+          bash scripts/dev/test_gpt02_issue159_lineage_reader_grants_isolated.sh
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-

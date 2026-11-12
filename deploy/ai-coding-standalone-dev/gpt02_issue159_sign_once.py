@@ -12,6 +12,8 @@ import argparse, base64, hashlib, json, os, re, stat, sys, time
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from gpt02_issue159_signer_approval_guard import persisted_approval_fresh, canonical_sha
+from gpt02_issue159_hub_core_signer_guard import require_hub_core_facts
 
 ROLES=("approval","hub","core","issuer")
 UUID=re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
@@ -120,54 +122,126 @@ def secure_file(path:str, label:str):
     st=os.lstat(path)
     if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
         fail(label+"_FILE_INVALID")
-    if st.st_uid!=0 or stat.S_IMODE(st.st_mode)&0o077:
+    if st.st_uid not in (0, os.getuid()) or stat.S_IMODE(st.st_mode)&0o077:
         fail(label+"_FILE_SECURITY_INVALID")
     return st
 
-def main():
-    ap=argparse.ArgumentParser()
-    ap.add_argument("--role",required=True,choices=ROLES)
-    ap.add_argument("--claims",required=True)
-    ap.add_argument("--output",required=True)
-    args=ap.parse_args()
-    if os.environ.get("APP_ENV")!="development":
-        fail("EXPLICIT_DEV_MODE_REQUIRED")
-    creds=os.environ.get("CREDENTIALS_DIRECTORY","")
-    if not creds: fail("SYSTEMD_CREDENTIALS_REQUIRED")
-    secure_file(args.claims,"CLAIMS")
-    claims=json.loads(Path(args.claims).read_text(encoding="utf-8"))
-    now_ms=int(time.time()*1000)
-    signing_bytes,canonical_bytes=validate(args.role,claims,now_ms)
+def sign_detached_for_test_or_gated_cli(
+    role: str, claims: dict, credentials_dir: str, output: str,
+    *, now_ms: int | None = None,
+) -> dict:
+    """Pure signer backend. CLI must pass persisted-approval gate first.
 
-    key_path=str(Path(creds)/"private-key.pkcs8")
-    manifest_path=str(Path(creds)/"manifest.json")
-    key_bytes=Path(key_path).read_bytes()
+    Unit tests supply ephemeral Ed25519 credentials and call this directly;
+    there is intentionally no CLI flag to skip the live persisted gate.
+    """
+    if now_ms is None:
+        now_ms = int(time.time() * 1000)
+    signing_bytes, canonical_bytes = validate(role, claims, now_ms)
+    creds = Path(credentials_dir)
+    manifest_path = creds / "manifest.json"
+    key_path = creds / "private-key.pkcs8"
+    # In systemd, LoadCredential owns the copy as the private service UID;
+    # the source on disk remains root-private.
+    secure_file(str(key_path), "PRIVATE_KEY")
+    secure_file(str(manifest_path), "MANIFEST")
+    key_bytes = key_path.read_bytes()
     try:
-        key=serialization.load_der_private_key(key_bytes,password=None)
+        key = serialization.load_der_private_key(key_bytes, password=None)
     finally:
-        key_bytes=b""
-    if not isinstance(key,Ed25519PrivateKey): fail("ED25519_PRIVATE_KEY_REQUIRED")
-    manifest=json.loads(Path(manifest_path).read_text(encoding="utf-8"))
-    if not isinstance(manifest,dict) or set(manifest)!=set(ROLES):
+        key_bytes = b""
+    if not isinstance(key, Ed25519PrivateKey):
+        fail("ED25519_PRIVATE_KEY_REQUIRED")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict) or set(manifest) != set(ROLES):
         fail("FINGERPRINT_MANIFEST_INVALID")
-    der=key.public_key().public_bytes(serialization.Encoding.DER,
-                                      serialization.PublicFormat.SubjectPublicKeyInfo)
-    fp=hashlib.sha256(der).hexdigest()
-    if manifest.get(args.role)!=fp: fail("PRIVATE_PUBLIC_FINGERPRINT_MISMATCH")
+    der = key.public_key().public_bytes(
+        serialization.Encoding.DER,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    fingerprint = hashlib.sha256(der).hexdigest()
+    if manifest.get(role) != fingerprint:
+        fail("PRIVATE_PUBLIC_FINGERPRINT_MISMATCH")
 
-    sig=base64.urlsafe_b64encode(key.sign(signing_bytes)).decode().rstrip("=")
-    if len(sig)!=86: fail("SIGNATURE_ENCODING_INVALID")
-    digest=hashlib.sha256(canonical_bytes).hexdigest()
-    out={"environment":"DEV","role":args.role,"algorithm":"Ed25519",
-         "claimsSha256":digest,"signatureBase64url":sig,
-         "fingerprintMatched":True,"authorizationGranted":False,
-         "dispatchPermitted":False,"releaseDecision":"NO_GO"}
-    target=Path(args.output)
-    tmp=target.with_name("."+target.name+".tmp")
-    tmp.write_text(json.dumps(out,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
-    os.chmod(tmp,0o600)
-    os.replace(tmp,target)
+    sig = base64.urlsafe_b64encode(key.sign(signing_bytes)).decode().rstrip("=")
+    if len(sig) != 86:
+        fail("SIGNATURE_ENCODING_INVALID")
+    digest = hashlib.sha256(canonical_bytes).hexdigest()
+    data = {
+        "environment": "DEV", "role": role, "algorithm": "Ed25519",
+        "claimsSha256": digest, "signatureBase64url": sig,
+        "fingerprintMatched": True, "authorizationGranted": False,
+        "dispatchPermitted": False, "releaseDecision": "NO_GO",
+    }
+    target = Path(output)
+    tmp = target.with_name("." + target.name + ".tmp")
+    if target.exists() or target.is_symlink() or tmp.exists() or tmp.is_symlink():
+        fail("SIGNATURE_OUTPUT_ALREADY_EXISTS")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as writer:
+            writer.write(json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n")
+            writer.flush()
+            os.fsync(writer.fileno())
+        os.link(str(tmp), str(target))
+    finally:
+        tmp.unlink(missing_ok=True)
+    return data
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--role", required=True, choices=ROLES)
+    ap.add_argument("--claims", required=True)
+    ap.add_argument("--output", required=True)
+    args = ap.parse_args()
+    if os.environ.get("APP_ENV") != "development":
+        fail("EXPLICIT_DEV_MODE_REQUIRED")
+    if os.environ.get("GPT02_ISSUE159_SIGNING_ENABLED") != "approved-once":
+        fail("EXPLICIT_ONE_SHOT_APPROVAL_SIGNING_REQUIRED")
+    # No bypass flag exists. Hub/Core require two independently authenticated
+    # Hub/Core read-only database logins, plus the SAME persisted approval.
+    # Issuer needs a real nonce receipt and fence and remains explicitly OFF.
+    if args.role == "issuer":
+        fail("ISSUER_SIGNER_PROOF_NOT_IMPLEMENTED")
+    creds = os.environ.get("CREDENTIALS_DIRECTORY", "")
+    output_dir = os.environ.get("RUNTIME_DIRECTORY", "")
+    if not creds or not output_dir:
+        fail("SYSTEMD_CREDENTIAL_AND_RUNTIME_BOUNDARY_REQUIRED")
+    approval_path = str(Path(creds) / "approved-claims.json")
+    expected = str(Path(creds) / ("approved-claims.json" if args.role == "approval"
+                                 else "hub-core-link.json"))
+    destination = str(Path(output_dir) / (args.role + "-signature.json"))
+    if args.claims != expected or args.output != destination:
+        fail("ONE_SHOT_CREDENTIAL_OR_OUTPUT_PATH_NOT_PINNED")
+    secure_file(approval_path, "APPROVED_CLAIMS")
+    payload = json.loads(Path(approval_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or set(payload) != {"claims", "claimsSha256"}:
+        fail("APPROVED_CLAIMS_PAYLOAD_INVALID")
+    approved = payload["claims"]
+    if payload["claimsSha256"] != canonical_sha(approved):
+        fail("APPROVED_CLAIMS_DIGEST_MISMATCH")
+    now_ms = int(time.time() * 1000)
+    validate("approval", approved, now_ms)
+    if args.role == "approval":
+        claims = approved
+        signed_digest = persisted_approval_fresh(approved, now_ms=now_ms)
+        if signed_digest != payload["claimsSha256"]:
+            fail("PERSISTED_APPROVAL_DIGEST_MISMATCH")
+    elif args.role in ("hub", "core"):
+        secure_file(args.claims, "HUB_CORE_LINK")
+        claims = json.loads(Path(args.claims).read_text(encoding="utf-8"))
+        validate(args.role, claims, now_ms)
+        require_hub_core_facts(args.role, claims, approved, now_ms=now_ms)
+    else:
+        fail("SIGNER_ROLE_NOT_SUPPORTED")
+    sign_detached_for_test_or_gated_cli(
+        args.role, claims, creds, args.output,
+        now_ms=int(time.time() * 1000),
+    )
     return 0
+
 
 if __name__=="__main__":
     try: sys.exit(main())

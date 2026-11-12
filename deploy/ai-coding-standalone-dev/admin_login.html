@@ -29,6 +29,7 @@
 const BASE='https://xssrfshdrtdfupgqwfdw.supabase.co/auth/v1',KEY='sb_publishable_gICBqyiTKNQkqlAAB8w0KA_tUYnUUh_';
 let access='',refreshToken='',verified=false,pendingApprovals=[];
 const API_PREFIX='/gpt02-approval-api';
+const GPT02_EMAIL_REDIRECT='https://dev.cstlogistic.co.id/gpt02-approval.html';
 const el=id=>document.getElementById(id),status=s=>{const target=el('loginPanel').classList.contains('hidden')?'workStatus':'loginStatus';el(target).textContent=s};
 async function auth(path,data,token){
  const r=await fetch(BASE+path,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(data),cache:'no-store'});
@@ -49,7 +50,7 @@ async function activateSession(d){
  refreshToken=d.refresh_token||'';if(refreshToken)sessionStorage.setItem('dev_refresh',refreshToken);
  el('loginPanel').classList.add('hidden');el('work').classList.remove('hidden');status('');await load();
 }
-async function sendOtp(){const email=el('email').value.trim();if(!email||!el('email').checkValidity())throw Error('Masukkan email admin yang valid.');await auth('/otp',{email,create_user:false});el('otpStep').classList.remove('hidden');status('Jika email terdaftar, kode OTP telah diminta. Periksa inbox dan spam.');el('otpCode').focus()}
+async function sendOtp(){const email=el('email').value.trim();if(!email||!el('email').checkValidity())throw Error('Masukkan email admin yang valid.');await auth('/otp?redirect_to='+encodeURIComponent(GPT02_EMAIL_REDIRECT),{email,create_user:false});el('otpStep').classList.remove('hidden');status('Jika email terdaftar, kode OTP telah diminta. Periksa inbox dan spam.');el('otpCode').focus()}
 el('sendOtp').onclick=async()=>{try{el('sendOtp').disabled=true;await sendOtp()}catch(e){status(e.message)}finally{el('sendOtp').disabled=false}};
 el('resendOtp').onclick=async()=>{try{el('resendOtp').disabled=true;await sendOtp()}catch(e){status(e.message)}finally{el('resendOtp').disabled=false}};
 el('verifyOtp').onclick=async()=>{try{const email=el('email').value.trim(),code=el('otpCode').value.trim();if(!/^\d{6,8}$/.test(code))throw Error('Masukkan kode OTP dari email.');el('verifyOtp').disabled=true;status('Memverifikasi OTP dan role Super Admin...');const d=await auth('/verify',{email,token:code,type:'email'});await activateSession(d)}catch(e){access='';verified=false;status(e.message)}finally{el('verifyOtp').disabled=false}};
@@ -67,6 +68,11 @@ async function loadIssue159(){
  }else{
   const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
   el('issue159Status').textContent=messages[d.reason]||'Tidak ada permintaan yang dapat disetujui: '+(d.reason||'status tidak diketahui')+'. Signing dan dispatch tetap NO-GO.';
+  if(d.reason==='NO_PENDING_REQUEST'||d.reason==='PENDING_REQUEST_EXPIRED'){
+   const guide=document.createElement('p');guide.textContent='Buat task validasi GPT02 DEV baru melalui Hub, tetapkan PIC aktif sebagai Super Admin dan pastikan penugasannya tercatat. Jangan gunakan ulang task lama atau task proyek lain.';
+   const link=document.createElement('a');link.href='https://dev-ai-task.cstlogistic.co.id/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='Buka AI Task Hub DEV';
+   root.append(guide,link);
+  }
  }
 }
 async function load(){
@@ -80,6 +86,37 @@ async function load(){
   await loadIssue159();
  }catch(e){status(e.message)}
 }
-async function restoreSession(){const token=sessionStorage.getItem('dev_refresh');if(!token)return;try{const d=await auth('/token?grant_type=refresh_token',{refresh_token:token});await activateSession(d)}catch(e){sessionStorage.removeItem('dev_refresh');access='';verified=false;status('Silakan login kembali menggunakan OTP email.')}}
+async function restoreSession(){
+ const fragment=new URLSearchParams(location.hash.startsWith('#')?location.hash.slice(1):'');
+ const emailCallback=fragment.has('access_token')||fragment.has('refresh_token')||fragment.has('error')||fragment.has('error_code');
+ if(emailCallback){
+  const linkAccess=fragment.get('access_token'),linkRefresh=fragment.get('refresh_token')||'';
+  // Immediately remove bearer tokens from the visible URL and browser history.
+  history.replaceState(null,'',location.pathname+location.search);
+  if(!linkAccess){
+   status('Tautan email GPT02 tidak valid atau kedaluwarsa. Minta OTP baru.');
+   return;
+  }
+  try{
+   status('Memverifikasi sesi GPT02 dari tautan email...');
+   await activateSession({access_token:linkAccess,refresh_token:linkRefresh});
+  }catch(e){
+   access='';refreshToken='';verified=false;
+   sessionStorage.removeItem('dev_refresh');
+   el('loginPanel').classList.remove('hidden');el('work').classList.add('hidden');
+   status('Tautan email GPT02 gagal diverifikasi: '+e.message);
+  }
+  return;
+ }
+ const token=sessionStorage.getItem('dev_refresh');
+ if(!token)return;
+ try{
+  const d=await auth('/token?grant_type=refresh_token',{refresh_token:token});
+  await activateSession(d);
+ }catch(e){
+  sessionStorage.removeItem('dev_refresh');access='';refreshToken='';verified=false;
+  status('Silakan login kembali menggunakan OTP email.');
+ }
+}
 restoreSession();
 </script></body></html>
