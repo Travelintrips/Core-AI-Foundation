@@ -12,7 +12,9 @@ import argparse
 import grp
 import json
 import os
+import pwd
 import signal
+import struct
 import socket
 import socketserver
 import stat
@@ -24,9 +26,11 @@ from gpt02_issue159_writer_broker_contract import (
     BrokerAdmissionError, verify_lifecycle_evidence_packet,
 )
 from gpt02_issue159_staged_admission import verify_pre_consumption_packet
+from gpt02_issue159_lineage_readback_contract import validate_trusted_lineage_row
 
 DEFAULT_SOCKET = "/run/gpt02-issue159-writer/verify.sock"
 DEFAULT_APPROVAL_READER_SOCKET = "/run/gpt02-approval-reader/approval.sock"
+DEFAULT_LINEAGE_READER_SOCKET = "/run/gpt02-lineage-reader/reader.sock"
 DEFAULT_PUBLIC_ROOTS = "/etc/gpt02-dev/public"
 DEFAULT_FINGERPRINT_MANIFEST = "/etc/gpt02-dev/trust-fingerprints.json"
 ROOT_FILES = {
@@ -110,6 +114,7 @@ def _read_request(conn: socket.socket) -> tuple[str, bytes]:
         b"POST /verify-packet HTTP/1.1": "verify",
         b"POST /verify-approved-packet HTTP/1.1": "verify-approved",
         b"POST /verify-staged-approval HTTP/1.1": "verify-staged-approval",
+        b"POST /verify-persisted-lineage HTTP/1.1": "verify-persisted-lineage",
     }
     if not lines or lines[0] not in routes:
         raise LookupError("ROUTE_NOT_FOUND")
@@ -259,14 +264,97 @@ def _require_persisted_admin_decision(
         raise BrokerAdmissionError("PERSISTED_ADMIN_APPROVAL_READBACK_MISMATCH")
 
 
+def _require_persisted_lineage(
+    signed_packet: dict[str, Any], pinned_roots: dict[str, str],
+    approval_digest: str, reader_socket: str, server_now_ms: int,
+    *, reader_uid: int | None = None, reader_gid: int | None = None,
+) -> dict[str, Any]:
+    """Authenticate the DEV-only read-only Unix peer and signed lineage binding.
+
+    No caller-provided receipt/fence IDs or reader rows enter the lookup.
+    This is evidence verification, never a writer or dispatch authorization.
+    """
+    if reader_uid is None:
+        reader_uid = pwd.getpwnam("gpt02-lineage-reader").pw_uid
+    if reader_gid is None:
+        reader_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
+    st = os.lstat(reader_socket)
+    parent = os.lstat(str(Path(reader_socket).parent))
+    if (not stat.S_ISSOCK(st.st_mode) or st.st_uid != reader_uid
+            or st.st_gid != reader_gid or stat.S_IMODE(st.st_mode) != 0o660
+            or not stat.S_ISDIR(parent.st_mode) or stat.S_ISLNK(parent.st_mode)
+            or parent.st_uid != reader_uid or parent.st_gid != reader_gid
+            or stat.S_IMODE(parent.st_mode) != 0o750):
+        raise RuntimeError("LINEAGE_SOCKET_CUSTODY_INVALID")
+    approval = signed_packet["approval"]["claims"]
+    lookup = {
+        "company_id": approval["companyId"],
+        "task_id": approval["taskId"],
+        "command_id": approval["commandId"],
+        "attempt_id": approval["attemptId"],
+        "approval_digest": approval_digest,
+    }
+    data = json.dumps({"lookup": lookup}, separators=(",", ":"), allow_nan=False).encode() + b"\n"
+    chunks: list[bytes] = []
+    size = 0
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(2.0)
+        conn.connect(reader_socket)
+        if not hasattr(socket, "SO_PEERCRED"):
+            raise RuntimeError("LINEAGE_PEER_CREDENTIALS_UNAVAILABLE")
+        peer = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+        _pid, uid, _gid = struct.unpack("3i", peer)
+        if uid != reader_uid:
+            raise RuntimeError("LINEAGE_SOCKET_PEER_UID_MISMATCH")
+        conn.sendall(data)
+        while True:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > 16384:
+                raise RuntimeError("LINEAGE_READER_RESPONSE_TOO_LARGE")
+            chunks.append(chunk)
+            if b"\n" in chunk:
+                break
+    reply = b"".join(chunks)
+    if not reply.endswith(b"\n") or reply.count(b"\n") != 1:
+        raise RuntimeError("LINEAGE_READER_RESPONSE_FRAMING_INVALID")
+    response = json.loads(reply.decode("utf-8"))
+    expected_fields = {
+        "environment", "readOnly", "matched", "rows",
+        "databaseWritePerformed", "signingPermitted",
+        "authorizationGranted", "dispatchPermitted", "releaseDecision",
+    }
+    if (not isinstance(response, dict) or set(response) != expected_fields
+            or response["environment"] != "DEV"
+            or response["readOnly"] is not True
+            or response["databaseWritePerformed"] is not False
+            or response["signingPermitted"] is not False
+            or response["authorizationGranted"] is not False
+            or response["dispatchPermitted"] is not False
+            or response["releaseDecision"] != "NO_GO"):
+        raise BrokerAdmissionError("PERSISTED_LINEAGE_READER_RESPONSE_INVALID")
+    rows = response["rows"]
+    if (response["matched"] is not True
+            or not isinstance(rows, list) or len(rows) != 1):
+        raise BrokerAdmissionError("PERSISTED_LINEAGE_NOT_FOUND_OR_AMBIGUOUS")
+    verified = validate_trusted_lineage_row(
+        signed_packet, pinned_roots, server_now_ms, rows)
+    return {**verified, "trustedAdapterAuthenticated": True,
+            "lineageReaderReadOnly": True}
+
+
 class _Handler(socketserver.StreamRequestHandler):
     roots: dict[str, str] = {}
     approval_reader_socket: str = DEFAULT_APPROVAL_READER_SOCKET
+    lineage_reader_socket: str = DEFAULT_LINEAGE_READER_SOCKET
 
     def handle(self):
         try:
             request, body = _read_request(self.request)
-            if request not in ("verify", "verify-approved", "verify-staged-approval"):
+            if request not in ("verify", "verify-approved", "verify-staged-approval",
+                               "verify-persisted-lineage"):
                 self.wfile.write(_response(404, {"ok": False, "reason": "NOT_FOUND"}))
                 return
             packet = json.loads(body.decode("utf-8"))
@@ -297,7 +385,7 @@ class _Handler(socketserver.StreamRequestHandler):
                 result = verify_lifecycle_evidence_packet(
                     packet["packet"], self.roots, server_now_ms
                 )
-            if request == "verify-approved":
+            if request in ("verify-approved", "verify-persisted-lineage"):
                 _require_persisted_admin_decision(
                     packet["packet"]["approval"]["claims"],
                     result["approvalDigest"],
@@ -305,6 +393,11 @@ class _Handler(socketserver.StreamRequestHandler):
                     server_now_ms,
                 )
                 result = {**result, "persistedAdminApprovalReadBack": True}
+            if request == "verify-persisted-lineage":
+                proof = _require_persisted_lineage(
+                    packet["packet"], self.roots, result["approvalDigest"],
+                    self.lineage_reader_socket, server_now_ms)
+                result = {**result, **proof}
             elif request == "verify":
                 result = {**result, "persistedAdminApprovalReadBack": False}
             # Verification only. The NO_GO contract is deliberate and immutable.
@@ -352,7 +445,8 @@ class _UnixServer(socketserver.UnixStreamServer):
 
 def serve(socket_path: str, public_root_dir: str, manifest_path: str,
           group_name: str, once: bool = False,
-          approval_reader_socket: str = DEFAULT_APPROVAL_READER_SOCKET) -> int:
+          approval_reader_socket: str = DEFAULT_APPROVAL_READER_SOCKET,
+          lineage_reader_socket: str = DEFAULT_LINEAGE_READER_SOCKET) -> int:
     roots = _load_public_roots(public_root_dir, manifest_path)
     # Validate all roots are four independent Ed25519 SPKIs before binding.
     from gpt02_issue159_writer_broker_contract import _public_key
@@ -386,6 +480,7 @@ def serve(socket_path: str, public_root_dir: str, manifest_path: str,
         raise RuntimeError("SOCKET_PATH_ALREADY_EXISTS")
     _Handler.roots = roots
     _Handler.approval_reader_socket = approval_reader_socket
+    _Handler.lineage_reader_socket = lineage_reader_socket
     server = _UnixServer(socket_path, _Handler)
     os.chown(socket_path, os.getuid(), gid)
     os.chmod(socket_path, 0o660)
@@ -421,9 +516,10 @@ def main() -> int:
     p.add_argument("--fingerprint-manifest", default=os.environ.get("GPT02_FINGERPRINT_MANIFEST", DEFAULT_FINGERPRINT_MANIFEST))
     p.add_argument("--socket-group", default="gpt02-issue159-signers")
     p.add_argument("--approval-reader-socket", default=DEFAULT_APPROVAL_READER_SOCKET)
+    p.add_argument("--lineage-reader-socket", default=DEFAULT_LINEAGE_READER_SOCKET)
     args = p.parse_args()
     return serve(args.socket, args.public_roots, args.fingerprint_manifest, args.socket_group,
-                 args.once, args.approval_reader_socket)
+                 args.once, args.approval_reader_socket, args.lineage_reader_socket)
 
 
 if __name__ == "__main__":
