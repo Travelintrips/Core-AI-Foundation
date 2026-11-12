@@ -6,6 +6,8 @@ ConditionPathExists=/etc/gpt02-dev/trust-fingerprints.json
 ConditionPathExists=/etc/gpt02-dev/verifier-public/approval-public.pem
 ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_writer_broker_runtime.py
 ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_writer_broker_contract.py
+ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_staged_admission.py
+ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_lineage_readback_contract.py
 
 [Service]
 Type=simple
