@@ -8,7 +8,7 @@ trap cleanup EXIT
 docker run -d --rm --network none --name "$name" \
   -e POSTGRES_PASSWORD=fixture-only postgres:16-alpine >/dev/null
 for i in $(seq 1 40); do
-  if docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+  if docker exec "$name" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
   sleep 0.25
 done
 docker exec -i "$name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null <<'SQL'
