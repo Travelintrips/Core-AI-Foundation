@@ -9,6 +9,7 @@ import socketserver
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
 from gpt02_issue159_writer_broker_runtime import _require_persisted_lineage
@@ -100,6 +101,20 @@ class LineageSocketBridgeTests(unittest.TestCase):
         os.chmod(self.path, 0o666)
         with self.assertRaisesRegex(RuntimeError, "LINEAGE_SOCKET_CUSTODY_INVALID"):
             self.verified()
+
+    def test_missing_reader_os_role_fails_unavailable_not_route_miss(self):
+        fixture = self.synthetic.fixture
+        with patch(
+            "gpt02_issue159_writer_broker_runtime.pwd.getpwnam",
+            side_effect=KeyError("gpt02-lineage-reader"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "LINEAGE_READER_OS_IDENTITY_MISSING",
+            ):
+                _require_persisted_lineage(
+                    fixture.packet, fixture.roots,
+                    fixture.link["approvalDigest"], str(self.path),
+                    fixture.now, reader_gid=os.getgid())
 
     def test_peer_uid_is_pinned(self):
         fixture = self.synthetic.fixture
