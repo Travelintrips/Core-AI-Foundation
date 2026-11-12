@@ -82,10 +82,14 @@ def _unix_json_request(socket_path: str, route: str, payload: dict[str, object])
         parent_path = os.path.dirname(socket_path)
         parent_entry = os.lstat(parent_path)
         if stat.S_ISLNK(parent_entry.st_mode):
-            # DynamicUser=yes uses a root-owned /run symlink for this one
-            # systemd RuntimeDirectory. Accept only the exact issuer mapping.
-            if (socket_path != "/run/gpt02-issuer-reader/reader.sock"
-                    or os.path.realpath(parent_path) != "/run/private/gpt02-issuer-reader"):
+            # systemd DynamicUser exposes exact, root-owned runtime aliases.
+            # Accept only these two reader sockets, never caller paths.
+            exact = {
+                "/run/gpt02-reader/reader.sock": "/run/private/gpt02-reader",
+                "/run/gpt02-issuer-reader/reader.sock": "/run/private/gpt02-issuer-reader",
+            }
+            if (parent_entry.st_uid != 0 or parent_entry.st_gid != 0
+                    or os.path.realpath(parent_path) != exact.get(socket_path)):
                 return None
             parent = os.stat(parent_path)
         else:
