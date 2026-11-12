@@ -146,7 +146,8 @@ class HubCoreSignerTrustTest(unittest.TestCase):
                 with patch.object(gate,"persisted_approval_fresh",
                                   return_value=canonical_sha(self.approved)):
                     bundle=gate.assemble_verified_operator_link(
-                        self.approved,self.server.facts,now_ms=self.now)
+                        self.approved,self.server.facts,now_ms=self.now,
+                        reader_socket=str(self.path),reader_uid=os.getuid())
         self.assertEqual(bundle["hubTaskId"],self.approved["taskId"])
         self.assertEqual(bundle["coreTaskId"],self.server.facts["prepared"]["coreTaskId"])
         self.assertEqual(bundle["coreOperatorUserId"],self.server.facts["core"]["operatorUserId"])
