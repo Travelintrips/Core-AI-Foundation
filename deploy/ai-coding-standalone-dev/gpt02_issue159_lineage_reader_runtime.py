@@ -113,13 +113,20 @@ def serve(socket_path: str, allowed_uid: int) -> None:
     parent = Path(socket_path).parent
     st = parent.lstat()
     if (not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode)
-            or stat.S_IMODE(st.st_mode) & 0o007):
+            or st.st_uid != os.getuid() or st.st_gid != os.getgid()
+            or stat.S_IMODE(st.st_mode) != 0o750):
         raise RuntimeError("PRIVATE_SOCKET_DIRECTORY_REQUIRED")
     if os.path.lexists(socket_path):
         raise RuntimeError("SOCKET_ALREADY_EXISTS")
     _Handler.allowed_uid = allowed_uid
     with _UnixServer(socket_path, _Handler) as server:
         os.chmod(socket_path, 0o660)
+        sock_stat = os.lstat(socket_path)
+        if (not stat.S_ISSOCK(sock_stat.st_mode)
+                or sock_stat.st_uid != os.getuid()
+                or sock_stat.st_gid != os.getgid()
+                or stat.S_IMODE(sock_stat.st_mode) != 0o660):
+            raise RuntimeError("PRIVATE_SOCKET_OWNERSHIP_INVALID")
         server.serve_forever(poll_interval=0.25)
 
 
