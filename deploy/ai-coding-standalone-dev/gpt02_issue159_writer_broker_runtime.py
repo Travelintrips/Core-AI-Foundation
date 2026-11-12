@@ -274,10 +274,15 @@ def _require_persisted_lineage(
     No caller-provided receipt/fence IDs or reader rows enter the lookup.
     This is evidence verification, never a writer or dispatch authorization.
     """
-    if reader_uid is None:
-        reader_uid = pwd.getpwnam("gpt02-lineage-reader").pw_uid
-    if reader_gid is None:
-        reader_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
+    try:
+        if reader_uid is None:
+            reader_uid = pwd.getpwnam("gpt02-lineage-reader").pw_uid
+        if reader_gid is None:
+            reader_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
+    except KeyError as exc:
+        # A missing OS identity is an unavailable dependency (503), not a
+        # request route miss (404) and never a reason to bypass peer pinning.
+        raise RuntimeError("LINEAGE_READER_OS_IDENTITY_MISSING") from exc
     st = os.lstat(reader_socket)
     parent = os.lstat(str(Path(reader_socket).parent))
     if (not stat.S_ISSOCK(st.st_mode) or st.st_uid != reader_uid
