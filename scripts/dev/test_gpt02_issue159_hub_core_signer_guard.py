@@ -136,6 +136,35 @@ class HubCoreSignerTrustTest(unittest.TestCase):
                     check.assert_called_once()
                     return r
 
+    def test_assemble_link_reuses_existing_reader_and_persisted_approval(self):
+        class Group:
+            gr_gid=os.getgid()
+        class User:
+            pw_uid=os.getuid()
+        with patch.object(grp,"getgrnam",return_value=Group()):
+            with patch.object(pwd,"getpwnam",return_value=User()):
+                with patch.object(gate,"persisted_approval_fresh",
+                                  return_value=canonical_sha(self.approved)):
+                    bundle=gate.assemble_verified_operator_link(
+                        self.approved,self.server.facts,now_ms=self.now)
+        self.assertEqual(bundle["hubTaskId"],self.approved["taskId"])
+        self.assertEqual(bundle["coreTaskId"],self.server.facts["prepared"]["coreTaskId"])
+        self.assertEqual(bundle["coreOperatorUserId"],self.server.facts["core"]["operatorUserId"])
+        self.assertEqual(bundle["approvalDigest"],canonical_sha(self.approved))
+        self.assertEqual(bundle["nonce"],self.approved["nonce"])
+        self.assertEqual(bundle["accountableOwnerId"],self.approved["superAdminId"])
+        self.assertTrue(self.now+30_000 < bundle["expiresAt"] <= self.now+89_000)
+        self.assertEqual(len(self.server.requests),1)
+        self.assertEqual(set(bundle),set(self.link))
+
+    def test_assemble_link_rejects_expired_approval_before_reader(self):
+        old=dict(self.approved,expiresAt=self.now-1)
+        with patch.object(gate,"persisted_approval_fresh",
+                          side_effect=RuntimeError("APPROVAL_SIGNER_INSUFFICIENT_VALIDITY")):
+            with self.assertRaisesRegex(RuntimeError,"APPROVAL_SIGNER_INSUFFICIENT_VALIDITY"):
+                gate.assemble_verified_operator_link(old,self.server.facts,now_ms=self.now)
+        self.assertEqual(self.server.requests,[])
+
     def test_hub_core_exact_preparation_and_persisted_approval(self):
         for role in ("hub","core"):
             with self.subTest(role=role):
