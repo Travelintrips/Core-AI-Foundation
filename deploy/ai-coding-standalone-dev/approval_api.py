@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from pathlib import Path
 from admin_identity import admin_identity
 from gpt02_issue159_approval_http import handle_issue159_approval_intent
-from gpt02_issue159_approval_intent_contract import validate_approval_claims
+from gpt02_issue159_approval_intent_contract import ApprovalIntentContractError, validate_approval_claims
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
 ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
@@ -43,11 +43,23 @@ def persist_issue159_approved_packet(claims,result):
  os.chmod(tmp,0o600)
  os.replace(tmp,target)
  return packet
-def issue159_identity_verifier(token,connection):
- identity=admin_identity(token,connection)
- if not identity or identity.get('role')!='super_admin' or identity.get('auth_level') not in ('aal1','aal2'):return None
- return {'userId':identity['user_id'],'role':identity['role'],
+def issue159_operator_identity(identity,connection):
+ if (not identity or identity.get('role')!='super_admin'
+     or identity.get('auth_level') not in ('aal1','aal2')
+     or not identity.get('user_id') or not identity.get('email')):return None
+ rows=connection.execute(
+  """SELECT l.hub_operator_id
+     FROM gpt02_issue159_admin_operator_links l
+     JOIN admin_identities a ON a.user_id=l.auth_user_id
+     WHERE l.auth_user_id=? AND lower(l.email)=lower(?)
+       AND l.enabled=1 AND a.enabled=1 AND a.role='super_admin'""",
+  (identity['user_id'],identity['email'])
+ ).fetchall()
+ if len(rows)!=1 or not rows[0][0]:return None
+ return {'userId':rows[0][0],'role':'super_admin',
          'enabled':True,'authMethod':'supabase_admin_session'}
+def issue159_identity_verifier(token,connection):
+ return issue159_operator_identity(admin_identity(token,connection),connection)
 def load_issue159_pending_claims(actor_id):
  try:
   st=os.lstat(ISSUE159_PENDING_CLAIMS)
@@ -86,7 +98,7 @@ def load_issue159_pending_claims(actor_id):
    'claims':claims,'signingPermitted':False,'authorizationGranted':False,
    'dispatchPermitted':False,'releaseDecision':'NO_GO'
   }
- except (OSError,ValueError,TypeError,KeyError,sqlite3.Error):
+ except (ApprovalIntentContractError,OSError,ValueError,TypeError,KeyError,sqlite3.Error):
   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_INVALID','releaseDecision':'NO_GO'}
 def conn():
  c=sqlite3.connect(DB,timeout=10)
@@ -135,10 +147,10 @@ class Handler(BaseHTTPRequestHandler):
    auth=self.headers.get('Authorization','')
    if not auth.startswith('Bearer '):return self.send(401,{'error':'unauthorized'})
    with conn() as c:
-    identity=admin_identity(auth[7:],c)
-   if not identity or identity.get('role')!='super_admin':
-    return self.send(403,{'error':'active_super_admin_required'})
-   return self.send(200,load_issue159_pending_claims(identity['user_id']))
+    identity=issue159_operator_identity(admin_identity(auth[7:],c),c)
+   if not identity:
+    return self.send(403,{'error':'active_super_admin_operator_mapping_required'})
+   return self.send(200,load_issue159_pending_claims(identity['userId']))
   if p=='/api/dashboard':
    with conn() as c:
     jobs=c.execute('SELECT status,COUNT(*) FROM jobs GROUP BY status').fetchall()

@@ -15,6 +15,13 @@ import sys
 
 LIVE_DB = "/opt/ai-coding-standalone-dev/tasks.db"
 TABLE = "gpt02_issue159_approval_intents"
+MAPPING_TABLE = "gpt02_issue159_admin_operator_links"
+MAPPING_COLUMNS = [
+    ("auth_user_id", "TEXT", 0, 1),
+    ("hub_operator_id", "TEXT", 1, 0),
+    ("email", "TEXT", 1, 0),
+    ("enabled", "INTEGER", 1, 0),
+]
 
 EXPECTED_COLUMNS = [
     ("id", "TEXT", 0, 1),
@@ -42,6 +49,10 @@ def result(reason: str, **extra):
         "legacyDecisionTablePresent": False,
         "approvalIntentTablePresent": False,
         "approvalIntentSchemaExact": False,
+        "adminOperatorMappingTablePresent": False,
+        "adminOperatorMappingSchemaExact": False,
+        "activeAdminOperatorMappings": 0,
+        "adminOperatorMappingReady": False,
         "approvalIntentSelfContainedDecision": False,
         "approvalIntentLookupIndexExact": False,
         "approvalIntentRows": 0,
@@ -92,6 +103,42 @@ def inspect(db_path: str, operational: bool = True):
             return result("ISSUE159_APPROVAL_INTENT_TABLE_MISSING",
                           **common, legacyDecisionTablePresent=legacy)
 
+        if MAPPING_TABLE not in tables:
+            return result(
+                "ISSUE159_ADMIN_OPERATOR_MAPPING_TABLE_MISSING",
+                **common,
+                legacyDecisionTablePresent=legacy,
+                approvalIntentTablePresent=True,
+            )
+        mapping_cols = [
+            (r[1], str(r[2]).upper(), int(r[3]), int(r[5]))
+            for r in con.execute(f"PRAGMA table_info({MAPPING_TABLE})")
+        ]
+        if mapping_cols != MAPPING_COLUMNS:
+            return result(
+                "ISSUE159_ADMIN_OPERATOR_MAPPING_SCHEMA_DRIFT",
+                **common,
+                legacyDecisionTablePresent=legacy,
+                approvalIntentTablePresent=True,
+                adminOperatorMappingTablePresent=True,
+            )
+        active_mapping = con.execute(
+            """SELECT COUNT(*)
+               FROM gpt02_issue159_admin_operator_links l
+               JOIN admin_identities a ON a.user_id=l.auth_user_id
+               WHERE l.enabled=1 AND a.enabled=1 AND a.role='super_admin'"""
+        ).fetchone()[0]
+        if active_mapping != 1:
+            return result(
+                "ISSUE159_ADMIN_OPERATOR_MAPPING_NOT_READY",
+                **common,
+                legacyDecisionTablePresent=legacy,
+                approvalIntentTablePresent=True,
+                adminOperatorMappingTablePresent=True,
+                adminOperatorMappingSchemaExact=True,
+                activeAdminOperatorMappings=active_mapping,
+            )
+
         cols = [
             (r[1], str(r[2]).upper(), int(r[3]), int(r[5]))
             for r in con.execute(f"PRAGMA table_info({TABLE})")
@@ -132,11 +179,20 @@ def inspect(db_path: str, operational: bool = True):
 
         total = con.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()[0]
         fallback = con.execute(
-            f"SELECT COUNT(*) FROM {TABLE} "
-            "WHERE actor_id='dev_approval_token' "
-            "OR auth_method NOT IN ('supabase_admin_session','supabase_aal2') "
-            "OR role_at_decision<>'super_admin' "
-            "OR decision<>'APPROVE'"
+            f"""SELECT COUNT(*) FROM {TABLE} i
+                WHERE i.actor_id='dev_approval_token'
+                OR i.auth_method NOT IN ('supabase_admin_session','supabase_aal2')
+                OR i.role_at_decision<>'super_admin'
+                OR i.decision<>'APPROVE'
+                OR (
+                  i.task_id > 139 AND NOT EXISTS (
+                  SELECT 1
+                  FROM gpt02_issue159_admin_operator_links l
+                  JOIN admin_identities a ON a.user_id=l.auth_user_id
+                  WHERE l.hub_operator_id=i.actor_id
+                    AND l.enabled=1 AND a.enabled=1 AND a.role='super_admin'
+                  )
+                )"""
         ).fetchone()[0]
         if fallback:
             return result("ISSUE159_APPROVAL_INTENT_PROVENANCE_INVALID",
@@ -155,6 +211,10 @@ def inspect(db_path: str, operational: bool = True):
             legacyDecisionTablePresent=legacy,
             approvalIntentTablePresent=True,
             approvalIntentSchemaExact=True,
+            adminOperatorMappingTablePresent=True,
+            adminOperatorMappingSchemaExact=True,
+            activeAdminOperatorMappings=1,
+            adminOperatorMappingReady=True,
             approvalIntentSelfContainedDecision=True,
             approvalIntentLookupIndexExact=True,
             approvalIntentRows=total,

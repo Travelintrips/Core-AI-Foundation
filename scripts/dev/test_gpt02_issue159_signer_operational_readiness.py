@@ -60,6 +60,7 @@ def runtime(**patch):
         "hubCoreIssuerTrustedReadAdaptersOperational": False,
         "fourSignerRuntimesMounted": False,
         "fourSignerTrustedReaderConnectivityVerified": False,
+        "issuerReaderBundleVerified": False,
         "authorizerAdaptersInstalled": False,
         "approvalIntentTrustedReadCurrent": False,
     }
@@ -87,24 +88,26 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 "SIGNED_LINK_LEDGER_DIGEST_MISMATCH",
                 "IMMUTABLE_PREPARATION_CONFIGURATION_MISMATCH",
             ],
-            "ISSUER_LEDGER_AUTHORIZER_SOURCE": [
-                "inspectGpt02Issue159IssuerAuthorizerEvidence",
-            ],
-            "ISSUER_AUTHORIZER_SOURCE": [
-                "inspectGpt02Issue159IssuerAuthorizerEvidence",
-                "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH",
-                "GPT02_ISSUE159_FENCE_BINDING_MISMATCH",
-                "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
-            ],
         }
         with tempfile.TemporaryDirectory(prefix="gpt02-authorizer-sources-") as root:
             for name, values in markers.items():
                 path = Path(root) / name
-                path.write_text("\\n".join(values), encoding="utf-8")
+                path.write_text("\n".join(values), encoding="utf-8")
                 setattr(readiness, name, path)
-            self.assertTrue(readiness.authorizer_adapters_installed())
-            Path(root, "ISSUER_AUTHORIZER_SOURCE").write_text("missing adapter", encoding="utf-8")
-            self.assertFalse(readiness.authorizer_adapters_installed())
+            bundle = Path(root) / "issuer-reader-runtime.mjs"
+            bundle.write_text(
+                "inspectGpt02Issue159IssuerAuthorizerEvidence(input) "
+                "inspectGpt02Issue159IssuerAuthorizerEvidence({ "
+                "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH "
+                "GPT02_ISSUE159_FENCE_BINDING_MISMATCH "
+                "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
+                encoding="utf-8",
+            )
+            with patch.object(readiness, "ISSUER_READER_BUNDLE", bundle), \
+                 patch.object(readiness, "issuer_reader_bundle_matches_running_process", return_value=True):
+                self.assertTrue(readiness.authorizer_adapters_installed())
+                bundle.write_text("missing deployed adapter", encoding="utf-8")
+                self.assertFalse(readiness.authorizer_adapters_installed())
 
     def test_current_expected_state_is_precise_no_go(self):
         out = readiness.assess(approval(), custody(), runtime())
@@ -174,9 +177,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 issuerReaderRuntimeOperational=True,
                 fourSignerRuntimesMounted=True,
                 fourSignerTrustedReaderConnectivityVerified=True,
+                issuerReaderBundleVerified=True,
                 authorizerAdaptersInstalled=True,
             ),
         )
+        self.assertTrue(out["issuerReaderBundleVerified"])
         self.assertTrue(out["fourSignerAuthorizersOperational"])
         self.assertNotIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
         self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
@@ -199,9 +204,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 issuerReaderRuntimeOperational=True,
                 fourSignerRuntimesMounted=True,
                 fourSignerTrustedReaderConnectivityVerified=True,
+                issuerReaderBundleVerified=False,
                 authorizerAdaptersInstalled=False,
             ),
         )
+        self.assertFalse(out["issuerReaderBundleVerified"])
         self.assertFalse(out["fourSignerAuthorizersOperational"])
         self.assertIn("FOUR_SIGNER_AUTHORIZERS_NOT_INTEGRATED", out["blockers"])
         self.assertIn("REAL_ADMIN_APPROVAL_INTENT_NOT_AVAILABLE", out["blockers"])
@@ -285,7 +292,7 @@ class SignerOperationalReadinessTest(unittest.TestCase):
     def test_issuer_health_probe_uses_http_crlf_not_literal_backslashes(self):
         source = SCRIPT.read_text()
         start = source.index('def issuer_reader_runtime_operational():')
-        end = source.index('def authorizer_adapters_installed():', start)
+        end = source.index('def authorizer_adapters_installed(', start)
         function = source[start:end]
         slash = chr(92)
         self.assertIn('b"GET /health HTTP/1.1' + slash + 'r' + slash + 'n"', function)
@@ -477,6 +484,122 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             '"operationalSigningReady": True',
         ):
             self.assertNotIn(forbidden, source)
+
+
+
+class IssuerReaderBundleRuntimeBindingTest(unittest.TestCase):
+    def setUp(self):
+        self.original_bundle = readiness.ISSUER_READER_BUNDLE
+        self.temp = tempfile.TemporaryDirectory(prefix="gpt02-issuer-bundle-")
+        self.bundle = Path(self.temp.name) / "gpt02-issuer-reader-runtime.mjs"
+        self.bundle.write_text("// deployed issuer reader bundle", encoding="utf-8")
+        readiness.ISSUER_READER_BUNDLE = self.bundle
+
+    def tearDown(self):
+        readiness.ISSUER_READER_BUNDLE = self.original_bundle
+        self.temp.cleanup()
+
+    def check_binding(self, *, bundle_mtime_ns, command_path=None):
+        real_lstat = os.lstat
+        real_read_bytes = Path.read_bytes
+        real_read_text = Path.read_text
+
+        def fake_lstat(path):
+            if os.fspath(path) == str(self.bundle):
+                return SimpleNamespace(
+                    st_mode=stat.S_IFREG | 0o755,
+                    st_uid=0,
+                    st_gid=0,
+                    st_mtime_ns=bundle_mtime_ns,
+                )
+            return real_lstat(path)
+
+        def fake_read_bytes(path):
+            if str(path) == "/proc/4242/cmdline":
+                target = command_path if command_path is not None else str(self.bundle)
+                return b"/usr/bin/node\0" + os.fsencode(target) + b"\0"
+            return real_read_bytes(path)
+
+        def fake_read_text(path, *args, **kwargs):
+            if str(path) == "/proc/4242/stat":
+                rest = ["S"] + ["0"] * 18 + ["5000"]
+                return "4242 (node runtime) " + " ".join(rest)
+            if str(path) == "/proc/uptime":
+                return "1000.00 0.00"
+            return real_read_text(path, *args, **kwargs)
+
+        def fake_run(args, **kwargs):
+            if args[:3] == ["systemctl", "is-active", "--quiet"]:
+                return SimpleNamespace(returncode=0, stdout="")
+            if args[:4] == ["systemctl", "show", "-p", "MainPID"]:
+                return SimpleNamespace(returncode=0, stdout="4242\n")
+            return SimpleNamespace(returncode=1, stdout="")
+
+        with patch.object(readiness.os, "lstat", side_effect=fake_lstat), \
+             patch.object(readiness.Path, "read_bytes", new=fake_read_bytes), \
+             patch.object(readiness.Path, "read_text", new=fake_read_text), \
+             patch.object(readiness.subprocess, "run", side_effect=fake_run), \
+             patch.object(readiness.os, "sysconf", return_value=100), \
+             patch.object(readiness.time, "time", return_value=2000.0):
+            return readiness.issuer_reader_bundle_matches_running_process()
+
+    def test_accepts_only_bundle_loaded_before_running_process_start(self):
+        self.assertTrue(self.check_binding(bundle_mtime_ns=1_040_000_000_000))
+        self.assertFalse(self.check_binding(bundle_mtime_ns=1_060_000_000_000))
+
+    def test_rejects_process_running_a_different_bundle_path(self):
+        self.assertFalse(
+            self.check_binding(
+                bundle_mtime_ns=1_040_000_000_000,
+                command_path="/opt/old/gpt02-issuer-reader-runtime.mjs",
+            )
+        )
+
+    def test_authorizer_probe_uses_deployed_bundle_and_live_process_attestation(self):
+        with tempfile.TemporaryDirectory(prefix="gpt02-authorizer-sources-") as root:
+            root_path = Path(root)
+            approval_api = root_path / "approval_api.py"
+            approval_reader = root_path / "approval_reader.py"
+            hub_core = root_path / "hub_core.mjs"
+            bundle = root_path / "issuer-reader-runtime.mjs"
+            approval_api.write_text(
+                "issue159_identity_verifier handle_issue159_approval_intent( "
+                "authMethod':'supabase_admin_session'",
+                encoding="utf-8",
+            )
+            approval_reader.write_text(
+                'def read_approval_intent( r["role_at_decision"] != "super_admin" '
+                'r["decision"] != "APPROVE" '
+                'r["auth_method"] not in ("supabase_admin_session", "supabase_aal2")',
+                encoding="utf-8",
+            )
+            hub_core.write_text(
+                "function mapFacts( SUPER_ADMIN_ASSIGNMENT_AUDIT_MISMATCH "
+                "SIGNED_LINK_LEDGER_DIGEST_MISMATCH "
+                "IMMUTABLE_PREPARATION_CONFIGURATION_MISMATCH",
+                encoding="utf-8",
+            )
+            bundle.write_text(
+                "inspectGpt02Issue159IssuerAuthorizerEvidence(input) "
+                "inspectGpt02Issue159IssuerAuthorizerEvidence({ "
+                "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH "
+                "GPT02_ISSUE159_FENCE_BINDING_MISMATCH "
+                "GPT02_ISSUE159_ISSUER_EVIDENCE_EXPIRED_OR_UNBOUND",
+                encoding="utf-8",
+            )
+            with patch.object(readiness, "APPROVAL_API_SOURCE", approval_api), \
+                 patch.object(readiness, "APPROVAL_READER_SOURCE", approval_reader), \
+                 patch.object(readiness, "HUB_CORE_AUTHORIZER_SOURCE", hub_core), \
+                 patch.object(readiness, "ISSUER_READER_BUNDLE", bundle), \
+                 patch.object(readiness, "issuer_reader_bundle_matches_running_process", return_value=True):
+                self.assertTrue(readiness.authorizer_adapters_installed())
+                bundle.write_text(
+                    "inspectGpt02Issue159IssuerAuthorizerEvidence(input) "
+                    "inspectGpt02Issue159IssuerAuthorizerEvidence({ "
+                    "GPT02_ISSUE159_NONCE_RECEIPT_BINDING_MISMATCH",
+                    encoding="utf-8",
+                )
+                self.assertFalse(readiness.authorizer_adapters_installed())
 
 
 if __name__ == "__main__":

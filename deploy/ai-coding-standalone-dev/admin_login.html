@@ -28,6 +28,7 @@
 <script>
 const BASE='https://xssrfshdrtdfupgqwfdw.supabase.co/auth/v1',KEY='sb_publishable_gICBqyiTKNQkqlAAB8w0KA_tUYnUUh_';
 let access='',refreshToken='',verified=false,pendingApprovals=[];
+const API_PREFIX='/gpt02-approval-api';
 const el=id=>document.getElementById(id),status=s=>{const target=el('loginPanel').classList.contains('hidden')?'workStatus':'loginStatus';el(target).textContent=s};
 async function auth(path,data,token){
  const r=await fetch(BASE+path,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(data),cache:'no-store'});
@@ -36,7 +37,7 @@ async function auth(path,data,token){
  return d;
 }
 function jwtClaims(token){const part=token.split('.')[1];if(!part)throw Error('Sesi Supabase tidak valid');const b64=part.replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(atob(b64+'='.repeat((4-b64.length%4)%4)))}
-async function api(path,data){if(!verified||!access)throw Error('Sesi admin belum aktif');const r=await fetch(path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+access,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(r.status+' '+JSON.stringify(d));return d}
+async function api(path,data){if(!verified||!access)throw Error('Sesi admin belum aktif');const url=API_PREFIX+(path.startsWith('/')?path:'/'+path);const r=await fetch(url,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+access,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(r.status+' '+JSON.stringify(d));return d}
 async function activateSession(d){
  if(!d.access_token)throw Error('OTP tidak menghasilkan sesi. Minta OTP baru.');
  access=d.access_token;const claims=jwtClaims(access);
@@ -64,7 +65,7 @@ async function loadIssue159(){
   b.onclick=async()=>{if(!confirm('Setujui Task #'+d.taskId+' sebagai Super Admin?'))return;b.disabled=true;try{await api('/api/gpt02/issue159/approval-intent',{claims:d.claims});el('issue159Status').textContent='Persetujuan tersimpan untuk Task #'+d.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.';await loadIssue159()}catch(e){el('issue159Status').textContent='Persetujuan gagal: '+e.message;b.disabled=false}};
   root.append(b);
  }else{
-  const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
+  const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
   el('issue159Status').textContent=messages[d.reason]||'Tidak ada permintaan yang dapat disetujui: '+(d.reason||'status tidak diketahui')+'. Signing dan dispatch tetap NO-GO.';
  }
 }

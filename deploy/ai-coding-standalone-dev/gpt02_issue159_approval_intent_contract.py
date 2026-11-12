@@ -47,7 +47,7 @@ def validate_approval_claims(claims: object):
         or c["environment"] != "DEV"
         or c["audience"] != "GPT02_NEW_TASK_SINGLE_COMMAND_APPROVAL"
         or not isinstance(c["taskId"], int)
-        or c["taskId"] <= 136
+        or c["taskId"] <= 139
         or not isinstance(c["commandId"], str)
         or not UUID.fullmatch(c["commandId"])
         or not isinstance(c["attemptId"], str)

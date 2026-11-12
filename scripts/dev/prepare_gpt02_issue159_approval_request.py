@@ -43,8 +43,8 @@ def prepare(db_path: str, output_path: str, task_id: int,
                 or db_stat.st_uid != 0 or db_stat.st_gid != 0
                 or stat.S_IMODE(db_stat.st_mode) != 0o600):
             raise RuntimeError("ISSUE159_TASK_DB_SECURITY_INVALID")
-    if not isinstance(task_id, int) or task_id <= 136:
-        raise RuntimeError("ISSUE159_TASK_ID_INVALID")
+    if not isinstance(task_id, int) or task_id <= 139:
+        raise RuntimeError("ISSUE159_FRESH_TASK_AFTER_139_REQUIRED")
     if (not isinstance(command_id, str) or not UUID.fullmatch(command_id)
             or not isinstance(attempt_id, str) or not UUID.fullmatch(attempt_id)
             or command_id == attempt_id):
@@ -56,15 +56,18 @@ def prepare(db_path: str, output_path: str, task_id: int,
     try:
         con.execute("PRAGMA query_only=ON")
         admins = con.execute(
-            "SELECT user_id FROM admin_identities "
-            "WHERE role='super_admin' AND enabled=1 ORDER BY user_id"
+            """SELECT l.hub_operator_id
+               FROM gpt02_issue159_admin_operator_links l
+               JOIN admin_identities a ON a.user_id=l.auth_user_id
+               WHERE l.enabled=1 AND a.role='super_admin' AND a.enabled=1
+               ORDER BY l.hub_operator_id"""
         ).fetchall()
     except sqlite3.Error as exc:
-        raise RuntimeError("ISSUE159_ACTIVE_SUPER_ADMIN_LOOKUP_FAILED") from exc
+        raise RuntimeError("ISSUE159_ADMIN_OPERATOR_MAPPING_LOOKUP_FAILED") from exc
     finally:
         con.close()
     if len(admins) != 1:
-        raise RuntimeError("ISSUE159_ACTIVE_SUPER_ADMIN_NOT_UNIQUE")
+        raise RuntimeError("ISSUE159_ACTIVE_ADMIN_OPERATOR_MAPPING_NOT_UNIQUE")
     actor_id = admins[0][0]
 
     if now_ms is None:

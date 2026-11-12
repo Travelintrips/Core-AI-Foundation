@@ -14,6 +14,8 @@ prepare_module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(prepare_module)
 
+AUTH = "auth-active-super-admin"
+HUB = "active-super-admin"
 COMMAND = "11111111-1111-4111-8111-111111111111"
 ATTEMPT = "22222222-2222-4222-8222-222222222222"
 
@@ -27,9 +29,17 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
         con.execute(
             "CREATE TABLE admin_identities(user_id TEXT PRIMARY KEY, role TEXT NOT NULL, enabled INTEGER NOT NULL)"
         )
+        con.execute("""CREATE TABLE gpt02_issue159_admin_operator_links (
+          auth_user_id TEXT PRIMARY KEY, hub_operator_id TEXT NOT NULL UNIQUE,
+          email TEXT NOT NULL, enabled INTEGER NOT NULL
+        )""")
         con.execute(
             "INSERT INTO admin_identities VALUES (?,?,1)",
-            ("active-super-admin", "super_admin"),
+            (AUTH, "super_admin"),
+        )
+        con.execute(
+            "INSERT INTO gpt02_issue159_admin_operator_links VALUES (?,?,?,1)",
+            (AUTH, HUB, "active@example.com"),
         )
         con.commit()
         con.close()
@@ -53,7 +63,8 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
         self.assertEqual(os.stat(self.output).st_mode & 0o777, 0o600)
         payload = json.loads(Path(self.output).read_text())
         claims = payload["claims"]
-        self.assertEqual(claims["superAdminId"], "active-super-admin")
+        self.assertEqual(claims["superAdminId"], HUB)
+        self.assertNotEqual(claims["superAdminId"], AUTH)
         self.assertEqual(claims["taskId"], 140)
         self.assertEqual(claims["commandId"], COMMAND)
         self.assertEqual(claims["attemptId"], ATTEMPT)
@@ -63,17 +74,21 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-        self.assertEqual(tables, {"admin_identities"})
+        self.assertEqual(tables, {"admin_identities", "gpt02_issue159_admin_operator_links"})
 
     def test_rejects_multiple_active_super_admins_without_writing(self):
         con = sqlite3.connect(self.db)
         con.execute(
             "INSERT INTO admin_identities VALUES (?,?,1)",
-            ("second-super-admin", "super_admin"),
+            ("auth-second-super-admin", "super_admin"),
+        )
+        con.execute(
+            "INSERT INTO gpt02_issue159_admin_operator_links VALUES (?,?,?,1)",
+            ("auth-second-super-admin", "second-super-admin", "second@example.com"),
         )
         con.commit()
         con.close()
-        with self.assertRaisesRegex(RuntimeError, "ACTIVE_SUPER_ADMIN_NOT_UNIQUE"):
+        with self.assertRaisesRegex(RuntimeError, "ACTIVE_ADMIN_OPERATOR_MAPPING_NOT_UNIQUE"):
             prepare_module.prepare(
                 self.db, self.output, 140, COMMAND, ATTEMPT,
                 now_ms=1_800_000_000_000, operational=False,
@@ -82,7 +97,7 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
 
     def test_rejects_invalid_or_reused_identifiers_without_writing(self):
         cases = (
-            (136, COMMAND, ATTEMPT),
+            (139, COMMAND, ATTEMPT),
             (140, COMMAND, COMMAND),
             (140, "not-a-uuid", ATTEMPT),
         )
