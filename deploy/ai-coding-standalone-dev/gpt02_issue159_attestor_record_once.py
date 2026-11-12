@@ -223,8 +223,9 @@ def main() -> int:
     if (props.get("user") != f"{ROLE}.{PROJECT}"
             or props.get("dbname") != "postgres"
             or props.get("host") != POOLER
+            or str(props.get("port")) != "5432"
             or props.get("sslmode") != "verify-full"
-            or not props.get("sslrootcert")
+            or props.get("sslrootcert") != "/etc/gpt02-dev/supabase-root-ca-2021.crt"
             or not props.get("password")):
         deny("ATTESTOR_DEV_DATABASE_CREDENTIAL_SCOPE_INVALID")
     with psycopg.connect(dsn,connect_timeout=5,autocommit=False) as connection:
