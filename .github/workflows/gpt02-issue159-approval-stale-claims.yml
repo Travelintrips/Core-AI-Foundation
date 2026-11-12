@@ -1,0 +1,41 @@
+name: GPT02 Issue159 approval stale-claims UI guard
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/ai-coding-standalone-dev/admin_login.html'
+      - 'scripts/dev/test_gpt02_issue159_fresh_approval_click.mjs'
+      - '.github/workflows/gpt02-issue159-approval-stale-claims.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale-claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test stale nonce, expiry timer and refreshed approval preflight
+        run: |
+          node --check scripts/dev/test_gpt02_issue159_fresh_approval_click.mjs
+          node scripts/dev/test_gpt02_issue159_fresh_approval_click.mjs
+      - name: Check canonical OTP and fail-closed authority
+        run: |
+          python3 scripts/dev/test_gpt02_issue159_admin_login_otp_only.py
+          node scripts/dev/test_gpt02_issue159_otp_redirect.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("deploy/ai-coding-standalone-dev/admin_login.html").read_text()
+          assert "const redirectTo='https://dev.cstlogistic.co.id/gpt02-approval.html'" in s
+          assert "a.nonce!==c.nonce" in s
+          assert "fresh.expiresAt<=Date.now()+1500" in s
+          assert "await api('/api/gpt02/issue159/approval-intent/pending')" in s
+          assert "b.disabled=true" in s
+          assert "Signing, authorization, dan dispatch tetap NO-GO." in s
+          print('PASS: no old nonce reuse, OTP redirect preserved, no signing/dispatch')
+          PY

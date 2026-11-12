@@ -339,6 +339,77 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(self.count(), 0)
 
+    def post_refresh(self, token=None, payload=b"{}"):
+        headers={"Content-Type":"application/json"}
+        if token is not None:
+            headers["Authorization"]="Bearer "+token
+        request=urllib.request.Request(
+            self.base+"/api/gpt02/issue159/approval-intent/refresh",
+            data=payload,headers=headers,method="POST")
+        try:
+            with urllib.request.urlopen(request,timeout=3) as response:
+                return response.status,json.load(response)
+        except urllib.error.HTTPError as error:
+            return error.code,json.loads(error.read().decode())
+
+    def test_refresh_requires_current_supabase_super_admin_not_static_token(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED=True
+        api.admin_identity=lambda token,conn: None
+        for token,expected in ((None,401),(STATIC_TOKEN,403),(AAL2_TOKEN,403)):
+            with self.subTest(token=token is not None):
+                status,out=self.post_refresh(token)
+                self.assertEqual(status,expected)
+                self.assertEqual(out["releaseDecision"],"NO_GO")
+        self.assertEqual(self.count(),0)
+
+    def test_refresh_disabled_fail_closed(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED=False
+        status,body=self.post_refresh(AAL2_TOKEN)
+        self.assertEqual(status,403)
+        self.assertEqual(body["releaseDecision"],"NO_GO")
+
+    def test_refresh_valid_admin_calls_only_bound_request_refresh(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED=True
+        api.admin_identity=lambda token,connection: {
+            "user_id":AUTH_USER_ID,
+            "email":"fixture@example.com",
+            "role":"super_admin","auth_level":"aal1",
+        }
+        response={"environment":"DEV","pending":True,"taskId":148,
+                  "expiresAt":BASE_NOW_MS+240000,"requestRefreshed":True,
+                  "signingPermitted":False,"authorizationGranted":False,
+                  "dispatchPermitted":False,"releaseDecision":"NO_GO"}
+        with patch.object(api,"refresh_pending",return_value=response) as mock:
+            status,body=self.post_refresh(AAL2_TOKEN)
+        self.assertEqual(status,200)
+        self.assertEqual(body,response)
+        mock.assert_called_once_with(self.db,self.pending,CLAIMS["superAdminId"])
+        self.assertEqual(self.count(),0)
+
+    def test_refresh_rejects_user_payload_and_preparation_expiry(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED=True
+        api.admin_identity=lambda token,connection: {
+            "user_id":AUTH_USER_ID,
+            "email":"fixture@example.com",
+            "role":"super_admin","auth_level":"aal1",
+        }
+        with patch.object(api,"refresh_pending") as mock:
+            for payload in (b'{"taskId":148}',b'',b"{}",):
+                if payload==b"{}":
+                    continue
+                status,out=self.post_refresh(AAL2_TOKEN,payload=payload)
+                self.assertEqual(status,400)
+                self.assertEqual(out["releaseDecision"],"NO_GO")
+            mock.assert_not_called()
+        with patch.object(api,"refresh_pending",side_effect=api.RefreshDenied(
+            "ISSUE159_PREPARATION_NOT_FRESH_ENOUGH",409)):
+            status,out=self.post_refresh(AAL2_TOKEN)
+        self.assertEqual(status,409)
+        self.assertEqual(out["error"],"ISSUE159_PREPARATION_NOT_FRESH_ENOUGH")
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(self.count(),0)
+
     def test_source_route_precedes_generic_static_token_authorization(self):
         source = API_PATH.read_text()
         route = source.index("if p=='/api/gpt02/issue159/approval-intent':")

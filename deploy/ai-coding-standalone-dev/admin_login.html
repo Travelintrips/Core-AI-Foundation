@@ -49,7 +49,7 @@ async function activateSession(d){
  refreshToken=d.refresh_token||'';if(refreshToken)sessionStorage.setItem('dev_refresh',refreshToken);
  el('loginPanel').classList.add('hidden');el('work').classList.remove('hidden');status('');await load();
 }
-async function sendOtp(){const email=el('email').value.trim();if(!email||!el('email').checkValidity())throw Error('Masukkan email admin yang valid.');await auth('/otp',{email,create_user:false});el('otpStep').classList.remove('hidden');status('Jika email terdaftar, kode OTP telah diminta. Periksa inbox dan spam.');el('otpCode').focus()}
+async function sendOtp(){const email=el('email').value.trim();if(!email||!el('email').checkValidity())throw Error('Masukkan email admin yang valid.');const redirectTo='https://dev.cstlogistic.co.id/gpt02-approval.html';await auth('/otp?redirect_to='+encodeURIComponent(redirectTo),{email,create_user:false});el('otpStep').classList.remove('hidden');status('Jika email terdaftar, buka link Sign in dari email. Link akan kembali ke halaman approval ini. Jika email berisi kode, kode tetap dapat dimasukkan di bawah.');el('otpCode').focus()}
 el('sendOtp').onclick=async()=>{try{el('sendOtp').disabled=true;await sendOtp()}catch(e){status(e.message)}finally{el('sendOtp').disabled=false}};
 el('resendOtp').onclick=async()=>{try{el('resendOtp').disabled=true;await sendOtp()}catch(e){status(e.message)}finally{el('resendOtp').disabled=false}};
 el('verifyOtp').onclick=async()=>{try{const email=el('email').value.trim(),code=el('otpCode').value.trim();if(!/^\d{6,8}$/.test(code))throw Error('Masukkan kode OTP dari email.');el('verifyOtp').disabled=true;status('Memverifikasi OTP dan role Super Admin...');const d=await auth('/verify',{email,token:code,type:'email'});await activateSession(d)}catch(e){access='';verified=false;status(e.message)}finally{el('verifyOtp').disabled=false}};
@@ -62,11 +62,47 @@ async function loadIssue159(){
  if(d.pending===true){
   el('issue159Status').textContent='Task #'+d.taskId+' menunggu satu persetujuan Super Admin. Batas waktu: '+new Date(d.expiresAt).toLocaleString('id-ID')+'.';
   const b=document.createElement('button');b.textContent='Setujui task ini satu kali';
-  b.onclick=async()=>{if(!confirm('Setujui Task #'+d.taskId+' sebagai Super Admin?'))return;b.disabled=true;try{await api('/api/gpt02/issue159/approval-intent',{claims:d.claims});el('issue159Status').textContent='Persetujuan tersimpan untuk Task #'+d.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.';await loadIssue159()}catch(e){el('issue159Status').textContent='Persetujuan gagal: '+e.message;b.disabled=false}};
+  b.onclick=async()=>{if(b.disabled)return;b.disabled=true;try{
+   const fresh=await api('/api/gpt02/issue159/approval-intent/pending');
+   if(fresh.pending!==true||fresh.taskId!==d.taskId||!fresh.claims||fresh.expiresAt<=Date.now()){
+    await loadIssue159();el('issue159Status').textContent='Permintaan sudah kedaluwarsa atau tidak tersedia. Jangan setujui klaim lama.';return;
+   }
+   const a=d.claims,c=fresh.claims;
+   if(!a||a.commandId!==c.commandId||a.attemptId!==c.attemptId||a.nonce!==c.nonce||d.expiresAt!==fresh.expiresAt){
+    await loadIssue159();el('issue159Status').textContent='Permintaan approval telah diperbarui. Periksa batas waktu dan tekan Setujui sekali lagi.';return;
+   }
+   if(!confirm('Setujui Task #'+fresh.taskId+' sebagai Super Admin?'))return;
+   if(fresh.expiresAt<=Date.now()+1500){await loadIssue159();el('issue159Status').textContent='Permintaan kedaluwarsa sebelum pengiriman. Muat ulang permintaan.';return;}
+   await api('/api/gpt02/issue159/approval-intent',{claims:c});
+   el('issue159Status').textContent='Persetujuan tersimpan untuk Task #'+fresh.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.';await loadIssue159();
+  }catch(e){const expired=String(e.message).includes('invalid_claims');await loadIssue159().catch(()=>{});el('issue159Status').textContent=expired?'Permintaan approval kedaluwarsa atau tidak valid. Tidak ada persetujuan tersimpan.':'Persetujuan gagal: '+e.message;
+  }finally{if(root.contains(b))b.disabled=false}};
+  if(d.expiresAt<=Date.now()){b.disabled=true;el('issue159Status').textContent='Permintaan kedaluwarsa. Muat ulang halaman.'}
+  else setTimeout(()=>{if(root.contains(b)){b.disabled=true;el('issue159Status').textContent='Permintaan approval kedaluwarsa. Tidak ada persetujuan dikirim.'}},Math.max(0,d.expiresAt-Date.now()));
   root.append(b);
  }else{
   const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
   el('issue159Status').textContent=messages[d.reason]||'Tidak ada permintaan yang dapat disetujui: '+(d.reason||'status tidak diketahui')+'. Signing dan dispatch tetap NO-GO.';
+  if(d.reason==='PENDING_REQUEST_EXPIRED'){
+   const refresh=document.createElement('button');
+   refresh.textContent='Perbarui permintaan (jika preparation masih berlaku)';
+   refresh.onclick=async()=>{if(refresh.disabled)return;refresh.disabled=true;
+    try{
+     const r=await api('/api/gpt02/issue159/approval-intent/refresh',{});
+     if(r.signingPermitted!==false||r.dispatchPermitted!==false||r.releaseDecision!=='NO_GO')throw Error('Batas keamanan refresh tidak sesuai');
+     await loadIssue159();
+     if(r.requestRefreshed===true)el('issue159Status').textContent='Permintaan baru tersedia untuk Task #'+r.taskId+'. Periksa batas waktu lalu tekan Setujui satu kali.';
+    }catch(e){
+     const message=String(e.message);
+     el('issue159Status').textContent=message.includes('ISSUE159_PREPARATION_NOT_FRESH_ENOUGH')?
+      'Preparation task sudah kedaluwarsa atau hampir habis. Buat task baru melalui Hub DEV.':
+      message.includes('ISSUE159_APPROVAL_ALREADY_RECORDED')?
+      'Task ini sudah pernah disetujui. Approval tidak dapat diulang.':
+      'Pembaruan permintaan ditolak: '+message;
+    }finally{if(root.contains(refresh))refresh.disabled=false;}
+   };
+   root.append(refresh);
+  }
  }
 }
 async function load(){
@@ -80,6 +116,6 @@ async function load(){
   await loadIssue159();
  }catch(e){status(e.message)}
 }
-async function restoreSession(){const token=sessionStorage.getItem('dev_refresh');if(!token)return;try{const d=await auth('/token?grant_type=refresh_token',{refresh_token:token});await activateSession(d)}catch(e){sessionStorage.removeItem('dev_refresh');access='';verified=false;status('Silakan login kembali menggunakan OTP email.')}}
+async function restoreSession(){const hash=new URLSearchParams(location.hash.replace(/^#/,''));const hashAccess=hash.get('access_token'),hashRefresh=hash.get('refresh_token');if(hashAccess){history.replaceState(null,'',location.pathname+location.search);try{await activateSession({access_token:hashAccess,refresh_token:hashRefresh||''});return}catch(e){access='';verified=false;status('Link sign-in tidak dapat diverifikasi: '+e.message);return}}const token=sessionStorage.getItem('dev_refresh');if(!token)return;try{const d=await auth('/token?grant_type=refresh_token',{refresh_token:token});await activateSession(d)}catch(e){sessionStorage.removeItem('dev_refresh');access='';verified=false;status('Silakan login kembali menggunakan OTP email.')}}
 restoreSession();
 </script></body></html>
