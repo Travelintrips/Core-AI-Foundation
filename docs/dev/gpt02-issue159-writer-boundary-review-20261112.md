@@ -129,3 +129,21 @@ This fixture has all six named RPC stages, split across the same two non-login o
 ## Current decision
 
 The verification ingress and an unactivated read-only approval adapter are implemented and isolated tests pass. The database writer, restricted writer credential, six lifecycle RPCs and live signer-to-approval-reader integration are not implemented. Operational lifecycle migration remains NO-GO.
+
+
+### TypeScript ↔ Python interoperability regression (synthetic test-only)
+
+The optional writer verifier admission route is additionally tested against
+the **actual published TypeScript signer contract**, not a second Python-only
+model. The cross-language fixture uses ephemeral Ed25519 keys generated only
+in a test process. It checks Python → TypeScript role-specific signatures,
+TypeScript → Python four-signer packet verification, matching
+domain-separated SHA-256 signing-byte hashes, tampering and role-swap
+denial, and all authorization/dispatch flags remaining false. This test is
+part of the GitHub Four-Signer Contract CI and does not install any
+new service or private credential.
+
+The six existing Supabase DEV lifecycle RPCs remain privately scoped;
+anonymous and authenticated users cannot execute them. Operational
+attestor/issuer login credentials remain disabled. This evidence
+**does not** grant signing, lease consumption or native dispatch.
