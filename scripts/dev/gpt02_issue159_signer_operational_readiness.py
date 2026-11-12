@@ -162,8 +162,7 @@ def hub_core_reader_runtime_operational():
             return False
         signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
         entry = os.lstat(directory_path)
-        private_dynamicuser = stat.S_ISLNK(entry.st_mode)
-        if private_dynamicuser:
+        if stat.S_ISLNK(entry.st_mode):
             # systemd DynamicUser uses /run/<name> -> /run/private/<name>.
             # Trust only its exact root-owned, root-group private link.
             if (entry.st_uid != 0 or entry.st_gid != 0
@@ -174,8 +173,8 @@ def hub_core_reader_runtime_operational():
             directory = entry
         endpoint = os.lstat(socket_path)
         if (not stat.S_ISDIR(directory.st_mode)
-                or (private_dynamicuser and
-                    (directory.st_uid == 0 or directory.st_uid != endpoint.st_uid))
+                or directory.st_uid == 0
+                or directory.st_uid != endpoint.st_uid
                 or directory.st_gid != signer_gid
                 or stat.S_IMODE(directory.st_mode) != 0o750
                 or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)

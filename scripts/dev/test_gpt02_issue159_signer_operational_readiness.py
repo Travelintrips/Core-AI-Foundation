@@ -244,6 +244,9 @@ class SignerOperationalReadinessTest(unittest.TestCase):
             directory = Path(root) / "gpt02-reader"
             directory.mkdir(mode=0o750)
             os.chmod(directory, 0o750)
+            if os.getuid() == 0:
+                nobody = pwd.getpwnam("nobody")
+                os.chown(directory, nobody.pw_uid, os.getgid())
             endpoint = directory / "reader.sock"
             server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             server.bind(str(endpoint))
@@ -352,6 +355,17 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                                 "Exact private DynamicUser symlink and live health should pass")
             thread.join(timeout=2)
             self.assertFalse(thread.is_alive())
+    def test_hub_core_reader_accepts_only_exact_dynamicuser_systemd_alias(self):
+        source = SCRIPT.read_text()
+        start = source.index("def hub_core_reader_runtime_operational():")
+        end = source.index("def issuer_reader_runtime_operational():", start)
+        function = source[start:end]
+        self.assertIn('os.path.realpath(directory_path) != "/run/private/gpt02-reader"', function)
+        self.assertIn("entry.st_uid != 0 or entry.st_gid != 0", function)
+        self.assertIn("directory.st_gid != signer_gid", function)
+        self.assertIn("endpoint.st_gid != signer_gid", function)
+        self.assertIn('payload.get("readerReady") is True', function)
+        self.assertNotIn("client.settimeout(35)", function)
 
     def test_issuer_reader_source_has_exact_dynamicuser_mapping_allowlist(self):
         source = SCRIPT.read_text()
