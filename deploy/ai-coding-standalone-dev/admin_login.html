@@ -86,6 +86,37 @@ async function load(){
   await loadIssue159();
  }catch(e){status(e.message)}
 }
-async function restoreSession(){const token=sessionStorage.getItem('dev_refresh');if(!token)return;try{const d=await auth('/token?grant_type=refresh_token',{refresh_token:token});await activateSession(d)}catch(e){sessionStorage.removeItem('dev_refresh');access='';verified=false;status('Silakan login kembali menggunakan OTP email.')}}
+async function restoreSession(){
+ const fragment=new URLSearchParams(location.hash.startsWith('#')?location.hash.slice(1):'');
+ const emailCallback=fragment.has('access_token')||fragment.has('refresh_token')||fragment.has('error')||fragment.has('error_code');
+ if(emailCallback){
+  const linkAccess=fragment.get('access_token'),linkRefresh=fragment.get('refresh_token')||'';
+  // Immediately remove bearer tokens from the visible URL and browser history.
+  history.replaceState(null,'',location.pathname+location.search);
+  if(!linkAccess){
+   status('Tautan email GPT02 tidak valid atau kedaluwarsa. Minta OTP baru.');
+   return;
+  }
+  try{
+   status('Memverifikasi sesi GPT02 dari tautan email...');
+   await activateSession({access_token:linkAccess,refresh_token:linkRefresh});
+  }catch(e){
+   access='';refreshToken='';verified=false;
+   sessionStorage.removeItem('dev_refresh');
+   el('loginPanel').classList.remove('hidden');el('work').classList.add('hidden');
+   status('Tautan email GPT02 gagal diverifikasi: '+e.message);
+  }
+  return;
+ }
+ const token=sessionStorage.getItem('dev_refresh');
+ if(!token)return;
+ try{
+  const d=await auth('/token?grant_type=refresh_token',{refresh_token:token});
+  await activateSession(d);
+ }catch(e){
+  sessionStorage.removeItem('dev_refresh');access='';refreshToken='';verified=false;
+  status('Silakan login kembali menggunakan OTP email.');
+ }
+}
 restoreSession();
 </script></body></html>
