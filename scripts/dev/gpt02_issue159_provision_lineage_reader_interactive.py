@@ -7,7 +7,10 @@ Never prints either database credential, and refuses to change PROD.
 No signer/writer credential, approval, or dispatch is touched.
 """
 from __future__ import annotations
+import base64
 import getpass
+import hashlib
+import hmac
 import os
 from pathlib import Path
 import secrets
@@ -43,17 +46,28 @@ def main() -> int:
 
     import psycopg
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from psycopg import sql
 
     admin_dsn = getpass.getpass("CST-DEV administrative PostgreSQL DSN (hidden): ")
     args = conninfo_to_dict(admin_dsn)
     if (args.get("dbname") != EXPECTED_DB or
-            args.get("user", "").endswith("." + PROJECT_REF) is False or
+            args.get("host") != HOST or str(args.get("port")) != "5432" or
+            not args.get("user", "").endswith("." + PROJECT_REF) or
             args.get("sslmode") != "verify-full" or not args.get("sslrootcert")):
         raise RuntimeError("ADMIN_DSN_SCOPE_OR_TLS_INVALID")
     if args.get("user", "").startswith(LOGIN_ROLE):
         raise RuntimeError("ADMIN_READER_ROLE_REUSE_DENIED")
 
     password = secrets.token_urlsafe(64)
+    # PostgreSQL ALTER ROLE doesn't support bind parameters. Supply a SCRAM
+    # verifier rather than the plaintext password, so DB logs cannot disclose
+    # the actual reader credential.
+    salt = secrets.token_bytes(16)
+    salted = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 4096, 32)
+    stored = hashlib.sha256(hmac.digest(salted, b"Client Key", "sha256")).digest()
+    server = hmac.digest(salted, b"Server Key", "sha256")
+    b64 = lambda data: base64.b64encode(data).decode("ascii")
+    verifier = f"SCRAM-SHA-256$4096:{b64(salt)}${b64(stored)}:{b64(server)}"
     reader_dsn = make_conninfo(
         host=HOST, port=5432, dbname=EXPECTED_DB,
         user=f"{LOGIN_ROLE}.{PROJECT_REF}", password=password,
@@ -99,8 +113,8 @@ def main() -> int:
         # Never print it; DDL identifier is a fixed literal.
         with psycopg.connect(admin_dsn, connect_timeout=5, autocommit=False) as conn:
             with conn.cursor() as cur:
-                cur.execute("ALTER ROLE dev_gpt02_lineage_login LOGIN PASSWORD %s",
-                            (password,))
+                cur.execute(sql.SQL("ALTER ROLE dev_gpt02_lineage_login LOGIN PASSWORD {}")
+                            .format(sql.Literal(verifier)))
             conn.commit()
         print("DEV_READER_LOGIN_ENABLED_CREDENTIAL_ENCRYPTED")
         print("Service not started; run read-only validation before start.")
