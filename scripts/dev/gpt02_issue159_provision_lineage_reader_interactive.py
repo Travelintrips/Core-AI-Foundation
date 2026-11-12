@@ -96,6 +96,20 @@ def main() -> int:
                    AND policyname='dev_gpt02_lineage_reader_select'""")
             if cur.fetchone()[0] != 5:
                 raise RuntimeError("RLS_POLICY_NOT_READY")
+            cur.execute(
+                """SELECT count(*),bool_and(c.relrowsecurity AND c.relforcerowsecurity),
+                    bool_or(has_table_privilege(%s,c.oid,'INSERT') OR
+                            has_table_privilege(%s,c.oid,'UPDATE') OR
+                            has_table_privilege(%s,c.oid,'DELETE') OR
+                            has_table_privilege(%s,c.oid,'TRUNCATE'))
+                FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='gpt02_private'
+                  AND c.relname IN ('approvals','operator_links','receipts',
+                                    'core_identity_receipts','post_consumption_fences')""",
+                (LOGIN_ROLE, LOGIN_ROLE, LOGIN_ROLE, LOGIN_ROLE))
+            count, forced, can_write = cur.fetchone()
+            if count != 5 or forced is not True or can_write is not False:
+                raise RuntimeError("LINEAGE_FORCE_RLS_OR_READONLY_GRANT_DRIFT")
         conn.rollback()
 
     # Use a local encrypted credential file, not any plaintext on disk.
