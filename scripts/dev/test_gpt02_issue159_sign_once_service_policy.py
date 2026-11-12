@@ -54,6 +54,28 @@ class OneShotApprovalSystemdPolicyTest(unittest.TestCase):
             with self.subTest(flag=flag):
                 self.assertNotIn(flag,unit)
 
+    def test_hub_core_one_shot_unit_is_private_and_not_auto_enabled(self):
+        unit=(ROOT/"deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-operator@.service").read_text()
+        for required in (
+            "Type=oneshot","DynamicUser=yes",
+            "SupplementaryGroups=gpt02-issue159-signers",
+            "Requires=gpt02-issue159-reader.service gpt02-issue159-approval-reader.service",
+            "LoadCredentialEncrypted=private-key.pkcs8:",
+            "LoadCredential=approved-claims.json:",
+            "LoadCredential=hub-core-link.json:",
+            "ExecStart=/usr/bin/python3 -B /opt/ai-coding-standalone-dev/gpt02_issue159_sign_once.py --role %i",
+            "--claims /run/credentials/gpt02-issue159-sign-once-operator@%i.service/hub-core-link.json",
+            "PrivateNetwork=yes","BindReadOnlyPaths=/run/gpt02-reader /run/gpt02-approval-reader",
+            "Restart=no","RuntimeDirectoryMode=0700",
+            "ProtectSystem=strict","NoNewPrivileges=yes",
+        ):
+            with self.subTest(value=required):
+                self.assertIn(required,unit)
+        self.assertNotIn("[Install]",unit)
+        self.assertNotIn("WantedBy=",unit)
+        self.assertNotIn("ExecStartPost=",unit)
+        self.assertNotIn("AI_DISPATCHER_ENABLED=true",unit)
+
     def test_cli_requires_real_readback_and_no_test_switch(self):
         source=SIGNER.read_text()
         gate=GATE.read_text()
