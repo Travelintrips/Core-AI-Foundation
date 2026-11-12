@@ -62,6 +62,7 @@ on:
       - 'scripts/dev/test_gpt02_issue159_approval_reader_runtime.py'
       - 'scripts/dev/test_gpt02_issue159_approval_reader_service.py'
       - 'scripts/dev/gpt02_issue159_lifecycle_catalog_preflight.sql'
+      - 'scripts/dev/test_gpt02_issue159_lifecycle_catalog_preflight.py'
       - 'scripts/dev/test_gpt02_issue159_writer_broker_contract.py'
       - 'scripts/dev/test_gpt02_issue159_cross_language_vectors.py'
       - 'scripts/dev/gpt02_issue159_ts_signing_vectors.ts'
@@ -133,6 +134,7 @@ jobs:
       - name: Verify approval store readiness contract
         run: |
           python3 scripts/dev/test_gpt02_issue159_approval_store_readiness.py
+          python3 scripts/dev/test_gpt02_issue159_lifecycle_catalog_preflight.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_reader.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_writer.py
           python3 scripts/dev/test_gpt02_issue159_approval_intent_contract.py

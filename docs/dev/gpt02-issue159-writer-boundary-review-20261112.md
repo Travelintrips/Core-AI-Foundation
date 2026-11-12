@@ -147,3 +147,22 @@ The six existing Supabase DEV lifecycle RPCs remain privately scoped;
 anonymous and authenticated users cannot execute them. Operational
 attestor/issuer login credentials remain disabled. This evidence
 **does not** grant signing, lease consumption or native dispatch.
+
+### Live DEV six-RPC privilege and RLS gate
+
+A read-only query using the reviewed lifecycle catalogue script against
+Supabase CST-DEV returned 6/6 exact SECURITY DEFINER RPC signatures with
+pinned search paths and minimum executor grants; 8/8 explicitly listed
+lifecycle tables with owner-scoped FORCE RLS; 7/7 expected fail-closed
+constraints; and 6/6 dedicated NOLOGIN, NO BYPASSRLS roles.
+
+The query explicitly excludes PUBLIC, anon, authenticated, service_role,
+and the dormant claim writer from executing the six RPCs. It also tests
+the intended preparation/attestor/issuer roles separately, so no role
+can silently inherit the wrong execution surface. The previous script
+assumed 6 total tables; the current schema correctly has 8. This false
+NO_GO has been replaced with exact table and role matrices.
+
+Gate output: CATALOG_PRIVILEGE_STANDBY_PASS_NOT_E2E_AUTHORIZED.
+It is a **read-only standby catalog PASS**, not authorization to enable
+a privileged login, sign, consume nonce, or dispatch.
