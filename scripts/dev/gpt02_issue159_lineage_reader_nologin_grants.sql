@@ -68,7 +68,11 @@ RESET ROLE;
 REVOKE gpt02_store_owner FROM postgres;
 DO $restore_guard$
 BEGIN
- IF pg_catalog.pg_has_role('postgres','gpt02_store_owner','SET') THEN
+ IF EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m
+   JOIN pg_catalog.pg_roles parent_role ON parent_role.oid=m.roleid
+   JOIN pg_catalog.pg_roles child_role ON child_role.oid=m.member
+   WHERE parent_role.rolname='gpt02_store_owner'
+     AND child_role.rolname='postgres' AND m.set_option) THEN
    RAISE EXCEPTION 'TEMPORARY_OWNER_SET_NOT_REVOKED';
  END IF;
 END $restore_guard$;
