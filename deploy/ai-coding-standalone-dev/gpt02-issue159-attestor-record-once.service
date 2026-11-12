@@ -15,6 +15,7 @@ ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-attestor-dsn
 
 [Service]
 Type=oneshot
+SupplementaryGroups=gpt02-issue159-signers
 Environment=APP_ENV=development
 Environment=PYTHONPATH=/opt/gpt02-verifier
 Environment=GPT02_ATTESTOR_RECORD_ONCE=explicit-approved
