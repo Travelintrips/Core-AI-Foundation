@@ -70,6 +70,31 @@ BEGIN
    OR pg_catalog.has_table_privilege('{ROLE}',c.oid,'DELETE')
    OR pg_catalog.has_table_privilege('{ROLE}',c.oid,'TRUNCATE'));
  IF v_writable<>0 THEN RAISE EXCEPTION 'CORE_PREP_DIRECT_DML_DENIED'; END IF;
+ -- Hard-pin this activation to the genuine audited Hub DEV Task #150.
+ -- In particular, running this SQL on a different project must fail closed.
+ IF NOT EXISTS (
+   SELECT 1 FROM public.ai_tasks t
+   JOIN public.team_members m ON m.id=t.assigned_to_id
+      AND m.company_id=t.company_id
+   JOIN public.audit_logs a ON a.company_id=t.company_id
+      AND a.entity_id=t.id::text AND a.action='gpt02_pic_assigned'
+      AND a.id=2591
+   JOIN public.users u ON u.id=a.after::jsonb->'actorIdentity'->>'id'
+   WHERE t.company_id='default' AND t.id=150
+     AND t.title='GPT02 DEV lifecycle E2E - validasi baru'
+     AND t.status NOT IN ('completed','cancelled')
+     AND m.is_active IS TRUE AND m.name=t.assigned_to
+     AND a.after::jsonb->>'taskId'='150'
+     AND a.after::jsonb->>'memberId'=t.assigned_to_id::text
+     AND a.after::jsonb->'actorIdentity'->>'role'='super_admin'
+     AND u.role='super_admin' AND u.is_active IS TRUE AND u.company_id IS NULL
+ ) THEN RAISE EXCEPTION 'FRESH_AUDITED_GPT02_TASK150_REQUIRED'; END IF;
+ IF EXISTS (SELECT 1 FROM gpt02_stage.core_preparations
+    WHERE company_id='default' AND hub_task_id=150)
+ OR EXISTS (SELECT 1 FROM public.ai_execution_jobs
+    WHERE company_id='default' AND task_id=150) THEN
+   RAISE EXCEPTION 'TASK150_ALREADY_PREPARED_OR_EXECUTED';
+ END IF;
 END $preflight$;
 ALTER ROLE {ROLE} LOGIN PASSWORD '{verifier}';
 COMMIT;
