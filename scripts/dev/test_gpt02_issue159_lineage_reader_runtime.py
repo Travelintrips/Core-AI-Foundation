@@ -15,7 +15,7 @@ from gpt02_issue159_lineage_reader_runtime import (
 
 
 class _Info:
-    user = "dev_gpt02_lineage_login"
+    user = "dev_gpt02_lineage_login.xssrfshdrtdfupgqwfdw"
 
 
 class _Connection:
