@@ -6,7 +6,7 @@ BEGIN;
 -- Temporary owner SET permission used only inside this transaction.
 -- Based on Supabase documented custom-role administration; revoke before COMMIT.
 GRANT gpt02_store_owner TO postgres WITH SET TRUE, INHERIT FALSE;
-DO $
+DO $$
 BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='gpt02_store_owner')
  OR NOT pg_catalog.pg_has_role(current_user,'gpt02_store_owner','SET') THEN
