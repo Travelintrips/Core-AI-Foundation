@@ -110,6 +110,7 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_hub_core_signer_guard.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-operator@.service'
       - 'scripts/dev/test_gpt02_issue159_hub_core_signer_guard.py'
+      - 'scripts/dev/gpt02_issue159_assemble_hub_core_link.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-approval.service'
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
       - 'scripts/dev/test_gpt02_issue159_signer_approval_guard.py'
