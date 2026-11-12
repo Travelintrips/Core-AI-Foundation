@@ -566,11 +566,13 @@ router.get(
     `);
     const pending = await db.execute(sql`
       SELECT count(*)::integer AS pending_ack_over_5m
-      FROM ai_platform.ai_coding_bridge_responses
-      WHERE kind = 'COMPLETED'
-        AND acknowledged_at IS NULL
-        AND created_at < now() - interval '5 minutes'
-        AND created_at >= now() - interval '24 hours'
+      FROM ai_platform.ai_coding_bridge_responses AS r
+      JOIN ai_platform.ai_coding_bridge_commands AS c ON c.id = r.command_id
+      WHERE c.metadata_json ->> 'assignedClientId' = ${workerId}::text
+        AND r.kind = 'COMPLETED'
+        AND r.acknowledged_at IS NULL
+        AND r.created_at < now() - interval '5 minutes'
+        AND r.created_at >= now() - interval '24 hours'
     `);
     const row = presence.rows[0] as Record<string, unknown> | undefined;
     const count = Number((pending.rows[0] as Record<string, unknown> | undefined)?.pending_ack_over_5m ?? 0);
