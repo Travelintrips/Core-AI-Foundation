@@ -83,6 +83,26 @@ async function loadIssue159(){
  }else{
   const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
   el('issue159Status').textContent=messages[d.reason]||'Tidak ada permintaan yang dapat disetujui: '+(d.reason||'status tidak diketahui')+'. Signing dan dispatch tetap NO-GO.';
+  if(d.reason==='PENDING_REQUEST_EXPIRED'){
+   const refresh=document.createElement('button');
+   refresh.textContent='Perbarui permintaan (jika preparation masih berlaku)';
+   refresh.onclick=async()=>{if(refresh.disabled)return;refresh.disabled=true;
+    try{
+     const r=await api('/api/gpt02/issue159/approval-intent/refresh',{});
+     if(r.signingPermitted!==false||r.dispatchPermitted!==false||r.releaseDecision!=='NO_GO')throw Error('Batas keamanan refresh tidak sesuai');
+     await loadIssue159();
+     if(r.requestRefreshed===true)el('issue159Status').textContent='Permintaan baru tersedia untuk Task #'+r.taskId+'. Periksa batas waktu lalu tekan Setujui satu kali.';
+    }catch(e){
+     const message=String(e.message);
+     el('issue159Status').textContent=message.includes('ISSUE159_PREPARATION_NOT_FRESH_ENOUGH')?
+      'Preparation task sudah kedaluwarsa atau hampir habis. Buat task baru melalui Hub DEV.':
+      message.includes('ISSUE159_APPROVAL_ALREADY_RECORDED')?
+      'Task ini sudah pernah disetujui. Approval tidak dapat diulang.':
+      'Pembaruan permintaan ditolak: '+message;
+    }finally{if(root.contains(refresh))refresh.disabled=false;}
+   };
+   root.append(refresh);
+  }
  }
 }
 async function load(){
