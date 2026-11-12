@@ -1,0 +1,56 @@
+[Unit]
+Description=GPT02 DEV trusted lineage reader (READ ONLY, NO_DISPATCH)
+After=network-online.target systemd-sysusers.service
+Wants=network-online.target
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-lineage-reader-dsn
+ConditionPathExists=/etc/gpt02-dev/supabase-root-ca-2021.crt
+ConditionPathExists=/opt/gpt02-lineage-reader/gpt02_issue159_lineage_reader_runtime.py
+ConditionPathExists=/opt/gpt02-lineage-reader/gpt02_issue159_lineage_db_reader.py
+ConditionPathExists=/opt/gpt02-lineage-reader/gpt02_issue159_lineage_readback_contract.py
+
+[Service]
+Type=simple
+User=gpt02-lineage-reader
+Group=gpt02-issue159-signers
+WorkingDirectory=/opt/gpt02-lineage-reader
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+LoadCredentialEncrypted=lineage-reader-dsn:/etc/credstore.encrypted/gpt02-issue159-lineage-reader-dsn
+LoadCredential=supabase-root-ca-2021.crt:/etc/gpt02-dev/supabase-root-ca-2021.crt
+ExecStart=/usr/bin/python3 -u /opt/gpt02-lineage-reader/gpt02_issue159_lineage_reader_runtime.py --socket /run/gpt02-lineage-reader/reader.sock --allowed-verifier-uid=995
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=20s
+TimeoutStopSec=10s
+RuntimeDirectory=gpt02-lineage-reader
+RuntimeDirectoryMode=0750
+UMask=0077
+LimitNOFILE=128
+MemoryMax=128M
+TasksMax=16
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+ReadOnlyPaths=/opt/gpt02-lineage-reader /etc/gpt02-dev/supabase-root-ca-2021.crt
+ReadWritePaths=/run/gpt02-lineage-reader
+InaccessiblePaths=-/opt/ai-coding-standalone-dev/tasks.db -/etc/gpt02-dev/private -/etc/gpt02-dev/signers
+
+[Install]
+WantedBy=multi-user.target
