@@ -226,7 +226,9 @@ def require_hub_core_facts(role: str, link: dict, approved: dict,
 
 
 def assemble_verified_operator_link(approved: dict, facts: dict,
-                                    *, now_ms: int | None = None) -> dict:
+                                    *, now_ms: int | None = None,
+                                    reader_socket: str = READER,
+                                    reader_uid: int | None = None) -> dict:
     """Assemble one short-lived link using existing Hub/Core reader output.
 
     This does not trust input facts: it calls the live, peer-pinned reader
@@ -285,5 +287,6 @@ def assemble_verified_operator_link(approved: dict, facts: dict,
     }
     # Never write or sign the claims unless the reader independently confirms
     # every Hub/Core binding against the live DEV database right now.
-    require_hub_core_facts("hub", link, approved, now_ms=now_ms)
+    require_hub_core_facts("hub", link, approved, now_ms=now_ms,
+                           reader_socket=reader_socket, reader_uid=reader_uid)
     return link
