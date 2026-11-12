@@ -144,6 +144,31 @@ def verify_https_local(sha):
         Path(header.name).unlink(missing_ok=True)
 
 
+def preserve_issue159_approval_ui(staged_static):
+    """Carry the existing root-owned DEV Super Admin OTP page through static swaps.
+
+    The app continues to serve the same authenticated approval API; this only
+    preserves its public HTML entry point. No signing, dispatch or PROD access.
+    """
+    source = Path("/opt/ai-coding-standalone-dev/admin_login.html")
+    entry = source.lstat()
+    if (not source.is_file() or source.is_symlink() or entry.st_uid != 0
+            or entry.st_gid != 0 or entry.st_mode & 0o022
+            or entry.st_size < 1024 or entry.st_size > 65536):
+        raise RuntimeError("DEV_ISSUE159_APPROVAL_UI_SOURCE_SECURITY_INVALID")
+    contents = source.read_bytes()
+    if (b"Persetujuan signer GPT02 Issue #159" not in contents
+            or b"API_PREFIX='/gpt02-approval-api'" not in contents):
+        raise RuntimeError("DEV_ISSUE159_APPROVAL_UI_SOURCE_INVALID")
+    destination = staged_static / "gpt02-approval.html"
+    if destination.exists() or destination.is_symlink():
+        raise RuntimeError("DEV_ISSUE159_APPROVAL_UI_STAGING_COLLISION")
+    destination.write_bytes(contents)
+    destination.chmod(0o644)
+    if destination.read_bytes() != contents:
+        raise RuntimeError("DEV_ISSUE159_APPROVAL_UI_STAGING_MISMATCH")
+
+
 def main(sha):
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise RuntimeError("Invalid immutable SHA")
@@ -192,6 +217,7 @@ def main(sha):
             command("docker", "cp", canary + ":/app/artifacts/api-server/dist/public/.", str(tempstatic) + "/")
             if not (tempstatic / "index.html").is_file() or not (tempstatic / "assets").is_dir():
                 raise RuntimeError("Frontend artifacts missing from verified image")
+            preserve_issue159_approval_ui(tempstatic)
             # tempfile.mkdtemp creates 0700 directories. Nginx serves this
             # directory as www-data, so make the vetted static tree readable.
             tempstatic.chmod(0o755)
