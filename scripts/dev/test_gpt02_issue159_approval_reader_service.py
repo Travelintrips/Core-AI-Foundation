@@ -24,6 +24,14 @@ class ApprovalReaderServiceContractTest(unittest.TestCase):
         for forbidden in ("AF_INET","AF_INET6","service_role","DATABASE_URL=","ExecStartPre=+"):
             self.assertNotIn(forbidden,body)
 
+    def test_runtime_socket_directory_matches_systemd_group_traversal(self):
+        p=Path(__file__).parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py"
+        body=p.read_text()
+        self.assertIn("parent.mkdir(mode=0o750",body)
+        self.assertIn("pst.st_gid!=expected_gid",body)
+        self.assertIn("stat.S_IMODE(pst.st_mode)!=0o750",body)
+        self.assertIn("os.chmod(socket_path,0o660)",body)
+
     def test_runtime_does_not_create_or_update_approval_decisions(self):
         p=Path(__file__).parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py"
         body=p.read_text()
