@@ -11,6 +11,7 @@ import os
 import re
 import sqlite3
 import stat
+import time
 import sys
 
 LIVE_DB = "/opt/ai-coding-standalone-dev/tasks.db"
@@ -40,7 +41,7 @@ def _lookup_valid(x):
             "companyId", "superAdminId",
         } and
         isinstance(x["claimsSha256"], str) and HEX.fullmatch(x["claimsSha256"]) and
-        isinstance(x["taskId"], int) and x["taskId"] > 136 and
+        isinstance(x["taskId"], int) and x["taskId"] > 139 and
         isinstance(x["commandId"], str) and UUID.fullmatch(x["commandId"]) and
         isinstance(x["attemptId"], str) and UUID.fullmatch(x["attemptId"]) and
         x["commandId"] != x["attemptId"] and
@@ -61,8 +62,14 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
                          operational: bool = True):
     if operational and db_path != LIVE_DB:
         return denied("OPERATIONAL_DB_PATH_NOT_PINNED")
-    if not _lookup_valid(lookup) or not isinstance(observed_at_ms, int) or observed_at_ms <= 0:
+    if not _lookup_valid(lookup) or type(observed_at_ms) is not int or observed_at_ms <= 0:
         return denied("APPROVAL_INTENT_LOOKUP_INVALID")
+    if operational:
+        # The trusted approval record may never be made fresh by caller time.
+        server_now_ms = int(time.time() * 1000)
+        if abs(observed_at_ms - server_now_ms) > 5000:
+            return denied("APPROVAL_INTENT_OBSERVATION_TIME_UNTRUSTED")
+        observed_at_ms = server_now_ms
     try:
         if not _secure_file(db_path, operational):
             return denied("APPROVAL_DB_FILE_SECURITY_NOT_VERIFIED")
@@ -81,9 +88,12 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
                    i.role_at_decision,i.decision,
                    i.recorded_at_ms,i.expires_at_ms,
                    a.role AS current_admin_role,
-                   a.enabled AS current_admin_enabled
+                   a.enabled AS current_admin_enabled,
+                   l.enabled AS current_operator_link_enabled
             FROM gpt02_issue159_approval_intents i
-            JOIN admin_identities a ON a.user_id=i.actor_id
+            JOIN gpt02_issue159_admin_operator_links l
+              ON l.hub_operator_id=i.actor_id
+            JOIN admin_identities a ON a.user_id=l.auth_user_id
             WHERE i.company_id=?
               AND i.task_id=?
               AND i.command_id=?
@@ -108,7 +118,8 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
             r["decision"] != "APPROVE" or
             r["actor_id"] == "dev_approval_token" or
             r["current_admin_role"] != "super_admin" or
-            r["current_admin_enabled"] != 1
+            r["current_admin_enabled"] != 1 or
+            r["current_operator_link_enabled"] != 1
         ):
             return denied("APPROVAL_INTENT_PROVENANCE_MISMATCH")
 
@@ -180,3 +191,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
