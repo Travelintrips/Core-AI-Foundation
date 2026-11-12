@@ -14,6 +14,7 @@ import socket
 import stat
 import struct
 import time
+import uuid
 
 from gpt02_issue159_signer_approval_guard import (
     canonical_sha, persisted_approval_fresh, fail, SIGNER_GROUP, MIN_VALIDITY_MS,
@@ -222,3 +223,67 @@ def require_hub_core_facts(role: str, link: dict, approved: dict,
     # Returning no authority is intentional. Caller may sign one detached link
     # only after it independently passed the approval-reader + Hub/Core reader.
     return None
+
+
+def assemble_verified_operator_link(approved: dict, facts: dict,
+                                    *, now_ms: int | None = None) -> dict:
+    """Assemble one short-lived link using existing Hub/Core reader output.
+
+    This does not trust input facts: it calls the live, peer-pinned reader
+    again through require_hub_core_facts before returning anything. It never
+    creates tasks, approves requests, signs, writes ledgers or dispatches.
+    """
+    if now_ms is None:
+        now_ms = int(time.time() * 1000)
+    if (type(approved) is not dict or type(facts) is not dict
+            or type(now_ms) is not int or now_ms <= 0):
+        fail("OPERATOR_LINK_ASSEMBLY_INPUT_INVALID")
+    prepared = facts.get("prepared")
+    core = facts.get("core")
+    if type(prepared) is not dict or type(core) is not dict:
+        fail("OPERATOR_LINK_PREPARATION_FACTS_MISSING")
+    # Always bind the exact persisted Super Admin approval before constructing
+    # any claims. An expired admin decision cannot be used to refresh a link.
+    digest = persisted_approval_fresh(approved, now_ms=now_ms)
+    expiry = min(
+        approved["expiresAt"], prepared["expiresAt"], now_ms + 90_000
+    ) - 1000
+    if expiry - now_ms < MIN_VALIDITY_MS:
+        fail("OPERATOR_LINK_NOT_ENOUGH_LIFETIME")
+    link_id = str(uuid.uuid4())
+    while link_id in (approved["commandId"], approved["attemptId"],
+                     prepared["hubExecutionId"], prepared["coreTaskId"]):
+        link_id = str(uuid.uuid4())
+    link = {
+        "v": 1,
+        "environment": "DEV",
+        "audience": "GPT02_DUAL_ACCOUNT_COMMAND_LINK",
+        "linkId": link_id,
+        "companyId": approved["companyId"],
+        "hubTaskId": approved["taskId"],
+        "hubExecutionId": prepared["hubExecutionId"],
+        "coreTaskId": prepared["coreTaskId"],
+        "coreCommandId": approved["commandId"],
+        "attemptId": approved["attemptId"],
+        "attemptNumber": 1,
+        "assigneeId": prepared["memberId"],
+        "accountableOwnerId": approved["superAdminId"],
+        "hubOperatorNamespace": "ai-task-hub.public.users",
+        "hubOperatorId": approved["superAdminId"],
+        "hubRole": "super_admin",
+        "hubActive": True,
+        "coreOperatorNamespace": "ai-core.ai_platform.internal_users",
+        "coreOperatorUserId": core["operatorUserId"],
+        "coreRole": core["operatorRole"],
+        "coreActive": True,
+        "corePasswordChanged": True,
+        "workerId": WORKER,
+        "approvalDigest": digest,
+        "nonce": approved["nonce"],
+        "issuedAt": now_ms,
+        "expiresAt": expiry,
+    }
+    # Never write or sign the claims unless the reader independently confirms
+    # every Hub/Core binding against the live DEV database right now.
+    require_hub_core_facts("hub", link, approved, now_ms=now_ms)
+    return link
