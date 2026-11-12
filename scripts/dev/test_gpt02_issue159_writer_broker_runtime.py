@@ -44,7 +44,7 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.manifest=self.root/"trust-fingerprints.json"
         self.approval_socket_path=self.root/"approval-run"/"approval.sock"
         self.approval_socket_path.parent.mkdir(mode=0o700)
-        self.socket_path.parent.mkdir(mode=0o700)
+        self.socket_path.parent.mkdir(mode=0o750)
         self.keys={r:Ed25519PrivateKey.generate() for r in ROOT_FILES}
         fingerprints={}
         import hashlib
@@ -311,6 +311,14 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"PUBLIC_ROOT_FINGERPRINT_PIN_MISMATCH"):
             _load_public_roots(str(self.public),str(self.manifest))
 
+    def test_verifier_socket_directory_group_traversal(self):
+        runtime=Path(__file__).parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py"
+        body=runtime.read_text()
+        for required in ("parent.mkdir(mode=0o750","pst.st_gid != gid",
+                         "stat.S_IMODE(pst.st_mode) != 0o750",
+                         "os.chmod(socket_path, 0o660)"):
+            self.assertIn(required,body)
+
     def test_runtime_source_has_no_database_or_dispatch_surface(self):
         p=Path(__file__).parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py"
         body=p.read_text()
@@ -318,4 +326,3 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
             self.assertNotIn(forbidden,body)
 
 if __name__=="__main__":unittest.main()
-
