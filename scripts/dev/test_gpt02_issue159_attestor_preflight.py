@@ -13,12 +13,12 @@ from unittest.mock import patch
 
 from gpt02_issue159_attestor_preflight import verify_stage_before_attestor
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
-from test_gpt02_issue159_writer_broker_runtime import WriterBrokerRuntimeTest
+import test_gpt02_issue159_writer_broker_runtime as verifier_fixture
 
 
 class AttestorPreflightTest(unittest.TestCase):
     def setUp(self):
-        self.fixture = WriterBrokerRuntimeTest(methodName="test_socket_returns_verified_but_no_authority")
+        self.fixture = verifier_fixture.WriterBrokerRuntimeTest(methodName="test_socket_returns_verified_but_no_authority")
         self.fixture.setUp()
 
     def tearDown(self):
