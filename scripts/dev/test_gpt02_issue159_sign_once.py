@@ -2,6 +2,8 @@ import base64, hashlib, json, os, subprocess, sys, tempfile, time, unittest
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deploy/ai-coding-standalone-dev"))
+import gpt02_issue159_sign_once as signer
 
 ROOT=Path(__file__).resolve().parents[2]
 SIGNER=ROOT/"deploy/ai-coding-standalone-dev/gpt02_issue159_sign_once.py"
@@ -62,12 +64,9 @@ class SignOnceTest(unittest.TestCase):
                 os.chmod(creds/"private-key.pkcs8",0o600)
                 c=claims(role,now); cp=root/"claims.json"; cp.write_text(json.dumps(c)); os.chmod(cp,0o600)
                 out=root/"result.json"
-                env=dict(os.environ,APP_ENV="development",CREDENTIALS_DIRECTORY=str(creds))
-                p=subprocess.run([sys.executable,str(SIGNER),"--role",role,
-                                  "--claims",str(cp),"--output",str(out)],
-                                 env=env,capture_output=True,text=True,timeout=5)
-                self.assertEqual(p.returncode,0,p.stderr)
-                d=json.loads(out.read_text())
+                d=signer.sign_detached_for_test_or_gated_cli(
+                    role, c, str(creds), str(out), now_ms=now)
+                self.assertEqual(json.loads(out.read_text()), d)
                 self.assertEqual(d["role"],role)
                 self.assertFalse(d["authorizationGranted"])
                 self.assertFalse(d["dispatchPermitted"])
@@ -94,16 +93,44 @@ class SignOnceTest(unittest.TestCase):
                 serialization.NoEncryption())); os.chmod(creds/"private-key.pkcs8",0o600)
             now=int(time.time()*1000); c=claims("approval",now)
             cp=root/"claims.json"; cp.write_text(json.dumps(c)); os.chmod(cp,0o600)
-            env=dict(os.environ,APP_ENV="development",CREDENTIALS_DIRECTORY=str(creds))
-            p=subprocess.run([sys.executable,str(SIGNER),"--role","approval","--claims",str(cp),
-                              "--output",str(root/"o.json")],env=env,capture_output=True,text=True)
-            self.assertEqual(p.returncode,2); self.assertIn("PRIVATE_PUBLIC_FINGERPRINT_MISMATCH",p.stderr)
+            with self.assertRaisesRegex(RuntimeError, "PRIVATE_PUBLIC_FINGERPRINT_MISMATCH"):
+                signer.sign_detached_for_test_or_gated_cli("approval",c,str(creds),str(root/"o.json"),now_ms=now)
             (creds/"private-key.pkcs8").write_bytes(keys["approval"].private_bytes(
                 serialization.Encoding.DER,serialization.PrivateFormat.PKCS8,
                 serialization.NoEncryption())); os.chmod(creds/"private-key.pkcs8",0o600)
             c["issuedAt"]=now-10000;c["expiresAt"]=now-5000;cp.write_text(json.dumps(c));os.chmod(cp,0o600)
-            p=subprocess.run([sys.executable,str(SIGNER),"--role","approval","--claims",str(cp),
-                              "--output",str(root/"o2.json")],env=env,capture_output=True,text=True)
-            self.assertEqual(p.returncode,2); self.assertIn("CLAIMS_TIME_INVALID",p.stderr)
+            with self.assertRaisesRegex(RuntimeError, "CLAIMS_TIME_INVALID"):
+                signer.sign_detached_for_test_or_gated_cli("approval",c,str(creds),str(root/"o2.json"),now_ms=now)
+
+    def test_cli_rejects_unproven_and_downstream_signing(self):
+        now=int(time.time()*1000)
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);creds,keys,_=fixture(root)
+            (creds/"private-key.pkcs8").write_bytes(keys["approval"].private_bytes(
+                serialization.Encoding.DER,serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption()))
+            os.chmod(creds/"private-key.pkcs8",0o600)
+            approved=creds/"approved-claims.json"
+            a=claims("approval",now)
+            approved.write_text(json.dumps({
+                "claims":a, "claimsSha256":signer.canonical_sha(a),
+            }));os.chmod(approved,0o600)
+            root_dir=root/"runtime";root_dir.mkdir()
+            env=dict(os.environ,APP_ENV="development",
+                     CREDENTIALS_DIRECTORY=str(creds),RUNTIME_DIRECTORY=str(root_dir))
+            args=[sys.executable,str(SIGNER),"--role","approval",
+                  "--claims",str(approved),
+                  "--output",str(root_dir/"approval-signature.json")]
+            no_toggle=subprocess.run(args,env=env,capture_output=True,text=True,timeout=5)
+            self.assertEqual(no_toggle.returncode,2)
+            self.assertIn("EXPLICIT_ONE_SHOT_APPROVAL_SIGNING_REQUIRED",no_toggle.stderr)
+            env["GPT02_ISSUE159_SIGNING_ENABLED"]="approved-once"
+            missing_store=subprocess.run(args,env=env,capture_output=True,text=True,timeout=5)
+            self.assertEqual(missing_store.returncode,2)
+            self.assertIn("APPROVAL_SIGNER_INSUFFICIENT_VALIDITY",missing_store.stderr)
+            args[args.index("--role")+1]="hub"
+            hub=subprocess.run(args,env=env,capture_output=True,text=True,timeout=5)
+            self.assertEqual(hub.returncode,2)
+            self.assertIn("DOWNSTREAM_SIGNER_PROOF_NOT_IMPLEMENTED",hub.stderr)
 
 if __name__=="__main__": unittest.main()
