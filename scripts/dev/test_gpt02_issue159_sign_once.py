@@ -131,6 +131,6 @@ class SignOnceTest(unittest.TestCase):
             args[args.index("--role")+1]="hub"
             hub=subprocess.run(args,env=env,capture_output=True,text=True,timeout=5)
             self.assertEqual(hub.returncode,2)
-            self.assertIn("DOWNSTREAM_SIGNER_PROOF_NOT_IMPLEMENTED",hub.stderr)
+            self.assertIn("ONE_SHOT_CREDENTIAL_OR_OUTPUT_PATH_NOT_PINNED",hub.stderr)
 
 if __name__=="__main__": unittest.main()
