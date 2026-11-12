@@ -89,3 +89,32 @@ BEGIN
 END $$;
 SELECT 'ISOLATED_LINEAGE_READER_PRIVILEGE_PASS' AS result;
 SQL
+
+# Execute the actual five-ledger JOIN under the restricted reader identity.
+# Catalog GRANT checks alone cannot prove the query is executable under RLS.
+docker exec -i "$name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+BEGIN READ ONLY;
+SET LOCAL ROLE dev_gpt02_lineage_reader;
+SELECT count(*) AS empty_lineage_matches
+FROM gpt02_private.approvals AS a
+JOIN gpt02_private.operator_links AS l
+  ON l.command_id = a.command_id AND l.attempt_id = a.attempt_id
+ AND l.company_id = a.company_id AND l.hub_task_id = a.task_id
+ AND l.approval_digest = a.digest
+JOIN gpt02_private.receipts AS r
+  ON r.command_id = a.command_id AND r.nonce = a.nonce
+ AND r.digest = a.digest
+JOIN gpt02_private.core_identity_receipts AS i
+  ON i.receipt_id = r.id AND i.command_id = r.command_id
+ AND i.link_id = l.link_id AND i.link_digest = l.link_digest
+JOIN gpt02_private.post_consumption_fences AS f
+  ON f.receipt_id = r.id AND f.command_id = a.command_id
+ AND f.link_id = l.link_id AND f.attempt_id = a.attempt_id
+ AND f.hub_execution_id = l.hub_execution_id
+ AND f.core_task_id = l.core_task_id
+WHERE a.company_id='default' AND a.task_id=140
+  AND a.command_id='10000000-0000-4000-8000-000000000001'::uuid
+  AND a.attempt_id='20000000-0000-4000-8000-000000000002'::uuid
+  AND a.digest=repeat('a',64);
+ROLLBACK;
+SQL
