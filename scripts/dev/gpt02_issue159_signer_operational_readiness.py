@@ -161,9 +161,16 @@ def hub_core_reader_runtime_operational():
         ).returncode != 0:
             return False
         signer_gid = grp.getgrnam("gpt02-issue159-signers").gr_gid
-        directory = os.lstat(directory_path)
+        entry = os.lstat(directory_path)
+        if stat.S_ISLNK(entry.st_mode):
+            if (entry.st_uid != 0 or entry.st_gid != 0
+                    or os.path.realpath(directory_path) != "/run/private/gpt02-reader"):
+                return False
+            directory = os.stat(directory_path)
+        else:
+            directory = entry
         endpoint = os.lstat(socket_path)
-        if (stat.S_ISLNK(directory.st_mode) or not stat.S_ISDIR(directory.st_mode)
+        if (not stat.S_ISDIR(directory.st_mode) or directory.st_uid == 0
                 or directory.st_gid != signer_gid
                 or stat.S_IMODE(directory.st_mode) != 0o750
                 or stat.S_ISLNK(endpoint.st_mode) or not stat.S_ISSOCK(endpoint.st_mode)
