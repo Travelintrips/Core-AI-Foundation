@@ -67,6 +67,11 @@ async function loadIssue159(){
  }else{
   const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
   el('issue159Status').textContent=messages[d.reason]||'Tidak ada permintaan yang dapat disetujui: '+(d.reason||'status tidak diketahui')+'. Signing dan dispatch tetap NO-GO.';
+  if(d.reason==='NO_PENDING_REQUEST'||d.reason==='PENDING_REQUEST_EXPIRED'){
+   const guide=document.createElement('p');guide.textContent='Buat task validasi GPT02 DEV baru melalui Hub, tetapkan PIC aktif sebagai Super Admin dan pastikan penugasannya tercatat. Jangan gunakan ulang task lama atau task proyek lain.';
+   const link=document.createElement('a');link.href='https://dev-ai-task.cstlogistic.co.id/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='Buka AI Task Hub DEV';
+   root.append(guide,link);
+  }
  }
 }
 async function load(){
