@@ -182,6 +182,43 @@ class AttestorRecordOnceTest(unittest.TestCase):
         self.assertEqual(conn.commits,0)
         self.assertEqual(conn.rollbacks,1)
 
+    def test_service_is_static_and_uses_only_dedicated_attestor_credential(self):
+        root=Path(__file__).resolve().parents[2]
+        unit=(root/"deploy/ai-coding-standalone-dev/gpt02-issue159-attestor-record-once.service").read_text()
+        source=(root/"deploy/ai-coding-standalone-dev/gpt02_issue159_attestor_record_once.py").read_text()
+        for value in (
+            "Type=oneshot","Restart=no","ProtectSystem=strict",
+            "NoNewPrivileges=yes","LoadCredentialEncrypted=attestor-dsn:",
+            "Environment=GPT02_ATTESTOR_RECORD_ONCE=explicit-approved",
+            "ConditionPathExists=/run/gpt02-issue159-verifier/verify.sock",
+            "BindReadOnlyPaths=/run/gpt02-issue159-verifier",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value,unit)
+        self.assertNotIn("[Install]",unit)
+        self.assertNotIn("WantedBy=",unit)
+        self.assertNotIn("ExecStartPost=",unit)
+        self.assertNotIn("AI_DISPATCHER_ENABLED=true",unit)
+        self.assertNotIn("service_role",source)
+        self.assertNotIn("supabase_admin",source)
+        self.assertNotIn("INSERT INTO",source)
+        self.assertNotIn("UPDATE gpt02_",source)
+        self.assertIn("record_existing_rpc_once(connection, packet, proof)",source)
+        self.assertIn("gpt02_private.record_linked_approval(",source)
+        self.assertIn('props.get("sslmode") != "verify-full"',source)
+        self.assertIn('props.get("sslrootcert") != "/etc/gpt02-dev/supabase-root-ca-2021.crt"',source)
+
+    def test_operational_execution_is_off_by_default(self):
+        import subprocess
+        code=Path(__file__).resolve().parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_attestor_record_once.py"
+        env=dict(os.environ)
+        env.pop("GPT02_ATTESTOR_RECORD_ONCE",None)
+        proc=subprocess.run([sys.executable,str(code)],capture_output=True,text=True,
+                            env=env,timeout=5,check=False)
+        self.assertEqual(proc.returncode,2)
+        self.assertIn("GPT02_DEV_ATTESTOR_DENIED: AttestorDenied",proc.stderr)
+        self.assertNotIn("GPT02_DEV_ATTESTOR_RECORD_EXISTING_RPC_SUCCESS",proc.stdout)
+
     def test_rpc_no_ack_rolls_back(self):
         packet,proof=self.binder()
         conn=FakeConnection(result=False)
