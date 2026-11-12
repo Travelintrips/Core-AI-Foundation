@@ -62,7 +62,23 @@ async function loadIssue159(){
  if(d.pending===true){
   el('issue159Status').textContent='Task #'+d.taskId+' menunggu satu persetujuan Super Admin. Batas waktu: '+new Date(d.expiresAt).toLocaleString('id-ID')+'.';
   const b=document.createElement('button');b.textContent='Setujui task ini satu kali';
-  b.onclick=async()=>{if(!confirm('Setujui Task #'+d.taskId+' sebagai Super Admin?'))return;b.disabled=true;try{await api('/api/gpt02/issue159/approval-intent',{claims:d.claims});el('issue159Status').textContent='Persetujuan tersimpan untuk Task #'+d.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.';await loadIssue159()}catch(e){el('issue159Status').textContent='Persetujuan gagal: '+e.message;b.disabled=false}};
+  b.onclick=async()=>{if(b.disabled)return;b.disabled=true;try{
+   const fresh=await api('/api/gpt02/issue159/approval-intent/pending');
+   if(fresh.pending!==true||fresh.taskId!==d.taskId||!fresh.claims||fresh.expiresAt<=Date.now()){
+    await loadIssue159();el('issue159Status').textContent='Permintaan sudah kedaluwarsa atau tidak tersedia. Jangan setujui klaim lama.';return;
+   }
+   const a=d.claims,c=fresh.claims;
+   if(!a||a.commandId!==c.commandId||a.attemptId!==c.attemptId||a.nonce!==c.nonce||d.expiresAt!==fresh.expiresAt){
+    await loadIssue159();el('issue159Status').textContent='Permintaan approval telah diperbarui. Periksa batas waktu dan tekan Setujui sekali lagi.';return;
+   }
+   if(!confirm('Setujui Task #'+fresh.taskId+' sebagai Super Admin?'))return;
+   if(fresh.expiresAt<=Date.now()+1500){await loadIssue159();el('issue159Status').textContent='Permintaan kedaluwarsa sebelum pengiriman. Muat ulang permintaan.';return;}
+   await api('/api/gpt02/issue159/approval-intent',{claims:c});
+   el('issue159Status').textContent='Persetujuan tersimpan untuk Task #'+fresh.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.';await loadIssue159();
+  }catch(e){const expired=String(e.message).includes('invalid_claims');await loadIssue159().catch(()=>{});el('issue159Status').textContent=expired?'Permintaan approval kedaluwarsa atau tidak valid. Tidak ada persetujuan tersimpan.':'Persetujuan gagal: '+e.message;
+  }finally{if(root.contains(b))b.disabled=false}};
+  if(d.expiresAt<=Date.now()){b.disabled=true;el('issue159Status').textContent='Permintaan kedaluwarsa. Muat ulang halaman.'}
+  else setTimeout(()=>{if(root.contains(b)){b.disabled=true;el('issue159Status').textContent='Permintaan approval kedaluwarsa. Tidak ada persetujuan dikirim.'}},Math.max(0,d.expiresAt-Date.now()));
   root.append(b);
  }else{
   const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
