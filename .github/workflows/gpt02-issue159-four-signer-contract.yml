@@ -54,6 +54,9 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_signer_runtime.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.sysusers'
+      - 'scripts/dev/test_gpt02_issue159_verifier_service.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service'
       - 'scripts/dev/test_gpt02_issue159_approval_reader_runtime.py'
@@ -142,6 +145,8 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_approval_api_route.py
           PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_contract.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_runtime.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_verifier_service.py
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service
           python3 -m py_compile deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py
       - name: Verify split-owner writer boundary in isolated PostgreSQL 16
         run: |
