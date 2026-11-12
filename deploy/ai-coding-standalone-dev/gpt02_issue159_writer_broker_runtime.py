@@ -23,6 +23,7 @@ from typing import Any
 from gpt02_issue159_writer_broker_contract import (
     BrokerAdmissionError, verify_lifecycle_evidence_packet,
 )
+from gpt02_issue159_staged_admission import verify_pre_consumption_packet
 
 DEFAULT_SOCKET = "/run/gpt02-issue159-writer/verify.sock"
 DEFAULT_APPROVAL_READER_SOCKET = "/run/gpt02-approval-reader/approval.sock"
@@ -108,6 +109,7 @@ def _read_request(conn: socket.socket) -> tuple[str, bytes]:
     routes = {
         b"POST /verify-packet HTTP/1.1": "verify",
         b"POST /verify-approved-packet HTTP/1.1": "verify-approved",
+        b"POST /verify-staged-approval HTTP/1.1": "verify-staged-approval",
     }
     if not lines or lines[0] not in routes:
         raise LookupError("ROUTE_NOT_FOUND")
@@ -264,7 +266,7 @@ class _Handler(socketserver.StreamRequestHandler):
     def handle(self):
         try:
             request, body = _read_request(self.request)
-            if request not in ("verify", "verify-approved"):
+            if request not in ("verify", "verify-approved", "verify-staged-approval"):
                 self.wfile.write(_response(404, {"ok": False, "reason": "NOT_FOUND"}))
                 return
             packet = json.loads(body.decode("utf-8"))
@@ -278,10 +280,12 @@ class _Handler(socketserver.StreamRequestHandler):
             if (type(caller_time) is not int
                     or abs(caller_time - server_now_ms) > 5000):
                 raise ValueError("CLIENT_OBSERVATION_TIME_UNTRUSTED")
-            result = verify_lifecycle_evidence_packet(
-                packet["packet"], self.roots, server_now_ms
-            )
-            if request == "verify-approved":
+            if request == "verify-staged-approval":
+                # Stage A has no receipt/fence yet. Verify three independent
+                # signatures, then derive persisted-approval lookup from claims.
+                result = verify_pre_consumption_packet(
+                    packet["packet"], self.roots, server_now_ms
+                )
                 _require_persisted_admin_decision(
                     packet["packet"]["approval"]["claims"],
                     result["approvalDigest"],
@@ -290,9 +294,22 @@ class _Handler(socketserver.StreamRequestHandler):
                 )
                 result = {**result, "persistedAdminApprovalReadBack": True}
             else:
+                result = verify_lifecycle_evidence_packet(
+                    packet["packet"], self.roots, server_now_ms
+                )
+            if request == "verify-approved":
+                _require_persisted_admin_decision(
+                    packet["packet"]["approval"]["claims"],
+                    result["approvalDigest"],
+                    self.approval_reader_socket,
+                    server_now_ms,
+                )
+                result = {**result, "persistedAdminApprovalReadBack": True}
+            elif request == "verify":
                 result = {**result, "persistedAdminApprovalReadBack": False}
             # Verification only. The NO_GO contract is deliberate and immutable.
-            if (result.get("packetVerified") is not True
+            if ((result.get("packetVerified") is not True
+                 and result.get("threeSignaturesVerified") is not True)
                     or result.get("databaseWritePerformed") is not False
                     or result.get("nonceConsumed") is not False
                     or result.get("leaseConsumed") is not False
