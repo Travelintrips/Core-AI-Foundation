@@ -70,6 +70,7 @@ on:
       - 'scripts/dev/test_gpt02_issue159_lineage_readback_contract.py'
       - 'scripts/dev/test_gpt02_issue159_lineage_db_reader.py'
       - 'scripts/dev/test_gpt02_issue159_lineage_reader_runtime.py'
+      - 'scripts/dev/test_gpt02_issue159_lineage_socket_bridge.py'
       - 'scripts/dev/gpt02_issue159_provision_lineage_reader_interactive.py'
       - 'scripts/dev/test_gpt02_issue159_provision_lineage_reader_interactive.py'
       - 'scripts/dev/gpt02_issue159_prepare_lineage_sql_editor.py'
@@ -172,6 +173,7 @@ jobs:
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_readback_contract.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_db_reader.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_reader_runtime.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_socket_bridge.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_provision_lineage_reader_interactive.py' -v
           PYTHONPATH=scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_prepare_lineage_sql_editor.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_service_policy.py' -v
