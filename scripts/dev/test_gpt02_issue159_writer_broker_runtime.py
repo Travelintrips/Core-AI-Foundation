@@ -317,24 +317,21 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertFalse(out["ok"])
         self.assertEqual(out["releaseDecision"],"NO_GO")
 
-    def test_staged_route_rejects_wrong_digest_and_revoked_mapping(self):
-        for settings in ({"stored_digest":"f"*64}, {"mapping_enabled":0}):
-            with self.subTest(settings=settings):
-                # Each subtest has its own fresh service/socket fixture.
-                self._start_approval_reader(**settings)
-                self._start()
-                status,out=self._post(self._pre_consumption(),"/verify-staged-approval")
-                self.assertEqual(status,403,out)
-                self.assertFalse(out["ok"])
-                self.proc.terminate()
-                self.proc.wait(timeout=3)
-                self.proc=None
-                self.approval_server.shutdown()
-                self.approval_server.server_close()
-                self.approval_server=None
-                self.approval_socket_path.unlink()
-                self.socket_path.unlink()
-                (self.root/"approval-intents.db").unlink()
+    def test_staged_route_rejects_wrong_digest(self):
+        self._start_approval_reader(stored_digest="f"*64)
+        self._start()
+        status,out=self._post(self._pre_consumption(),"/verify-staged-approval")
+        self.assertEqual(status,403,out)
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_staged_route_rejects_revoked_mapping(self):
+        self._start_approval_reader(mapping_enabled=0)
+        self._start()
+        status,out=self._post(self._pre_consumption(),"/verify-staged-approval")
+        self.assertEqual(status,403,out)
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["releaseDecision"],"NO_GO")
 
     def test_staged_route_rejects_caller_approved_flag_and_injected_issuer(self):
         self._start_approval_reader()
