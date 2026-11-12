@@ -282,6 +282,77 @@ class SignerOperationalReadinessTest(unittest.TestCase):
                 self.assertTrue(readiness.hub_core_reader_runtime_operational())
             thread.join(timeout=2)
 
+    def test_hub_core_dynamicuser_symlink_accepts_only_exact_private_root_owned_link(self):
+        with tempfile.TemporaryDirectory(prefix="gpt02-hubcore-symlink-") as tmp:
+            target = Path(tmp) / "private"
+            target.mkdir(mode=0o750)
+            os.chmod(target, 0o750)
+            link = Path(tmp) / "gpt02-reader"
+            link.symlink_to(target, target_is_directory=True)
+            endpoint = target / "reader.sock"
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(str(endpoint))
+            os.chmod(endpoint, 0o660)
+            if os.getuid() == 0:
+                nobody = pwd.getpwnam("nobody")
+                os.chown(target, nobody.pw_uid, os.getgid())
+                os.chown(endpoint, nobody.pw_uid, os.getgid())
+            body = json.dumps({
+                "ok": True, "environment": "DEV", "readerReady": True,
+                "hubRole": "gpt02_hub_evidence_reader",
+                "coreRole": "gpt02_core_evidence_reader",
+                "twoSessionsVerified": True,
+                "signingPermitted": False, "dispatchPermitted": False,
+            }).encode()
+            response = (
+                b"HTTP/1.1 200 OK\r\n"
+                + f"content-length: {len(body)}\r\n".encode()
+                + b"connection: close\r\n\r\n" + body
+            )
+            server.listen(1)
+
+            def serve_once():
+                conn, _ = server.accept()
+                with conn:
+                    if b"GET /health HTTP/1.1\r\n" in conn.recv(2048):
+                        conn.sendall(response)
+                server.close()
+
+            thread = threading.Thread(target=serve_once, daemon=True)
+            thread.start()
+            real_lstat = os.lstat
+            real_realpath = os.path.realpath
+            owner = {"uid": 0}
+
+            def fake_lstat(path):
+                if str(path) == str(link):
+                    return SimpleNamespace(st_mode=stat.S_IFLNK | 0o777,
+                                           st_uid=owner["uid"], st_gid=0)
+                return real_lstat(path)
+
+            def fake_realpath(path):
+                if str(path) == str(link):
+                    return "/run/private/gpt02-reader"
+                return real_realpath(path)
+
+            with patch.object(readiness, "HUB_CORE_READER_SOCKET_DIR", str(link)), \
+                 patch.object(readiness, "HUB_CORE_READER_SOCKET", str(link / "reader.sock")), \
+                 patch.object(readiness.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())), \
+                 patch.object(readiness.subprocess, "run", return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(readiness.os, "lstat", side_effect=fake_lstat), \
+                 patch.object(readiness.os.path, "realpath", side_effect=fake_realpath):
+                owner["uid"] = 123
+                self.assertFalse(readiness.hub_core_reader_runtime_operational(),
+                                 "Non-root symlink owner must be rejected")
+                owner["uid"] = 0
+                with patch.object(readiness.os.path, "realpath", return_value="/tmp/untrusted"):
+                    self.assertFalse(readiness.hub_core_reader_runtime_operational(),
+                                     "Non-systemd target must be rejected")
+                self.assertTrue(readiness.hub_core_reader_runtime_operational(),
+                                "Exact private DynamicUser symlink and live health should pass")
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+
     def test_issuer_reader_source_has_exact_dynamicuser_mapping_allowlist(self):
         source = SCRIPT.read_text()
         self.assertIn('os.path.realpath(directory_path) != "/run/private/gpt02-issuer-reader"', source)
