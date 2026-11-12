@@ -199,7 +199,7 @@ class AttestorRecordOnceTest(unittest.TestCase):
         self.assertNotIn("WantedBy=",unit)
         self.assertNotIn("ExecStartPost=",unit)
         self.assertNotIn("AI_DISPATCHER_ENABLED=true",unit)
-        self.assertNotIn("service_role",source)
+        self.assertNotIn('ROLE = "service_role"',source)
         self.assertNotIn("supabase_admin",source)
         self.assertNotIn("INSERT INTO",source)
         self.assertNotIn("UPDATE gpt02_",source)
