@@ -13,6 +13,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from gpt02_issue159_signer_approval_guard import persisted_approval_fresh, canonical_sha
+from gpt02_issue159_hub_core_signer_guard import require_hub_core_facts
 
 ROLES=("approval","hub","core","issuer")
 UUID=re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
@@ -199,34 +200,44 @@ def main():
         fail("EXPLICIT_DEV_MODE_REQUIRED")
     if os.environ.get("GPT02_ISSUE159_SIGNING_ENABLED") != "approved-once":
         fail("EXPLICIT_ONE_SHOT_APPROVAL_SIGNING_REQUIRED")
-    # No bypass flag exists. Hub/Core need independent active operator facts
-    # and issuer needs a persisted receipt + fence; both are separate stages.
-    if args.role != "approval":
-        fail("DOWNSTREAM_SIGNER_PROOF_NOT_IMPLEMENTED")
+    # No bypass flag exists. Hub/Core require two independently authenticated
+    # Hub/Core read-only database logins, plus the SAME persisted approval.
+    # Issuer needs a real nonce receipt and fence and remains explicitly OFF.
+    if args.role == "issuer":
+        fail("ISSUER_SIGNER_PROOF_NOT_IMPLEMENTED")
     creds = os.environ.get("CREDENTIALS_DIRECTORY", "")
     output_dir = os.environ.get("RUNTIME_DIRECTORY", "")
     if not creds or not output_dir:
         fail("SYSTEMD_CREDENTIAL_AND_RUNTIME_BOUNDARY_REQUIRED")
-    expected = str(Path(creds) / "approved-claims.json")
-    destination = str(Path(output_dir) / "approval-signature.json")
+    approval_path = str(Path(creds) / "approved-claims.json")
+    expected = str(Path(creds) / ("approved-claims.json" if args.role == "approval"
+                                 else "hub-core-link.json"))
+    destination = str(Path(output_dir) / (args.role + "-signature.json"))
     if args.claims != expected or args.output != destination:
         fail("ONE_SHOT_CREDENTIAL_OR_OUTPUT_PATH_NOT_PINNED")
-    secure_file(args.claims, "APPROVED_CLAIMS")
-    payload = json.loads(Path(args.claims).read_text(encoding="utf-8"))
+    secure_file(approval_path, "APPROVED_CLAIMS")
+    payload = json.loads(Path(approval_path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or set(payload) != {"claims", "claimsSha256"}:
         fail("APPROVED_CLAIMS_PAYLOAD_INVALID")
-    claims = payload["claims"]
-    if payload["claimsSha256"] != canonical_sha(claims):
+    approved = payload["claims"]
+    if payload["claimsSha256"] != canonical_sha(approved):
         fail("APPROVED_CLAIMS_DIGEST_MISMATCH")
     now_ms = int(time.time() * 1000)
-    validate("approval", claims, now_ms)
-    # Critical: this is a read-only query of a genuine persisted decision,
-    # not a caller-approved boolean, a token string or a JSON document.
-    signed_digest = persisted_approval_fresh(claims, now_ms=now_ms)
-    if signed_digest != payload["claimsSha256"]:
-        fail("PERSISTED_APPROVAL_DIGEST_MISMATCH")
+    validate("approval", approved, now_ms)
+    if args.role == "approval":
+        claims = approved
+        signed_digest = persisted_approval_fresh(approved, now_ms=now_ms)
+        if signed_digest != payload["claimsSha256"]:
+            fail("PERSISTED_APPROVAL_DIGEST_MISMATCH")
+    elif args.role in ("hub", "core"):
+        secure_file(args.claims, "HUB_CORE_LINK")
+        claims = json.loads(Path(args.claims).read_text(encoding="utf-8"))
+        validate(args.role, claims, now_ms)
+        require_hub_core_facts(args.role, claims, approved, now_ms=now_ms)
+    else:
+        fail("SIGNER_ROLE_NOT_SUPPORTED")
     sign_detached_for_test_or_gated_cli(
-        "approval", claims, creds, args.output,
+        args.role, claims, creds, args.output,
         now_ms=int(time.time() * 1000),
     )
     return 0
