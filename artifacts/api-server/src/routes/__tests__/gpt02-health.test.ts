@@ -67,3 +67,17 @@ describe("GPT02 read-only health endpoint", () => {
     expect(response.body).toMatchObject({ status: "degraded", heartbeatAgeSeconds: null, leaseValid: false });
   });
 });
+
+it("counts only GPT02 DELL pending ACKs, not unrelated Travelintrips hostname completions", async () => {
+  mocks.execute.mockReset();
+  mocks.scopes.mockReset();
+  mocks.execute.mockResolvedValueOnce({ rows: [{ heartbeat_age_seconds: 20, lease_valid: true }] })
+    .mockResolvedValueOnce({ rows: [{ pending_ack_over_5m: 0 }] });
+  const response = await request(await app()).get("/ai/agent-runtime/monitor/gpt02-health").set("x-test-scope", "agent:presence");
+  expect(response.status).toBe(200);
+  expect(response.body.pendingAckOver5m).toBe(0);
+  const pendingSql = JSON.stringify(mocks.execute.mock.calls[1][0]);
+  expect(pendingSql).toContain("ai_coding_bridge_commands");
+  expect(pendingSql).toContain("assignedClientId");
+  expect(pendingSql).toContain("openclaw-dell-chatgpt-wake-dev");
+});
