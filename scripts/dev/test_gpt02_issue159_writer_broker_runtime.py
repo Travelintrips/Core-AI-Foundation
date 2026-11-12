@@ -292,6 +292,74 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertFalse(out["ok"])
         self.assertFalse(out["dispatchPermitted"])
 
+    def _pre_consumption(self):
+        import copy
+        return {key: copy.deepcopy(self.packet[key])
+                for key in ("approval", "hubLink", "coreLink")}
+
+    def test_staged_route_uses_persisted_admin_and_never_authorizes(self):
+        self._start_approval_reader()
+        self._start()
+        status,out=self._post(self._pre_consumption(),"/verify-staged-approval")
+        self.assertEqual(status,200,out)
+        self.assertTrue(out["result"]["threeSignaturesVerified"])
+        self.assertTrue(out["result"]["persistedAdminApprovalReadBack"])
+        self.assertEqual(out["result"]["stage"],"PRE_CONSUMPTION_VERIFICATION_ONLY")
+        for field in ("writerEnabled","databaseConnected","signingPermitted",
+                      "authorizationGranted","dispatchPermitted"):
+            self.assertFalse(out[field])
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_staged_route_rejects_missing_persisted_admin(self):
+        self._start()
+        status,out=self._post(self._pre_consumption(),"/verify-staged-approval")
+        self.assertEqual(status,503,out)
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_staged_route_rejects_wrong_digest_and_revoked_mapping(self):
+        for settings in ({"stored_digest":"f"*64}, {"mapping_enabled":0}):
+            with self.subTest(settings=settings):
+                # Each subtest has its own fresh service/socket fixture.
+                self._start_approval_reader(**settings)
+                self._start()
+                status,out=self._post(self._pre_consumption(),"/verify-staged-approval")
+                self.assertEqual(status,403,out)
+                self.assertFalse(out["ok"])
+                self.proc.terminate()
+                self.proc.wait(timeout=3)
+                self.proc=None
+                self.approval_server.shutdown()
+                self.approval_server.server_close()
+                self.approval_server=None
+                self.approval_socket_path.unlink()
+                self.socket_path.unlink()
+                (self.root/"approval-intents.db").unlink()
+
+    def test_staged_route_rejects_caller_approved_flag_and_injected_issuer(self):
+        self._start_approval_reader()
+        self._start()
+        for bad_key,value in (
+            ("approved",True),("persistedAdminApprovalReadBack",True),
+            ("issuerEvidence",self.packet["issuerEvidence"]),
+        ):
+            with self.subTest(bad_key=bad_key):
+                packet=self._pre_consumption()
+                packet[bad_key]=value
+                status,out=self._post(packet,"/verify-staged-approval")
+                self.assertEqual(status,400,out)
+                self.assertFalse(out["ok"])
+                self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_staged_route_rejects_tampered_approval_before_readback(self):
+        self._start_approval_reader()
+        self._start()
+        packet=self._pre_consumption()
+        packet["approval"]["claims"]["taskId"]+=1
+        status,out=self._post(packet,"/verify-staged-approval")
+        self.assertEqual(status,400,out)
+        self.assertFalse(out["ok"])
+
     def test_unknown_route_rejected(self):
         self._start()
         c=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);c.settimeout(3)
