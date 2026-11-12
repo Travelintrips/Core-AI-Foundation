@@ -105,6 +105,12 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.sysusers'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.tmpfiles'
       - 'scripts/dev/test_gpt02_issue159_signer_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_sign_once.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_signer_approval_guard.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-approval.service'
+      - 'scripts/dev/test_gpt02_issue159_sign_once.py'
+      - 'scripts/dev/test_gpt02_issue159_signer_approval_guard.py'
+      - 'scripts/dev/test_gpt02_issue159_sign_once_service_policy.py'
       - 'scripts/dev/fixtures/supabase-root-ca-2021.crt'
       - '.github/workflows/gpt02-issue159-four-signer-contract.yml'
   workflow_dispatch:
@@ -171,6 +177,10 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_private_key_custody_readiness.py
           python3 scripts/dev/test_gpt02_issue159_signer_operational_readiness.py
           python3 scripts/dev/test_gpt02_issue159_signer_runtime.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once.py
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_signer_approval_guard.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once_service_policy.py
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-approval.service
           python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_reader_runtime.py
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_reader_service.py
