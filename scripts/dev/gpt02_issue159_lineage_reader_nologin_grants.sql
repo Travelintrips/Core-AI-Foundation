@@ -3,9 +3,8 @@
 -- activation. Never use the existing issuer reader login or signer credentials.
 -- Never run on PROD.
 BEGIN;
--- Temporary owner SET permission used only inside this transaction.
--- Based on Supabase documented custom-role administration; revoke before COMMIT.
-GRANT gpt02_store_owner TO postgres WITH SET TRUE, INHERIT FALSE;
+-- Must be run by a session ALREADY authorized to SET ROLE gpt02_store_owner.
+-- Never add or revoke existing owner memberships inside this migration.
 DO $$
 BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='gpt02_store_owner')
@@ -65,17 +64,6 @@ ON gpt02_private.post_consumption_fences FOR SELECT TO dev_gpt02_lineage_reader
 USING (worker_id='openclaw-dell-chatgpt-wake-dev'
  AND lease_epoch=1 AND NOT dispatch_allowed AND NOT core_ledger_written);
 RESET ROLE;
-REVOKE gpt02_store_owner FROM postgres;
-DO $restore_guard$
-BEGIN
- IF EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m
-   JOIN pg_catalog.pg_roles parent_role ON parent_role.oid=m.roleid
-   JOIN pg_catalog.pg_roles child_role ON child_role.oid=m.member
-   WHERE parent_role.rolname='gpt02_store_owner'
-     AND child_role.rolname='postgres' AND m.set_option) THEN
-   RAISE EXCEPTION 'TEMPORARY_OWNER_SET_NOT_REVOKED';
- END IF;
-END $restore_guard$;
 COMMIT;
 
 -- Expected: role NOLOGIN/NOBYPASSRLS, five FORCE RLS tables,
