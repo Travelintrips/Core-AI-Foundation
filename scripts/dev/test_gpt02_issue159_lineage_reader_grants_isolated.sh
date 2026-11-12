@@ -12,6 +12,7 @@ for i in $(seq 1 40); do
   sleep 0.25
 done
 docker exec -i "$name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null <<'SQL'
+CREATE ROLE gpt02_store_owner NOLOGIN;
 CREATE SCHEMA gpt02_private;
 CREATE TABLE gpt02_private.approvals (
  task_id integer, company_id text, attempt_id uuid, command_id uuid,
@@ -47,6 +48,11 @@ ALTER TABLE gpt02_private.core_identity_receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gpt02_private.core_identity_receipts FORCE ROW LEVEL SECURITY;
 ALTER TABLE gpt02_private.post_consumption_fences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gpt02_private.post_consumption_fences FORCE ROW LEVEL SECURITY;
+ALTER TABLE gpt02_private.approvals OWNER TO gpt02_store_owner;
+ALTER TABLE gpt02_private.operator_links OWNER TO gpt02_store_owner;
+ALTER TABLE gpt02_private.receipts OWNER TO gpt02_store_owner;
+ALTER TABLE gpt02_private.core_identity_receipts OWNER TO gpt02_store_owner;
+ALTER TABLE gpt02_private.post_consumption_fences OWNER TO gpt02_store_owner;
 SQL
 docker exec -i "$name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null \
   < "$root/scripts/dev/gpt02_issue159_lineage_reader_nologin_grants.sql"
