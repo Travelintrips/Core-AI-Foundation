@@ -29,6 +29,7 @@
 const BASE='https://xssrfshdrtdfupgqwfdw.supabase.co/auth/v1',KEY='sb_publishable_gICBqyiTKNQkqlAAB8w0KA_tUYnUUh_';
 let access='',refreshToken='',verified=false,pendingApprovals=[];
 const API_PREFIX='/gpt02-approval-api';
+const GPT02_EMAIL_REDIRECT='https://dev.cstlogistic.co.id/gpt02-approval.html';
 const el=id=>document.getElementById(id),status=s=>{const target=el('loginPanel').classList.contains('hidden')?'workStatus':'loginStatus';el(target).textContent=s};
 async function auth(path,data,token){
  const r=await fetch(BASE+path,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(data),cache:'no-store'});
@@ -49,7 +50,7 @@ async function activateSession(d){
  refreshToken=d.refresh_token||'';if(refreshToken)sessionStorage.setItem('dev_refresh',refreshToken);
  el('loginPanel').classList.add('hidden');el('work').classList.remove('hidden');status('');await load();
 }
-async function sendOtp(){const email=el('email').value.trim();if(!email||!el('email').checkValidity())throw Error('Masukkan email admin yang valid.');await auth('/otp',{email,create_user:false});el('otpStep').classList.remove('hidden');status('Jika email terdaftar, kode OTP telah diminta. Periksa inbox dan spam.');el('otpCode').focus()}
+async function sendOtp(){const email=el('email').value.trim();if(!email||!el('email').checkValidity())throw Error('Masukkan email admin yang valid.');await auth('/otp?redirect_to='+encodeURIComponent(GPT02_EMAIL_REDIRECT),{email,create_user:false});el('otpStep').classList.remove('hidden');status('Jika email terdaftar, kode OTP telah diminta. Periksa inbox dan spam.');el('otpCode').focus()}
 el('sendOtp').onclick=async()=>{try{el('sendOtp').disabled=true;await sendOtp()}catch(e){status(e.message)}finally{el('sendOtp').disabled=false}};
 el('resendOtp').onclick=async()=>{try{el('resendOtp').disabled=true;await sendOtp()}catch(e){status(e.message)}finally{el('resendOtp').disabled=false}};
 el('verifyOtp').onclick=async()=>{try{const email=el('email').value.trim(),code=el('otpCode').value.trim();if(!/^\d{6,8}$/.test(code))throw Error('Masukkan kode OTP dari email.');el('verifyOtp').disabled=true;status('Memverifikasi OTP dan role Super Admin...');const d=await auth('/verify',{email,token:code,type:'email'});await activateSession(d)}catch(e){access='';verified=false;status(e.message)}finally{el('verifyOtp').disabled=false}};
