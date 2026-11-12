@@ -133,9 +133,15 @@ def serve(socket_path:str,group_name:str,once:bool=False)->int:
           "signingPermitted":False,"dispatchPermitted":False,"releaseDecision":"NO_GO"},sort_keys=True))
         return 0
     parent=Path(socket_path).parent
-    parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+    # systemd RuntimeDirectory=gpt02-approval-reader owns this directory and
+    # sets mode 0750 so members of the signer group can traverse to the socket.
+    # Refuse 0700 (unusable for signers) and any world-accessible directory.
+    parent.mkdir(mode=0o750,parents=True,exist_ok=True)
     pst=os.lstat(parent)
-    if stat.S_ISLNK(pst.st_mode) or not stat.S_ISDIR(pst.st_mode) or pst.st_uid!=os.getuid() or stat.S_IMODE(pst.st_mode)!=0o700:
+    expected_gid=grp.getgrnam(group_name).gr_gid
+    if (stat.S_ISLNK(pst.st_mode) or not stat.S_ISDIR(pst.st_mode)
+            or pst.st_uid!=os.getuid() or pst.st_gid!=expected_gid
+            or stat.S_IMODE(pst.st_mode)!=0o750):
         raise RuntimeError("SOCKET_DIRECTORY_INVALID")
     if os.path.lexists(socket_path): raise RuntimeError("SOCKET_PATH_ALREADY_EXISTS")
     _Handler.approval_reader_fn=reader
@@ -171,4 +177,3 @@ def main():
 
 if __name__=="__main__":
     raise SystemExit(main())
-
