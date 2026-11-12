@@ -18,7 +18,7 @@ class ApprovalReaderRuntimeTest(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory()
         self.root=Path(self.tmp.name)
         self.db=self.root/"tasks.db"
-        self.now=1_800_000_000_000
+        self.now=int(time.time()*1000)
         self.lookup={
           "claimsSha256":"a"*64,
           "taskId":140,
@@ -32,6 +32,12 @@ class ApprovalReaderRuntimeTest(unittest.TestCase):
         CREATE TABLE admin_identities(
           user_id TEXT PRIMARY KEY, role TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE gpt02_issue159_admin_operator_links(
+          auth_user_id TEXT PRIMARY KEY,
+          hub_operator_id TEXT NOT NULL UNIQUE,
+          email TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1
+        );
         CREATE TABLE gpt02_issue159_approval_intents(
           id TEXT PRIMARY KEY, task_id INTEGER NOT NULL, command_id TEXT NOT NULL,
           attempt_id TEXT NOT NULL, company_id TEXT NOT NULL, claims_sha256 TEXT NOT NULL,
@@ -39,7 +45,9 @@ class ApprovalReaderRuntimeTest(unittest.TestCase):
           decision TEXT NOT NULL, recorded_at_ms INTEGER NOT NULL, expires_at_ms INTEGER NOT NULL
         );
         """)
-        con.execute("INSERT INTO admin_identities VALUES(?,?,?)",(self.lookup["superAdminId"],"super_admin",1))
+        con.execute("INSERT INTO admin_identities VALUES(?,?,?)",("auth-fixture-user","super_admin",1))
+        con.execute("INSERT INTO gpt02_issue159_admin_operator_links VALUES(?,?,?,?)",
+                    ("auth-fixture-user",self.lookup["superAdminId"],"fixture@example.invalid",1))
         con.execute("""INSERT INTO gpt02_issue159_approval_intents VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(
           "30000000-0000-4000-8000-000000000003",self.lookup["taskId"],
           self.lookup["commandId"],self.lookup["attemptId"],"default","a"*64,
@@ -117,6 +125,29 @@ class ApprovalReaderRuntimeTest(unittest.TestCase):
         self.assertFalse(out["ok"])
         self.assertEqual(out["releaseDecision"],"NO_GO")
 
+    def test_socket_rejects_backdated_client_observation(self):
+        self._start_server()
+        status,out=self._post(observed=self.now-600000)
+        self.assertEqual(status,400)
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_socket_rejects_future_client_observation(self):
+        self._start_server()
+        status,out=self._post(observed=self.now+600000)
+        self.assertEqual(status,400)
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_socket_rejects_disabled_supabase_operator_mapping(self):
+        self._start_server()
+        con=sqlite3.connect(self.db)
+        con.execute("UPDATE gpt02_issue159_admin_operator_links SET enabled=0")
+        con.commit()
+        con.close()
+        status,out=self._post()
+        self.assertEqual(status,404)
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["releaseDecision"],"NO_GO")
+
     def test_source_has_no_write_or_signing_surface(self):
         source=Path(__file__).parents[2]/"deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py"
         body=source.read_text()
@@ -125,3 +156,4 @@ class ApprovalReaderRuntimeTest(unittest.TestCase):
 
 
 if __name__=="__main__":unittest.main()
+
