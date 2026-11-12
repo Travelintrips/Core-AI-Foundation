@@ -136,6 +136,18 @@ def require_hub_core_facts(role: str, link: dict, approved: dict,
     head,sep,raw=bytes(response).partition(b"\r\n\r\n")
     if not sep or not head.startswith(b"HTTP/1.1 200 "):
         fail("OPERATOR_READER_PRE_SIGN_NOT_AVAILABLE")
+    headers={}
+    for line in head.split(b"\r\n")[1:]:
+        key,colon,value=line.partition(b":")
+        key=key.strip().lower()
+        if not colon or key in headers:
+            fail("OPERATOR_READER_HTTP_HEADER_INVALID")
+        headers[key]=value.strip()
+    length=headers.get(b"content-length",b"")
+    if (b"transfer-encoding" in headers
+            or not length.isdigit() or int(length)!=len(raw)
+            or not headers.get(b"content-type",b"").startswith(b"application/json")):
+        fail("OPERATOR_READER_HTTP_FRAMING_INVALID")
     try:
         envelope=json.loads(raw)
     except (ValueError,UnicodeError) as exc:
@@ -168,6 +180,11 @@ def require_hub_core_facts(role: str, link: dict, approved: dict,
             or job.get("executionId") != link["hubExecutionId"]
             or job.get("taskId") != link["hubTaskId"]
             or job.get("status") != "prepared"
+            or job.get("commandId") is not None
+            or job.get("workerCommandCount") != 0
+            or job.get("attemptNumber") != 1
+            or job.get("memberId") != link["assigneeId"]
+            or job.get("operatorSubject") != link["hubOperatorId"]
             or job.get("dispatchStarted") is not False
             or core.get("taskId") != link["coreTaskId"]
             or core.get("commandCandidateId") != link["coreCommandId"]
@@ -186,6 +203,7 @@ def require_hub_core_facts(role: str, link: dict, approved: dict,
             or hub.get("memberId") != link["assigneeId"]
             or hub.get("accountableOwnerId") != link["accountableOwnerId"]
             or assignment.get("action") != "gpt02_pic_assigned"
+            or assignment.get("entityId") != str(link["hubTaskId"])
             or assignment.get("actorId") != link["hubOperatorId"]
             or assignment.get("actorRole") != "super_admin"
             or assignment.get("actorActive") is not True
