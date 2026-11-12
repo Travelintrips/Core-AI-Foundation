@@ -48,6 +48,7 @@ ALTER TABLE gpt02_private.core_identity_receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gpt02_private.core_identity_receipts FORCE ROW LEVEL SECURITY;
 ALTER TABLE gpt02_private.post_consumption_fences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gpt02_private.post_consumption_fences FORCE ROW LEVEL SECURITY;
+ALTER SCHEMA gpt02_private OWNER TO gpt02_store_owner;
 ALTER TABLE gpt02_private.approvals OWNER TO gpt02_store_owner;
 ALTER TABLE gpt02_private.operator_links OWNER TO gpt02_store_owner;
 ALTER TABLE gpt02_private.receipts OWNER TO gpt02_store_owner;
