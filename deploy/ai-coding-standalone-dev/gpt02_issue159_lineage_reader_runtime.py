@@ -46,8 +46,13 @@ def _load_connection():
     if not dsn or len(dsn) > 4096:
         raise RuntimeError("LINEAGE_DSN_INVALID")
     args = conninfo_to_dict(dsn)
-    if args.get("user") != "dev_gpt02_lineage_login" or args.get("dbname") != "postgres":
-        raise RuntimeError("LINEAGE_DEDICATED_DB_IDENTITY_REQUIRED")
+    # Supabase pooler requires the exact DB role + CST-DEV project suffix.
+    expected_user = "dev_gpt02_lineage_login.xssrfshdrtdfupgqwfdw"
+    if (args.get("user") != expected_user
+            or args.get("dbname") != "postgres"
+            or args.get("host") != "aws-1-ap-southeast-2.pooler.supabase.com"
+            or args.get("port") != "5432"):
+        raise RuntimeError("LINEAGE_DEDICATED_DEV_POOLER_IDENTITY_REQUIRED")
     if args.get("sslmode") != "verify-full":
         raise RuntimeError("LINEAGE_TLS_PEER_VERIFICATION_REQUIRED")
     if not args.get("sslrootcert"):
@@ -59,7 +64,7 @@ def read_verified_lineage(lookup: Any, connect=_load_connection) -> dict[str, An
     """Read only: caller cannot inject rows or claim an authorized mutation."""
     params = _clean_lookup(lookup)
     with connect() as connection:
-        if connection.info.user != "dev_gpt02_lineage_login":
+        if connection.info.user != "dev_gpt02_lineage_login.xssrfshdrtdfupgqwfdw":
             raise RuntimeError("LINEAGE_DB_IDENTITY_MISMATCH")
         rows = read_lineage_once(connection, params)
     return {
