@@ -12,7 +12,11 @@ class AdminLoginOtpOnlyTest(unittest.TestCase):
     def test_login_uses_email_otp_without_password_or_totp_challenge(self):
         source = PAGE.read_text()
         self.assertIn("Kirim OTP ke email", source)
-        self.assertIn("auth('/otp'", source)
+        self.assertIn("auth('/otp?redirect_to='", source)
+        self.assertIn("encodeURIComponent(GPT02_EMAIL_REDIRECT)", source)
+        self.assertIn("const GPT02_EMAIL_REDIRECT='https://dev.cstlogistic.co.id/gpt02-approval.html';", source)
+        self.assertNotIn("await auth('/otp',{email,create_user:false})", source)
+        self.assertNotIn("bizportal", source.lower())
         self.assertIn("auth('/verify'", source)
         self.assertIn("type:'email'", source)
         self.assertNotIn("grant_type=password", source)
