@@ -68,6 +68,9 @@ on:
       - 'scripts/dev/test_gpt02_issue159_lineage_readback_contract.py'
       - 'scripts/dev/test_gpt02_issue159_lineage_db_reader.py'
       - 'scripts/dev/test_gpt02_issue159_lineage_reader_runtime.py'
+      - 'scripts/dev/test_gpt02_issue159_lineage_service_policy.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-lineage-reader.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-lineage-reader.sysusers'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_reader_runtime.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_db_reader.py'
       - 'scripts/dev/gpt02_issue159_lineage_reader_nologin_grants.sql'
@@ -163,6 +166,8 @@ jobs:
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_readback_contract.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_db_reader.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_reader_runtime.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_lineage_service_policy.py' -v
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-lineage-reader.service
           PYTHONPATH=deploy/ai-coding-standalone-dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_writer_broker_runtime.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_verifier_service.py
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service
