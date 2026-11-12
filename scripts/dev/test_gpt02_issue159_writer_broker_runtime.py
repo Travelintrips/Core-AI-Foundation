@@ -310,6 +310,27 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
             self.assertFalse(out[field])
         self.assertEqual(out["releaseDecision"],"NO_GO")
 
+    def test_lineage_route_rejects_missing_live_reader(self):
+        self._start_approval_reader()
+        self._start()
+        status, out = self._post(self.packet, "/verify-persisted-lineage")
+        self.assertEqual(status, 503, out)
+        self.assertFalse(out["ok"])
+        self.assertFalse(out["writerEnabled"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+
+    def test_lineage_route_checks_four_signatures_before_reader(self):
+        self._start_approval_reader()
+        self._start()
+        packet = json.loads(json.dumps(self.packet))
+        packet["issuerEvidence"]["claims"]["fenceId"] = (
+            "70000000-0000-4000-8000-000000000099")
+        status, out = self._post(packet, "/verify-persisted-lineage")
+        self.assertEqual(status, 400, out)
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+
     def test_staged_route_rejects_missing_persisted_admin(self):
         self._start()
         status,out=self._post(self._pre_consumption(),"/verify-staged-approval")
