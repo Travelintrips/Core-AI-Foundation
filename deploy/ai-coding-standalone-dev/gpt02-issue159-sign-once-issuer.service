@@ -1,0 +1,67 @@
+[Unit]
+Description=GPT02 Issue159 DEV one-shot issuer signer (NO DISPATCH)
+After=gpt02-issue159-reader.service gpt02-issue159-issuer-reader.service gpt02-issue159-approval-reader.service
+Requires=gpt02-issue159-reader.service gpt02-issue159-issuer-reader.service gpt02-issue159-approval-reader.service
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_approved_claims.json
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_hub_core_link_claims.json
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_issuer_claims.json
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_sign_once.py
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_signer_approval_guard.py
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_hub_core_signer_guard.py
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_issuer_signer_guard.py
+ConditionPathExists=/run/gpt02-approval-reader/approval.sock
+ConditionPathExists=/run/gpt02-reader/reader.sock
+ConditionPathExists=/run/gpt02-issuer-reader/reader.sock
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-issuer-private-key.pkcs8
+ConditionPathExists=/etc/gpt02-dev/trust-fingerprints.json
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+SupplementaryGroups=gpt02-issue159-signers
+WorkingDirectory=/opt/ai-coding-standalone-dev
+Environment=APP_ENV=development
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=GPT02_ISSUE159_SIGNING_ENABLED=approved-once
+LoadCredentialEncrypted=private-key.pkcs8:/etc/credstore.encrypted/gpt02-issue159-issuer-private-key.pkcs8
+LoadCredential=manifest.json:/etc/gpt02-dev/trust-fingerprints.json
+LoadCredential=approved-claims.json:/opt/ai-coding-standalone-dev/gpt02_issue159_approved_claims.json
+LoadCredential=hub-core-link.json:/opt/ai-coding-standalone-dev/gpt02_issue159_hub_core_link_claims.json
+LoadCredential=issuer-claims.json:/opt/ai-coding-standalone-dev/gpt02_issue159_issuer_claims.json
+ExecStart=/usr/bin/python3 -B /opt/ai-coding-standalone-dev/gpt02_issue159_sign_once.py --role issuer --claims /run/credentials/gpt02-issue159-sign-once-issuer.service/issuer-claims.json --output /run/gpt02-issue159-sign-once-issuer/issuer-signature.json
+RuntimeDirectory=gpt02-issue159-sign-once-issuer
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+TimeoutStartSec=15s
+Restart=no
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+BindReadOnlyPaths=/run/private/gpt02-reader:/run/gpt02-reader
+BindReadOnlyPaths=/run/gpt02-approval-reader
+BindReadOnlyPaths=/run/gpt02-issuer-reader
+ReadOnlyPaths=/opt/ai-coding-standalone-dev/gpt02_issue159_sign_once.py /opt/ai-coding-standalone-dev/gpt02_issue159_signer_approval_guard.py /opt/ai-coding-standalone-dev/gpt02_issue159_hub_core_signer_guard.py /opt/ai-coding-standalone-dev/gpt02_issue159_issuer_signer_guard.py
+StandardOutput=journal
+StandardError=journal
+
+# Static unit only; explicit supervised one-shot invocation.
