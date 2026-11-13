@@ -53,6 +53,20 @@ describe("generic worker never claims DEV GPT02 recovery",()=>{
     expect(claim.indexOf("AND ${genericClaimNotGpt02RecoverySql()}")).toBeLessThan(
       claim.indexOf("FOR UPDATE SKIP LOCKED"));
   });
+  it("duplicate protected bridge commands cannot re-notify when caller omits marker",async()=>{
+    const {readFileSync}=await import("node:fs");
+    const source=readFileSync(
+      new URL("../localCodingControlBridgeService.ts",import.meta.url),"utf8");
+    const submission=source.slice(source.indexOf("export async function submitCodingBridgeCommand("),
+      source.indexOf("async function deliverCodingBridgeWhatsappNotification"));
+    const start=submission.indexOf("if (existing) {");
+    const guard=submission.indexOf("isQuarantinedGpt02RecoveryMetadata(existing.metadataJson)",start);
+    const notification=submission.indexOf("notifyExternalAgentWork(input.assignedClientId, existing.id)",start);
+    expect(start).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(start);
+    expect(notification).toBeGreaterThan(guard);
+    expect(submission.slice(guard,notification)).toContain("GPT02_PROTECTED_GENERIC_RENOTIFY_FORBIDDEN");
+  });
   it("DEV uses owner-owned candidate identity function without broad table grants",()=>{
     const prev=process.env["APP_ENV"];
     try {
