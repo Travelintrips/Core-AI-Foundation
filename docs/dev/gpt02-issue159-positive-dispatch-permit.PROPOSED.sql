@@ -45,8 +45,8 @@ BEGIN
  THEN RAISE EXCEPTION 'ISSUER_LINEAGE_RPC_MISSING'; END IF;
 END $preflight$;
 
-CREATE ROLE dev_gpt02_release_writer NOLOGIN NOINHERIT NOBYPASSRLS;
-CREATE ROLE dev_gpt02_release_reader NOLOGIN NOINHERIT NOBYPASSRLS;
+CREATE ROLE dev_gpt02_release_writer NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0;
+CREATE ROLE dev_gpt02_release_reader NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0;
 GRANT gpt02_store_owner TO postgres WITH SET TRUE;
 SET ROLE gpt02_store_owner;
 -- The private schema owner, not the migration account, must grant USAGE.
