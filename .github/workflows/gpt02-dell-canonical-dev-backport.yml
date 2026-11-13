@@ -47,6 +47,10 @@ jobs:
           PY
       - name: Install pinned Python cryptography used by existing wake and recovery tests
         run: python3 -m pip install --no-cache-dir cryptography==50.0.2
+      - name: Prove canonical source/runtime parity without accessing Windows host
+        run: |
+          python3 -B scripts/windows/ai-core/gpt02_dell_runtime_parity.py --mode source
+          python3 -B -m unittest discover -s scripts/windows/ai-core -p test_gpt02_dell_runtime_parity.py -q
       - name: Existing Windows native Python suite plus unrelated test regressions
         run: |
           python3 -B -m unittest discover -s scripts/windows/ai-core -p 'test_*.py' -q
@@ -86,6 +90,13 @@ jobs:
           print('DELL_WINDOWS_CHECKOUT_BYTE_IDENTICAL_SHA256_PASS')
           '@ | python -
           if ($LASTEXITCODE -ne 0) { throw 'Byte-for-byte Windows runtime pin mismatch' }
+      - name: Prove exact installed Windows runtime hashes using read-only preflight
+        shell: pwsh
+        run: |
+          python -B scripts/windows/ai-core/gpt02_dell_runtime_parity.py --mode runtime
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime source parity failed' }
+          python -B -m unittest discover -s scripts/windows/ai-core -p test_gpt02_dell_runtime_parity.py -q
+          if ($LASTEXITCODE -ne 0) { throw 'Windows parity fail-closed tests failed' }
       - name: Run 35 native tests and exact cache/stream/rate contracts
         shell: pwsh
         run: |

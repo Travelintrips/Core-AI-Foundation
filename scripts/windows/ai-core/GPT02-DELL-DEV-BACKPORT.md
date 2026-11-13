@@ -26,3 +26,14 @@ One separate command \`e5e1d428-1ef1-45bb-8041-603d31ee8bf2\` remains FAILED; pr
 5. **PROD must not be deployed or changed** based on this PR. Leave it Draft pending explicit release review.
 
 Historical details and source custody are recorded in PR #1723 and review-only PR #1748.
+
+## Exact DELL source parity preflight (PASS, read-only)
+- New `gpt02_dell_runtime_parity.py` compares all 24 installed GPT02 DELL source modules with canonical LF-normalized SHA-256 data. Three critical installed byte hashes are independently pinned, with CRLF/LF differences checked explicitly.
+- A live DELL read-only audit using an external manifest showed `result=PASS`, `runtime_files=24`, `critical_hashes=3`, and `changes_made=false`. No running executable, Chrome profile, credential store, Task Scheduler task, or database was modified.
+- Preflight accepts `--mode source` in GitHub/Linux and `--mode runtime` on Windows. CI runs source custody, 10 negative/positive parity test cases, and Windows installed-byte validation. Missing runtime code, altered hash, symlink or path-traversal input is refused. Git-only unit tests are not required in the DELL worker directory.
+- To audit an installed DELL runtime safely, place a *copy of this source's manifest and preflight script* in a separate audit directory and invoke `--source-root <installed AI-Core> --runtime-root <installed AI-Core> --manifest-path <audit manifest> --mode runtime`. Neither runtime app files nor configuration are changed.
+
+## Required merge/deploy safety hold
+`develop` is monitored by `scripts/vps/dev_ci_watcher.py` and `.github/workflows/hostinger-dev-deploy.yml`. Once `CI Verify` and `DEV Fast Verify` pass, a develop push can automatically trigger a **full Hostinger VPS DEV application release**, *even for Windows-only source changes*. This PR must remain Draft until a reviewed source-only release/no-restart path or a separate explicitly approved maintenance deployment gate exists. The PR itself does not deploy PROD, but do not interpret green CI alone as permission to restart the already-PASS DEV API.
+
+The verified browser-wake → DELL → callback path still does **not** prove Task Hub/issuer Task #166 → same command ID: Task #166 retains `NO_DISPATCH`, and no signed dispatch grant is inferred.

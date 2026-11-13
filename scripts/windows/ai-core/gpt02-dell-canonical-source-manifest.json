@@ -40,8 +40,8 @@
     },
     {
       "name": "gpt02-dev-monitor-readonly.ps1",
-      "sha256_lf": "d9c706c9a75dad549039b2c1d15ec6a81bdcb31e1d8027428577fd3590237f7e",
-      "bytes": 10096
+      "sha256_lf": "f956d2ee40dfd2abcaa14d02a58b26aa90a9afb2590958284f8292c9a797f744",
+      "bytes": 10095
     },
     {
       "name": "gpt02-dev-recovery-policy.cjs",
