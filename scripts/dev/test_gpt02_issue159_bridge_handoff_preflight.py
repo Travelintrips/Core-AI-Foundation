@@ -11,8 +11,10 @@ import unittest
 
 from gpt02_issue159_bridge_handoff_preflight import (
     BRIDGE_IDENTITY_COLLISION_SQL,
+    BOUND_CORE_INSTRUCTION_SQL,
     HandoffBoundaryError,
     inspect_held_outbox_bridge_identity,
+    inspect_persisted_core_instruction,
     external_id,
 )
 
@@ -188,6 +190,80 @@ class BridgeHandoffPreflightTests(unittest.TestCase):
                   "artifacts/api-server/src/services/gpt02RecoveryGenericClaimQuarantine.ts").read_text()
         self.assertIn('"gpt02Issue159PositivePermit"', source)
         self.assertIn("'gpt02Issue159PositivePermit'", source)
+
+    def test_persisted_core_source_identity_is_not_dispatch_authority(self):
+        prepared = {
+            "company_id": "default",
+            "hub_task_id": 171,
+            "command_candidate_id": COMMAND,
+            "attempt_id": ATTEMPT,
+            "core_task_id": CORE,
+            "config_sha256": "c" * 64,
+            "expires_at_ms": 1_800_000_120_000,
+        }
+        task = {
+            "id": CORE,
+            "task_number": "GPT02DEV-171-" + "c" * 14,
+            "project_name": "GPT02 DEV coding lifecycle",
+            "repository": "Travelintrips/Core-AI-Foundation",
+            "branch": "develop",
+            "instruction": "DEV E2E source-only proof task",
+            "status": "PENDING",
+        }
+        result = inspect_persisted_core_instruction(
+            self.row, prepared, task, 1_800_000_000_000)
+        self.assertEqual(result["commandId"], COMMAND)
+        self.assertEqual(result["coreTaskId"], CORE)
+        self.assertEqual(result["attemptId"], ATTEMPT)
+        self.assertEqual(len(result["instructionSha256"]), 64)
+        self.assertFalse(result["fullConfigDigestRecomputed"])
+        self.assertFalse(result["instructionAuthorityVerified"])
+        self.assertFalse(result["ownerChannelVerified"])
+        self.assertFalse(result["targetConversationVerified"])
+        self.assertFalse(result["bridgeCommandInserted"])
+        self.assertFalse(result["dispatchPermitted"])
+        self.assertEqual(result["releaseDecision"], "NO_GO")
+
+        for field, wrong in [
+            ("company_id", "prod"),
+            ("hub_task_id", 170),
+            ("command_candidate_id", OTHER),
+            ("attempt_id", OTHER),
+            ("core_task_id", OTHER),
+            ("config_sha256", "x" * 64),
+            ("expires_at_ms", 1_800_000_000_000),
+        ]:
+            with self.subTest(field=field):
+                with self.assertRaises(HandoffBoundaryError):
+                    inspect_persisted_core_instruction(
+                        self.row, dict(prepared, **{field: wrong}),
+                        task, 1_800_000_000_000)
+        for field, wrong in [
+            ("id", OTHER),
+            ("task_number", "GPT02DEV-170-cccccccccccccc"),
+            ("project_name", "another project"),
+            ("repository", "Travelintrips/unrelated"),
+            ("branch", "main"),
+            ("instruction", ""),
+            ("instruction", "contains\ncontrol"),
+            ("status", "COMPLETED"),
+        ]:
+            with self.subTest(field=field, wrong=wrong):
+                with self.assertRaises(HandoffBoundaryError):
+                    inspect_persisted_core_instruction(
+                        self.row, prepared, dict(task, **{field: wrong}),
+                        1_800_000_000_000)
+
+    def test_core_instruction_sql_is_read_only_and_single_task_scoped(self):
+        query = BOUND_CORE_INSTRUCTION_SQL.lower()
+        self.assertTrue(query.strip().startswith("select "))
+        self.assertIn("from gpt02_stage.core_preparations", query)
+        self.assertIn("join ai_platform.ai_coding_tasks", query)
+        self.assertIn("command_candidate_id=%s::uuid", query)
+        self.assertIn("attempt_id=%s::uuid", query)
+        self.assertIn("limit 2", query)
+        for forbidden in ("insert into", "update ", "delete from", "drop table"):
+            self.assertNotIn(forbidden, query)
 
     def test_no_send_or_write_surface(self):
         source = (Path(__file__).resolve().parents[2] /
