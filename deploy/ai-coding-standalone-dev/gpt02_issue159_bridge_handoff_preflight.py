@@ -202,8 +202,9 @@ def inspect_persisted_core_instruction(
 ) -> dict[str, Any]:
     """Attest proposal identity and instruction hash, never approve a send.
 
-    Inputs must come from a trusted read-only SQL adapter. A caller may forge
-    the JSON objects, so this pure function NEVER grants dispatch authority.
+    Inputs must come from a trusted read-only SQL adapter. This function
+    DOES NOT recompute the full config SHA-256 (which also depends on Hub/PIC
+    identity). A caller may forge JSON objects, so it NEVER grants authority.
     """
     if type(now_ms) is not int or now_ms <= 0:
         deny("CORE_INSTRUCTION_CLOCK_INVALID")
@@ -246,13 +247,15 @@ def inspect_persisted_core_instruction(
         deny("IMMUTABLE_CORE_INSTRUCTION_BINDING_REQUIRED")
     return {
         "environment": "DEV",
-        "stage": "READONLY_CORE_INSTRUCTION_SOURCE_BOUND",
+        "stage": "READONLY_CORE_INSTRUCTION_IDENTITY_MATCHED_ONLY",
         "commandId": outbox["command_id"],
         "coreTaskId": outbox["core_task_id"],
         "attemptId": outbox["attempt_id"],
         "instructionSha256": hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
         "source": "gpt02_stage.core_preparations+ai_platform.ai_coding_tasks",
         "trustedReaderMustAuthenticate": True,
+        "fullConfigDigestRecomputed": False,
+        "instructionAuthorityVerified": False,
         "ownerChannelVerified": False,
         "targetConversationVerified": False,
         "bridgeCommandInserted": False,
