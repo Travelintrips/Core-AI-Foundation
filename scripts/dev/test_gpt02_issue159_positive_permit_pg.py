@@ -80,6 +80,10 @@ def main():
             ('dev_gpt02_release_writer','dev_gpt02_release_reader')""").stdout.strip()
         ensure(roles == "dev_gpt02_release_reader:false,dev_gpt02_release_writer:false",
                "RELEASE_ROLES_MUST_BE_NOLOGIN")
+        for role in ("dev_gpt02_release_writer", "dev_gpt02_release_reader"):
+            actual = sql("SELECT has_schema_privilege('" + role +
+                         "','gpt02_private','USAGE')").stdout.strip()
+            ensure(actual == "t", "RELEASE_PRIVATE_SCHEMA_USAGE_MISSING_" + role)
         n = sql("""SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
              WHERE n.nspname='gpt02_private' AND c.relname IN
              ('positive_dispatch_permits','positive_dispatch_consumptions')
