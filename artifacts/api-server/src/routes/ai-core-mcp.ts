@@ -27,7 +27,7 @@ import {
 } from "../services/aiCoreMcpOAuthService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { dispatchExternalAgentWork, getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
-import { isDevBrowserWakeAllowed, queueDevBrowserWake } from "../services/devChatGptWakeService.js";
+import { isConfiguredDevWakeAccountTarget, isDevBrowserWakeAllowed, queueDevBrowserWake } from "../services/devChatGptWakeService.js";
 import { allowedDevWakeOwners, DEV_WAKE_DELL_WORKER, isOwnedDevWakeProgressCommand } from "../services/devChatGptWakeBindingService.js";
 import {
   isDevChatGptContinuityMessage, parseDevChatGptContinuityCommand,
@@ -1360,6 +1360,25 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         // second work command. The worker also checks marker visibility.
         const wakeEventId = wake[2]!.toLowerCase();
         const destinationConversationId = wake[1]!.toLowerCase();
+        const isGpt02Target = await isConfiguredDevWakeAccountTarget({
+          accountAlias: "GPT02",
+          ownerChannel: principalChannel,
+          targetConversationId: destinationConversationId,
+          requestHost: req.hostname,
+        });
+        if (isGpt02Target) {
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "GPT02_V2_INSTRUCTION_REQUIRED: GPT02 DEV wake must carry an explicit bounded instruction." }],
+            structuredContent: {
+              blocked: true,
+              reason: "GPT02_V2_INSTRUCTION_REQUIRED",
+              dispatched: false,
+              browserWakeVerified: false,
+            },
+            isError: true,
+          }));
+          return;
+        }
         try {
           const queued = await queueDevBrowserWake({ ownerChannel: principalChannel,
             targetConversationId: destinationConversationId, eventId: wakeEventId, requestHost: req.hostname });
