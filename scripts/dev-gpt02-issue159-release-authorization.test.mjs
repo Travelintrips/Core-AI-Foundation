@@ -55,7 +55,7 @@ function setup() {
   };
   const signed=sign(null,canonicalIssue159Release(release),signing.privateKey).toString("base64");
   const input={
-    release,signatureBase64:signed,publicKeyPem:signing.publicKey,held,
+    release,signatureBase64:signed,publicKeyPem:signing.publicKey.export({type:'spki',format:'pem'}),held,
     binding,nowMs:now,
   };
   return input;
@@ -81,7 +81,7 @@ test("unsigned, substituted signature or incorrect release root fails",()=>{
   assert.throws(()=>verifyInput({...a,signatureBase64:"A".repeat(86)+"=="}),
     code("INDEPENDENT_RELEASE_SIGNATURE_INVALID"));
   const wrong=generateKeyPairSync("ed25519");
-  assert.throws(()=>verifyInput({...a,publicKeyPem:wrong.publicKey}),
+  assert.throws(()=>verifyInput({...a,publicKeyPem:wrong.publicKey.export({type:'spki',format:'pem'})}),
     code("INDEPENDENT_RELEASE_SIGNATURE_INVALID"));
 });
 test("signed but stale, excessive TTL, future-dated or wrong environment denied",()=>{
