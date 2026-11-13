@@ -82,8 +82,20 @@ router.get("/dev-center/jobs", async (req, res): Promise<void> => {
     const str=(v:unknown):string=>typeof v==="string"?v.slice(0,180):"";
     const [bridgeResult, executionResult] = await Promise.allSettled([
       db.execute(sql`SELECT id::text AS id, source, external_id, title, status, owner, created_at, updated_at FROM ai_task_bridge.jobs ORDER BY CASE WHEN status IN ('QUEUED','RUNNING','REVIEW_REQUIRED') THEN 0 ELSE 1 END, updated_at DESC LIMIT 100`),
-      db.execute(sql`SELECT e.id::text AS id,e.task_id,e.external_id,e.command_id::text AS command_id,e.title,e.source,e.status,e.progress,e.worker_id,e.worker_type,e.assigned_client_id,e.error_message,e.callback_verified,e.attestation_verified,e.final_ack_verified,e.metadata,e.updated_at,t.status AS parent_task_status,t.assigned_to
-        FROM public.ai_execution_jobs e LEFT JOIN public.ai_tasks t ON t.id=e.task_id AND t.company_id=e.company_id ORDER BY CASE WHEN e.status IN ('received','processing','dispatching','verifying','review_required','blocked') THEN 0 ELSE 1 END, e.updated_at DESC LIMIT 100`),
+      db.execute(sql`WITH recent AS (
+          SELECT id FROM public.ai_execution_jobs
+          ORDER BY CASE WHEN status IN ('received','processing','dispatching','verifying','review_required','blocked') THEN 0 ELSE 1 END, updated_at DESC LIMIT 100
+        ), verified_completed AS (
+          SELECT id FROM public.ai_execution_jobs
+          WHERE status='completed' AND callback_verified IS TRUE AND attestation_verified IS TRUE AND final_ack_verified IS TRUE
+          ORDER BY updated_at DESC LIMIT 25
+        ), selected AS (
+          SELECT id FROM recent UNION SELECT id FROM verified_completed
+        )
+        SELECT e.id::text AS id,e.task_id,e.external_id,e.command_id::text AS command_id,e.title,e.source,e.status,e.progress,e.worker_id,e.worker_type,e.assigned_client_id,e.error_message,e.callback_verified,e.attestation_verified,e.final_ack_verified,e.metadata,e.updated_at,t.status AS parent_task_status,t.assigned_to
+        FROM selected s JOIN public.ai_execution_jobs e ON e.id=s.id
+        LEFT JOIN public.ai_tasks t ON t.id=e.task_id AND t.company_id=e.company_id
+        ORDER BY CASE WHEN e.status IN ('received','processing','dispatching','verifying','review_required','blocked') THEN 0 ELSE 1 END, e.updated_at DESC LIMIT 125`),
     ]);
     const warnings:string[]=[];
     if(bridgeResult.status==="rejected")warnings.push("AI_TASK_BRIDGE_UNAVAILABLE");
