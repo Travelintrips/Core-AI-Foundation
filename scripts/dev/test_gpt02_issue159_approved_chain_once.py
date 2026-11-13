@@ -47,8 +47,12 @@ class ApprovedChainOnceTest(unittest.TestCase):
     def test_preexisting_signer_output_denies_replay_before_service_start(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
-            cred=root/"encrypted";cred.write_text("encrypted-fixture")
-            cred.chmod(0o600)
+            # The CI runner is non-root. Simulate an exact root-owned 0600
+            # encrypted credential without weakening the live root-only check.
+            cred=SimpleNamespace(
+                is_file=lambda: True, is_symlink=lambda: False,
+                stat=lambda: SimpleNamespace(st_uid=0, st_mode=0o100600),
+            )
             assembler=root/"assemble";assembler.write_text("# test")
             output=root/"approval.json";output.write_text("already done")
             with patch.object(mod.os,"geteuid",return_value=0), \
