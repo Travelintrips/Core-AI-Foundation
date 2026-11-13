@@ -1,0 +1,27 @@
+name: GPT02 DEV Positive Permit Proposal (Disposable Only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "docs/dev/gpt02-issue159-positive-dispatch-permit.PROPOSED.sql"
+      - "scripts/dev/test_gpt02_issue159_positive_permit_pg.py"
+      - ".github/workflows/gpt02-issue159-positive-permit-draft.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout proposed source (no deploy)
+        uses: actions/checkout@v4
+      - name: Disposable PostgreSQL 16 one-use ledger regressions
+        run: python3 scripts/dev/test_gpt02_issue159_positive_permit_pg.py
+      - name: Assert no runtime deployment path
+        run: |
+          test ! -f scripts/dev/gpt02_issue159_positive_permit_apply_live.py
+          echo "NO_LIVE_MIGRATION_NO_DEPLOY"
