@@ -149,6 +149,11 @@ class PositivePermitHandoffTest(unittest.TestCase):
         e["result"]["fourSignaturesVerified"] = False
         self.reject(response=e)
 
+    def test_verifier_timeout_covers_both_bounded_readbacks(self):
+        from gpt02_issue159_positive_permit_handoff import REQUEST_TIMEOUT_S
+        self.assertGreater(REQUEST_TIMEOUT_S, 8.0)
+        self.assertLess(REQUEST_TIMEOUT_S, 15.0)
+
     def test_unpinned_socket_refused_before_filesystem_access(self):
         with self.assertRaises(BrokerAdmissionError) as ctx:
             _pinned_verifier_socket("/tmp/untrusted.sock")
