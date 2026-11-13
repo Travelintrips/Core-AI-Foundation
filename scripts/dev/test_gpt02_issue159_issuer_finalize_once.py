@@ -311,7 +311,7 @@ class IssuerFinalizerTests(unittest.TestCase):
 
         def response(health, status=b"HTTP/1.1 200 OK"):
             raw = json.dumps(health, separators=(",", ":")).encode()
-            return (status+b"\r\nContent-Type: application/json\r\nContent-Length: "+
+            return (status+b"\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: "+
                     str(len(raw)).encode()+b"\r\n\r\n"+raw)
         good = FakeSocket(response(body))
         with patch.object(signer_guard, "_require_socket", return_value=(42,7)), \

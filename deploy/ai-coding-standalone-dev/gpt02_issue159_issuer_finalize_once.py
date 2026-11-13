@@ -197,7 +197,8 @@ def require_issuer_reader_warm(
     length = hdr.get(b"content-length", b"")
     if (b"transfer-encoding" in hdr or not length.isdigit()
             or int(length) != len(body)
-            or hdr.get(b"content-type") != b"application/json"):
+            or hdr.get(b"content-type", b"").split(b";", 1)[0].strip()
+               != b"application/json"):
         deny("ISSUER_WARMUP_FRAMING_INVALID")
     try:
         response = json.loads(body)
