@@ -6,6 +6,7 @@ from pathlib import Path
 from admin_identity import admin_identity
 from gpt02_issue159_approval_http import handle_issue159_approval_intent
 from gpt02_issue159_approval_intent_contract import ApprovalIntentContractError, validate_approval_claims
+from gpt02_issue159_approval_request_refresh import refresh_pending, RefreshDenied
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
 ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
@@ -43,11 +44,23 @@ def persist_issue159_approved_packet(claims,result):
  os.chmod(tmp,0o600)
  os.replace(tmp,target)
  return packet
-def issue159_identity_verifier(token,connection):
- identity=admin_identity(token,connection)
- if not identity or identity.get('role')!='super_admin' or identity.get('auth_level') not in ('aal1','aal2'):return None
- return {'userId':identity['user_id'],'role':identity['role'],
+def issue159_operator_identity(identity,connection):
+ if (not identity or identity.get('role')!='super_admin'
+     or identity.get('auth_level') not in ('aal1','aal2')
+     or not identity.get('user_id') or not identity.get('email')):return None
+ rows=connection.execute(
+  """SELECT l.hub_operator_id
+     FROM gpt02_issue159_admin_operator_links l
+     JOIN admin_identities a ON a.user_id=l.auth_user_id
+     WHERE l.auth_user_id=? AND lower(l.email)=lower(?)
+       AND l.enabled=1 AND a.enabled=1 AND a.role='super_admin'""",
+  (identity['user_id'],identity['email'])
+ ).fetchall()
+ if len(rows)!=1 or not rows[0][0]:return None
+ return {'userId':rows[0][0],'role':'super_admin',
          'enabled':True,'authMethod':'supabase_admin_session'}
+def issue159_identity_verifier(token,connection):
+ return issue159_operator_identity(admin_identity(token,connection),connection)
 def load_issue159_pending_claims(actor_id):
  try:
   st=os.lstat(ISSUE159_PENDING_CLAIMS)
@@ -66,9 +79,9 @@ def load_issue159_pending_claims(actor_id):
   validated=validate_approval_claims(claims)
   if claims['superAdminId']!=actor_id:
    return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_ACTOR_MISMATCH','releaseDecision':'NO_GO'}
-  observed=int(time.time()*1000)
-  if observed<claims['issuedAt'] or observed>=claims['expiresAt']:
-   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  # An expired request can already have an APPROVE record from its valid
+  # window. Read the bound, immutable ledger before displaying expiry, while
+  # never re-enabling the approval button or extending the request.
   con=sqlite3.connect('file:'+DB+'?mode=ro',uri=True,timeout=2)
   try:
    con.execute('PRAGMA query_only=ON')
@@ -78,8 +91,13 @@ def load_issue159_pending_claims(actor_id):
    ).fetchone()
   finally:
    con.close()
-  if not row or row[0]!=0:
+  if not row:
+   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_INVALID','releaseDecision':'NO_GO'}
+  if row[0]!=0:
    return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_ALREADY_APPROVED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  observed=int(time.time()*1000)
+  if observed<claims['issuedAt'] or observed>=claims['expiresAt']:
+   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   return {
    'environment':'DEV','pending':True,'taskId':claims['taskId'],
    'commandId':claims['commandId'],'expiresAt':claims['expiresAt'],
@@ -135,10 +153,10 @@ class Handler(BaseHTTPRequestHandler):
    auth=self.headers.get('Authorization','')
    if not auth.startswith('Bearer '):return self.send(401,{'error':'unauthorized'})
    with conn() as c:
-    identity=admin_identity(auth[7:],c)
-   if not identity or identity.get('role')!='super_admin':
-    return self.send(403,{'error':'active_super_admin_required'})
-   return self.send(200,load_issue159_pending_claims(identity['user_id']))
+    identity=issue159_operator_identity(admin_identity(auth[7:],c),c)
+   if not identity:
+    return self.send(403,{'error':'active_super_admin_operator_mapping_required'})
+   return self.send(200,load_issue159_pending_claims(identity['userId']))
   if p=='/api/dashboard':
    with conn() as c:
     jobs=c.execute('SELECT status,COUNT(*) FROM jobs GROUP BY status').fetchall()
@@ -158,6 +176,32 @@ class Handler(BaseHTTPRequestHandler):
   return self.send(200,{'approvals':[{'job_id':r[0],'kind':r[1],'status':r[2],'test_result':r[3],'updated_at':r[4],'artifact_hash':hashlib.sha256(r[5].encode()).hexdigest()} for r in rows]})
  def do_POST(self):
   p=urlparse(self.path).path
+  if p=='/api/gpt02/issue159/approval-intent/refresh':
+   # This is NOT a task/approval creation API. It only rotates an expired
+   # nonce for the same independently verified, unconsumed DEV preparation.
+   if not ISSUE159_APPROVAL_INTENT_ENABLED:
+    return self.send(403,{'error':'issue159_approval_disabled','releaseDecision':'NO_GO'})
+   auth=self.headers.get('Authorization','')
+   if not auth.startswith('Bearer '):
+    return self.send(401,{'error':'unauthorized','releaseDecision':'NO_GO'})
+   with conn() as c:
+    identity=issue159_operator_identity(admin_identity(auth[7:],c),c)
+   if not identity:
+    return self.send(403,{'error':'active_super_admin_operator_mapping_required','releaseDecision':'NO_GO'})
+   try:
+    length=int(self.headers.get('Content-Length','0'))
+    if length!=2 or self.rfile.read(length)!=b'{}':
+     return self.send(400,{'error':'empty_json_required','releaseDecision':'NO_GO'})
+    response=refresh_pending(DB,ISSUE159_PENDING_CLAIMS,identity['userId'])
+    return self.send(200,response)
+   except RefreshDenied as exc:
+    return self.send(exc.http_status,{'error':exc.code,
+     'signingPermitted':False,'authorizationGranted':False,
+     'dispatchPermitted':False,'releaseDecision':'NO_GO'})
+   except (OSError,ValueError,TypeError,sqlite3.Error):
+    return self.send(503,{'error':'issue159_refresh_unavailable',
+     'signingPermitted':False,'authorizationGranted':False,
+     'dispatchPermitted':False,'releaseDecision':'NO_GO'})
   if p=='/api/gpt02/issue159/approval-intent':
    try:
     n=int(self.headers.get('Content-Length','0'))

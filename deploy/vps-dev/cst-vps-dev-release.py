@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed VPS DEV deployment; PROD stays on its current image and database."""
 import fcntl
+import hashlib
+import stat
 import json
 import os
 import re
@@ -17,6 +19,7 @@ REPO = "https://github.com/Travelintrips/Core-AI-Foundation.git"
 SRC = Path("/opt/cst-vps-dev-release/source")
 ENV = Path("/opt/core-ai-dev/.env.dev")
 STATIC = Path("/var/www/dev-aicore")
+APPROVAL_LOGIN_SOURCE = Path("/opt/ai-coding-standalone-dev/admin_login.html")
 DOMAIN = "dev.cstlogistic.co.id"
 PROD = "ai-core-prod-api"
 DEV = "core-ai-dev"
@@ -116,6 +119,41 @@ def remove(name):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+
+def copy_gpt02_approval_static(target_dir, source=APPROVAL_LOGIN_SOURCE, expected_uid=0):
+    """Carry the separately managed DEV approval UI across static swaps.
+
+    Refuse symlinks and untrusted/missing sources; never overwrite an asset
+    already present in the verified DEV image. This does not change auth.
+    """
+    st = source.lstat()
+    if (not stat.S_ISREG(st.st_mode) or st.st_uid != expected_uid
+            or stat.S_IMODE(st.st_mode) != 0o644):
+        raise RuntimeError("GPT02 DEV approval HTML source custody invalid")
+    data = source.read_bytes()
+    if (b"<title>AI Coding DEV | Admin</title>" not in data
+            or b"/gpt02/issue159/approval-intent" not in data
+            or b"GPT02_NEW_TASK_SINGLE_COMMAND_APPROVAL" in data):
+        raise RuntimeError("GPT02 DEV approval HTML contract invalid")
+    dest = target_dir / "gpt02-approval.html"
+    if dest.exists() or dest.is_symlink():
+        raise RuntimeError("GPT02 DEV approval static path collision")
+    dest.write_bytes(data)
+    dest.chmod(0o644)
+    if hashlib.sha256(dest.read_bytes()).digest() != hashlib.sha256(data).digest():
+        raise RuntimeError("GPT02 DEV approval static hash mismatch")
+
+
+def verify_gpt02_approval_https():
+    """Require independent HTTPS readback before the DEV release is committed."""
+    html = command("curl", "--fail", "--silent", "--show-error", "--max-time", "10",
+                   "--resolve", DOMAIN + ":443:127.0.0.1",
+                   "https://" + DOMAIN + "/gpt02-approval.html", output=True)
+    if "<title>AI Coding DEV | Admin</title>" not in html:
+        raise RuntimeError("GPT02 DEV approval HTML HTTPS readback failed")
+    if "/gpt02/issue159/approval-intent" not in html:
+        raise RuntimeError("GPT02 DEV approval form not present after static swap")
+
 def verify_https_local(sha):
     # Pin a local TLS connection to nginx without altering public DNS.
     header = tempfile.NamedTemporaryFile(delete=False)
@@ -192,6 +230,7 @@ def main(sha):
             command("docker", "cp", canary + ":/app/artifacts/api-server/dist/public/.", str(tempstatic) + "/")
             if not (tempstatic / "index.html").is_file() or not (tempstatic / "assets").is_dir():
                 raise RuntimeError("Frontend artifacts missing from verified image")
+            copy_gpt02_approval_static(tempstatic)
             # tempfile.mkdtemp creates 0700 directories. Nginx serves this
             # directory as www-data, so make the vetted static tree readable.
             tempstatic.chmod(0o755)
@@ -210,6 +249,7 @@ def main(sha):
             STATIC.rename(prevstatic)
             tempstatic.rename(STATIC)
             verify_https_local(sha)
+            verify_gpt02_approval_https()
             if inspect(PROD)["Id"] != before_prod["Id"] or not check_prod():
                 raise RuntimeError("PROD identity or health changed during DEV deploy")
             if inspect("ai-task-production")["Id"] != before_task["Id"]:

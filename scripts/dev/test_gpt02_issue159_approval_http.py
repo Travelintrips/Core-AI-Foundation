@@ -24,7 +24,7 @@ CLAIMS = {
     "v": 2,
     "environment": "DEV",
     "audience": "GPT02_NEW_TASK_SINGLE_COMMAND_APPROVAL",
-    "taskId": 137,
+    "taskId": 140,
     "commandId": "11111111-1111-4111-8111-111111111111",
     "attemptId": "22222222-2222-4222-8222-222222222222",
     "nonce": "A" * 44,

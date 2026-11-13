@@ -23,9 +23,11 @@ CREATE TABLE admin_identities (
 );
 """
 
+AUTH_USER_ID = "auth_fixture_super_admin"
+
 LOOKUP = {
     "claimsSha256": "a" * 64,
-    "taskId": 137,
+    "taskId": 140,
     "commandId": "11111111-1111-4111-8111-111111111111",
     "attemptId": "22222222-2222-4222-8222-222222222222",
     "companyId": "default",
@@ -50,7 +52,12 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         con = sqlite3.connect(path)
         con.execute(
             "INSERT INTO admin_identities(user_id,role,enabled) VALUES (?,?,?)",
-            (actor,"super_admin",1),
+            (AUTH_USER_ID,"super_admin",1),
+        )
+        con.execute(
+            """INSERT INTO gpt02_issue159_admin_operator_links
+            (auth_user_id,hub_operator_id,email,enabled) VALUES (?,?,?,1)""",
+            (AUTH_USER_ID,actor,"fixture@example.com"),
         )
         con.execute(
             """INSERT INTO gpt02_issue159_approval_intents
@@ -119,7 +126,7 @@ class ApprovalIntentReaderTest(unittest.TestCase):
             con = sqlite3.connect(path)
             con.execute(
                 "UPDATE admin_identities SET role=?,enabled=? WHERE user_id=?",
-                (role, enabled, LOOKUP["superAdminId"]),
+                (role, enabled, AUTH_USER_ID),
             )
             con.commit()
             con.close()
@@ -130,6 +137,16 @@ class ApprovalIntentReaderTest(unittest.TestCase):
                 out["reason"], "APPROVAL_INTENT_PROVENANCE_MISMATCH"
             )
             self.assertFalse(out["persistedTrustedReadProven"])
+
+    def test_disabled_operator_mapping_fails_closed(self):
+        path = self.db()
+        self.seed(path)
+        con=sqlite3.connect(path)
+        con.execute("UPDATE gpt02_issue159_admin_operator_links SET enabled=0")
+        con.commit(); con.close()
+        out=reader.read_approval_intent(path,LOOKUP,1500,operational=False)
+        self.assertEqual(out["reason"],"APPROVAL_INTENT_PROVENANCE_MISMATCH")
+        self.assertFalse(out["persistedTrustedReadProven"])
 
     def test_expired_or_future_observation_fails_closed(self):
         path = self.db()

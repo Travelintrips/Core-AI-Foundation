@@ -45,6 +45,8 @@ on:
       - 'scripts/dev/test_gpt02_issue159_approval_intent_contract.py'
       - 'scripts/dev/test_gpt02_issue159_approval_http.py'
       - 'scripts/dev/test_gpt02_issue159_approval_api_route.py'
+      - 'scripts/dev/prepare_gpt02_issue159_approval_request.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_request_prepare.py'
       - 'artifacts/api-server/src/services/gpt02Issue159PrivateKeyCustodyContract.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02Issue159PrivateKeyCustodyContract.test.ts'
       - 'scripts/dev/gpt02_issue159_private_key_custody_readiness.py'
