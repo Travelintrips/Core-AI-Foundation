@@ -274,19 +274,24 @@ describe("DEV chatgpt:wake permission boundary", () => {
     expect(JSON.stringify(failure.body)).not.toContain("credentials");
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
-  it("queues a new configured account only for its exact relay owner and target", async () => {
+  it("requires an explicit V2 instruction for a configured GPT02 target while preserving the owner fence", async () => {
     const entry = { accountAlias: "GPT02", ownerChannel: "ai-engine-oauth:" + "d".repeat(64),
       targetConversationId: "22222222-2222-4222-8222-222222222222", workerId: "openclaw-dell-chatgpt-wake-dev",
       browserProfile: "travelincars-dev", enabled: true };
     vi.stubEnv("AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON", JSON.stringify({ version: 1, bindings: [entry] }));
-    mocks.dispatch.mockResolvedValue({ clientId: entry.workerId, command: { id: jobId }, created: true });
     const wakeMessage = "DEV_CHATGPT_WAKE_V1 conversation=" + entry.targetConversationId + " event=" + eventId;
-    const denied = await call(wakeMessage);
-    expect(denied.body.result.structuredContent.reason).toBe("DEV_CHATGPT_WAKE_DENIED");
+    const deniedOwner = await call(wakeMessage);
+    expect(deniedOwner.body.result.structuredContent.reason).toBe("DEV_CHATGPT_WAKE_DENIED");
     expect(mocks.dispatch).not.toHaveBeenCalled();
-    const accepted = await call(wakeMessage, true, "dev-relay-test-key", entry.ownerChannel);
-    expect(accepted.body.result.structuredContent).toMatchObject({ commandId: jobId, clientId: entry.workerId, browserWakeVerified: false });
-    expect(mocks.dispatch.mock.calls[0]![0].metadata.wakeBinding).toMatchObject({ accountAlias: "GPT02", ownerChannel: entry.ownerChannel, browserProfile: entry.browserProfile });
+
+    const deniedV1 = await call(wakeMessage, true, "dev-relay-test-key", entry.ownerChannel);
+    expect(deniedV1.body.result.structuredContent).toMatchObject({
+      blocked: true,
+      reason: "GPT02_V2_INSTRUCTION_REQUIRED",
+      dispatched: false,
+      browserWakeVerified: false,
+    });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 
   it("returns historical DELL progress only to the authenticated owner without dispatch", async () => {
