@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from gpt02_issue159_signer_approval_guard import persisted_approval_fresh, canonical_sha
 from gpt02_issue159_hub_core_signer_guard import require_hub_core_facts
+from gpt02_issue159_issuer_signer_guard import require_issuer_facts
 
 ROLES=("approval","hub","core","issuer")
 UUID=re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
@@ -203,15 +204,17 @@ def main():
     # No bypass flag exists. Hub/Core require two independently authenticated
     # Hub/Core read-only database logins, plus the SAME persisted approval.
     # Issuer needs a real nonce receipt and fence and remains explicitly OFF.
-    if args.role == "issuer":
-        fail("ISSUER_SIGNER_PROOF_NOT_IMPLEMENTED")
     creds = os.environ.get("CREDENTIALS_DIRECTORY", "")
     output_dir = os.environ.get("RUNTIME_DIRECTORY", "")
     if not creds or not output_dir:
         fail("SYSTEMD_CREDENTIAL_AND_RUNTIME_BOUNDARY_REQUIRED")
     approval_path = str(Path(creds) / "approved-claims.json")
-    expected = str(Path(creds) / ("approved-claims.json" if args.role == "approval"
-                                 else "hub-core-link.json"))
+    expected_name = (
+        "approved-claims.json" if args.role == "approval"
+        else "hub-core-link.json" if args.role in ("hub", "core")
+        else "issuer-claims.json"
+    )
+    expected = str(Path(creds) / expected_name)
     destination = str(Path(output_dir) / (args.role + "-signature.json"))
     if args.claims != expected or args.output != destination:
         fail("ONE_SHOT_CREDENTIAL_OR_OUTPUT_PATH_NOT_PINNED")
@@ -234,6 +237,14 @@ def main():
         claims = json.loads(Path(args.claims).read_text(encoding="utf-8"))
         validate(args.role, claims, now_ms)
         require_hub_core_facts(args.role, claims, approved, now_ms=now_ms)
+    elif args.role == "issuer":
+        link_path = str(Path(creds) / "hub-core-link.json")
+        secure_file(link_path, "HUB_CORE_LINK")
+        secure_file(args.claims, "ISSUER_CLAIMS")
+        link = json.loads(Path(link_path).read_text(encoding="utf-8"))
+        claims = json.loads(Path(args.claims).read_text(encoding="utf-8"))
+        validate("issuer", claims, now_ms)
+        require_issuer_facts(claims, approved, link, now_ms=now_ms)
     else:
         fail("SIGNER_ROLE_NOT_SUPPORTED")
     sign_detached_for_test_or_gated_cli(
