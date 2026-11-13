@@ -1,0 +1,44 @@
+name: GPT02 DEV OTP canonical redirect
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/ai-coding-standalone-dev/admin_login.html'
+      - 'scripts/dev/test_gpt02_issue159_admin_login_otp_only.py'
+      - 'scripts/dev/test_gpt02_issue159_otp_redirect.mjs'
+      - 'docs/dev/gpt02-issue159-otp-redirect-20261112.md'
+      - '.github/workflows/gpt02-issue159-otp-redirect.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  otp-redirect-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test canonical OTP link and one-click session restore (offline)
+        run: |
+          python3 scripts/dev/test_gpt02_issue159_admin_login_otp_only.py
+          node --check scripts/dev/test_gpt02_issue159_otp_redirect.mjs
+          node scripts/dev/test_gpt02_issue159_otp_redirect.mjs
+      - name: Ensure OTP remains DEV-only and no secrets or privileged flows added
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('deploy/ai-coding-standalone-dev/admin_login.html').read_text()
+          assert "https://dev.cstlogistic.co.id/gpt02-approval.html" in s
+          assert "https://xssrfshdrtdfupgqwfdw.supabase.co/auth/v1" in s
+          assert "create_user:false" in s
+          assert "const API_PREFIX='/gpt02-approval-api';" in s
+          assert "type:'email'" in s
+          assert "grant_type=password" not in s
+          assert "verify_mfa" not in s.lower()
+          assert "bizportal." not in s.lower()
+          print('PASS: DEV-only OTP redirect, no password/TOTP or BizPortal destination')
+          PY

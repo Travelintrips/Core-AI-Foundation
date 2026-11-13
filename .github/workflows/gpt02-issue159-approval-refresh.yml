@@ -1,0 +1,62 @@
+name: GPT02 Issue159 Approval Refresh — DEV Only
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/ai-coding-standalone-dev/approval_api.py'
+      - 'deploy/ai-coding-standalone-dev/admin_login.html'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_request_refresh.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_api_route.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_request_refresh.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_request_refresh_ui.mjs'
+      - 'docs/dev/gpt02-issue159-approval-refresh-on-demand-20261112.md'
+      - '.github/workflows/gpt02-issue159-approval-refresh.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-readonly-approval-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Python and JavaScript syntax
+        run: |
+          python3 -m py_compile deploy/ai-coding-standalone-dev/approval_api.py deploy/ai-coding-standalone-dev/gpt02_issue159_approval_request_refresh.py scripts/dev/test_gpt02_issue159_approval_request_refresh.py
+          node --check scripts/dev/test_gpt02_issue159_approval_request_refresh_ui.mjs
+      - name: Exact session, immutable lineage, replay, clock and rollback denial
+        run: |
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_approval_request_refresh.py' -v
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_approval_api_route.py' -v
+      - name: Manual approval UI refresh and old tests
+        run: |
+          node scripts/dev/test_gpt02_issue159_approval_request_refresh_ui.mjs
+          node scripts/dev/test_gpt02_issue159_fresh_approval_click.mjs
+          node scripts/dev/test_gpt02_issue159_otp_redirect.mjs
+          python3 scripts/dev/test_gpt02_issue159_admin_login_otp_only.py
+      - name: Check no new signing, dispatch or privilege surface
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('deploy/ai-coding-standalone-dev/gpt02_issue159_approval_request_refresh.py').read_text()
+          api=Path('deploy/ai-coding-standalone-dev/approval_api.py').read_text()
+          html=Path('deploy/ai-coding-standalone-dev/admin_login.html').read_text()
+          assert 'MIN_PREPARATION_REMAINING_MS = 250_000' in s
+          assert 'WHERE task_id=? OR command_id=? OR attempt_id=?' in s
+          assert 'facts = fact_reader(query)' in s
+          assert 'prepare(db_path, output_path' in s
+          assert 'flock(fd, fcntl.LOCK_EX)' in s
+          assert 'RefreshDenied("ISSUE159_APPROVAL_ALREADY_RECORDED"' in s
+          assert 'p==\'/api/gpt02/issue159/approval-intent/refresh\'' in api
+          assert 'issue159_operator_identity(admin_identity(auth[7:],c),c)' in api
+          assert 'length!=2 or self.rfile.read(length)!=b\'{}\'' in api
+          assert "d.reason==='PENDING_REQUEST_EXPIRED'" in html
+          assert "const redirectTo='https://dev.cstlogistic.co.id/gpt02-approval.html'" in html
+          assert not any(x in s for x in ('Ed25519PrivateKey','INSERT INTO','UPDATE gpt02','DELETE FROM gpt02','dispatchPermitted": True'))
+          print('PASS: manual refresh only, no new authorization surface')
+          PY
