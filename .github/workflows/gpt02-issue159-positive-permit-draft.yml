@@ -7,9 +7,13 @@ on:
       - "docs/dev/gpt02-issue159-positive-dispatch-permit.PROPOSED.sql"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_release_broker.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_bridge_handoff_preflight.py"
+      - "artifacts/api-server/src/services/gpt02RecoveryGenericClaimQuarantine.ts"
+      - "artifacts/api-server/src/services/__tests__/gpt02RecoveryGenericClaimQuarantine.test.ts"
       - "scripts/dev/test_gpt02_issue159_positive_permit_pg.py"
       - "scripts/dev/test_gpt02_issue159_positive_permit_handoff.py"
       - "scripts/dev/test_gpt02_issue159_positive_release_broker.py"
+      - "scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py"
       - ".github/workflows/gpt02-issue159-positive-permit-draft.yml"
   workflow_dispatch:
 
@@ -48,11 +52,14 @@ jobs:
           set -euo pipefail
           python3 scripts/dev/test_gpt02_issue159_positive_permit_handoff.py -q
           python3 scripts/dev/test_gpt02_issue159_positive_release_broker.py -q
+          python3 scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py -q
           python3 -m py_compile \
             deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py \
             deploy/ai-coding-standalone-dev/gpt02_issue159_positive_release_broker.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_bridge_handoff_preflight.py \
             scripts/dev/test_gpt02_issue159_positive_permit_handoff.py \
-            scripts/dev/test_gpt02_issue159_positive_release_broker.py
+            scripts/dev/test_gpt02_issue159_positive_release_broker.py \
+            scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py
       - name: Preserve no-grant no-dispatch boundary
         run: |
           set -euo pipefail
