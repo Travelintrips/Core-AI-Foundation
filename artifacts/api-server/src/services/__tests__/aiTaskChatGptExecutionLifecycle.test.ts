@@ -15,6 +15,8 @@ describe("AI Task GPT02 execution lifecycle linkage", () => {
     expect(route).toContain("pg_advisory_xact_lock");
     expect(route).toContain("AI_TASK_EXECUTION_SOURCE_NOT_FOUND");
     expect(route).toContain("AI_TASK_EXECUTION_TERMINAL_REVIEW_REQUIRED");
+    expect(route).toContain("AI_TASK_EXECUTION_ACTIVE");
+    expect(route).toContain('current["idempotency_key"] !== idempotencyKey && status !== "prepared"');
     expect(route).toContain("executionJobId:execution.executionId");
     expect(route).toContain("markAiTaskChatGptExecutionDispatchFailed");
     expect(route).toContain("productionAllowed',false");
