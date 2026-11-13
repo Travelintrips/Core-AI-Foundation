@@ -38,19 +38,39 @@ def deny(code: str):
 def validate_dsn(conninfo: dict, role: str):
     if role not in ROLES:
         deny("PROBE_ROLE_NOT_APPROVED")
-    name = ROLES[role][0]
+    # Accept only the two exact database endpoints published for this one
+    # CST-DEV project; never a caller-chosen host or cross-role username.
+    profile = classify_pinned_profile(conninfo, role)
     exact = {
-        "user": f"{name}.{PROJECT}",
-        "host": HOST, "port": "5432", "dbname": "postgres",
+        "port": "5432", "dbname": "postgres",
         "sslmode": "verify-full", "sslrootcert": CA,
     }
     failures = [key for key, expected in exact.items()
                 if str(conninfo.get(key)) != expected]
+    if profile == "UNRECOGNIZED":
+        failures.extend(("user", "host"))
     if not conninfo.get("password"):
         failures.append("missing_password")
+    if conninfo.get("hostaddr") or conninfo.get("service"):
+        failures.append("untrusted_address_or_service_override")
     if failures:
-        # Field NAMES only. Never print the provided values.
+        # Only field NAMES, never the supplied values.
         deny("PROBE_STRICT_DEV_DSN_SCOPE_FAILED_FIELDS_" + "_".join(failures))
+    return profile
+
+
+def classify_pinned_profile(conninfo: dict, role: str) -> str:
+    """Classify known DEV connection profiles, without printing DSN fields."""
+    if role not in ROLES:
+        deny("PROBE_ROLE_NOT_APPROVED")
+    login = ROLES[role][0]
+    if (conninfo.get("host") == HOST
+            and conninfo.get("user") == f"{login}.{PROJECT}"):
+        return "PINNED_POOLER"
+    if (conninfo.get("host") == f"db.{PROJECT}.supabase.co"
+            and conninfo.get("user") == login):
+        return "PINNED_DIRECT"
+    return "UNRECOGNIZED"
 
 
 def check_identity(row, role: str):
@@ -68,7 +88,7 @@ def check_grants(rows, role: str):
         deny("PROBE_RPC_GRANT_SCOPE_FAILED")
 
 
-def run(role: str):
+def run(role: str, *, classify_only: bool = False):
     if role not in ROLES:
         deny("PROBE_ROLE_NOT_APPROVED")
     if os.geteuid() != 0 or os.environ.get("APP_ENV") != "development":
@@ -89,7 +109,12 @@ def run(role: str):
     from psycopg.conninfo import conninfo_to_dict
     import psycopg
     dsn = filepath.read_text(encoding="utf-8").strip()
-    validate_dsn(conninfo_to_dict(dsn), role)
+    parsed = conninfo_to_dict(dsn)
+    if classify_only:
+        print("GPT02_DEV_CREDENTIAL_PROFILE_" + classify_pinned_profile(parsed, role))
+        print("database_connected false")
+        return
+    validate_dsn(parsed, role)
     # Only read-only SQL, no permission modifications, no RPC execution.
     with psycopg.connect(dsn, connect_timeout=5, autocommit=True) as connection:
         with connection.cursor() as cursor:
@@ -128,8 +153,9 @@ if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser()
         parser.add_argument("--role", choices=sorted(ROLES), required=True)
+        parser.add_argument("--classify-only", action="store_true")
         args = parser.parse_args()
-        run(args.role)
+        run(args.role, classify_only=args.classify_only)
     except Exception as exc:
         # Always suppress raw Postgres/psycopg exception contents and secrets.
         safe_reason = (str(exc) if isinstance(exc, ProbeDenied)

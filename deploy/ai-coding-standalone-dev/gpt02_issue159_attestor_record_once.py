@@ -38,6 +38,17 @@ SIGNATURES = {
     "core": Path("/run/gpt02-issue159-sign-once-core/core-signature.json"),
 }
 DSN_FILE = Path("/run/credentials/gpt02-issue159-attestor-record-once.service/attestor-dsn")
+
+
+def pinned_dev_writer_endpoint(values: dict) -> bool:
+    """Two exact CST-DEV endpoints, paired with their respective login format."""
+    return (
+        (values.get("user"), values.get("host")) in {
+            (f"{ROLE}.{PROJECT}", POOLER),
+            (ROLE, f"db.{PROJECT}.supabase.co"),
+        }
+        and not values.get("hostaddr") and not values.get("service")
+    )
 MAX_DATA = 16_384
 B64URL = re.compile(r"^[A-Za-z0-9_-]{86}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -220,9 +231,8 @@ def main() -> int:
     import psycopg
     dsn = dsn_raw.decode("utf-8").strip()
     props = conninfo_to_dict(dsn)
-    if (props.get("user") != f"{ROLE}.{PROJECT}"
+    if (not pinned_dev_writer_endpoint(props)
             or props.get("dbname") != "postgres"
-            or props.get("host") != POOLER
             or str(props.get("port")) != "5432"
             or props.get("sslmode") != "verify-full"
             or props.get("sslrootcert") != "/etc/gpt02-dev/supabase-root-ca-2021.crt"

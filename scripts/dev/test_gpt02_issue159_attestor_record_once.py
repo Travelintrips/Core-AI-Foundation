@@ -13,6 +13,7 @@ import unittest
 
 from gpt02_issue159_attestor_record_once import (
     AttestorDenied, validate_and_verify, record_existing_rpc_once,
+    pinned_dev_writer_endpoint, ROLE, PROJECT, POOLER,
 )
 from gpt02_issue159_writer_broker_contract import (
     APPROVAL_FIELDS, LINK_FIELDS, _canonical,
@@ -181,6 +182,20 @@ class AttestorRecordOnceTest(unittest.TestCase):
             record_existing_rpc_once(conn,packet,proof)
         self.assertEqual(conn.commits,0)
         self.assertEqual(conn.rollbacks,1)
+
+    def test_pinned_direct_and_pooler_attestor_endpoints(self):
+        self.assertTrue(pinned_dev_writer_endpoint(
+            {"user": f"{ROLE}.{PROJECT}", "host": POOLER}))
+        self.assertTrue(pinned_dev_writer_endpoint(
+            {"user": ROLE, "host": f"db.{PROJECT}.supabase.co"}))
+        for bad in (
+            {"user": ROLE, "host": POOLER},
+            {"user": f"{ROLE}.{PROJECT}", "host": f"db.{PROJECT}.supabase.co"},
+            {"user": ROLE, "host": "untrusted.invalid"},
+            {"user": ROLE, "host": f"db.{PROJECT}.supabase.co",
+             "hostaddr": "127.0.0.1"},
+        ):
+            self.assertFalse(pinned_dev_writer_endpoint(bad))
 
     def test_service_is_static_and_uses_only_dedicated_attestor_credential(self):
         root=Path(__file__).resolve().parents[2]

@@ -1,6 +1,36 @@
 # GPT02 Issue #159 — DEV writer boundary and lifecycle migration review
 
-## Credential admission audit — 13 November 2026 (latest readback)
+## Verified direct-connection resolution — 13 November 2026 (supersedes prior DSN warning)
+
+- Further systemd-only classification established that BOTH existing encrypted
+  DSNs match the exact CST-DEV PostgreSQL **direct** endpoint/profile
+  (db.xssrfshdrtdfupgqwfdw.supabase.co with the corresponding unsuffixed
+  dedicated role username), not arbitrary/mismatched cross-project credentials.
+  This supersedes the intermediate warning below about reissuing secrets.
+- Both actual encrypted DSNs subsequently passed **live** systemd-managed,
+  read-only PostgreSQL tests: exact session_user/current_user, database,
+  SSL/TLS, restricted LOGIN/connection limit, and separated RPC EXECUTE
+  privileges, with BEGIN READ ONLY and ROLLBACK. Each probe reported
+  GPT02_DEV_CREDENTIAL_READONLY_PROBE_PASS. No writer RPC or database mutation.
+- The previously hard-pinned pooler-only checks in the **existing**
+  attestor and issuer one-shot adapters were extended minimally to accept
+  exactly two whitelisted, project-bound pairs: approved pooler+project-suffixed
+  role OR approved direct host+unsuffixed role. Both retain exact port 5432,
+  database postgres, sslmode=verify-full, pinned CA, nonempty password,
+  and disallow hostaddr/service overrides. No arbitrary hostname or role.
+- Existing passwords, encrypted files, RLS, roles and RPCs are preserved;
+  **no password reset or DSN replacement is required**. Signing, dispatch,
+  and live writer RPCs remain OFF until an authorized fresh approval.
+- A separate concurrent activity recorded one expired Task #156 approval and
+  operator link in the DEV private ledger, but no nonce receipt, fence,
+  issuer evidence or lease. Those immutable records must not be removed or
+  replayed; Task #156 is NOT usable for the next run.
+- Successful readonly authentication does **not** prove a full E2E lifecycle
+  or independent DELL Final ACK. This change only repairs endpoint scope.
+
+---
+
+## Credential admission audit — 13 November 2026 (historical intermediate finding)
 
 - VPS srv1792369 now has both host-encrypted credential files, owner root, permissions 0600. Both dedicated writer PostgreSQL roles are now LOGIN, connection limit 1, and NOBYPASSRLS. This supersedes older notes below saying credentials were absent and roles NOLOGIN.
 - A systemd LoadCredentialEncrypted-only **read-only** probe was executed separately for the attestor and issuer. Both **failed closed before the database connection** because the encrypted DSNs did not match the existing pinned CST-DEV contract on two fields: user and host. Neither password nor actual supplied host/username was displayed; the probe printed field names only. No writer RPC, signer, or dispatch executed.

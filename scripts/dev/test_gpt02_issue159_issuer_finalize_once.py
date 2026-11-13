@@ -217,6 +217,22 @@ class IssuerFinalizerTests(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
         self.assertIn("ISSUER_FINALIZE_DENIED", p.stderr)
 
+    def test_pinned_direct_and_pooler_issuer_endpoints(self):
+        self.assertTrue(issuer.pinned_dev_writer_endpoint(
+            {"user": f"{issuer.ROLE}.{issuer.PROJECT}", "host": issuer.POOLER}))
+        self.assertTrue(issuer.pinned_dev_writer_endpoint(
+            {"user": issuer.ROLE,
+             "host": f"db.{issuer.PROJECT}.supabase.co"}))
+        for bad in (
+            {"user": issuer.ROLE, "host": issuer.POOLER},
+            {"user": f"{issuer.ROLE}.{issuer.PROJECT}",
+             "host": f"db.{issuer.PROJECT}.supabase.co"},
+            {"user": issuer.ROLE, "host": "other.invalid"},
+            {"user": issuer.ROLE, "host": f"db.{issuer.PROJECT}.supabase.co",
+             "service": "other-profile"},
+        ):
+            self.assertFalse(issuer.pinned_dev_writer_endpoint(bad))
+
     def test_systemd_service_static_and_dedicated_issuer_only(self):
         unit = (ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-finalize-once.service").read_text()
         for required in ("Type=oneshot", "Restart=no", "ProtectSystem=strict",

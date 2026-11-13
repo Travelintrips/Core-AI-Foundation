@@ -19,7 +19,16 @@ class CredentialProbeTest(unittest.TestCase):
 
     def test_exact_separated_credentials_scope(self):
         for role in probe.ROLES:
-            probe.validate_dsn(self.dsn(role), role)
+            self.assertEqual(probe.validate_dsn(self.dsn(role), role),
+                             "PINNED_POOLER")
+            direct = self.dsn(role)
+            direct["user"] = probe.ROLES[role][0]
+            direct["host"] = f"db.{probe.PROJECT}.supabase.co"
+            self.assertEqual(probe.validate_dsn(direct, role),
+                             "PINNED_DIRECT")
+            direct["hostaddr"] = "127.0.0.1"
+            with self.assertRaisesRegex(probe.ProbeDenied, "untrusted_address"):
+                probe.validate_dsn(direct, role)
         bad = self.dsn("attestor")
         bad["user"] = self.dsn("issuer")["user"]
         with self.assertRaisesRegex(probe.ProbeDenied, "STRICT_DEV_DSN"):
@@ -28,6 +37,20 @@ class CredentialProbeTest(unittest.TestCase):
         bad["sslmode"] = "require"
         with self.assertRaisesRegex(probe.ProbeDenied, "STRICT_DEV_DSN"):
             probe.validate_dsn(bad, "issuer")
+
+    def test_classify_only_keeps_direct_and_pooler_profiles_distinct(self):
+        for role in probe.ROLES:
+            pooled = self.dsn(role)
+            self.assertEqual(probe.classify_pinned_profile(pooled, role),
+                             "PINNED_POOLER")
+            direct = dict(pooled)
+            direct["user"] = probe.ROLES[role][0]
+            direct["host"] = f"db.{probe.PROJECT}.supabase.co"
+            self.assertEqual(probe.classify_pinned_profile(direct, role),
+                             "PINNED_DIRECT")
+            direct["host"] = "unrecognized.invalid"
+            self.assertEqual(probe.classify_pinned_profile(direct, role),
+                             "UNRECOGNIZED")
 
     def test_identity_rejects_wrong_role_or_non_readonly(self):
         for role in probe.ROLES:

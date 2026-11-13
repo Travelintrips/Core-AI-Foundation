@@ -130,13 +130,23 @@ def signed_stage():
         deny("ISSUER_PARENT_APPROVAL_TOO_CLOSE_TO_EXPIRY")
     return packet, proof
 
+def pinned_dev_writer_endpoint(values: dict) -> bool:
+    """Two exact CST-DEV endpoints; never arbitrary host or cross-role DSN."""
+    return (
+        (values.get("user"), values.get("host")) in {
+            (f"{ROLE}.{PROJECT}", POOLER),
+            (ROLE, f"db.{PROJECT}.supabase.co"),
+        }
+        and not values.get("hostaddr") and not values.get("service")
+    )
+
+
 def issuer_dsn():
     from psycopg.conninfo import conninfo_to_dict
     raw = require_private(DSN_FILE, root_only=True, size_limit=4096)
     conninfo = raw.decode("utf-8").strip()
     values = conninfo_to_dict(conninfo)
-    if (values.get("user") != f"{ROLE}.{PROJECT}"
-            or values.get("host") != POOLER
+    if (not pinned_dev_writer_endpoint(values)
             or str(values.get("port")) != "5432"
             or values.get("dbname") != "postgres"
             or values.get("sslmode") != "verify-full"
