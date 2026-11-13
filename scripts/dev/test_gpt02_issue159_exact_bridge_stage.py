@@ -49,7 +49,7 @@ class FakeConnection:
         if query==stage.ROLE_SQL:
             self.events.append("ROLE")
             self.last=(self.role,self.role)
-        elif query==stage.HELD_BRIDGE_INSERT_SQL:
+        elif query==stage.HELD_BRIDGE_STAGE_RPC_SQL:
             self.events.append(("STAGE_HELD",args))
             if self.raise_on_insert:
                 raise RuntimeError("SYNTHETIC_UNIQUE_CONFLICT")
@@ -134,23 +134,28 @@ class HeldBridgeStageTest(unittest.TestCase):
             stage.stage_exact_held_bridge_command(SIGNED,db)
         self.assertEqual(db.events[-1],"ROLLBACK")
 
-    def test_sql_uses_immutable_consumed_outbox_and_original_uuid(self):
-        sql=stage.HELD_BRIDGE_INSERT_SQL.lower()
-        self.assertIn("insert into ai_platform.ai_coding_bridge_commands",sql)
-        self.assertIn("select o.command_id,o.core_task_id",sql)
-        self.assertIn("positive_dispatch_consumptions",sql)
-        self.assertIn("positive_dispatch_outbox",sql)
-        self.assertIn("positive_dispatch_permits",sql)
-        self.assertIn("join ai_platform.ai_coding_tasks",sql)
-        self.assertIn("'issue159_held'",sql)
-        self.assertIn("'held_no_dispatch'",sql)
-        self.assertIn("not exists",sql)
-        self.assertIn("returning id::text",sql)
-        # A read-back of the field is allowed; it must not be written.
-        self.assertNotIn("'assignedclientid',",sql)
-        self.assertIn("metadata_json->>'assignedclientid' as assigned_client_id",sql)
-        self.assertNotIn("notify",sql)
-        self.assertNotIn("on conflict do update",sql)
+    def test_exact_uuid_stage_is_scoped_security_definer_rpc_not_direct_insert(self):
+        sql=stage.HELD_BRIDGE_STAGE_RPC_SQL.lower()
+        self.assertTrue(sql.startswith("select * from gpt02_private.stage_issue159_held_bridge_command"))
+        self.assertNotIn("insert into",sql)
+        ddl=(Path(__file__).resolve().parents[2] /
+            "docs/dev/gpt02-issue159-exact-bridge-stage-role.PROPOSED.sql").read_text()
+        d=ddl.lower()
+        self.assertIn("create function gpt02_private.stage_issue159_held_bridge_command",d)
+        self.assertIn("security definer",d)
+        self.assertIn("select o.command_id,o.core_task_id",d)
+        self.assertIn("positive_dispatch_consumptions",d)
+        self.assertIn("positive_dispatch_outbox",d)
+        self.assertIn("join ai_platform.ai_coding_tasks",d)
+        self.assertIn("'issue159_held'",d)
+        self.assertIn("'held_no_dispatch'",d)
+        self.assertIn("not exists",d)
+        self.assertIn("returning id::text",d)
+        self.assertIn("session_user<>'dev_gpt02_bridge_stage_login'",d)
+        self.assertIn("revoke all on function",d)
+        self.assertIn("noinherit nobypassrls connection limit 0",d)
+        self.assertNotIn("to dev_gpt02_bridge_stage_login;\ncreate policy issue159_stage_bridge_insert",d)
+        self.assertNotIn("assignedclientid',",d)
 
     def test_no_live_worker_or_db_connection_creation(self):
         src=(Path(__file__).resolve().parents[2]
