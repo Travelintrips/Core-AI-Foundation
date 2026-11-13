@@ -173,7 +173,7 @@ def main():
            worker_id,lease_epoch,lease_started_at,lease_expires_at,
            dispatch_allowed,core_ledger_written)
         SELECT id,command_id,'{LINK}','{HUB}','{CORE}','{ATT}',
-           '{WORKER}',1,clock_timestamp(),clock_timestamp()+interval '15 seconds',
+           '{WORKER}',1,clock_timestamp(),clock_timestamp()+interval '14 seconds',
            false,false FROM gpt02_private.receipts;
         INSERT INTO gpt02_private.issuer_evidences
           (company_id,hub_task_id,command_id,fence_id,link_id,receipt_id,attempt_id,
