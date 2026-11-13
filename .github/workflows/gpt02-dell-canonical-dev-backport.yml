@@ -51,6 +51,13 @@ jobs:
         run: |
           python3 -B scripts/windows/ai-core/gpt02_dell_runtime_parity.py --mode source
           python3 -B -m unittest discover -s scripts/windows/ai-core -p test_gpt02_dell_runtime_parity.py -q
+      - name: Check safe develop source-only release and watchdog policy
+        run: |
+          PYTHONPATH=scripts/vps python3 -B -m unittest discover \
+            -s scripts/vps -p test_dev_source_only_release_gate.py -q
+          PYTHONPATH=scripts/vps python3 -B -m unittest discover \
+            -s scripts/vps -p test_dev_ci_watcher_source_only.py -q
+          python3 -m py_compile scripts/vps/dev_ci_watcher.py scripts/vps/dev_source_only_release_gate.py
       - name: Existing Windows native Python suite plus unrelated test regressions
         run: |
           python3 -B -m unittest discover -s scripts/windows/ai-core -p 'test_*.py' -q

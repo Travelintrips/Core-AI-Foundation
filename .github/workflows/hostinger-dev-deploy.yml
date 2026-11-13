@@ -13,9 +13,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  source-only-scope:
+    name: Classify DEV source-only commit before any VPS restart
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      skip_restart: ${{ steps.classify.outputs.skip_restart }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Inspect exact current DEV SHA and authorized Git changes
+        id: classify
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          DEV_DOMAIN: dev.cstlogistic.co.id
+          DEV_VPS_IP: 72.61.210.205
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "skip_restart=false" >> "$GITHUB_OUTPUT"
+            echo "SOURCE_ONLY_SCOPE=MANUAL_DEPLOY_EXPLICIT"
+            exit 0
+          fi
+          # Fail closed if the deployed baseline is not observable. Do not
+          # infer a pure source change from a stale/failed external API call.
+          code="$(curl --silent --show-error --connect-timeout 5 --max-time 12 \
+            --resolve "$DEV_DOMAIN:443:$DEV_VPS_IP" \
+            -D /tmp/gpt02-dev-baseline.headers -o /tmp/gpt02-dev-baseline.json \
+            -w '%{http_code}' "https://$DEV_DOMAIN/api/healthz")"
+          test "$code" = 200
+          jq -e '.status == "ok"' /tmp/gpt02-dev-baseline.json >/dev/null
+          baseline="$(awk -F': ' 'tolower($1)=="x-cst-commit-sha" {gsub("\r","",$2);print $2}' \
+            /tmp/gpt02-dev-baseline.headers | tail -n 1)"
+          [[ "$baseline" =~ ^[0-9a-f]{40}$ ]] ||
+            { echo "::error::DEV currently deployed SHA unavailable"; exit 1; }
+          python3 scripts/vps/dev_source_only_release_gate.py \
+            --baseline-sha "$baseline" --target-sha "$EXPECTED_SHA" > /tmp/gpt02-dev-scope.json
+          decision="$(jq -r '.decision' /tmp/gpt02-dev-scope.json)"
+          case "$decision" in
+            SKIP_DEV_RESTART)
+              echo "skip_restart=true" >> "$GITHUB_OUTPUT"
+              echo "SOURCE_ONLY_DEV_RESTART_SKIPPED sha=$EXPECTED_SHA"
+              ;;
+            NORMAL_DEV_RELEASE)
+              echo "skip_restart=false" >> "$GITHUB_OUTPUT"
+              echo "DEV_APPLICATION_CHANGE_REQUIRES_NORMAL_RELEASE"
+              ;;
+            *)
+              echo "::error::DEV changed-file comparison not verified"
+              exit 1
+              ;;
+          esac
   deploy:
     name: Deploy AI Core DEV (isolated VPS)
-    if: github.ref == 'refs/heads/develop'
+    needs: source-only-scope
+    if: github.ref == 'refs/heads/develop' && needs.source-only-scope.outputs.skip_restart != 'true'
     runs-on: ubuntu-latest
     environment: development
     timeout-minutes: 28
