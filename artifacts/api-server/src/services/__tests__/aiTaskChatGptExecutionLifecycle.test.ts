@@ -46,4 +46,13 @@ describe("AI Task GPT02 execution lifecycle linkage", () => {
     expect(bridge).toContain("final_ack_verified = TRUE");
     expect(bridge).toContain("status = 'completed'");
   });
+
+  it("promotes a verified generic ACK through the conversation-bound final ACK path", () => {
+    expect(bridge).toContain("const eligible = await db.execute(sql");
+    expect(bridge).toContain("acknowledgeCodingBridgeResponseForConversation({");
+    expect(bridge).toContain("command.metadata_json ->> 'e2eCode' IN ('E2E_VERIFIED','MCP_ACK_VERIFIED')");
+    expect(bridge).toContain("response.metadata_json ->> 'verifiedAssistantReply' = 'true'");
+    expect(bridge).toContain("response.metadata_json ->> 'browserPairingVerified' = 'true'");
+    expect(bridge).toContain("SET acknowledged_at = COALESCE(response.acknowledged_at, NOW())");
+  });
 });
