@@ -1,0 +1,58 @@
+name: GPT02 Issue159 DEV Issuer Delta — Disposable Only
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/dev/gpt02_issue159_issuer_delta_DEV_ONLY.sql'
+      - 'scripts/dev/gpt02_issue159_issuer_delta_disposable_seed.sql'
+      - 'scripts/dev/test_gpt02_issue159_issuer_delta_isolated.py'
+      - 'docs/dev/gpt02-issue159-issuer-delta-incremental-20261112.md'
+      - '.github/workflows/gpt02-issue159-issuer-delta-disposable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schema-and-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify issuer-only additive boundary (no dispatch or login)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          sql=Path("scripts/dev/gpt02_issue159_issuer_delta_DEV_ONLY.sql").read_text()
+          expected=(
+            "CREATE FUNCTION gpt02_private.record_issuer_evidence(",
+            "CREATE FUNCTION gpt02_private.consume_issuer_lease(",
+            "CREATE TABLE gpt02_private.issuer_evidences(",
+            "CREATE TABLE gpt02_private.issuer_lease_consumptions(",
+            "ALTER TABLE gpt02_private.issuer_evidences FORCE ROW LEVEL SECURITY;",
+            "ALTER TABLE gpt02_private.issuer_lease_consumptions FORCE ROW LEVEL SECURITY;",
+            "GRANT gpt02_store_owner TO postgres WITH SET FALSE;",
+            "TO dev_gpt02_issuer_evidence;",
+            "RETURN 'LEASE_CONSUMED_NO_DISPATCH';",
+          )
+          for item in expected:
+              assert item in sql, item
+          for forbidden in (
+            "ALTER ROLE dev_gpt02_issuer_evidence LOGIN",
+            "ALTER ROLE gpt02_core_prep_login LOGIN",
+            "CREATE OR REPLACE FUNCTION gpt02_stage.prepare_core_task(",
+            "CREATE OR REPLACE FUNCTION gpt02_private.record_linked_approval(",
+            "CREATE OR REPLACE FUNCTION gpt02_private.consume_linked_approval(",
+            "CREATE OR REPLACE FUNCTION gpt02_private.reserve_post_consumption_fence(",
+            "dispatch_allowed=true",
+            "signing_grant=true",
+            "jsonb_object_length(",
+          ):
+              assert forbidden not in sql, forbidden
+          assert sql.rstrip().endswith("COMMIT;")
+          print("PASS: issuer-only additive, writer remains NOLOGIN, no dispatch")
+          PY
+      - name: Compile disposable test
+        run: python3 -m py_compile scripts/dev/test_gpt02_issue159_issuer_delta_isolated.py
+      - name: Verify issuer-only migration, role custody, replay and concurrency in no-network PostgreSQL 16
+        run: python3 scripts/dev/test_gpt02_issue159_issuer_delta_isolated.py
