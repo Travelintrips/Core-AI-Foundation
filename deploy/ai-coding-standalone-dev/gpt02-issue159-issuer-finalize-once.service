@@ -1,0 +1,57 @@
+[Unit]
+Description=GPT02 Issue159 DEV supervised issuer consume/sign/verify/lease once (NO DISPATCH)
+After=gpt02-issue159-verifier.service gpt02-issue159-approval-reader.service gpt02-issue159-issuer-reader.service gpt02-issue159-lineage-reader.service gpt02-issue159-attestor-record-once.service
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_issuer_finalize_once.py
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_attestor_record_once.py
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_approved_claims.json
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_hub_core_link_claims.json
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-issuer-dsn
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-issuer-private-key.pkcs8
+ConditionPathExists=/run/gpt02-issue159-verifier/verify.sock
+ConditionPathExists=/run/gpt02-issuer-reader/reader.sock
+ConditionPathExists=/run/gpt02-lineage-reader/reader.sock
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+SupplementaryGroups=gpt02-issue159-signers
+Environment=APP_ENV=development
+Environment=GPT02_ISSUER_FINALIZE_ONCE=explicit-supervised
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/gpt02-verifier
+LoadCredentialEncrypted=issuer-dsn:/etc/credstore.encrypted/gpt02-issue159-issuer-dsn
+WorkingDirectory=/opt/ai-coding-standalone-dev
+ExecStart=/opt/gpt02-lineage-reader/.venv/bin/python3 -B /opt/ai-coding-standalone-dev/gpt02_issue159_issuer_finalize_once.py
+TimeoutStartSec=18s
+Restart=no
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryDenyWriteExecute=yes
+ReadWritePaths=/run/lock /opt/ai-coding-standalone-dev
+ReadOnlyPaths=/opt/gpt02-verifier /opt/gpt02-lineage-reader
+BindReadOnlyPaths=/run/gpt02-issue159-verifier /run/gpt02-approval-reader /run/gpt02-issuer-reader /run/gpt02-lineage-reader
+BindReadOnlyPaths=/run/gpt02-issue159-sign-once-approval /run/gpt02-issue159-sign-once-hub /run/gpt02-issue159-sign-once-core
+StandardOutput=journal
+StandardError=journal
+
+# Static supervised unit. No timer, no boot enable, no retry, no dispatch.
