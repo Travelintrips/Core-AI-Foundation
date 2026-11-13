@@ -126,6 +126,41 @@ class IssuerSignerGuardTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "ISSUER_READER_TRUSTED_BINDING_REQUIRED"):
                 guard.require_issuer_facts(claims, approved, link, now_ms=now)
 
+    def test_expired_fence_claims_fail_before_reader(self):
+        now = int(time.time() * 1000)
+        approved, link, claims, digest = fixtures(now)
+        claims["expiresAt"] = now + 500
+        with patch.object(guard, "persisted_approval_fresh") as approval, \
+             patch.object(guard, "require_hub_core_facts") as hubcore, \
+             patch.object(guard, "_request_reader") as reader:
+            with self.assertRaisesRegex(RuntimeError, "ISSUER_CLAIMS_NOT_FRESH_OR_ALLOWED"):
+                guard.require_issuer_facts(claims, approved, link, now_ms=now)
+        approval.assert_not_called()
+        hubcore.assert_not_called()
+        reader.assert_not_called()
+
+    def test_wrong_nonce_digest_fails_before_reader(self):
+        now = int(time.time() * 1000)
+        approved, link, claims, digest = fixtures(now)
+        claims["nonceDigest"] = "f" * 64
+        with patch.object(guard, "persisted_approval_fresh", return_value=digest), \
+             patch.object(guard, "require_hub_core_facts"), \
+             patch.object(guard, "_request_reader") as reader:
+            with self.assertRaisesRegex(RuntimeError, "ISSUER_PARENT_BINDING_MISMATCH"):
+                guard.require_issuer_facts(claims, approved, link, now_ms=now)
+        reader.assert_not_called()
+
+    def test_reader_false_native_role_rejected(self):
+        now = int(time.time() * 1000)
+        approved, link, claims, digest = fixtures(now)
+        untrusted = success_envelope()
+        untrusted["result"]["trustedReadProof"]["nativeRoleVerified"] = False
+        with patch.object(guard, "persisted_approval_fresh", return_value=digest), \
+             patch.object(guard, "require_hub_core_facts"), \
+             patch.object(guard, "_request_reader", return_value=untrusted):
+            with self.assertRaisesRegex(RuntimeError, "ISSUER_READER_TRUSTED_BINDING_REQUIRED"):
+                guard.require_issuer_facts(claims, approved, link, now_ms=now)
+
     def test_source_has_peer_pin_and_no_writer_or_key_surface(self):
         source = (ROOT / "deploy/ai-coding-standalone-dev/gpt02_issue159_issuer_signer_guard.py").read_text()
         for required in (
