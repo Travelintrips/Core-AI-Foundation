@@ -146,7 +146,9 @@ class HeldBridgeStageTest(unittest.TestCase):
         self.assertIn("'held_no_dispatch'",sql)
         self.assertIn("not exists",sql)
         self.assertIn("returning id::text",sql)
-        self.assertNotIn("'assignedclientid'",sql)
+        # A read-back of the field is allowed; it must not be written.
+        self.assertNotIn("'assignedclientid',",sql)
+        self.assertIn("metadata_json->>'assignedclientid' as assigned_client_id",sql)
         self.assertNotIn("notify",sql)
         self.assertNotIn("on conflict do update",sql)
 
