@@ -1,0 +1,44 @@
+name: GPT02 Issue159 DEV Approval JSON Length Fix — Disposable Only
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/dev/gpt02_issue159_approval_jsonlen_DEV_ONLY.sql'
+      - 'scripts/dev/gpt02_issue159_approval_jsonlen_disposable_seed.sql'
+      - 'scripts/dev/gpt02_issue159_approval_original_fixture_ONLY.sql'
+      - 'scripts/dev/test_gpt02_issue159_approval_jsonlen_isolated.py'
+      - '.github/workflows/gpt02-issue159-approval-jsonlen-disposable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  approval-jsonlen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify minimal scope and original definition pin
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          sql=Path("scripts/dev/gpt02_issue159_approval_jsonlen_DEV_ONLY.sql").read_text()
+          original=Path("scripts/dev/gpt02_issue159_approval_original_fixture_ONLY.sql").read_text()
+          assert "a70b5b77df3da58ffe1f34e7ff3fb6a18cce535483e9f7e378560bc0fcab2447" in sql
+          assert original.count("jsonb_object_length(")==2
+          assert sql.count("(SELECT count(*) FROM pg_catalog.jsonb_object_keys(p_approval))")==1
+          assert sql.count("(SELECT count(*) FROM pg_catalog.jsonb_object_keys(p_link))")==1
+          assert "session_user<>'dev_gpt02_attestor_evidence'" in sql
+          assert "SET search_path TO 'pg_catalog'" in sql
+          assert "GRANT gpt02_store_owner TO postgres WITH SET FALSE;" in sql
+          assert "ALTER ROLE dev_gpt02_attestor_evidence LOGIN" not in sql
+          assert "CREATE TABLE" not in sql
+          assert "dispatch_allowed=true" not in sql
+          assert sql.rstrip().endswith("COMMIT;")
+          print("PASS: original function pinned and exactly two JSON-length expressions changed")
+          PY
+      - name: Syntax and disposable PostgreSQL regression
+        run: |
+          python3 -m py_compile scripts/dev/test_gpt02_issue159_approval_jsonlen_isolated.py
+          python3 scripts/dev/test_gpt02_issue159_approval_jsonlen_isolated.py
