@@ -141,7 +141,7 @@ function isDuplicateCommandKey(error: unknown): boolean {
 function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, worker: DevWakeWorker, command: {
   source: string;
   commandType: string;
-  status: string;
+  status?: string;
   instruction: string;
   metadataJson: unknown;
 }, wakeBinding?: DevWakeBinding): boolean {
@@ -150,8 +150,10 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, wo
   const challenge = deriveDevAssistantChallenge({ ...input, ...(wakeBinding ? { bindingFingerprint: wakeBinding.bindingFingerprint, browserProfile: wakeBinding.browserProfile } : {}) });
   const existingBinding = readDevWakeBinding(metadata?.["wakeBinding"]);
   if (wakeBinding ? existingBinding?.bindingFingerprint !== wakeBinding.bindingFingerprint : metadata?.["wakeBinding"] !== undefined) return false;
+  const activeStatus = command.status === undefined ||
+    ["RECEIVED","PENDING","QUEUED","PROCESSING"].includes(command.status);
   if (!metadata || command.source !== "ai-core" || command.commandType !== "EXTERNAL_AGENT_WORK" ||
-      !["RECEIVED","PENDING","QUEUED","PROCESSING"].includes(command.status) ||
+      !activeStatus ||
       command.instruction !== instruction || metadata["assignedClientId"] !== worker ||
       metadata["conversationId"] !== input.ownerChannel || metadata["capability"] !== "chatgpt:wake" ||
       metadata["targetConversationId"] !== input.targetConversationId.toLowerCase() ||
