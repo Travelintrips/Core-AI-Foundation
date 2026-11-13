@@ -1,0 +1,126 @@
+name: GPT02 DELL Canonical DEV Backport (No Deploy)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/windows/ai-core/**'
+      - '.github/workflows/gpt02-dell-canonical-dev-backport.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    name: Source hash and canonical regressions (Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact git source content, Windows pins, no logs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,re
+          root=Path('scripts/windows/ai-core')
+          spec=json.loads((root/'gpt02-dell-canonical-source-manifest.json').read_text())
+          assert spec['scope']=='GPT02_DELL_DEV_CANONICAL_DRAFT_NO_DEPLOY'
+          for item in spec['files']:
+              p=root/item['name'];raw=p.read_bytes()
+              source=raw.replace(b'\r\n',b'\n')
+              assert len(source)==item['bytes'],p
+              assert hashlib.sha256(source).hexdigest()==item['sha256_lf'],p
+              assert not re.search(rb'sk-[A-Za-z0-9_-]{30,}',raw),p
+              assert b'-----BEGIN PRIVATE KEY-----' not in raw,p
+          for name,digest in spec['expected_windows_runtime_sha256'].items():
+              raw=(root/name).read_bytes()
+              original=(raw if name.endswith('.js') else raw.replace(b'\r\n',b'\n').replace(b'\n',b'\r\n'))
+              assert hashlib.sha256(original).hexdigest()==digest,name
+          print('SOURCE_MANIFEST_AND_WINDOWS_PINS_PASS')
+          PY
+      - name: Install pinned Python cryptography used by existing wake and recovery tests
+        run: python3 -m pip install --no-cache-dir cryptography==50.0.2
+      - name: Prove canonical source/runtime parity without accessing Windows host
+        run: |
+          python3 -B scripts/windows/ai-core/gpt02_dell_runtime_parity.py --mode source
+          python3 -B -m unittest discover -s scripts/windows/ai-core -p test_gpt02_dell_runtime_parity.py -q
+      - name: Check safe develop source-only release and watchdog policy
+        run: |
+          PYTHONPATH=scripts/vps python3 -B -m unittest discover \
+            -s scripts/vps -p test_dev_source_only_release_gate.py -q
+          PYTHONPATH=scripts/vps python3 -B -m unittest discover \
+            -s scripts/vps -p test_dev_ci_watcher_source_only.py -q
+          python3 -m py_compile scripts/vps/dev_ci_watcher.py scripts/vps/dev_source_only_release_gate.py
+      - name: Existing Windows native Python suite plus unrelated test regressions
+        run: |
+          python3 -B -m unittest discover -s scripts/windows/ai-core -p 'test_*.py' -q
+      - name: Existing and backported JavaScript contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in scripts/windows/ai-core/*.js scripts/windows/ai-core/*.cjs scripts/windows/ai-core/*.mjs; do node --check "$f"; done
+          node scripts/windows/ai-core/test_gpt02_passive_submit_rate_gate.cjs
+          node scripts/windows/ai-core/work-event-stream.test.mjs
+          node scripts/windows/ai-core/test-gpt02-readiness-metadata-census.mjs
+          node scripts/windows/ai-core/test-gpt02-job135-native-history-census.mjs
+
+  windows-native:
+    name: Exact DELL source hash and synthetic Windows native contract
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify binary Windows and LF pinned hashes
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import hashlib,json
+          root=Path('scripts/windows/ai-core')
+          m=json.loads((root/'gpt02-dell-canonical-source-manifest.json').read_text())
+          for name,expected in m['expected_windows_runtime_sha256'].items():
+              actual=hashlib.sha256((root/name).read_bytes()).hexdigest()
+              assert actual==expected,(name,actual)
+          print('DELL_WINDOWS_CHECKOUT_BYTE_IDENTICAL_SHA256_PASS')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Byte-for-byte Windows runtime pin mismatch' }
+      - name: Prove exact installed Windows runtime hashes using read-only preflight
+        shell: pwsh
+        run: |
+          python -B scripts/windows/ai-core/gpt02_dell_runtime_parity.py --mode runtime
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime source parity failed' }
+          python -B -m unittest discover -s scripts/windows/ai-core -p test_gpt02_dell_runtime_parity.py -q
+          if ($LASTEXITCODE -ne 0) { throw 'Windows parity fail-closed tests failed' }
+      - name: Run 35 native tests and exact cache/stream/rate contracts
+        shell: pwsh
+        run: |
+          $root = 'scripts/windows/ai-core'
+          python -B -m unittest discover -s $root -p test_dev_chatgpt_native_transport.py -q
+          if ($LASTEXITCODE -ne 0) { throw '35 canonical Windows native tests failed' }
+          foreach ($test in @(
+            'test_gpt02_cache_readiness_contract_readonly_20261113.py',
+            'test_gpt02_submit_stream_contract_20261113.py',
+            'test_gpt02_passive_submit_rate_gate.py'
+          )) {
+            python -B "$root/$test"
+            if ($LASTEXITCODE -ne 0) { throw "GPT02 Windows contract failed: $test" }
+          }
+          Get-ChildItem $root -File | Where-Object {$_.Extension -in @('.js','.cjs','.mjs')} | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw 'Native JS syntax error' }
+          }
+          node "$root/test_gpt02_passive_submit_rate_gate.cjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows rate contract failed' }

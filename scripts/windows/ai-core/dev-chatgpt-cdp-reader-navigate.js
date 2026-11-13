@@ -13,7 +13,10 @@ const binding=(config.bindings||[]).filter(b=>b.accountAlias==='GPT02'&&b.enable
 if(binding.length!==1)stop('REGISTRY_MISMATCH');
 const args=cp.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
  '(Get-CimInstance Win32_Process -Filter "ProcessId='+pid+'").CommandLine'],{encoding:'utf8',timeout:10000}).trim();
-if(!args.includes('--remote-debugging-port='+port)||!args.includes('--user-data-dir='+profileDir)||args.includes('--type='))stop('PROCESS_MISMATCH');
+const userDataUnquoted='--user-data-dir='+profileDir;
+const userDataQuoted='--user-data-dir="'+profileDir+'"';
+const userDataMatches=(args.includes(userDataUnquoted)?1:0)+(args.includes(userDataQuoted)?1:0);
+if(!args.includes('--remote-debugging-port='+port)||userDataMatches!==1||args.includes('--type='))stop('PROCESS_MISMATCH');
 const inventory=()=>new Promise((ok,no)=>http.get({hostname:'127.0.0.1',port,path:'/json',timeout:5000},r=>{
  let chunks='';r.on('data',b=>{chunks+=b;if(chunks.length>524288)r.destroy()});r.on('end',()=>{try{ok(JSON.parse(chunks))}catch(e){no(e)}})}).on('error',no));
 (async()=>{
@@ -25,12 +28,27 @@ const inventory=()=>new Promise((ok,no)=>http.get({hostname:'127.0.0.1',port,pat
  await new Promise((ok,no)=>{ws.onopen=ok;ws.onerror=no});
  let seq=0;const pending=new Map();
  ws.onmessage=e=>{const m=JSON.parse(e.data);const pair=pending.get(m.id);if(!pair)return;pending.delete(m.id);m.error?pair[1](Error(m.error.message)):pair[0](m.result)};
- const call=(method,params={})=>new Promise((ok,no)=>{const id=++seq;pending.set(id,[ok,no]);ws.send(JSON.stringify({id,method,params}))});
+ const call=(method,params={},timeoutMs=10000)=>new Promise((ok,no)=>{
+  const id=++seq;
+  const timer=setTimeout(()=>{pending.delete(id);no(Error(method+'_TIMEOUT'))},timeoutMs);
+  pending.set(id,[(v)=>{clearTimeout(timer);ok(v)},(e)=>{clearTimeout(timer);no(e)}]);
+  ws.send(JSON.stringify({id,method,params}));
+ });
  try {
-  const before=await call('Runtime.evaluate',{expression:'location.href',returnByValue:true});
+  const before=await call('Runtime.evaluate',{expression:'location.href',returnByValue:true},5000);
   if(before.result?.value!=='about:blank')stop('READER_NOT_BLANK');
-  const nav=await call('Page.navigate',{url:conversationUrl});
-  if(nav.errorText)stop('NAVIGATION_ERROR');
-  console.log(JSON.stringify({ok:true,rawTargetId:readerId,pageUrl:conversationUrl,navigationInvoked:true}));
+  let nav;
+  try {
+   nav=await call('Page.navigate',{url:conversationUrl},10000);
+   if(nav.errorText)stop('NAVIGATION_ERROR');
+  } catch(e) {
+   const after=await inventory();
+   const proven=after.filter(t=>t.id===readerId&&t.url===conversationUrl&&t.type==='page');
+   const original=after.filter(t=>t.id===originalId&&t.url===conversationUrl&&t.type==='page');
+   if(proven.length!==1||original.length!==1)throw e;
+   console.log(JSON.stringify({ok:true,rawTargetId:readerId,pageUrl:conversationUrl,navigationInvoked:true,navigationReconciled:true}));
+   return;
+  }
+  console.log(JSON.stringify({ok:true,rawTargetId:readerId,pageUrl:conversationUrl,navigationInvoked:true,navigationReconciled:false}));
  }finally{ws.close()}
 })().catch(e=>{console.error('READER_STOP:'+e.message);process.exitCode=1});
