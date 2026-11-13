@@ -33,6 +33,123 @@ import {
 import { queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../services/devChatGptWakeService.js";
 const router=Router(); const Uuid=z.string().uuid();
 
+const AI_TASK_CHATGPT_CORRELATION = /^ai-task:([A-Za-z0-9_-]{1,100}):([1-9][0-9]*):([A-Za-z0-9_-]{8,80})$/;
+
+function parseAiTaskChatGptCorrelation(correlationId: string) {
+  const match = AI_TASK_CHATGPT_CORRELATION.exec(correlationId);
+  const taskId = match ? Number(match[2]) : Number.NaN;
+  if (!match || !Number.isSafeInteger(taskId) || taskId < 1) throw new Error("AI_TASK_EXECUTION_IDENTITY_INVALID");
+  return { companyId: match[1]!, taskId, externalId: `ai-task:${match[1]}:${taskId}` };
+}
+
+async function prepareAiTaskChatGptExecution(input: {
+  correlationId: string; instruction: string; accountAlias: string; workerId: string;
+}) {
+  const identity = parseAiTaskChatGptCorrelation(input.correlationId);
+  const idempotencyKey = "ai-task-chatgpt-dispatch:" + input.correlationId;
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  return db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${idempotencyKey}))`);
+    const source = await tx.execute(sql`
+      SELECT id, company_id, title
+      FROM public.ai_tasks
+      WHERE id=${identity.taskId} AND company_id=${identity.companyId}
+      LIMIT 1
+    `);
+    const task = source.rows?.[0] as Record<string, unknown> | undefined;
+    if (!task) throw new Error("AI_TASK_EXECUTION_SOURCE_NOT_FOUND");
+
+    const existing = await tx.execute(sql`
+      SELECT id,status,task_id,company_id,idempotency_key
+      FROM public.ai_execution_jobs
+      WHERE idempotency_key=${idempotencyKey}
+         OR (source='AI_TASK' AND external_id=${identity.externalId})
+      ORDER BY CASE WHEN idempotency_key=${idempotencyKey} THEN 0 ELSE 1 END
+      LIMIT 1
+      FOR UPDATE
+    `);
+    const current = existing.rows?.[0] as Record<string, unknown> | undefined;
+    if (current) {
+      if (Number(current["task_id"]) !== identity.taskId || current["company_id"] !== identity.companyId)
+        throw new Error("AI_TASK_EXECUTION_IDENTITY_MISMATCH");
+      const status = String(current["status"] ?? "");
+      if (["failed","completed","cancelled","blocked","review_required"].includes(status))
+        throw new Error("AI_TASK_EXECUTION_TERMINAL_REVIEW_REQUIRED");
+      if (current["idempotency_key"] !== idempotencyKey && status !== "prepared")
+        throw new Error("AI_TASK_EXECUTION_ACTIVE");
+      const refreshed = await tx.execute(sql`
+        UPDATE public.ai_execution_jobs
+        SET instruction=COALESCE(instruction,${input.instruction}),
+            assigned_client_id=${input.workerId}, worker_id=${input.workerId},
+            worker_type='chatgpt_browser',
+            status=CASE WHEN status='prepared' THEN 'received' ELSE status END,
+            metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
+              'environment','development','accountAlias',${input.accountAlias},
+              'executionType','chatgpt_dispatch','productionAllowed',false,
+              'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}
+            ),
+            updated_at=NOW()
+        WHERE id=${String(current["id"])}::uuid
+        RETURNING id,status
+      `);
+      return { executionId: String(refreshed.rows[0]?.["id"]), created: false };
+    }
+
+    const inserted = await tx.execute(sql`
+      INSERT INTO public.ai_execution_jobs
+        (company_id,task_id,source,external_id,idempotency_key,title,instruction,
+         assigned_client_id,worker_id,worker_type,status,progress,metadata)
+      VALUES (
+        ${identity.companyId},${identity.taskId},'AI_TASK',${identity.externalId},${idempotencyKey},
+        ${String(task["title"] ?? "AI Task ChatGPT dispatch")},${input.instruction},
+        ${input.workerId},${input.workerId},'chatgpt_browser','received',0,
+        jsonb_build_object(
+          'environment','development','accountAlias',${input.accountAlias},
+          'executionType','chatgpt_dispatch','productionAllowed',false,
+          'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}
+        )
+      )
+      RETURNING id
+    `);
+    const executionId = inserted.rows?.[0]?.["id"];
+    if (typeof executionId !== "string") throw new Error("AI_TASK_EXECUTION_CREATE_FAILED");
+    return { executionId, created: true };
+  });
+}
+
+async function markAiTaskChatGptExecutionDispatched(input: {
+  executionId: string; commandId: string; workerId: string; eventId: string; correlationId: string;
+}) {
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  const result = await db.execute(sql`
+    UPDATE public.ai_execution_jobs
+    SET command_id=${input.commandId}::uuid, assigned_client_id=${input.workerId},
+        worker_id=${input.workerId}, worker_type='chatgpt_browser', status='processing',
+        progress=10, started_at=COALESCE(started_at,NOW()),
+        metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
+          'dispatchStarted',true,'commandId',${input.commandId},
+          'eventId',${input.eventId},'dispatchCorrelationId',${input.correlationId}
+        ), updated_at=NOW()
+    WHERE id=${input.executionId}::uuid AND status IN ('prepared','received','processing')
+    RETURNING id
+  `);
+  if (!result.rows?.length) throw new Error("AI_TASK_EXECUTION_DISPATCH_BIND_FAILED");
+}
+
+async function markAiTaskChatGptExecutionDispatchFailed(executionId: string, error: unknown) {
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  const code = (error instanceof Error ? error.message : "DEV_CHATGPT_WAKE_UNAVAILABLE").slice(0, 500);
+  await db.execute(sql`
+    UPDATE public.ai_execution_jobs
+    SET status='failed', progress=100, error_message=${code}, completed_at=NOW(),
+        metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object('dispatchStarted',false,'dispatchFailed',true),
+        updated_at=NOW()
+    WHERE id=${executionId}::uuid AND command_id IS NULL AND status IN ('prepared','received')
+  `);
+}
 async function resolveAiTaskGptOwnerChannel(): Promise<string | undefined> {
   try {
     const { db } = await import("@workspace/db");
@@ -194,19 +311,40 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
   const eventId=createHash("sha256").update([
    "ai-task-chatgpt-dispatch/v1",target.ownerChannel,target.targetConversationId,p.data.correlationId
   ].join("|")).digest("hex");
-  const queued=await queueDevBrowserWake({
-   ownerChannel:target.ownerChannel,
-   targetConversationId:target.targetConversationId,
-   eventId,
+  const execution=await prepareAiTaskChatGptExecution({
    correlationId:p.data.correlationId,
    instruction:p.data.instruction,
-   jobAlias:p.data.jobAlias??null,
-   requestHost:req.hostname,
-   expectedWorkerId:target.workerId,
-   ...(target.wakeBinding?{expectedBindingFingerprint:target.wakeBinding.bindingFingerprint}:{})
+   accountAlias:p.data.accountAlias,
+   workerId:target.workerId,
+  });
+  let queued;
+  try {
+   queued=await queueDevBrowserWake({
+    ownerChannel:target.ownerChannel,
+    targetConversationId:target.targetConversationId,
+    eventId,
+    correlationId:p.data.correlationId,
+    executionJobId:execution.executionId,
+    instruction:p.data.instruction,
+    jobAlias:p.data.jobAlias??null,
+    requestHost:req.hostname,
+    expectedWorkerId:target.workerId,
+    ...(target.wakeBinding?{expectedBindingFingerprint:target.wakeBinding.bindingFingerprint}:{})
+   });
+  } catch (error) {
+   await markAiTaskChatGptExecutionDispatchFailed(execution.executionId,error).catch(()=>undefined);
+   throw error;
+  }
+  await markAiTaskChatGptExecutionDispatched({
+   executionId:execution.executionId,
+   commandId:queued.commandId,
+   workerId:queued.clientId,
+   eventId,
+   correlationId:p.data.correlationId,
   });
   res.status(queued.created?202:200).json({
    created:queued.created,
+   executionId:execution.executionId,
    commandId:queued.commandId,
    clientId:queued.clientId,
    eventId,

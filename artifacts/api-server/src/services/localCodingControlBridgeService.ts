@@ -588,7 +588,7 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
         AND response.id = ${input.responseId}::uuid
         AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
         AND response.acknowledged_at IS NULL
-      RETURNING response.id, response.command_id, response.acknowledged_at
+      RETURNING response.id, response.command_id, response.kind, response.acknowledged_at
     ),
     marked AS (
       UPDATE ai_platform.ai_coding_bridge_commands AS command
@@ -604,8 +604,28 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
       FROM acknowledged
       WHERE command.id = acknowledged.command_id
       RETURNING command.id
+    ),
+    finalized AS (
+      UPDATE public.ai_execution_jobs AS execution
+      SET final_ack_verified = TRUE,
+          status = 'completed',
+          progress = 100,
+          completed_at = COALESCE(execution.completed_at, NOW()),
+          metadata = COALESCE(execution.metadata, '{}'::jsonb) ||
+            jsonb_build_object(
+              'finalAckResponseId', acknowledged.id::text,
+              'finalAckConversationId', ${input.conversationId}::text,
+              'finalAckAt', acknowledged.acknowledged_at::text
+            ),
+          updated_at = NOW()
+      FROM acknowledged
+      WHERE execution.command_id = acknowledged.command_id
+        AND acknowledged.kind = 'COMPLETED'
+        AND execution.callback_verified IS TRUE
+        AND execution.attestation_verified IS TRUE
+      RETURNING execution.id
     )
-    SELECT id FROM marked
+    SELECT marked.id FROM marked LEFT JOIN finalized ON TRUE
     `);
   });
   return (result.rows ?? []).length > 0;
@@ -1202,6 +1222,41 @@ export async function completeCodingBridgeCommand(input: {
       metadataJson:{...details,...evidence},
     }).returning();
     if(!response)throw new Error("Failed to persist terminal bridge response");
+
+    const commandMetadata = isRecord(row["metadata_json"]) ? row["metadata_json"] : {};
+    const executionJobId = typeof commandMetadata["executionJobId"] === "string" &&
+      /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(commandMetadata["executionJobId"])
+      ? commandMetadata["executionJobId"] : null;
+    if (executionJobId) {
+      const executionStatus = verifiedStatus === "FAILED" ? "failed" : "verifying";
+      const executionProgress = verifiedStatus === "FAILED" ? 100 : 90;
+      const executionAttested = verifiedStatus === "COMPLETED" && verifiedCheckpointWake &&
+        evidence.e2eCode === "E2E_VERIFIED";
+      await tx.execute(sql`
+        UPDATE public.ai_execution_jobs
+        SET command_id = ${input.commandId}::uuid,
+            assigned_client_id = ${input.clientId},
+            worker_id = ${input.clientId},
+            worker_type = 'chatgpt_browser',
+            status = ${executionStatus},
+            progress = ${executionProgress},
+            result_summary = CASE WHEN ${verifiedStatus} = 'COMPLETED' THEN ${input.message} ELSE result_summary END,
+            error_message = CASE WHEN ${verifiedStatus} = 'FAILED' THEN ${input.message} ELSE NULL END,
+            callback_verified = TRUE,
+            attestation_verified = CASE WHEN ${executionAttested} THEN TRUE ELSE attestation_verified END,
+            completed_at = CASE WHEN ${verifiedStatus} = 'FAILED' THEN COALESCE(completed_at,NOW()) ELSE completed_at END,
+            metadata = COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
+              'statusCode',${evidence.statusCode},
+              'deliveryCode',${evidence.deliveryCode},
+              'e2eCode',${evidence.e2eCode},
+              'callbackAt',NOW()::text
+            ),
+            updated_at = NOW()
+        WHERE id = ${executionJobId}::uuid
+          AND (command_id IS NULL OR command_id = ${input.commandId}::uuid)
+          AND status <> 'cancelled'
+      `);
+    }
     return {response,taskId,command:row,verifiedCheckpointResponse};
   });
   if(!persisted)return null;
