@@ -103,6 +103,7 @@ router.get("/dev-center/jobs", async (req, res): Promise<void> => {
     const bridgeRows=bridgeResult.status==="fulfilled"?bridgeResult.value.rows:[];
     const executionRows=executionResult.status==="fulfilled"?executionResult.value.rows:[];
     const bridgeRefs=new Set(bridgeRows.map(row=>String(row["external_id"]??"")));
+    const bridgeItemsByExternal=new Map<string,Record<string,unknown>>();
     const items:Record<string,unknown>[]=jobs.map(j=>{const p=read(j.payload),r=read(j.result);const explicitProgress=r["verifiedProgress"]??p["verifiedProgress"];
       const evidenceId=str(r["progressEvidenceId"])||str(r["checkpointId"])||str(p["progressEvidenceId"]);
       const verified=Boolean(evidenceId);
@@ -111,15 +112,30 @@ router.get("/dev-center/jobs", async (req, res): Promise<void> => {
     });
     for(const row of bridgeRows){
       const external=String(row["external_id"]??"");
-      items.push({id:String(row["id"]),deleteKey:"bridge:"+String(row["id"]),title:str(row["title"])||external,source:str(row["source"])||"AI Task Bridge",status:String(row["status"]??"UNKNOWN").toUpperCase(),stage:null,verifiedProgress:null,worker:str(row["owner"])||null,accountable:null,workerType:null,blocker:null,evidence:null,updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
+      const bridgeItem:Record<string,unknown>={id:String(row["id"]),deleteKey:"bridge:"+String(row["id"]),title:str(row["title"])||external,source:str(row["source"])||"AI Task Bridge",status:String(row["status"]??"UNKNOWN").toUpperCase(),stage:null,verifiedProgress:null,worker:str(row["owner"])||null,accountable:null,workerType:null,blocker:null,evidence:null,updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null};
+      items.push(bridgeItem);
+      if(external)bridgeItemsByExternal.set(external,bridgeItem);
     }
     for(const row of executionRows){
       const external=str(row["external_id"]),command=str(row["command_id"]);
-      if((external && bridgeRefs.has(external))||(command && bridgeRefs.has("bridge-command:"+command)))continue;
+      const linkedExternal=external && bridgeRefs.has(external)?external:command && bridgeRefs.has("bridge-command:"+command)?"bridge-command:"+command:null;
       const metadata=read(row["metadata"]);const status=String(row["status"]??"UNKNOWN").toUpperCase();
       const evidenceId=str(metadata["progressEvidenceId"])||str(metadata["checkpointId"]);
       const progressValue=metadata["verifiedProgress"];
       const fullyVerified=status==="COMPLETED" && row["callback_verified"]===true && row["attestation_verified"]===true && row["final_ack_verified"]===true;
+      const bridgeItem=linkedExternal?bridgeItemsByExternal.get(linkedExternal):null;
+      if(bridgeItem && fullyVerified && bridgeItem["status"]==="COMPLETED"){
+        const taskId=row["task_id"];
+        if(Number.isInteger(taskId) && Number(taskId)>0)bridgeItem["title"]="AI Task #"+taskId+" — "+(str(row["title"])||String(bridgeItem["title"]));
+        Object.assign(bridgeItem,{
+          executionVerified:true,parentTaskStatus:str(row["parent_task_status"])||null,
+          verifiedProgress:100,evidence:"Callback, attestation, dan final ACK terverifikasi",
+          worker:str(row["worker_id"])||str(row["assigned_client_id"])||bridgeItem["worker"],
+          accountable:str(row["assigned_to"])||bridgeItem["accountable"]
+        });
+        continue;
+      }
+      if(bridgeItem && !fullyVerified)continue;
       const verifiedProgress=evidenceId && typeof progressValue==="number" && Number.isInteger(progressValue) && progressValue>=0 && progressValue<=100 && !["FAILED","BLOCKED","CANCELLED"].includes(status)?progressValue:fullyVerified?100:null;
       items.push({id:String(row["id"]),deleteKey:"execution:"+String(row["id"]),title:str(row["title"])||"AI Task",source:str(row["source"])||"AI Tasks",status,parentTaskStatus:str(row["parent_task_status"])||null,executionVerified:fullyVerified,stage:str(metadata["stage"])||null,verifiedProgress,worker:str(row["worker_id"])||str(row["assigned_client_id"])||null,accountable:str(row["assigned_to"])||null,workerType:str(row["worker_type"])||null,blocker:str(row["error_message"])||str(metadata["lastDispatchError"])||null,evidence:evidenceId|| (fullyVerified?"Callback, attestation, dan final ACK terverifikasi":null),updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
     }
