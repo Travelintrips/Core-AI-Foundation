@@ -11,6 +11,7 @@ from unittest import mock
 
 from gpt02_issue159_lineage_reader_runtime import (
     _credential_path, _Handler, _UnixServer, read_verified_lineage,
+    ReusableLineageReadOnlySession,
 )
 
 
@@ -24,6 +25,13 @@ class _Connection:
         self.autocommit = False
         self.rows = rows
         self.rollback_count = 0
+        self.transaction_count = 0
+        self.closed = False
+        self.fail_query = False
+        self.fail_rollback = False
+
+    def close(self):
+        self.closed = True
 
     def __enter__(self):
         return self
@@ -33,6 +41,9 @@ class _Connection:
 
     def rollback(self):
         self.rollback_count += 1
+        if self.fail_rollback:
+            raise RuntimeError("ROLLBACK_INJECTED_FAILURE")
+        self.ro = False
 
     def cursor(self):
         conn = self
@@ -46,8 +57,11 @@ class _Connection:
             def execute(self, sql, params=None):
                 if sql.startswith("SET TRANSACTION READ ONLY"):
                     conn.ro = True
-                if sql.startswith("SELECT") and not getattr(conn, "ro", False):
+                    conn.transaction_count += 1
+                if sql.lstrip().startswith("SELECT") and not getattr(conn, "ro", False):
                     raise AssertionError("WRITEABLE_CONTEXT")
+                if sql.lstrip().startswith("SELECT") and conn.fail_query:
+                    raise RuntimeError("READ_ONLY_QUERY_FAILED")
             def fetchmany(self, n):
                 assert n == 3
                 return conn.rows
@@ -72,6 +86,47 @@ class LineageRuntimeTest(unittest.TestCase):
         self.assertFalse(res["dispatchPermitted"])
         self.assertEqual(res["releaseDecision"], "NO_GO")
         self.assertEqual(conn.rollback_count, 1)
+
+    def test_reuses_one_connection_with_two_new_readonly_transactions(self):
+        conn = _Connection()
+        opens = []
+        def connect():
+            opens.append(True)
+            return conn
+        session = ReusableLineageReadOnlySession(connect)
+        session.warm()
+        for _ in range(2):
+            result = session.read(self.lookup)
+            self.assertFalse(result["matched"])
+            self.assertFalse(result["dispatchPermitted"])
+            self.assertFalse(result["databaseWritePerformed"])
+        self.assertEqual(len(opens), 1)
+        self.assertEqual(conn.transaction_count, 2)
+        self.assertEqual(conn.rollback_count, 2)
+        self.assertFalse(conn.closed)
+        session.close()
+        self.assertTrue(conn.closed)
+
+    def test_read_error_or_failed_rollback_destroys_reusable_session(self):
+        for failure in ("fail_query", "fail_rollback"):
+            conn = _Connection()
+            setattr(conn, failure, True)
+            session = ReusableLineageReadOnlySession(lambda: conn)
+            session.warm()
+            with self.assertRaises(RuntimeError):
+                session.read(self.lookup)
+            self.assertTrue(conn.closed)
+            self.assertIsNone(session._connection)
+
+    def test_cached_session_cannot_become_privileged(self):
+        conn = _Connection()
+        session = ReusableLineageReadOnlySession(lambda: conn)
+        session.warm()
+        conn.info = type("Info", (), {"user": "postgres"})()
+        with self.assertRaisesRegex(RuntimeError, "LINEAGE_DB_IDENTITY_MISMATCH"):
+            session.read(self.lookup)
+        self.assertTrue(conn.closed)
+        self.assertEqual(conn.transaction_count, 0)
 
     def test_wrong_database_identity_rejected(self):
         conn = _Connection()

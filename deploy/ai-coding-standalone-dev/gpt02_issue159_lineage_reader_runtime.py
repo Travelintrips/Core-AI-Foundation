@@ -67,12 +67,66 @@ def read_verified_lineage(lookup: Any, connect=_load_connection) -> dict[str, An
         if connection.info.user != "dev_gpt02_lineage_login.xssrfshdrtdfupgqwfdw":
             raise RuntimeError("LINEAGE_DB_IDENTITY_MISMATCH")
         rows = read_lineage_once(connection, params)
+    return _result(rows)
+
+
+def _result(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "environment": "DEV", "readOnly": True, "matched": len(rows) == 1,
         "rows": rows, "databaseWritePerformed": False,
         "signingPermitted": False, "authorizationGranted": False,
         "dispatchPermitted": False, "releaseDecision": "NO_GO",
     }
+
+
+class ReusableLineageReadOnlySession:
+    """Single privileged-peer-only reader session; never a signer or writer.
+
+    The existing UnixStreamServer handles requests sequentially, the DB login
+    is restricted to SELECT, and every read_lineage_once() call starts a fresh
+    read-only transaction and rolls back its snapshot.  Reuse is allowed only
+    after the prior query and rollback succeeded. Any exception closes the
+    DB connection and fails the request; no retry inside an expiring fence.
+    """
+
+    def __init__(self, connect=_load_connection):
+        self._connect = connect
+        self._connection = None
+
+    def warm(self) -> None:
+        if self._connection is not None:
+            return
+        connection = self._connect()
+        if (connection.info.user !=
+                "dev_gpt02_lineage_login.xssrfshdrtdfupgqwfdw"
+                or connection.autocommit is not False):
+            try: connection.close()
+            except Exception: pass
+            raise RuntimeError("LINEAGE_DB_IDENTITY_MISMATCH")
+        self._connection = connection
+
+    def read(self, lookup: Any) -> dict[str, Any]:
+        params = _clean_lookup(lookup)
+        if self._connection is None or getattr(self._connection, "closed", False):
+            self._connection = None
+            self.warm()
+        connection = self._connection
+        try:
+            if (connection.info.user !=
+                    "dev_gpt02_lineage_login.xssrfshdrtdfupgqwfdw"
+                    or connection.autocommit is not False):
+                raise RuntimeError("LINEAGE_DB_IDENTITY_MISMATCH")
+            rows = read_lineage_once(connection, params)
+            return _result(rows)
+        except Exception:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        connection, self._connection = self._connection, None
+        if connection is not None:
+            try: connection.close()
+            except Exception: pass
 
 
 def _peer_uid(conn: socket.socket) -> int:
@@ -124,15 +178,25 @@ def serve(socket_path: str, allowed_uid: int) -> None:
     if os.path.lexists(socket_path):
         raise RuntimeError("SOCKET_ALREADY_EXISTS")
     _Handler.allowed_uid = allowed_uid
-    with _UnixServer(socket_path, _Handler) as server:
-        os.chmod(socket_path, 0o660)
-        sock_stat = os.lstat(socket_path)
-        if (not stat.S_ISSOCK(sock_stat.st_mode)
-                or sock_stat.st_uid != os.getuid()
-                or sock_stat.st_gid != os.getgid()
-                or stat.S_IMODE(sock_stat.st_mode) != 0o660):
-            raise RuntimeError("PRIVATE_SOCKET_OWNERSHIP_INVALID")
-        server.serve_forever(poll_interval=0.25)
+    # Pre-connect before the Unix socket begins accepting verifier traffic.
+    # The first approved POST /verify-persisted-lineage then does not spend
+    # the issuer's 15s lease establishing a new PostgreSQL TLS session.
+    session = ReusableLineageReadOnlySession()
+    try:
+        session.warm()
+        _Handler.read_fn = staticmethod(session.read)
+        with _UnixServer(socket_path, _Handler) as server:
+            os.chmod(socket_path, 0o660)
+            sock_stat = os.lstat(socket_path)
+            if (not stat.S_ISSOCK(sock_stat.st_mode)
+                    or sock_stat.st_uid != os.getuid()
+                    or sock_stat.st_gid != os.getgid()
+                    or stat.S_IMODE(sock_stat.st_mode) != 0o660):
+                raise RuntimeError("PRIVATE_SOCKET_OWNERSHIP_INVALID")
+            server.serve_forever(poll_interval=0.25)
+    finally:
+        session.close()
+        _Handler.read_fn = staticmethod(read_verified_lineage)
 
 
 def main():
