@@ -7,6 +7,7 @@ before a production-style writer connection may ever be enabled on DEV.
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
+import ast
 import json
 from pathlib import Path
 import re
@@ -80,6 +81,31 @@ def main():
                    "/tmp/issuer.sql", MIGRATOR, replace_migrator=True)
         candidate = ROOT / "docs/dev/gpt02-issue159-positive-dispatch-permit.PROPOSED.sql"
         apply_file(candidate, "/tmp/positive.sql", MIGRATOR, replace_migrator=True)
+        # Exact shape of the existing AI Core bridge / Core Task columns needed
+        # for a disposable-only HELD command insert. No external database.
+        sql("""
+          CREATE SCHEMA ai_platform;
+          CREATE TABLE ai_platform.ai_coding_tasks (
+            id uuid PRIMARY KEY,
+            task_number text NOT NULL,
+            project_name text NOT NULL, repository text NOT NULL,
+            branch text NOT NULL, instruction text NOT NULL,
+            status text NOT NULL
+          );
+          CREATE TABLE ai_platform.ai_coding_bridge_commands (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            task_id uuid REFERENCES ai_platform.ai_coding_tasks(id),
+            external_command_id text NOT NULL,
+            source text NOT NULL,
+            command_type text NOT NULL,
+            instruction text NOT NULL,
+            authority_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+            metadata_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+            status text NOT NULL DEFAULT 'RECEIVED'
+              CHECK (status IN ('RECEIVED','PROCESSING','COMPLETED','FAILED','CANCELLED')),
+            UNIQUE(source,external_command_id)
+          );
+        """)
 
         roles = sql("""SELECT string_agg(rolname||':'||rolcanlogin::text,',' ORDER BY rolname)
             FROM pg_roles WHERE rolname IN
@@ -150,6 +176,11 @@ def main():
            core_task_id,hub_execution_id,command_candidate_id,attempt_id,config_sha256,expires_at)
         VALUES ('default',140,5,10,'fixture-super-admin','{CORE}','{HUB}','{CMD}',
           '{ATT}',repeat('c',64),clock_timestamp()+interval '5 minutes');
+        INSERT INTO ai_platform.ai_coding_tasks
+          (id,task_number,project_name,repository,branch,instruction,status)
+        VALUES ('{CORE}','GPT02DEV-140-'||repeat('c',14),
+          'GPT02 DEV coding lifecycle','Travelintrips/Core-AI-Foundation',
+          'develop','Synthetic DEV owner-approved task fixture','PENDING');
         INSERT INTO gpt02_private.approvals
           (command_id,attempt_id,nonce,task_id,company_id,approver_id,claims,
            signature,digest,expires_at,operator_namespace)
@@ -262,6 +293,45 @@ def main():
              FROM gpt02_private.positive_dispatch_outbox""").stdout.strip()
         ensure(outbox == (CMD+":"+ATT+":140:"+CORE+":HELD_NO_DISPATCH:"+("a"*64)),
                "EXACT_COMMAND_OUTBOX_NOT_DURABLY_LINKED")
+        # Parse the SQL constant from source WITHOUT importing the broker,
+        # installing crypto dependencies, or connecting to a real database.
+        module = ast.parse((ROOT /
+          "deploy/ai-coding-standalone-dev/gpt02_issue159_exact_bridge_stage.py"
+        ).read_text())
+        matches = [node.value.value for node in module.body
+          if isinstance(node, ast.Assign)
+          and any(isinstance(t,ast.Name) and t.id=="HELD_BRIDGE_INSERT_SQL"
+                  for t in node.targets)
+          and isinstance(node.value,ast.Constant)
+          and isinstance(node.value.value,str)]
+        ensure(len(matches)==1, "HELD_BRIDGE_SQL_NOT_UNIQUE")
+        held_sql = matches[0]
+        # Simulate stage SQL parameter binding in the disposable psql only.
+        # This inserts a HELD row; it never schedules or wakes any worker.
+        def stage_sql(command=CMD, packet_sha="a"*64):
+            expected = held_sql.replace("%s::uuid", "'" + command + "'::uuid",1)
+            return expected.replace("%s::text", "'" + packet_sha + "'::text",1)
+        wrong_hash = sql(stage_sql(packet_sha="f"*64))
+        ensure(wrong_hash.stdout.strip()=="",
+               "UNVERIFIED_PACKET_HASH_COULD_STAGE_COMMAND")
+        wrong_id = sql(stage_sql(command="ffffffff-ffff-4fff-8fff-ffffffffffff"))
+        ensure(wrong_id.stdout.strip()=="","UNRELATED_ISSUER_UUID_STAGED")
+        staged = sql(stage_sql())
+        ensure(staged.stdout.strip().startswith(
+            CMD+"|"+CORE+"|ai-core|gpt02-issue159:"+CMD+"|ISSUE159_HELD|RECEIVED|"),
+            "EXACT_HELD_BRIDGE_INSERT_MISSING_OR_ID_CHANGED: "+
+            staged.stdout[-180:])
+        check = sql("""SELECT
+          id::text||':'||task_id::text||':'||source||':'||command_type
+          ||':'||status||':'||(metadata_json ? 'assignedClientId')::text
+          ||':'||(metadata_json ? 'gpt02Issue159PositivePermit')::text
+          FROM ai_platform.ai_coding_bridge_commands""").stdout.strip()
+        ensure(check==CMD+":"+CORE+":ai-core:ISSUE159_HELD:RECEIVED:false:true",
+               "HELD_BRIDGE_COMMAND_COULD_BE_GENERIC_CLAIMED")
+        duplicate = sql(stage_sql())
+        ensure(duplicate.stdout.strip()=="","HELD_BRIDGE_REPLAY_INSERTED_DUPLICATE")
+        ensure(sql("SELECT count(*) FROM ai_platform.ai_coding_bridge_commands"
+                   ).stdout.strip()=="1","HELD_BRIDGE_NOT_EXACTLY_ONCE")
         denied_update = sql("""UPDATE gpt02_private.positive_dispatch_outbox
                SET delivery_state='SENT'""", required=False)
         ensure(denied_update.returncode!=0 and "APPEND_ONLY_EVIDENCE" in denied_update.stderr,
