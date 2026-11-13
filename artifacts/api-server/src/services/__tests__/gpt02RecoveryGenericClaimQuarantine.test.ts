@@ -12,6 +12,9 @@ describe("generic worker never claims DEV GPT02 recovery",()=>{
     {gpt02RecoveryParentCommandId:"parent"},
     {recoveryParentCommandId:"parent"},
     {recovery_parent_command_id:"parent"},
+    {gpt02Issue159PositivePermit:false},
+    {gpt02Issue159PositivePermit:null},
+    {gpt02Issue159PositivePermit:{commandId:"fake"}},
     {capability:"chatgpt:wake",parentCommandId:"parent"},
   ])("quarantines recovery markers even when falsy: %j",(metadata)=>{
     expect(isQuarantinedGpt02RecoveryMetadata(metadata)).toBe(true);
@@ -29,6 +32,7 @@ describe("generic worker never claims DEV GPT02 recovery",()=>{
     const rendered=dialect.sqlToQuery(genericClaimNotGpt02RecoverySql()).sql;
     for(const key of ["gpt02Recovery","gpt02RecoveryParentCommandId",
       "recoveryParentCommandId","recovery_parent_command_id",
+      "gpt02Issue159PositivePermit",
       "parentCommandId","chatgpt:wake"])
       expect(rendered).toContain("'"+key+"'");
     expect(rendered).toContain("NOT");
