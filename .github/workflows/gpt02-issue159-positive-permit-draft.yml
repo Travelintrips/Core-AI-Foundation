@@ -5,7 +5,9 @@ on:
     branches: [develop]
     paths:
       - "docs/dev/gpt02-issue159-positive-dispatch-permit.PROPOSED.sql"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
       - "scripts/dev/test_gpt02_issue159_positive_permit_pg.py"
+      - "scripts/dev/test_gpt02_issue159_positive_permit_handoff.py"
       - ".github/workflows/gpt02-issue159-positive-permit-draft.yml"
   workflow_dispatch:
 
@@ -25,3 +27,31 @@ jobs:
         run: |
           test ! -f scripts/dev/gpt02_issue159_positive_permit_apply_live.py
           echo "NO_LIVE_MIGRATION_NO_DEPLOY"
+
+  existing-verifier-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout proposed source (no deploy)
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned verification dependency
+        run: python3 -m pip install --no-cache-dir cryptography==50.0.2
+      - name: Verify pinned existing four-signature verifier handoff
+        env:
+          PYTHONPATH: "deploy/ai-coding-standalone-dev:scripts/dev"
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test_gpt02_issue159_positive_permit_handoff.py -q
+          python3 -m py_compile \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py \
+            scripts/dev/test_gpt02_issue159_positive_permit_handoff.py
+      - name: Preserve no-grant no-dispatch boundary
+        run: |
+          set -euo pipefail
+          grep -Fq 'releaseDecision": "NO_GO"' \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py
+          ! grep -Eq 'dispatchPermitted": True|authorizationGranted": True|signingPermitted": True' \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py
