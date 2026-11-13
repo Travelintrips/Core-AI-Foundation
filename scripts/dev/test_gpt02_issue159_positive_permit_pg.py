@@ -98,7 +98,7 @@ def main():
              ('positive_dispatch_permits','positive_dispatch_consumptions','positive_dispatch_outbox')
              AND c.relrowsecurity AND c.relforcerowsecurity""").stdout.strip()
         ensure(n == "3", "ALL_POSITIVE_LEDGERS_MUST_FORCE_RLS")
-        for fn in ("reserve_positive_dispatch_permit(uuid,uuid,text)",
+        for fn in ("reserve_positive_dispatch_permit(uuid,text,text,text)",
                    "consume_positive_dispatch_permit(uuid,uuid,text)"):
             signature = "gpt02_private." + fn
             for role in ("anon", "authenticated", "service_role", "dev_gpt02_issuer_evidence"):
@@ -132,12 +132,12 @@ def main():
         # Only on this disposable fixture, make writer eligible to exercise RPCs.
         sql("ALTER ROLE dev_gpt02_release_writer LOGIN CONNECTION LIMIT 3")
         bad = sql("SELECT gpt02_private.reserve_positive_dispatch_permit('" +
-                  CMD + "',gen_random_uuid(),'0')", "dev_gpt02_release_writer",
+                  CMD + "','0',repeat('e',64),repeat('D',86))", "dev_gpt02_release_writer",
                   required=False)
         ensure(bad.returncode != 0 and "TRUSTED_RELEASE_WRITER_AND_PACKET_REQUIRED"
                in bad.stderr, f"BAD_PACKET_HASH_ACCEPTED status={bad.returncode} stderr={bad.stderr[-1400:]} stdout={bad.stdout[-500:]}")
         missing = sql("SELECT gpt02_private.reserve_positive_dispatch_permit('" +
-                      CMD + "',gen_random_uuid(),repeat('a',64))",
+                      CMD + "',repeat('a',64),repeat('e',64),repeat('D',86))",
                       "dev_gpt02_release_writer", required=False)
         ensure(missing.returncode != 0 and "PERSISTED_LINKED_ISSUER_PROOF_REQUIRED"
                in missing.stderr, f"MISSING_LINKED_LINEAGE_ACCEPTED status={missing.returncode} stderr={missing.stderr[-1400:]} stdout={missing.stdout[-500:]}")
@@ -187,7 +187,10 @@ def main():
         SELECT 'default',140,'{CMD}',f.fence_id,'{LINK}',f.receipt_id,'{ATT}',
            jsonb_build_object('environment','DEV',
              'audience','GPT02_ISSUER_LEASE_EVIDENCE_V1',
-             'commandId','{CMD}','attemptId','{ATT}'),
+             'commandId','{CMD}','attemptId','{ATT}',
+             'hubTaskId',140,'hubExecutionId','{HUB}','coreTaskId','{CORE}',
+             'linkId','{LINK}','fenceId',f.fence_id::text,
+             'receiptId',f.receipt_id::text,'approvalDigest',repeat('a',64)),
            repeat('D',86),repeat('e',64),f.lease_expires_at,false,false
         FROM gpt02_private.post_consumption_fences f;
         INSERT INTO gpt02_private.issuer_lease_consumptions
@@ -198,13 +201,27 @@ def main():
         """
         sql(setup)
         evidence = sql("SELECT evidence_id FROM gpt02_private.issuer_evidences").stdout.strip()
+        bad_issuer_digest = sql(
+            "SELECT gpt02_private.reserve_positive_dispatch_permit('" + CMD +
+            "',repeat('a',64),repeat('0',64),repeat('D',86))",
+            "dev_gpt02_release_writer", required=False)
+        ensure(bad_issuer_digest.returncode != 0 and
+               "PERSISTED_LINKED_ISSUER_PROOF_REQUIRED" in bad_issuer_digest.stderr,
+               "ISSUER_DIGEST_SUBSTITUTION_ALLOWED")
+        bad_issuer_sig = sql(
+            "SELECT gpt02_private.reserve_positive_dispatch_permit('" + CMD +
+            "',repeat('a',64),repeat('e',64),repeat('E',86))",
+            "dev_gpt02_release_writer", required=False)
+        ensure(bad_issuer_sig.returncode != 0 and
+               "PERSISTED_LINKED_ISSUER_PROOF_REQUIRED" in bad_issuer_sig.stderr,
+               "ISSUER_SIGNATURE_SUBSTITUTION_ALLOWED")
         permit = sql("SELECT gpt02_private.reserve_positive_dispatch_permit('" +
-                     CMD + "','" + evidence + "',repeat('a',64))",
+                     CMD + "',repeat('a',64),repeat('e',64),repeat('D',86))",
                      "dev_gpt02_release_writer").stdout.strip()
         ensure(re.fullmatch(r"[0-9a-f-]{36}", permit) is not None,
                "POSITIVE_PERMIT_UUID_MISSING")
         again = sql("SELECT gpt02_private.reserve_positive_dispatch_permit('" +
-                    CMD + "','" + evidence + "',repeat('a',64))",
+                    CMD + "',repeat('a',64),repeat('e',64),repeat('D',86))",
                     "dev_gpt02_release_writer", required=False)
         ensure(again.returncode != 0 and "duplicate key" in again.stderr,
                "DUPLICATE_PERMIT_RESERVATION_ACCEPTED")
