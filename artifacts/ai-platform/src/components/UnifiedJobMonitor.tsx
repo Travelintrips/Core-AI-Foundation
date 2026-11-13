@@ -241,7 +241,7 @@ function FragmentRow({ job, open, stale, checked, toggleChecked, assistance, onA
     </tr>
     {open && <tr className="border-t bg-muted/20"><td colSpan={7} className="p-4 space-y-1 text-sm">
       {job.parentTaskStatus && <div><strong>Status tugas induk:</strong> {job.parentTaskStatus} <span className="text-muted-foreground">(workflow terpisah dari eksekusi)</span></div>}
-      <div><strong>Tahap:</strong> {job.stage || "Belum terverifikasi"}</div>
+      <div><strong>Tahap:</strong> {job.executionVerified ? "Selesai — E2E terverifikasi" : job.stage || "Belum terverifikasi"}</div>
       <div><strong>Hambatan:</strong> {job.blocker || "Tidak tercatat"}</div>
       <div><strong>Bukti / ACK:</strong> {job.evidence || "Belum tersedia"}</div>
       <div><strong>Jenis pelaksana:</strong> {job.workerType || "Belum tercatat"}</div>
