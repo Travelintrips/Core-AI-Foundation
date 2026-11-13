@@ -200,7 +200,7 @@ jobs:
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once_service_policy.py
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_issuer_signer_guard.py' -v
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 -m unittest discover -s scripts/dev -p 'test_gpt02_issue159_issuer_sign_once_service_policy.py' -v
-          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-issuer.service
+          systemd-analyze verify "$RUNNER_TEMP/gpt02-issue159-reader.service" deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-issuer.service
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-sign-once-approval.service
           python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_reader_runtime.py
