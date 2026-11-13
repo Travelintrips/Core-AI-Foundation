@@ -13,12 +13,17 @@
  * and immutable readback; it does not mint release records or dispatch.
  */
 import { createHash, createPublicKey, verify } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { validateTrustedBinding, validateJob, BridgeViolation } from "./dev-gpt02-gateway-bridge.mjs";
 
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const HEX = /^[0-9a-f]{64}$/;
 const OWNER = /^ai-engine-oauth:[a-f0-9]{64}$/;
 const WORKER = "openclaw-dell-chatgpt-wake-dev";
+const PINNED_PUBLIC_ROOT = "/etc/gpt02-dev/issue159-release/release-public.pem";
+const PINNED_ROOT_FINGERPRINT =
+  "/etc/gpt02-dev/issue159-release/fingerprint.sha256";
 const FIELDS = [
   "version", "environment", "audience", "hubTaskId",
   "commandId", "attemptId", "permitId", "coreTaskId", "packetSha256",
@@ -164,5 +169,51 @@ export function verifyIssue159ReleaseCandidate({
     finalAckVerified: false,
     dispatchPermitted: false,
     releaseDecision: "NO_GO",
+  });
+}
+
+function protectedRootFile(path) {
+  const stat = lstatSync(path);
+  requireOk(stat.isFile() && !stat.isSymbolicLink() &&
+    stat.uid === 0 && stat.gid === 0 &&
+    (stat.mode & 0o022) === 0, "RELEASE_PINNED_ROOT_CUSTODY_INVALID");
+  return readFileSync(path, { encoding: "utf8" });
+}
+/**
+ * The only intended operational entrypoint: the release public key
+ * is always read from the system-controlled DEV trust directory.
+ * The four existing signer keys do NOT stand in for this independent
+ * release authority. No release private key is stored in this module.
+ * On current live DEV these files are deliberately not installed.
+ */
+export function verifyIssue159ReleaseUsingPinnedRoot(input) {
+  const dir = dirname(PINNED_PUBLIC_ROOT);
+  requireOk(dirname(PINNED_ROOT_FINGERPRINT) === dir,
+    "RELEASE_PINNED_DIRECTORY_MISMATCH");
+  let pem, pinnedSha;
+  try {
+    const parent = lstatSync(dir);
+    requireOk(parent.isDirectory() && !parent.isSymbolicLink() &&
+      parent.uid === 0 && parent.gid === 0 &&
+      (parent.mode & 0o022) === 0, "RELEASE_PINNED_DIRECTORY_INVALID");
+    pem = protectedRootFile(PINNED_PUBLIC_ROOT);
+    pinnedSha = protectedRootFile(PINNED_ROOT_FINGERPRINT).trim();
+  } catch {
+    throw new BridgeViolation("RELEASE_INDEPENDENT_PINNED_ROOT_UNAVAILABLE");
+  }
+  requireOk(HEX.test(pinnedSha), "RELEASE_PINNED_FINGERPRINT_INVALID");
+  let key;
+  try {
+    key = createPublicKey(pem);
+  } catch {
+    throw new BridgeViolation("RELEASE_PINNED_PUBLIC_KEY_INVALID");
+  }
+  requireOk(key.asymmetricKeyType === "ed25519",
+    "RELEASE_PINNED_KEY_NOT_ED25519");
+  const der = key.export({ type: "spki", format: "der" });
+  requireOk(createHash("sha256").update(der).digest("hex") === pinnedSha,
+    "RELEASE_PINNED_FINGERPRINT_MISMATCH");
+  return verifyIssue159ReleaseCandidate({
+    ...input, publicKeyPem: pem,
   });
 }
