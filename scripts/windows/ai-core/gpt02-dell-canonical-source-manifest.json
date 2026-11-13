@@ -1,0 +1,157 @@
+{
+  "scope": "GPT02_DELL_DEV_CANONICAL_DRAFT_NO_DEPLOY",
+  "source": "verified DELL runtime copied to canonical DEV source; production untouched",
+  "hashes": "Git canonical LF; byte-pinned Windows paths use CRLF on checkout",
+  "files": [
+    {
+      "name": "dell-wake-executor-once.mjs",
+      "sha256_lf": "e45aa598082319e854d3a0a98ad0def0e91d6e9400baf1e5d3d246a6454788af",
+      "bytes": 55056
+    },
+    {
+      "name": "dev-chatgpt-cdp-reader-navigate.js",
+      "sha256_lf": "b9e821622ca690ea583d7ac64b827eaa3176ac6aaeedcba40ad81e83dbcf4ce5",
+      "bytes": 3751
+    },
+    {
+      "name": "dev_chatgpt_native_transport.py",
+      "sha256_lf": "bb9fbc875de8adb1c386558bd493857ad138b1fe6182d176f5e0d7165c224856",
+      "bytes": 86079
+    },
+    {
+      "name": "gpt02-cdp-capture-stage.js",
+      "sha256_lf": "3f6e55305311defe9e860c7c871087f75409944f7a0406d2c1d624301d6048cb",
+      "bytes": 3274
+    },
+    {
+      "name": "gpt02-cdp-listener-stage.js",
+      "sha256_lf": "17d2f66aa41bcece3b7794d35c6748110ade89823d7a86e2bd6ae6ff03d33967",
+      "bytes": 3753
+    },
+    {
+      "name": "gpt02-cdp-submit-passive-stage.js",
+      "sha256_lf": "955a1955babb9ef0adeaea984ef7613eef7e0102d3ef7c17afb35a03b45119fd",
+      "bytes": 4551
+    },
+    {
+      "name": "gpt02-current-listener-gate-readonly.mjs",
+      "sha256_lf": "75c0742f1f98212309606842274d0731f12edbbc066e6cf9f463d94baf167fd1",
+      "bytes": 1311
+    },
+    {
+      "name": "gpt02-dev-monitor-readonly.ps1",
+      "sha256_lf": "d9c706c9a75dad549039b2c1d15ec6a81bdcb31e1d8027428577fd3590237f7e",
+      "bytes": 10096
+    },
+    {
+      "name": "gpt02-dev-recovery-policy.cjs",
+      "sha256_lf": "c07c3e387595ffebfacd401fbfce7370d9dc977f6f82b151f973384433a431fa",
+      "bytes": 6161
+    },
+    {
+      "name": "gpt02-ed25519-attestation-gate-stage.cjs",
+      "sha256_lf": "b73b9d055d7b0f0f8be614cbd5f47af99ab0326dc478d7911c12e7d527e7dce4",
+      "bytes": 2943
+    },
+    {
+      "name": "gpt02-json-unique-stage.js",
+      "sha256_lf": "550804a1c2c0e42407945a395b08866b1c8208d2f0a55622842704fc9a0b2930",
+      "bytes": 1806
+    },
+    {
+      "name": "gpt02-legacy429-quarantine-validator.cjs",
+      "sha256_lf": "74a3e9f1d0333f4c5291130e1748c56dbf4e3fd29abe4633db43ee2ba0839c84",
+      "bytes": 5122
+    },
+    {
+      "name": "gpt02-local-cache-readback.js",
+      "sha256_lf": "d7258da2acc5c7650056da1049463667cabd91f86b5a2d907ec1d112de57aeec",
+      "bytes": 4243
+    },
+    {
+      "name": "gpt02-passive-submit-rate-gate.cjs",
+      "sha256_lf": "807ed1e2f2126e1c916a3fe9d7de14ae89471aeccb72fd7794aeb173538eb509",
+      "bytes": 2982
+    },
+    {
+      "name": "gpt02-preclaim-observer-readonly.mjs",
+      "sha256_lf": "7063944e07081904aceb6cf5c99c6f5f503f573b9f86b1972588a937fb2d3889",
+      "bytes": 1164
+    },
+    {
+      "name": "gpt02-rate-metadata-audit-stage.cjs",
+      "sha256_lf": "000ea1cd35391bd7908725d594edf0ec81dab0741ebcf75a9f2ba419584e44db",
+      "bytes": 2727
+    },
+    {
+      "name": "gpt02-supervised-one-shot-gate.cjs",
+      "sha256_lf": "b4bb9d77fff9d3a20b557fa37d24e9ecccf6bd6e90bb2e68485a5a80d43b904f",
+      "bytes": 6074
+    },
+    {
+      "name": "gpt02_bound_cdp_fallback.py",
+      "sha256_lf": "61d2901143385e43f452f785a10d7d6e92413af89cb2f205dae313a6306b5f0b",
+      "bytes": 871
+    },
+    {
+      "name": "gpt02_legacy429_quarantine_validator.py",
+      "sha256_lf": "c51768d9d06227044c8b13e52ed8bfd06886dc785649aff99af14871fcfd0801",
+      "bytes": 4731
+    },
+    {
+      "name": "gpt02_passive_submit_rate_gate.py",
+      "sha256_lf": "cb74d9615d36a994c5334f9ee82f29d989bb5c2a635aa6c9ed68a117cc1a2255",
+      "bytes": 3165
+    },
+    {
+      "name": "gpt02_reader_integrator_stage.py",
+      "sha256_lf": "bb957c7401d2b6d5644f72931ba160a54fbcd6dd58374f103757bd61ff7a107a",
+      "bytes": 3602
+    },
+    {
+      "name": "gpt02_ready_capture_stage.py",
+      "sha256_lf": "c04d99cd97250e72e0c7e5c2882beff5cffb71f9761464a48e6729f3017cb130",
+      "bytes": 4457
+    },
+    {
+      "name": "gpt02_retry_after_metadata.py",
+      "sha256_lf": "5796951689113e3a84a46bcf4ec33d7a5fd8f12a72477001463cb0deb7c75317",
+      "bytes": 1297
+    },
+    {
+      "name": "gpt02_submit_stream_reader.py",
+      "sha256_lf": "e0720219862d5f737577f9c40c307b7b6d3dd939ae398f1c9620bcfaf09080ff",
+      "bytes": 6017
+    },
+    {
+      "name": "test_dev_chatgpt_native_transport.py",
+      "sha256_lf": "0d043ed43a1e108fb3a612fd6a19eb75a77a10581bd5757e613ed1e08be70141",
+      "bytes": 38760
+    },
+    {
+      "name": "test_gpt02_cache_readiness_contract_readonly_20261113.py",
+      "sha256_lf": "fd2ecc49c17323e7e7e8bdadfc1a67c35939a84a5f912a46018c2b5b370df25f",
+      "bytes": 1366
+    },
+    {
+      "name": "test_gpt02_passive_submit_rate_gate.cjs",
+      "sha256_lf": "0d3cfa12a8ae3c9e659e0bb6c16bf5756b3a84d950724e3f8683b4328cc2e815",
+      "bytes": 968
+    },
+    {
+      "name": "test_gpt02_passive_submit_rate_gate.py",
+      "sha256_lf": "4d3b551e7b1845947ec75a1bbdc2043ab3d47ddb6b4cfb814adfabc4250ee959",
+      "bytes": 1039
+    },
+    {
+      "name": "test_gpt02_submit_stream_contract_20261113.py",
+      "sha256_lf": "b1f266430efec2bcf00b6b142aefeacf8b6aade5ddcdf2b68a367a02d9becc1a",
+      "bytes": 2907
+    }
+  ],
+  "expected_windows_runtime_sha256": {
+    "dev_chatgpt_native_transport.py": "17d0a6e00c966d6ad391779205826a91f989ec426fc073519ac60bf9bfb72b95",
+    "dell-wake-executor-once.mjs": "6f3bc3a6b6f1d814d08602df0fffc3f8a8f5ca47f9a73275f6d2b757b6da8eb1",
+    "gpt02-local-cache-readback.js": "d7258da2acc5c7650056da1049463667cabd91f86b5a2d907ec1d112de57aeec"
+  }
+}

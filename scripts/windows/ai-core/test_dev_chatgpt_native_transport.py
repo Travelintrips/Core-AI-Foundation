@@ -79,6 +79,7 @@ class FakeTransport(NativeTransport):
     def _runtime(self):
         self.expected_user_data = self.fake_user_data
         self.node = Path("/synthetic/node.exe")
+        self.cdp_node = Path("/synthetic/node.exe")
         self.entry = Path("/synthetic/openclaw.mjs")
 
     # Test-double for the managed DELL CDP boundary; no real browser or process calls.
@@ -95,6 +96,15 @@ class FakeTransport(NativeTransport):
         if self.reader_tab is not None: tabs.append(dict(self.reader_tab))
         if self.extra_blank: tabs.append({'type': 'page', 'url': 'about:blank', 'targetId': 'E' * 32})
         return tabs
+
+    # Adapt only the synthetic CDP fixture, never the production native transport.
+    # The current DELL source uses a direct target creation endpoint; older tests
+    # modeled it through the OpenClaw CLI "open" operation.
+    def _cdp_create_blank_target(self, cdp_port):
+        if cdp_port != self.expected_cdp_port:
+            raise RuntimeError("Synthetic CDP port changed")
+        self.calls.append(("native:cdp-create-blank", (cdp_port,)))
+        return self._cli("open", "about:blank", "--label", "aicore-reader-" + EVENT[:16])
 
     def _cdp_activate_target(self, cdp_port, target_id):
         if sum(t['targetId'] == target_id for t in self._cdp_tab_inventory(cdp_port)) != 1:
@@ -278,6 +288,22 @@ class NativeTransportTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
+        # Production rejects missing/ambiguous 429 logs. Use one strictly typed
+        # synthetic 200 event, local to each test. Never read real Windows logs.
+        rate_dir = Path(self.folder.name) / "AI-Core"
+        rate_dir.mkdir()
+        (rate_dir / "native-response-metadata.jsonl").write_text(
+            json.dumps({"capturedAtUtc": "2026-11-13T12:00:00Z",
+                        "responseStatus": 200, "envelopeOk": True,
+                        "responsePresent": True}) + "\n", encoding="utf-8")
+        local_env = patch.dict("os.environ", {
+            "LOCALAPPDATA": self.folder.name,
+            "AI_CORE_GPT02_LOCAL_CACHE_READBACK_DEV": "0",
+            "AI_CORE_GPT02_PASSIVE_SUBMIT_CAPTURE_DEV": "0",
+            "AI_CORE_GPT02_CDP_READY_CAPTURE_DEV": "0",
+        })
+        local_env.start()
+        self.addCleanup(local_env.stop)
         self.transport = FakeTransport(self.folder.name)
 
     def test_activation_is_local_explicit_and_disabled_by_default(self):

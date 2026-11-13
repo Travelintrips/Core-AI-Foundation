@@ -4,6 +4,7 @@ No page evaluation, endpoint replay, session export or assistant ID inference.
 All process output stays in memory; failures expose fixed messages only.
 """
 
+import datetime
 from contextlib import contextmanager
 import hashlib
 import json
@@ -14,12 +15,15 @@ import re
 import subprocess
 import threading
 import time
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from dev_chatgpt_native_reader import select_observed_request, validate_native_response
+from gpt02_legacy429_quarantine_validator import evaluate_files as evaluate_legacy429_quarantine
+from gpt02_ready_capture_stage import ReadyCaptureStage
+from gpt02_submit_stream_reader import validate_submit_stream
 
 
-MAX_OUTPUT_BYTES = 2 * 1024 * 1024
+MAX_OUTPUT_BYTES = 12 * 1024 * 1024
 RAW_TARGET = re.compile(r"[A-Fa-f0-9]{32}")
 STOP = re.compile(r'\bbutton\s+"Stop(?: generating)?"', re.I)
 READER_STATES = frozenset(("OPEN_ATTEMPTING", "BLANK_CREATED", "BLANK_VERIFIED",
@@ -27,7 +31,7 @@ READER_STATES = frozenset(("OPEN_ATTEMPTING", "BLANK_CREATED", "BLANK_VERIFIED",
 CLI_SECONDS = 75
 NATIVE_SECONDS = 45
 TRANSPORT_SECONDS = 1950
-READINESS_SECONDS = 120
+READINESS_SECONDS = 120  # Isolated candidate: matches proven fixed transport budget; requires native E2E verification.
 LISTENER_STARTUP_SECONDS = 25
 LISTENER_CAPTURE_SECONDS = 90
 # These are sums of bounded remaining phases, not renewed-lease durations.
@@ -49,6 +53,78 @@ def openclaw_runtime_paths(local):
         return Path(node_override), Path(entry_override)
     portable = Path(local) / "OpenClaw" / "deps" / "portable-node"
     return portable / "node.exe", portable / "node_modules" / "openclaw" / "openclaw.mjs"
+
+
+def _unique_rate_log_pairs(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate native rate metadata key")
+        result[key] = value
+    return result
+
+
+def parse_native_rate_log(raw):
+    """Strictly validate entire JSONL before any native provider operation."""
+    if not isinstance(raw, str) or not raw.strip() or len(raw.encode("utf-8")) > 4_000_000:
+        raise ValueError("missing or oversized native rate metadata")
+    lines = raw.splitlines()
+    if len(lines) > 10000 or any(not line.strip() for line in lines):
+        raise ValueError("invalid native rate metadata rows")
+    records = []
+    for line in lines:
+        record = json.loads(line, object_pairs_hook=_unique_rate_log_pairs)
+        status = record.get("responseStatus") if isinstance(record, dict) else None
+        if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+            raise ValueError("invalid native rate metadata status")
+        records.append(record)
+    return records
+
+
+def has_unverifiable_429(records, now=None):
+    """Reject ambiguous legacy 429 metadata before any native provider capture."""
+    clock = time.time() if now is None else now
+    if not isinstance(records, list) or not math.isfinite(clock):
+        return True
+    for row in records:
+        if not isinstance(row, dict):
+            return True
+        if row.get("responseStatus") != 429:
+            continue
+        stamp_text = row.get("capturedAtUtc")
+        if not isinstance(stamp_text, str) or not stamp_text:
+            return True
+        try:
+            stamp_dt = datetime.datetime.fromisoformat(stamp_text.replace("Z", "+00:00"))
+            if stamp_dt.utcoffset() is None:
+                return True
+            stamp = stamp_dt.timestamp()
+        except (ValueError, TypeError, OverflowError):
+            return True
+        if not math.isfinite(stamp) or stamp > clock:
+            return True
+    return False
+
+
+def has_repeated_recent_429(records, now=None):
+    """Fail-closed dispatch policy signal: two recorded 429s within 24 hours."""
+    clock = time.time() if now is None else now
+    count = 0
+    for row in records:
+        if not isinstance(row, dict) or row.get("responseStatus") != 429:
+            continue
+        value = row.get("capturedAtUtc")
+        if not isinstance(value, str):
+            continue
+        try:
+            stamp = datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError, OverflowError):
+            continue
+        if 0 <= clock - stamp < 86400:
+            count += 1
+            if count >= 2:
+                return True
+    return False
 
 
 def native_submit_seconds(message):
@@ -126,7 +202,7 @@ class _Capture:
             for thread in self.threads:
                 thread.join(timeout=1)
             if code != 0 or self.failed or any(thread.is_alive() for thread in self.threads):
-                raise RuntimeError("Native subprocess failed; raw output withheld")
+                raise RuntimeError("Native subprocess failed; exit_code=" + str(code) + "; stream_failure=" + str(bool(self.failed)) + "; thread_alive=" + str(any(thread.is_alive() for thread in self.threads)) + "; raw output withheld")
             try:
                 return bytes(self.output).decode("utf-8-sig")
             except UnicodeError:
@@ -237,6 +313,8 @@ class NativeTransport:
             staged_entry = Path(local) / 'OpenClaw' / 'staged-update-2026.10.7' / 'node_modules' / 'openclaw' / 'openclaw.mjs'
             if staged_node.is_file() and staged_entry.is_file():
                 self.node, self.entry = staged_node, staged_entry
+        cdp_node_override = os.environ.get('AI_CORE_CDP_NODE', '').strip()
+        self.cdp_node = Path(cdp_node_override) if cdp_node_override else self.node
         self.powershell = Path(system) / 'System32' / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe'
         self.bridge = Path(__file__).with_name('dev-chatgpt-native-bridge.ps1')
         self.cdp_snapshot = Path(__file__).with_name('dev-chatgpt-cdp-snapshot.js')
@@ -255,7 +333,7 @@ class NativeTransport:
         if type(expected_port) is not int or not 1024 <= expected_port <= 65535:
             raise RuntimeError('OpenClaw managed profile CDP port is invalid')
         self.expected_cdp_port = expected_port
-        if not all(path.is_file() for path in (self.node, self.entry, self.powershell, self.bridge, self.cdp_snapshot,
+        if not all(path.is_file() for path in (self.node, self.cdp_node, self.entry, self.powershell, self.bridge, self.cdp_snapshot,
                                                self.bridge.with_name("dev-chatgpt-native-composer.psm1"))):
             raise RuntimeError("Reviewed native transport files are unavailable")
 
@@ -287,6 +365,18 @@ class NativeTransport:
             raise RuntimeError("Native command returned an invalid envelope")
         return value
 
+    def _preflight_cli(self, action):
+        # Bounded retry for read-only status/tabs only.
+        if action not in ("status", "tabs"):
+            raise RuntimeError("Preflight action not allowlisted")
+        for attempt in range(2):
+            try:
+                return self._cli(action)
+            except RuntimeError:
+                if attempt == 1:
+                    raise
+                self._sleep(2)
+
     def _cdp_submit(self, message, allow_provider_lf):
         """Single-attempt bound CDP Send; JS owns durable native-input marker."""
         self.authorize()
@@ -297,7 +387,7 @@ class NativeTransport:
         script = Path(__file__).with_name("dev-chatgpt-ax-identity-readonly.js")
         if not script.is_file() or self.marker.exists():
             raise RuntimeError("CDP Send unavailable or already attempted")
-        args = [str(self.node), str(script), str(self.context["pid"]), str(self.context["cdpPort"]),
+        args = [str(self.cdp_node), str(script), str(self.context["pid"]), str(self.context["cdpPort"]),
                 self.context["rawTargetId"], self.page_url, self.expected_user_data,
                 self.binding["accountAlias"], self.binding["bindingFingerprint"], "submit"]
         payload = json.dumps({"message": message, "eventId": self.event,
@@ -340,12 +430,20 @@ class NativeTransport:
         if type(cdp_port) is not int or not 1024 <= cdp_port <= 65535:
             raise RuntimeError("OpenClaw CDP identity is unavailable")
         expected = self.expected_user_data.replace("'", "''")
+        # Match only exact unquoted or quoted user-data argument and CDP port.
+        # A prefix wildcard could incorrectly accept a different profile.
         script = (
+            "$expected='" + expected + "'; "
+            "$escaped=[regex]::Escape($expected); "
+            "$profilePattern='(?i)(?:^|\\s)--user-data-dir=(?:\\x22'+$escaped+'\\x22|'+$escaped+')(?=\\s|$)'; "
             "$rows=@(Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { "
             "$_.CommandLine -and $_.CommandLine -notmatch '--type=' -and "
             "$_.CommandLine -match '--remote-debugging-port=" + str(cdp_port) + "(?:\\s|$)' -and "
-            "$_.CommandLine -like '*--user-data-dir=" + expected + "*' } | Select-Object ProcessId,CommandLine); "
-            "if($rows.Count -ne 1){exit 41}; $rows[0] | ConvertTo-Json -Compress"
+            "$_.CommandLine -match $profilePattern -and "
+            "([regex]::Matches($_.CommandLine,'(?i)--user-data-dir=')).Count -eq 1 -and "
+            "([regex]::Matches($_.CommandLine,'(?i)--remote-debugging-port=')).Count -eq 1 "
+            "} | Select-Object -ExpandProperty ProcessId); "
+            "if($rows.Count -ne 1){exit 41}; @{ProcessId=[int]$rows[0]} | ConvertTo-Json -Compress"
         )
         last_error = None
         for attempt in range(3):
@@ -392,6 +490,22 @@ class NativeTransport:
             raise RuntimeError("Expected exactly one native bound ChatGPT tab")
         return matching[0]["targetId"]
 
+    def _cdp_create_blank_target(self, cdp_port):
+        if type(cdp_port) is not int or not 1024 <= cdp_port <= 65535:
+            raise RuntimeError("OpenClaw CDP identity is unavailable")
+        try:
+            request = Request(f"http://127.0.0.1:{cdp_port}/json/new?about:blank", method="PUT")
+            with urlopen(request, timeout=3) as response:
+                raw = response.read(64 * 1024)
+            opened = json.loads(raw)
+        except Exception as error:
+            raise RuntimeError("Native CDP blank target creation failed") from error
+        target_id = opened.get("id") if isinstance(opened, dict) else None
+        if (not isinstance(target_id, str) or not RAW_TARGET.fullmatch(target_id)
+                or opened.get("url") != "about:blank"):
+            raise RuntimeError("Native CDP blank target creation was not confirmed")
+        return {"targetId": target_id, "url": "about:blank"}
+
     def _cdp_activate_target(self, cdp_port, target_id):
         tabs = self._cdp_tab_inventory(cdp_port)
         if sum(tab["targetId"] == target_id for tab in tabs) != 1:
@@ -406,6 +520,43 @@ class NativeTransport:
 
     def _session(self, reader_url=None):
         self.authorize()
+        # GPT02 DELL has a separately verified native Chrome identity and CDP
+        # endpoint. When the staged CDP capture flag is enabled, prove that
+        # exact local profile directly instead of depending on the OpenClaw
+        # browser CLI, whose control request may block even while CDP is healthy.
+        # This path does not weaken binding: PID, user-data dir, port, exact
+        # conversation URL and owned-reader identity remain fail-closed.
+        if (os.environ.get("AI_CORE_GPT02_CDP_READY_CAPTURE_DEV") == "1"
+                and self.binding.get("workerId") == "openclaw-dell-chatgpt-wake-dev"
+                and self.binding.get("browserProfile") == "gpt02-dell-dev"):
+            native_pid = self._native_profile_pid(self.expected_cdp_port)
+            cdp_tabs = self._cdp_tab_inventory(self.expected_cdp_port)
+            if self.reader_id is not None:
+                self._reader_record()
+                owned = [tab for tab in cdp_tabs if tab.get("targetId") == self.reader_id]
+                if (reader_url not in ("about:blank", self.page_url) or len(owned) != 1
+                        or owned[0].get("type") != "page" or owned[0].get("url") != reader_url):
+                    raise RuntimeError("Owned reader changed; preserve it for reconciliation")
+                if (reader_url == "about:blank" and sum(
+                        tab.get("type") == "page" and tab.get("url") == "about:blank"
+                        for tab in cdp_tabs) != 1):
+                    raise RuntimeError("Owned blank reader is not uniquely identifiable")
+                matching = [tab for tab in cdp_tabs
+                            if tab.get("type") == "page" and tab.get("url") == self.page_url
+                            and tab.get("targetId") != self.reader_id]
+                if len(matching) != 1:
+                    raise RuntimeError("Expected exactly one native bound ChatGPT tab; candidates=" + str(len(matching)))
+                raw_target_id = matching[0]["targetId"]
+            else:
+                from gpt02_bound_cdp_fallback import unique_bound_target
+                raw_target_id = unique_bound_target(cdp_tabs, self.page_url)
+                if raw_target_id is None:
+                    raise RuntimeError("Expected exactly one native bound ChatGPT tab; candidates=0")
+            self.last_tabs = cdp_tabs
+            self.last_tabs_observed_at = time.time()
+            return {"profile": self.binding["browserProfile"], "pid": native_pid,
+                    "userDataDir": self.expected_user_data, "cdpPort": self.expected_cdp_port,
+                    "rawTargetId": raw_target_id, "pageUrl": self.page_url}
         # Actual same-profile parallel startup exceeded 30s and did not return
         # a usable inventory. Serialized reads preserve both identity fences.
         def _diag(stage, ok, failure="none"):
@@ -419,7 +570,7 @@ class NativeTransport:
             except OSError:
                 pass
         try:
-            status = self._cli("status")
+            status = self._preflight_cli("status")
         except Exception:
             _diag("status", False, "cli_exception")
             raise
@@ -434,7 +585,7 @@ class NativeTransport:
                 _diag(stage + "_" + field, present, "none" if present else "missing")
         _status_shape("status_fields", status)
         try:
-            tab_envelope = self._cli("tabs")
+            tab_envelope = self._preflight_cli("tabs")
         except Exception:
             _diag("tabs", False, "cli_exception")
             raise
@@ -448,7 +599,7 @@ class NativeTransport:
                     value.get("userDataDir") == self.expected_user_data and
                     type(value.get("cdpPort")) is int and
                     value.get("cdpPort") == self.expected_cdp_port)
-        if isinstance(status, dict) and status.get("profile") == self.binding["browserProfile"] and not _valid_managed_status(status):
+        if (isinstance(status, dict) and status.get("profile") == self.binding["browserProfile"] and not _valid_managed_status(status) and not (status.get("pid") is None and status.get("userDataDir") is None)):
             for attempt in range(5):
                 self.authorize()
                 self._sleep(2)
@@ -528,7 +679,7 @@ class NativeTransport:
         if self.reader_id is not None and len(matching) == 0:
             for _ in range(3):
                 self._sleep(1)
-                retry_envelope = self._cli("tabs")
+                retry_envelope = self._preflight_cli("tabs")
                 retry_tabs = retry_envelope.get("tabs")
                 if not isinstance(retry_tabs, list) or not 1 <= len(retry_tabs) <= 128:
                     continue
@@ -565,6 +716,17 @@ class NativeTransport:
                 return {'profile': status['profile'], 'pid': pid, 'userDataDir': user_data,
                         'cdpPort': status.get('cdpPort'), 'rawTargetId': self.context['rawTargetId'],
                         'pageUrl': self.page_url}
+        # OpenClaw can return an incomplete tab snapshot while Chrome's exact
+        # profile is already verified by parent PID, user-data dir and CDP port.
+        # A rescue is allowed only BEFORE an owned reader exists and only if
+        # that same verified CDP inventory contains exactly one exact-URL tab.
+        # Never choose between duplicates or replace a previously pinned tab.
+        if len(matching) == 0 and self.reader_id is None:
+            from gpt02_bound_cdp_fallback import unique_bound_target
+            cdp_fallback_tabs = self._cdp_tab_inventory(status.get('cdpPort'))
+            unique_id = unique_bound_target(cdp_fallback_tabs, self.page_url)
+            if unique_id is not None:
+                matching = [{'targetId': unique_id, 'type': 'page', 'url': self.page_url}]
         if len(matching) != 1 or not isinstance(matching[0].get("targetId"), str) or not RAW_TARGET.fullmatch(matching[0]["targetId"]):
             raise RuntimeError("Expected exactly one native bound ChatGPT tab; candidates=" + str(len(matching)))
         raw_target_id = matching[0]["targetId"]
@@ -591,7 +753,7 @@ class NativeTransport:
             self.authorize()
             timeout = self._remaining(CLI_SECONDS)
             try:
-                raw = _Capture([str(self.node), str(self.cdp_snapshot), str(self.context["cdpPort"]),
+                raw = _Capture([str(self.cdp_node), str(self.cdp_snapshot), str(self.context["cdpPort"]),
                                 self.context["rawTargetId"], self.page_url]).finish(timeout)
                 value = json.loads(raw)
                 if not isinstance(value, dict) or value.get("url") != self.page_url:
@@ -629,7 +791,7 @@ class NativeTransport:
         script = Path(__file__).with_name("dev-chatgpt-ax-identity-readonly.js")
         if not script.is_file():
             raise RuntimeError("Bound Chromium accessibility adapter missing")
-        argv = [str(self.node), str(script), str(self.context["pid"]),
+        argv = [str(self.cdp_node), str(script), str(self.context["pid"]),
                 str(self.context["cdpPort"]), self.context["rawTargetId"],
                 self.page_url, self.expected_user_data,
                 self.binding["accountAlias"], self.binding["bindingFingerprint"], "focus"]
@@ -746,30 +908,40 @@ class NativeTransport:
                 lock.seek(0)
                 msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
 
-    def _ready(self, snapshot, message):
-        # Visible innerText can change whitespace but may not change task words.
-        # ACK markers alone are not proof that the exact user task is present.
-        normalized_message = " ".join(message.split())
-        normalized_snapshot = " ".join(snapshot.split())
-        return (bool(normalized_message) and not STOP.search(snapshot) and
+    def _ready(self, snapshot, message, require_visible_assistant_ack=True):
+        # Browser innerText may introduce layout whitespace. Preserve exact
+        # marker counts and require one contiguous message after whitespace
+        # canonicalization; never accept missing, duplicated or altered words.
+        normalized_snapshot = ' '.join(snapshot.split())
+        normalized_message = ' '.join(message.split())
+        # Exact assistant identity is enforced by the downstream proof source.
+        # Local-cache mode verifies the assistant ACK from the exact IndexedDB
+        # user/assistant pair with stable UUIDs and timestamp, so visible ACK
+        # duplication is not a prerequisite. Non-cache modes retain >=2.
+        ack_count = snapshot.count("[AI_CORE_ATTEST_ACK:" + self.challenge + "]")
+        return (not STOP.search(snapshot) and
                 normalized_snapshot.count(normalized_message) == 1 and
                 snapshot.count("[AI_CORE_WAKE:" + self.event + "]") == 1 and
                 snapshot.count("[AI_CORE_ATTEST:" + self.challenge + "]") == 1 and
-                snapshot.count("[AI_CORE_ATTEST_ACK:" + self.challenge + "]") >= 2)
+                (ack_count >= 2 if require_visible_assistant_ack else True))
 
     def _log_readiness_observation(self, snapshot, message):
         """Log bounded boolean-only evidence; never persist chat text or token values."""
         flags = (
             bool(STOP.search(snapshot)),
-            bool(" ".join(message.split())) and
-            " ".join(snapshot.split()).count(" ".join(message.split())) == 1,
+            snapshot.count(message) == 1,
             snapshot.count("[AI_CORE_WAKE:" + self.event + "]") == 1,
             snapshot.count("[AI_CORE_ATTEST:" + self.challenge + "]") == 1,
             snapshot.count("[AI_CORE_ATTEST_ACK:" + self.challenge + "]") >= 2,
         )
         result = ("READINESS_DIAG time=%s phase=%s responding=%s user_exact=%s "
-                  "wake_exact=%s attest_exact=%s assistant_ack_visible=%s\n" %
-                  (time.time(), self.phase, *flags))
+                  "wake_exact=%s attest_exact=%s assistant_ack_visible=%s "
+                  "user_occurrences=%d snapshot_chars=%d message_chars=%d "
+                  "message_lines=%d snapshot_lines=%d "
+                  "collapsed_whitespace_occurrences=%d\n" %
+                  (time.time(), self.phase, *flags, snapshot.count(message),
+                   len(snapshot), len(message), message.count("\n"), snapshot.count("\n"),
+                   ' '.join(snapshot.split()).count(' '.join(message.split()))))
         try:
             with open(Path(__file__).with_name("dev-identity-diagnostic.log"), "a", encoding="utf-8") as log:
                 log.write(result)
@@ -805,7 +977,7 @@ class NativeTransport:
                 os.fsync(stream.fileno())
         except FileExistsError:
             raise RuntimeError("Owned reader already exists; do not open again") from None
-        opened = self._cli("open", "about:blank", "--label", "aicore-reader-" + self.event[:16])
+        opened = self._cdp_create_blank_target(self.context["cdpPort"])
         raw_id = opened.get("targetId")
         if (not isinstance(raw_id, str) or not RAW_TARGET.fullmatch(raw_id) or
                 raw_id.lower() in [value.lower() for value in record["preopenTargetIds"]] or opened.get("url") != "about:blank"):
@@ -828,9 +1000,14 @@ class NativeTransport:
         return self._listen_reader(request_url, message_hash, reader)
 
     def _listen_reader(self, request_url, message_hash, reader):
+        # Explicit DEV-only opt-in; default preserves the previous OpenClaw path.
+        # This never enables itself or changes any non-GPT02 worker.
+        if os.environ.get("AI_CORE_GPT02_CDP_READY_CAPTURE_DEV") == "1":
+            from gpt02_reader_integrator_stage import listen_reader_cdp_stage
+            return listen_reader_cdp_stage(self, request_url, message_hash, reader)
         self.phase = "reader_listener"
         argv = self._argv("responsebody", "/backend-api/conversations/" + self.binding["targetConversationId"], "--target-id", self.reader_id,
-                          "--max-chars", "200000", "--timeout-ms", "180000")
+                          "--max-chars", "4000000", "--timeout-ms", "180000")
         argv[argv.index("--timeout") + 1] = "210000"
         listener = _Capture(argv)
         try:
@@ -853,7 +1030,7 @@ class NativeTransport:
             if record["status"] != "BLANK_VERIFIED":
                 raise RuntimeError("CDP reader is not blank verified")
             self._reader_update(record, status="NAVIGATION_ATTEMPTING", navigationAttemptedAt=time.time())
-            args = [str(self.node), str(script), str(self.context["pid"]),
+            args = [str(self.cdp_node), str(script), str(self.context["pid"]),
                     str(self.context["cdpPort"]), self.context["rawTargetId"], self.reader_id,
                     self.page_url, self.expected_user_data, self.binding["bindingFingerprint"]]
             try:
@@ -888,6 +1065,88 @@ class NativeTransport:
                                                        "[AI_CORE_ATTEST_ACK:" + self.challenge + "]")):
             raise RuntimeError("Native input contains ambiguous wake markers")
         self.authorize()
+        local_cache_mode = (
+            os.environ.get("AI_CORE_GPT02_LOCAL_CACHE_READBACK_DEV") == "1" and
+            self.binding.get("workerId") == "openclaw-dell-chatgpt-wake-dev" and
+            self.binding.get("browserProfile") == "gpt02-dell-dev" and
+            self.binding.get("accountAlias") == "GPT02"
+        )
+        passive_rate_mode = (
+            not local_cache_mode and
+            os.environ.get("AI_CORE_GPT02_PASSIVE_SUBMIT_CAPTURE_DEV") == "1" and
+            self.binding.get("workerId") == "openclaw-dell-chatgpt-wake-dev" and
+            self.binding.get("browserProfile") == "gpt02-dell-dev" and
+            self.binding.get("accountAlias") == "GPT02"
+        )
+        if local_cache_mode:
+            adapter = Path(__file__).with_name("gpt02-local-cache-readback.js")
+            if (not adapter.is_file() or
+                    hashlib.sha256(adapter.read_bytes()).hexdigest() !=
+                    "d7258da2acc5c7650056da1049463667cabd91f86b5a2d907ec1d112de57aeec"):
+                raise RuntimeError("GPT02_LOCAL_CACHE_ARCHITECTURE_UNVERIFIED")
+        elif passive_rate_mode:
+            expected_passive_hashes = {
+                "gpt02-cdp-submit-passive-stage.js": "8c559ece7f024d4bfab226ea34703d5eee89714c77cf24c3efd1bd36700f6797",
+                "gpt02_submit_stream_reader.py": "aa5d36512eabb5f5d2e4469cd33ca8681e3b6577e65a78374c1938c4d0726da2",
+                "gpt02-passive-submit-rate-gate.cjs": "aa252197049767e38a8e07462419c9f88de2f4cfdc367d25f979c2c91ca3cfad",
+                "gpt02_passive_submit_rate_gate.py": "ead7bdd9a7ae882ae0d39a84c125303890141b63840c1bdd1033cb15df2fe127",
+            }
+            for name, expected_hash in expected_passive_hashes.items():
+                candidate = Path(__file__).with_name(name)
+                if (not candidate.is_file() or
+                        hashlib.sha256(candidate.read_bytes()).hexdigest() != expected_hash):
+                    raise RuntimeError("PASSIVE_CAPTURE_ARCHITECTURE_UNVERIFIED")
+            from gpt02_passive_submit_rate_gate import evaluate_files as evaluate_passive_submit_rate
+            passive_gate = evaluate_passive_submit_rate(
+                Path(os.environ["LOCALAPPDATA"]) / "AI-Core", time.time())
+            if passive_gate.get("allowed") is not True:
+                raise RuntimeError("PASSIVE_SUBMIT_" + str(passive_gate.get("reason") or "RATE_GATE_BLOCKED"))
+        else:
+            # Fail closed for recent HTTP 429 evidence, including earlier records.
+            rate_log = Path(os.environ["LOCALAPPDATA"]) / "AI-Core" / "native-response-metadata.jsonl"
+            # Missing audit history must never be interpreted as recovered provider limits.
+            if not rate_log.is_file():
+                raise RuntimeError("NATIVE_CAPTURE_RATE_LOG_MISSING")
+            if rate_log.exists():
+                try:
+                    records = parse_native_rate_log(rate_log.read_text(encoding="utf-8"))
+                    if not records:
+                        raise ValueError("empty rate log")
+                    # Only immutable, aged historical rows may be excluded from
+                    # rate calculations. New 429s and malformed logs still block.
+                    legacy = evaluate_legacy429_quarantine(rate_log.parent, time.time())
+                    if legacy.get("valid") and legacy.get("reason") == "LEGACY_QUARANTINE_AGED_CONDITIONALLY":
+                        excluded = set(legacy["excluded_rows"])
+                        records = [row for i, row in enumerate(records, 1) if i not in excluded]
+                    if has_unverifiable_429(records):
+                        raise RuntimeError("NATIVE_CAPTURE_RATE_LOG_UNVERIFIED")
+                    if has_repeated_recent_429(records):
+                        raise RuntimeError("NATIVE_CAPTURE_429_REPEAT_REMEDIATION_REQUIRED")
+                    # Repeated capture rate limits require architecture remediation,
+                    # not another dispatch after an arbitrary cooldown.
+                    if len(records) >= 3 and all(row.get("responseStatus") == 429 and isinstance(row.get("capturedAtUtc"), str) and 0 <= time.time() - datetime.datetime.fromisoformat(row["capturedAtUtc"].replace("Z", "+00:00")).timestamp() < 86400 for row in records[-3:]):
+                        raise RuntimeError("NATIVE_CAPTURE_429_CIRCUIT_OPEN_REMEDIATION_REQUIRED")
+                    latest_429 = next((row for row in reversed(records) if row.get("responseStatus") == 429), None)
+                    if latest_429 is not None:
+                        stamp = latest_429.get("capturedAtUtc")
+                        if stamp:
+                            age = time.time() - datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+                        elif records[-1] is latest_429:
+                            age = time.time() - rate_log.stat().st_mtime
+                        else:
+                            raise ValueError("historical 429 timestamp missing")
+                        retry_after = latest_429.get("retryAfterSeconds")
+                        if isinstance(retry_after, bool) or not isinstance(retry_after, (int, float)) or not math.isfinite(retry_after) or retry_after < 0:
+                            cooldown_seconds = 3600
+                        else:
+                            # Honor the provider's explicit Retry-After for a single
+                            # rate-limit response. Repeated recent 429s remain blocked
+                            # above by the remediation/circuit-breaker guards.
+                            cooldown_seconds = min(3600, max(1, float(retry_after) + 5))
+                        if age < cooldown_seconds:
+                            raise RuntimeError("NATIVE_CAPTURE_429_GLOBAL_COOLDOWN_ACTIVE")
+                except (IndexError, ValueError, OSError, AttributeError, TypeError) as error:
+                    raise RuntimeError("NATIVE_CAPTURE_RATE_LOG_UNVERIFIED") from error
         self._runtime()
         message_hash = hashlib.sha256(message.encode("utf-8")).hexdigest()
         with self._exclusive():
@@ -906,23 +1165,48 @@ class NativeTransport:
                 if ("AI_CORE_WAKE:" + self.event) in before or ("AI_CORE_ATTEST:" + self.challenge) in before:
                     raise RuntimeError("Visible wake has no original input record; do not replay")
             self._resolve()
+            passive_enabled = passive_rate_mode
+            passive_envelope = None
+            if passive_enabled and existing:
+                raise RuntimeError("PASSIVE_CAPTURE_REQUIRES_FRESH_SEND")
             if not existing:
                 self._reserve(native_submit_seconds(message) + READINESS_SECONDS + POST_READINESS_SECONDS)
                 if any(tab.get("type") == "page" and tab.get("url") == "about:blank" for tab in self.last_tabs):
                     raise RuntimeError("A preexisting blank tab prevents unique native reader ownership")
-                self.authorize()
-                self.phase = "native_submit"
-                self._audit_stage("SEND_ATTEMPTED")
-                result = self._cdp_submit(message, self.options["allowProviderLf"])
-                if result.get("sendInvoked") is not True:
-                    raise RuntimeError("Native Send outcome is unknown; do not replay")
-                record = self._attempt(message_hash)
-                self._audit_stage("SEND_CONFIRMED")
+                passive_listener = None
+                try:
+                    if passive_enabled:
+                        passive_script = Path(__file__).with_name("gpt02-cdp-submit-passive-stage.js")
+                        if not passive_script.is_file():
+                            raise RuntimeError("PASSIVE_CAPTURE_SCRIPT_MISSING")
+                        passive_argv = [str(self.cdp_node), str(passive_script), "--capture-submit",
+                            str(self.context["cdpPort"]), self.context["rawTargetId"], self.page_url,
+                            self.binding["targetConversationId"], self.event, self.challenge, "180000"]
+                        passive_listener = ReadyCaptureStage(passive_argv, self.context["rawTargetId"])
+                        passive_listener.ready(self._remaining(20))
+                    self.authorize()
+                    self.phase = "native_submit"
+                    self._audit_stage("SEND_ATTEMPTED")
+                    result = self._cdp_submit(message, self.options["allowProviderLf"])
+                    if result.get("sendInvoked") is not True:
+                        raise RuntimeError("Native Send outcome is unknown; do not replay")
+                    record = self._attempt(message_hash)
+                    self._audit_stage("SEND_CONFIRMED")
+                    if passive_listener is not None:
+                        self.phase = "passive_submit_capture"
+                        passive_envelope = passive_listener.finish(self._remaining(180))
+                finally:
+                    if passive_listener is not None:
+                        passive_listener.close()
             self.phase = "assistant_readiness"
             self.phase_deadline = min(self.deadline - POST_READINESS_SECONDS, time.monotonic() + READINESS_SECONDS)
+            readiness_samples = 0
+            readiness_stop_samples = 0
             try:
                 snapshot = self._snapshot()
-                while not self._ready(snapshot, message):
+                readiness_samples += 1
+                readiness_stop_samples += bool(STOP.search(snapshot))
+                while not self._ready(snapshot, message, not local_cache_mode):
                     # Reserve a small final margin for deterministic, evidence-only
                     # timeout reporting; never start another read at expiry.
                     time_left = self.phase_deadline - time.monotonic()
@@ -932,33 +1216,182 @@ class NativeTransport:
                     if self.phase_deadline - time.monotonic() <= 5:
                         break
                     snapshot = self._snapshot()
+                    readiness_samples += 1
+                    readiness_stop_samples += bool(STOP.search(snapshot))
             finally:
                 self.phase_deadline = None
             self._log_readiness_observation(snapshot, message)
-            if not self._ready(snapshot, message):
+            try:
+                with open(Path(__file__).with_name('dev-identity-diagnostic.log'), 'a', encoding='utf-8') as log:
+                    log.write('READINESS_SAMPLES total=%d stop_visible=%d stop_absent=%d\n' %
+                              (readiness_samples, readiness_stop_samples, readiness_samples - readiness_stop_samples))
+            except OSError:
+                pass
+            # Local-cache mode is intentionally independent of whether the
+            # virtualized ChatGPT transcript is currently mounted in the DOM.
+            # The cache branch below still requires exact event/challenge,
+            # wake hash, distinct UUID message IDs, one assistant ACK, and
+            # a cache timestamp newer than the durable SEND attempt.
+            if not self._ready(snapshot, message) and not local_cache_mode:
                 raise RuntimeError("Native assistant reply is not visibly ready")
+            if local_cache_mode:
+                self.phase = "local_cache_readback"
+                self.authorize()
+                self._guard()
+                adapter = Path(__file__).with_name("gpt02-local-cache-readback.js")
+                cached = None
+                for attempt in range(20):
+                    self.authorize()
+                    try:
+                        raw = _Capture([
+                            str(self.cdp_node), str(adapter),
+                            str(self.context["cdpPort"]), self.context["rawTargetId"],
+                            self.binding["targetConversationId"], self.event, self.challenge
+                        ]).finish(self._remaining(10))
+                        candidate = json.loads(raw)
+                    except (RuntimeError, ValueError, RecursionError):
+                        candidate = None
+                    if isinstance(candidate, dict) and candidate.get("ok") is True:
+                        cached = candidate
+                        break
+                    if attempt < 19:
+                        self._sleep(1)
+                if cached is None:
+                    raise RuntimeError("GPT02_LOCAL_CACHE_READBACK_FAILED")
+                if (cached.get("conversationId") != self.binding["targetConversationId"]
+                        or cached.get("eventId") != self.event
+                        or cached.get("challenge") != self.challenge
+                        or cached.get("source") != "GPT02_LOCAL_INDEXEDDB_CACHE"):
+                    raise RuntimeError("GPT02_LOCAL_CACHE_BINDING_INVALID")
+                wake_id = cached.get("wakeMessageId")
+                assistant_id = cached.get("assistantMessageId")
+                wake_text = cached.get("wakeText")
+                assistant_text = cached.get("assistantText")
+                cached_at = cached.get("cachedAt")
+                uuid_pattern = r"[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}"
+                if (not isinstance(wake_id, str) or re.fullmatch(uuid_pattern, wake_id, re.I) is None
+                        or not isinstance(assistant_id, str) or re.fullmatch(uuid_pattern, assistant_id, re.I) is None
+                        or wake_id.lower() == assistant_id.lower()):
+                    raise RuntimeError("GPT02_LOCAL_CACHE_MESSAGE_IDS_INVALID")
+                if (not isinstance(wake_text, str)
+                        or hashlib.sha256(wake_text.encode("utf-8")).hexdigest() != message_hash):
+                    raise RuntimeError("GPT02_LOCAL_CACHE_WAKE_HASH_MISMATCH")
+                ack = "[AI_CORE_ATTEST_ACK:" + self.challenge + "]"
+                if (not isinstance(assistant_text, str) or not assistant_text
+                        or len(assistant_text.encode("utf-16-le")) // 2 > 4000
+                        or assistant_text.count(ack) != 1
+                        or ("[AI_CORE_WAKE:" + self.event + "]") in assistant_text):
+                    raise RuntimeError("GPT02_LOCAL_CACHE_ASSISTANT_TEXT_INVALID")
+                if (type(cached_at) not in (int, float) or not math.isfinite(cached_at)
+                        or cached_at < record["sendAttemptedAt"] * 1000
+                        or cached_at > (time.time() + 60) * 1000):
+                    raise RuntimeError("GPT02_LOCAL_CACHE_TIMESTAMP_INVALID")
+                self.authorize()
+                self._audit_stage("RESULT_VERIFIED")
+                return {
+                    "userFound": True, "assistantFound": True, "ackVisible": True,
+                    "responding": False, "assistantMessageId": assistant_id.lower(),
+                    "assistantText": assistant_text,
+                    "assistantResponseHash": hashlib.sha256(assistant_text.encode("utf-8")).hexdigest(),
+                    "userMessageId": wake_id.lower(), "rawTargetId": self.context["rawTargetId"],
+                    "sendAttemptedAt": record["sendAttemptedAt"], "alreadyVisible": existing,
+                    "source": "GPT02_LOCAL_INDEXEDDB_CACHE", "cacheObservedAtMs": cached_at
+                }
+            if passive_envelope is not None:
+                captured_at = time.time()
+                passive_response = passive_envelope.get("response") if isinstance(passive_envelope, dict) else None
+                diagnostic = {
+                    "capturedAtUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "eventPrefix": self.event[:16],
+                    "captureMode": "PASSIVE_SUBMIT_STREAM",
+                    "envelopeOk": passive_envelope.get("ok") if isinstance(passive_envelope, dict) else None,
+                    "responsePresent": isinstance(passive_response, dict),
+                    "responseStatus": passive_response.get("status") if isinstance(passive_response, dict) else None,
+                    "responseTruncated": passive_response.get("truncated") if isinstance(passive_response, dict) else None,
+                    "responseUrlMatches": (
+                        isinstance(passive_response, dict) and isinstance(passive_envelope.get("request"), dict) and
+                        passive_response.get("url") == passive_envelope["request"].get("url")),
+                    "responseBodyLength": (
+                        len(passive_response.get("body")) if isinstance(passive_response, dict) and
+                        isinstance(passive_response.get("body"), str) else None)
+                }
+                if isinstance(passive_response, dict) and passive_response.get("status") == 429:
+                    from gpt02_retry_after_metadata import safe_retry_after
+                    diagnostic.update(safe_retry_after(passive_response))
+                with (Path(os.environ["LOCALAPPDATA"]) / "AI-Core" / "native-response-metadata.jsonl").open("a", encoding="utf-8") as diagnostic_file:
+                    diagnostic_file.write(json.dumps(diagnostic, separators=(",", ":")) + "\n")
+                if isinstance(passive_response, dict) and passive_response.get("status") == 429:
+                    raise RuntimeError("PASSIVE_SUBMIT_RATE_LIMITED_RECONCILIATION_REQUIRED")
+                if not isinstance(passive_response, dict) or passive_response.get("status") != 200:
+                    raise RuntimeError("PASSIVE_SUBMIT_RESPONSE_INVALID")
+                observed = validate_submit_stream(
+                    passive_envelope, page_url=self.page_url,
+                    raw_target_id=self.context["rawTargetId"],
+                    conversation_id=self.binding["targetConversationId"],
+                    event_id=self.event, challenge=self.challenge,
+                    visible_snapshot=snapshot, expected_user_text=message,
+                    not_before=record["sendAttemptedAt"], captured_at=captured_at)
+                self.authorize()
+                self._audit_stage("RESULT_VERIFIED")
+                return {**observed, "alreadyVisible": False,
+                        "rawTargetId": self.context["rawTargetId"],
+                        "captureRawTargetId": self.context["rawTargetId"],
+                        "readerDisposition": "PASSIVE_ORIGINAL_TARGET_NO_READER",
+                        "sendAttemptedAt": record["sendAttemptedAt"]}
             if "refreshAttemptedAt" in record:
                 raise RuntimeError("Native response capture was already attempted; do not refresh again")
             self.phase = "observed_requests"
-            requests = self._cli("requests", "--target-id", self.context["rawTargetId"],
-                                 "--filter", self.binding["targetConversationId"])
+            request_url = None
             try:
-                request_url = select_observed_request(requests, page_url=self.page_url,
-                                                     raw_target_id=self.context["rawTargetId"],
-                                                     conversation_id=self.binding["targetConversationId"])
-            except ValueError as error:
-                if str(error) != "NATIVE_OBSERVED_REQUEST_MISSING_OR_AMBIGUOUS":
-                    raise
-                # The original ChatGPT tab can legitimately have no retained
-                # conversation GET after a long-lived session. Do not invent or
-                # replay a URL. The owned reader listener will observe the exact
-                # navigation response and its strict validator remains authoritative.
-                request_url = None
+                requests = self._cli("requests", "--target-id", self.context["rawTargetId"],
+                                     "--filter", self.binding["targetConversationId"])
+            except RuntimeError:
+                # browser requests is only a best-effort history hint. Some
+                # Chrome/Playwright combinations can establish browser-level CDP
+                # but fail connectOverCDP while the exact bound tab remains healthy.
+                # Never trust a failed history lookup by itself: require a fresh
+                # direct-CDP inventory proving the original raw target and URL
+                # before falling through to the authoritative owned reader.
+                self.authorize()
+                fresh = self._cdp_tab_inventory(self.context["cdpPort"])
+                exact = [tab for tab in fresh
+                         if tab.get("targetId") == self.context["rawTargetId"]
+                         and tab.get("url") == self.page_url]
+                if len(exact) != 1:
+                    raise RuntimeError("Native request history unavailable and original CDP identity is unproven") from None
+            else:
+                try:
+                    request_url = select_observed_request(requests, page_url=self.page_url,
+                                                         raw_target_id=self.context["rawTargetId"],
+                                                         conversation_id=self.binding["targetConversationId"])
+                except ValueError as error:
+                    if str(error) != "NATIVE_OBSERVED_REQUEST_MISSING_OR_AMBIGUOUS":
+                        raise
+                    # The original ChatGPT tab can legitimately have no retained
+                    # conversation GET after a long-lived session. Do not invent or
+                    # replay a URL. The owned reader listener will observe the exact
+                    # navigation response and its strict validator remains authoritative.
+                    request_url = None
             envelope = self._capture_response(request_url, message_hash)
             captured_request_url = (envelope.get("response", {}).get("url")
                                     if isinstance(envelope, dict) and isinstance(envelope.get("response"), dict)
                                     else None)
             captured_at = time.time()
+            # Diagnostic metadata only: never persist response bodies or credentials.
+            response_meta = envelope.get("response") if isinstance(envelope, dict) else None
+            diagnostic = {"capturedAtUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "eventPrefix": self.event[:16], "envelopeOk": envelope.get("ok") if isinstance(envelope, dict) else None,
+                          "responsePresent": isinstance(response_meta, dict),
+                          "responseStatus": response_meta.get("status") if isinstance(response_meta, dict) else None,
+                          "responseTruncated": response_meta.get("truncated") if isinstance(response_meta, dict) else None,
+                          "responseUrlMatches": captured_request_url == request_url if request_url is not None else None,
+                          "responseBodyLength": len(response_meta.get("body")) if isinstance(response_meta, dict) and isinstance(response_meta.get("body"), str) else None}
+            if isinstance(response_meta, dict) and response_meta.get("status") == 429:
+                from gpt02_retry_after_metadata import safe_retry_after
+                diagnostic.update(safe_retry_after(response_meta))
+            with (Path(os.environ["LOCALAPPDATA"]) / "AI-Core" / "native-response-metadata.jsonl").open("a", encoding="utf-8") as diagnostic_file:
+                    diagnostic_file.write(json.dumps(diagnostic, separators=(",", ":")) + "\n")
+            if isinstance(response_meta, dict) and response_meta.get("status") == 429:
+                raise RuntimeError("NATIVE_CAPTURE_RATE_LIMITED_RECONCILIATION_REQUIRED")
             self.phase = "final_proof"
             self._reserve(FINAL_PROOF_SECONDS)
             snapshot = self._snapshot()
@@ -981,3 +1414,4 @@ class NativeTransport:
             return {**observed, "alreadyVisible": existing, "rawTargetId": self.context["rawTargetId"],
                     "captureRawTargetId": self.reader_id, "readerDisposition": "PRESERVED_RECONCILIATION_REQUIRED",
                     "sendAttemptedAt": record["sendAttemptedAt"]}
+

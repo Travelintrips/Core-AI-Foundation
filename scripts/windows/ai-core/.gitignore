@@ -1,0 +1,11 @@
+# Never commit native diagnostic state or credentials from test runs.
+__pycache__/
+*.pyc
+*.log
+*.jsonl
+*.sqlite
+*.sqlite3
+*.db
+auth.json
+*.pem
+*.key
