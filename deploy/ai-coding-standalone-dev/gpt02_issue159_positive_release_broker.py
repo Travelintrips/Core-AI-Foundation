@@ -14,6 +14,8 @@ durably writes a HELD_NO_DISPATCH outbox row, not a DELL command.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import time
@@ -24,7 +26,7 @@ from gpt02_issue159_positive_permit_handoff import (
     inspect_proposed_permit_candidate,
 )
 from gpt02_issue159_writer_broker_runtime import _load_public_roots
-from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
+from gpt02_issue159_writer_broker_contract import BrokerAdmissionError, ISSUER_FIELDS
 
 PINNED_PUBLIC_DIR = "/etc/gpt02-dev/verifier-public"
 PINNED_MANIFEST = "/etc/gpt02-dev/trust-fingerprints.json"
@@ -82,6 +84,23 @@ def _make_verified_request(packet: Any) -> dict[str, Any]:
     packet_sha = proof.get("verifiedPacketSha256")
     issuer_sha = proof.get("issuerClaimsSha256")
     issuer_signature = issuer.get("signature")
+    # Recompute both bindings independently of the verifier response.
+    try:
+        canonical_packet = json.dumps(
+            packet, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")
+        canonical_issuer = json.dumps(
+            {k: claims[k] for k in ISSUER_FIELDS},
+            ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BrokerAdmissionError("CANONICAL_SIGNED_PACKET_INVALID") from exc
+    if (
+        packet_sha != hashlib.sha256(canonical_packet).hexdigest()
+        or issuer_sha != hashlib.sha256(canonical_issuer).hexdigest()
+    ):
+        _fail("VERIFIER_HASH_BINDING_MISMATCH")
     if (
         not isinstance(packet_sha, str) or not HEX64.fullmatch(packet_sha)
         or not isinstance(issuer_sha, str) or not HEX64.fullmatch(issuer_sha)
