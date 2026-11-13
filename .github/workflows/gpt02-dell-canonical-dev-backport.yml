@@ -45,6 +45,8 @@ jobs:
               assert hashlib.sha256(original).hexdigest()==digest,name
           print('SOURCE_MANIFEST_AND_WINDOWS_PINS_PASS')
           PY
+      - name: Install pinned Python cryptography used by existing wake and recovery tests
+        run: python3 -m pip install --no-cache-dir cryptography==50.0.2
       - name: Existing Windows native Python suite plus unrelated test regressions
         run: |
           python3 -B -m unittest discover -s scripts/windows/ai-core -p 'test_*.py' -q
