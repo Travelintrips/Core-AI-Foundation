@@ -1,5 +1,50 @@
 # GPT02 Issue #159 — DEV writer boundary and lifecycle migration review
 
+## Issuer read-only latency fix — 13 November 2026
+
+**Existing infrastructure retained; no new signer, RPC, dispatcher, or task.**
+
+- Task #158 failed issuer signing with the verified reason
+  `ISSUER_READER_RESULT_EXPIRED`. Its issuer claim TTL was **8 seconds**
+  and the actual receipt/fence lease **15 seconds**. The expired receipt/fence
+  must not be replayed or treated as dispatch authority.
+- An independent read-only health request to the existing issuer reader over
+  its Unix socket took **3.58 seconds**. The current
+  `gpt02Issue159IssuerLedgerReadOnly.ts` called `client.release(true)`
+  after **every** request, destroying even healthy SQL sessions and forcing
+  another PostgreSQL TLS handshake for each later health/evidence lookup.
+- Targeted patch: keep the existing dedicated reader's **one-connection
+  pool** available after a verified native role/TLS check and successful
+  `ROLLBACK`. Each call still starts a fresh `BEGIN READ ONLY`,
+  locks transaction settings, checks identity/permissions, and verifies
+  issuer ledger lineage. Any wrong role, error, failed rollback or failed
+  release is denied and/or destroys the connection; unsafe sessions never
+  return a trusted proof.
+- Targeted finalizer patch: perform an authenticated, NO_GO-only
+  `GET /health` check against the existing private issuer-reader socket
+  **before** calling the existing `consume_linked_approval` and
+  `reserve_post_consumption_fence` RPCs. This warms the reader while there
+  is **no active fence yet**. Signed issuer evidence still needs a separate
+  fresh, bound issuer reader lookup and the independent four-signature
+  verifier after the fence exists.
+- Source also retains already deployed attestor audit-envelope validation
+  and the existing host-specific systemd timestamp fallback with the
+  persisted, fresh signed-approval RPC gate. Do not overwrite those
+  operational fixes with stale source.
+- **Unchanged hard bounds**: 8-second issuer claim TTL, maximum 15-second
+  fence, signed and persisted provenance, replay fences, NO-GO for dispatch,
+  no automatic retry. Never convert a reader health response into signer
+  authorization or native DELL Final ACK.
+
+**Release gate:** isolated tests and exact-head CI must pass before a
+supervised, no-active-task deployment. Verify two consecutive read-only
+`GET /health` requests with bounded latency and a strict native credential
+check. No expired #157/#158 reuse, no PROD changes, and do not declare
+live issuer/DELL E2E PASS without fresh signed evidence.
+
+---
+
+
 ## Verified direct-connection resolution — 13 November 2026 (supersedes prior DSN warning)
 
 - Further systemd-only classification established that BOTH existing encrypted

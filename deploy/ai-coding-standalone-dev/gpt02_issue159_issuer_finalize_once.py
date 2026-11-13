@@ -96,19 +96,26 @@ def preflight(*, run=subprocess.run):
                 "gpt02-issue159-approval-reader.service"):
         if safe_unit(svc, run=run)["ActiveState"] != "active":
             deny("ISSUER_TRUSTED_READER_NOT_ACTIVE")
-    # systemd retains the final ExecMain timestamps; no stale attestor success.
+    # VPS one-shot metadata may report monotonic timestamps=0 even after a
+    # real execution. Keep the pre-existing operational Result/ExecMainStatus
+    # check and, when a reliable monotonic stamp exists, bound it to 60s.
+    # This is NOT authority to consume: the issuer's first SECURITY DEFINER
+    # RPC separately requires the exact FRESH signed approval and operator
+    # link written by the attestor, or it rolls back without creating a receipt.
     out = run(["systemctl", "show", ATTESTOR_UNIT,
-               "-p", "ExecMainExitTimestampMonotonic", "-p", "Result",
-               "-p", "ExecMainStatus"], timeout=4, text=True,
-              check=True, capture_output=True).stdout
+               "-p", "ExecMainExitTimestampMonotonic",
+               "-p", "Result", "-p", "ExecMainStatus"],
+              timeout=4, text=True, check=True, capture_output=True).stdout
     values = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
-    last_exit = values.get("ExecMainExitTimestampMonotonic", "")
-    if (values.get("Result") != "success" or values.get("ExecMainStatus") != "0"
-            or not last_exit.isdigit() or int(last_exit) <= 0):
+    if values.get("Result") != "success" or values.get("ExecMainStatus") != "0":
         deny("ISSUER_COMPLETED_ATTESTOR_REQUIRED")
-    elapsed_us = time.monotonic_ns() // 1000 - int(last_exit)
-    if elapsed_us < 0 or elapsed_us > 60_000_000:
-        deny("ISSUER_ATTESTOR_LAST_SUCCESS_NOT_FRESH")
+    last_exit = values.get("ExecMainExitTimestampMonotonic", "")
+    if not last_exit.isdigit():
+        deny("ISSUER_ATTESTOR_TIMESTAMP_INVALID")
+    if int(last_exit) > 0:
+        elapsed_us = time.monotonic_ns() // 1000 - int(last_exit)
+        if elapsed_us < 0 or elapsed_us > 60_000_000:
+            deny("ISSUER_ATTESTOR_LAST_SUCCESS_NOT_FRESH")
     # Freshness of the actual approval and signed packet is checked again
     # cryptographically before the first database mutation.
 
@@ -139,6 +146,74 @@ def pinned_dev_writer_endpoint(values: dict) -> bool:
         }
         and not values.get("hostaddr") and not values.get("service")
     )
+
+
+def require_issuer_reader_warm(
+    *, reader_socket: str | None = None,
+) -> None:
+    """Prove dedicated issuer reader is READY before reserving any fence.
+
+    The health request is independently read-only and cannot confer signing
+    or dispatch authority. It warms the existing single-connection pool, so
+    the post-fence issuer lookup does not pay another cold TLS handshake.
+    The issuer signer still obtains a completely fresh, signed/evidence-bound
+    readback before loading its private key.
+    """
+    from gpt02_issue159_issuer_signer_guard import _require_socket, ISSUER_READER
+
+    sockpath = ISSUER_READER if reader_socket is None else reader_socket
+    uid, _gid = _require_socket(sockpath)
+    payload = bytearray()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(6.0)
+        conn.connect(sockpath)
+        if not hasattr(socket, "SO_PEERCRED"):
+            deny("ISSUER_WARMUP_UNIX_PEER_CREDENTIALS_REQUIRED")
+        peer = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+        _pid, peer_uid, _peer_gid = struct.unpack("3i", peer)
+        if peer_uid != uid:
+            deny("ISSUER_WARMUP_READER_PEER_MISMATCH")
+        conn.sendall(
+            b"GET /health HTTP/1.1\r\n"
+            b"Host: localhost\r\nConnection: close\r\n\r\n"
+        )
+        while True:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            payload.extend(chunk)
+            if len(payload) > 8_192:
+                deny("ISSUER_WARMUP_RESPONSE_TOO_LARGE")
+    header, sep, body = bytes(payload).partition(b"\r\n\r\n")
+    if not sep or header.split(b"\r\n", 1)[0] != b"HTTP/1.1 200 OK":
+        deny("ISSUER_WARMUP_HEALTH_NOT_READY")
+    hdr = {}
+    for line in header.split(b"\r\n")[1:]:
+        key, colon, value = line.partition(b":")
+        key = key.strip().lower()
+        if not colon or key in hdr:
+            deny("ISSUER_WARMUP_FRAMING_INVALID")
+        hdr[key] = value.strip()
+    length = hdr.get(b"content-length", b"")
+    if (b"transfer-encoding" in hdr or not length.isdigit()
+            or int(length) != len(body)
+            or hdr.get(b"content-type") != b"application/json"):
+        deny("ISSUER_WARMUP_FRAMING_INVALID")
+    try:
+        response = json.loads(body)
+    except (ValueError, UnicodeError) as exc:
+        raise IssuerDenied("ISSUER_WARMUP_INVALID_JSON") from exc
+    if (not isinstance(response, dict)
+            or response.get("ok") is not True
+            or response.get("environment") != "DEV"
+            or response.get("readerReady") is not True
+            or response.get("issuerRole") != "gpt02_issuer_evidence_reader"
+            or response.get("tlsVerified") is not True
+            or response.get("readOnly") is not True
+            or any(response.get(field) is not False for field in (
+                "signingPermitted", "authorizationGranted", "dispatchPermitted"))
+            or response.get("releaseDecision") != "NO_GO"):
+        deny("ISSUER_WARMUP_TRUSTED_READONLY_HEALTH_REQUIRED")
 
 
 def issuer_dsn():
@@ -414,6 +489,10 @@ def run_once(*, run=subprocess.run):
         dsn = issuer_dsn()
         import psycopg
         with psycopg.connect(dsn, connect_timeout=4, autocommit=False) as conn:
+            # Cold read-only DB TLS establishment happens BEFORE the
+            # irreversible receipt/fence transaction, never inside its
+            # 15-second lease window.
+            require_issuer_reader_warm()
             receipt, fence = consume_and_reserve(conn, packet, proof)
             claims = issuer_claims(packet, proof, receipt, fence)
             write_private_claims(claims)
@@ -435,7 +514,10 @@ if __name__ == "__main__":
     try:
         run_once()
     except Exception as exc:
-        # Never print SQL parameters, identities, DSN, signatures or claim body.
-        print("GPT02_DEV_ISSUER_FINALIZE_DENIED", type(exc).__name__,
+        # Preserve stable, non-secret operational failure codes. Never print
+        # SQL parameters, DSNs, identities, signatures or claim bodies.
+        code = str(exc)
+        safe = code if re.fullmatch(r"[A-Z0-9_:-]{1,120}", code) else type(exc).__name__
+        print("GPT02_DEV_ISSUER_FINALIZE_DENIED", safe,
               file=__import__("sys").stderr)
         raise SystemExit(2)

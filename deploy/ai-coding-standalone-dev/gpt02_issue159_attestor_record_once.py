@@ -114,12 +114,30 @@ def validate_and_verify(
     """Pure binder with mandatory trusted existing verifier readback."""
     if now_ms is None:
         now_ms = int(time.time() * 1000)
+    required={"claims","claimsSha256"}
+    allowed=required|{"intentId","actorId","authMethod","roleAtDecision","decision",
+        "recordedAt","expiresAt","signingPermitted","authorizationGranted",
+        "dispatchPermitted","releaseDecision"}
     if (type(approved_payload) is not dict
-            or set(approved_payload) != {"claims", "claimsSha256"}
+            or not required.issubset(approved_payload)
+            or not set(approved_payload).issubset(allowed)
             or type(approved_payload["claims"]) is not dict
             or type(link) is not dict or type(sigs) is not dict
             or set(sigs) != {"approval", "hub", "core"}):
         deny("ATTESTOR_PACKET_INPUT_SHAPE_INVALID")
+    # Preserve the existing operational signed decision envelope emitted by
+    # the authenticated Super Admin approval service. Optional metadata
+    # cannot substitute for live verifier/persisted approval readback.
+    if set(approved_payload) != required:
+        if (approved_payload.get("roleAtDecision")!="super_admin"
+                or approved_payload.get("decision")!="APPROVE"
+                or approved_payload.get("authMethod")!="supabase_admin_session"
+                or approved_payload.get("expiresAt")!=approved_payload["claims"].get("expiresAt")
+                or approved_payload.get("signingPermitted") is not False
+                or approved_payload.get("authorizationGranted") is not False
+                or approved_payload.get("dispatchPermitted") is not False
+                or approved_payload.get("releaseDecision")!="NO_GO"):
+            deny("ATTESTOR_APPROVED_AUDIT_ENVELOPE_INVALID")
     approval = approved_payload["claims"]
     if (set(approval) != set(APPROVAL_FIELDS) or set(link) != set(LINK_FIELDS)
             or type(now_ms) is not int or now_ms <= 0
@@ -251,5 +269,9 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as exc:
-        print("GPT02_DEV_ATTESTOR_DENIED:", type(exc).__name__, file=sys.stderr)
+        # Preserve the VPS's reviewed stable, non-secret diagnostic codes;
+        # never print SQL errors, claim bodies, credentials or signatures.
+        code = str(exc)
+        safe = code if re.fullmatch(r"[A-Z0-9_:-]{1,120}", code) else type(exc).__name__
+        print("GPT02_DEV_ATTESTOR_DENIED:", safe, file=sys.stderr)
         sys.exit(2)

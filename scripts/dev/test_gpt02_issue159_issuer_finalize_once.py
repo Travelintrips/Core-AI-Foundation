@@ -6,8 +6,10 @@ from pathlib import Path
 import json
 import os
 import subprocess
+import struct
 import sys
 import tempfile
+from types import SimpleNamespace
 import time
 import unittest
 from unittest.mock import patch
@@ -232,6 +234,104 @@ class IssuerFinalizerTests(unittest.TestCase):
              "service": "other-profile"},
         ):
             self.assertFalse(issuer.pinned_dev_writer_endpoint(bad))
+
+    def test_issuer_reader_is_warmed_before_any_receipt_or_fence(self):
+        source = (ROOT / "deploy/ai-coding-standalone-dev/gpt02_issue159_issuer_finalize_once.py").read_text()
+        start = source.index("def run_once(")
+        scope = source[start:]
+        self.assertLess(scope.index("require_issuer_reader_warm()"),
+                        scope.index("receipt, fence = consume_and_reserve("))
+        self.assertIn("GET /health HTTP/1.1", source)
+        self.assertIn("SO_PEERCRED", source)
+
+    def test_attestor_systemd_zero_timestamps_still_require_real_db_rpc(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "encrypted-existing"
+            source.write_text("synthetic")
+            uncreated_claims = Path(tmp) / "no-claims"
+            uncreated_output = Path(tmp) / "no-output"
+            def fake_unit(unit, *, run=None):
+                return {"LoadState":"loaded",
+                        "ActiveState":("active" if unit in {
+                            "gpt02-issue159-verifier.service",
+                            "gpt02-issue159-lineage-reader.service",
+                            "gpt02-issue159-issuer-reader.service",
+                            "gpt02-issue159-approval-reader.service",
+                        } else "inactive"),
+                        "UnitFileState":"static"}
+            result={"Result":"success","ExecMainStatus":"0",
+                    "ExecMainExitTimestampMonotonic":"0"}
+            def fake_run(cmd,**kw):
+                return SimpleNamespace(stdout="".join(f"{k}={v}\n" for k,v in result.items()))
+            with patch.object(issuer.os,"geteuid",return_value=0), \
+                 patch.dict(os.environ,{"APP_ENV":"development",
+                                        "GPT02_ISSUER_FINALIZE_ONCE":"explicit-supervised"}), \
+                 patch.object(issuer,"SECRET_SOURCE",source), \
+                 patch.object(issuer,"SIGNER_SECRET",source), \
+                 patch.object(issuer,"DSN_FILE",source), \
+                 patch.object(issuer,"CLAIMS_FILE",uncreated_claims), \
+                 patch.object(issuer,"ISSUER_OUTPUT",uncreated_output), \
+                 patch.object(issuer,"safe_unit",side_effect=fake_unit):
+                self.assertIsNone(issuer.preflight(run=fake_run))
+                # A stale systemd-only result is NOT receipt authority.
+                pkt, proof = packet()
+                con = FakeDB()
+                proof["persistedAdminApprovalReadBack"]=False
+                with self.assertRaisesRegex(issuer.IssuerDenied,"ISSUER_RPC_ADMISSION"):
+                    issuer.consume_and_reserve(con,pkt,proof)
+                self.assertEqual(con.q.calls, [])
+                result["ExecMainStatus"]="2"
+                with self.assertRaisesRegex(issuer.IssuerDenied, "ISSUER_COMPLETED_ATTESTOR_REQUIRED"):
+                    issuer.preflight(run=fake_run)
+
+    def test_warmup_requires_native_readonly_health_no_grant(self):
+        import gpt02_issue159_issuer_signer_guard as signer_guard
+        body = {
+            "ok": True, "environment": "DEV", "readerReady": True,
+            "issuerRole": "gpt02_issuer_evidence_reader",
+            "tlsVerified": True, "readOnly": True,
+            "signingPermitted": False, "authorizationGranted": False,
+            "dispatchPermitted": False, "releaseDecision": "NO_GO",
+        }
+        class FakeSocket:
+            def __init__(self, reply, uid=42):
+                self.reply = reply
+                self.uid = uid
+                self.reads = 0
+                self.sent = []
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def settimeout(self, seconds): self.timeout = seconds
+            def connect(self, address): self.address = address
+            def getsockopt(self,*args): return struct.pack("3i",1,self.uid,7)
+            def sendall(self, data): self.sent.append(data)
+            def recv(self, limit):
+                self.reads += 1
+                return self.reply if self.reads == 1 else b""
+
+        def response(health, status=b"HTTP/1.1 200 OK"):
+            raw = json.dumps(health, separators=(",", ":")).encode()
+            return (status+b"\r\nContent-Type: application/json\r\nContent-Length: "+
+                    str(len(raw)).encode()+b"\r\n\r\n"+raw)
+        good = FakeSocket(response(body))
+        with patch.object(signer_guard, "_require_socket", return_value=(42,7)), \
+             patch.object(issuer.socket,"socket",return_value=good):
+            self.assertIsNone(issuer.require_issuer_reader_warm(reader_socket="/fixture/reader.sock"))
+        self.assertEqual(good.address, "/fixture/reader.sock")
+        self.assertEqual(good.timeout, 6.0)
+        self.assertIn(b"GET /health", good.sent[0])
+        for health in ({**body, "dispatchPermitted": True},
+                       {**body, "readerReady": False}):
+            forged = FakeSocket(response(health))
+            with patch.object(signer_guard, "_require_socket", return_value=(42,7)), \
+                 patch.object(issuer.socket,"socket",return_value=forged):
+                with self.assertRaisesRegex(issuer.IssuerDenied,"WARMUP_TRUSTED_READONLY"):
+                    issuer.require_issuer_reader_warm(reader_socket="/fixture/reader.sock")
+        invalid_peer=FakeSocket(response(body),uid=99)
+        with patch.object(signer_guard, "_require_socket", return_value=(42,7)), \
+             patch.object(issuer.socket,"socket",return_value=invalid_peer):
+            with self.assertRaisesRegex(issuer.IssuerDenied,"WARMUP_READER_PEER_MISMATCH"):
+                issuer.require_issuer_reader_warm(reader_socket="/fixture/reader.sock")
 
     def test_systemd_service_static_and_dedicated_issuer_only(self):
         unit = (ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-finalize-once.service").read_text()

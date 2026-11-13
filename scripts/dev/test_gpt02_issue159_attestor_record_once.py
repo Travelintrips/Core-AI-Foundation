@@ -197,6 +197,32 @@ class AttestorRecordOnceTest(unittest.TestCase):
         ):
             self.assertFalse(pinned_dev_writer_endpoint(bad))
 
+    def test_existing_super_admin_audit_envelope_remains_supported(self):
+        audited = {
+            **self.approved,
+            "roleAtDecision": "super_admin",
+            "decision": "APPROVE",
+            "authMethod": "supabase_admin_session",
+            "expiresAt": self.approved["claims"]["expiresAt"],
+            "signingPermitted": False, "authorizationGranted": False,
+            "dispatchPermitted": False, "releaseDecision": "NO_GO",
+        }
+        packet, proof = validate_and_verify(
+            audited, self.link, self.sigs, now_ms=self.fixture.now,
+            verify_fn=lambda *args, **kwargs: self.proof,
+        )
+        self.assertTrue(proof["threeSignaturesVerified"])
+        self.assertEqual(packet["approval"]["claims"], self.approved["claims"])
+        # Metadata can never override the stored explicit Super Admin decision.
+        for key, value in (("decision","REJECT"), ("roleAtDecision","staff"),
+                           ("dispatchPermitted",True)):
+            bad = dict(audited, **{key:value})
+            with self.assertRaisesRegex(AttestorDenied, "ATTESTOR_APPROVED_AUDIT_ENVELOPE_INVALID"):
+                validate_and_verify(
+                    bad, self.link, self.sigs, now_ms=self.fixture.now,
+                    verify_fn=lambda *args, **kwargs: self.proof,
+                )
+
     def test_service_is_static_and_uses_only_dedicated_attestor_credential(self):
         root=Path(__file__).resolve().parents[2]
         unit=(root/"deploy/ai-coding-standalone-dev/gpt02-issue159-attestor-record-once.service").read_text()
@@ -215,7 +241,9 @@ class AttestorRecordOnceTest(unittest.TestCase):
         self.assertNotIn("ExecStartPost=",unit)
         self.assertNotIn("AI_DISPATCHER_ENABLED=true",unit)
         self.assertNotIn('ROLE = "service_role"',source)
-        self.assertNotIn("supabase_admin",source)
+        # Admin-session is an audited approval method, not writer credentials.
+        self.assertIn('get("authMethod")!="supabase_admin_session"',source)
+        self.assertNotIn('ROLE = "supabase_admin"',source)
         self.assertNotIn("INSERT INTO",source)
         self.assertNotIn("UPDATE gpt02_",source)
         self.assertIn("record_existing_rpc_once(connection, packet, proof)",source)
@@ -231,7 +259,7 @@ class AttestorRecordOnceTest(unittest.TestCase):
         proc=subprocess.run([sys.executable,str(code)],capture_output=True,text=True,
                             env=env,timeout=5,check=False)
         self.assertEqual(proc.returncode,2)
-        self.assertIn("GPT02_DEV_ATTESTOR_DENIED: AttestorDenied",proc.stderr)
+        self.assertIn("GPT02_DEV_ATTESTOR_DENIED: ATTESTOR_ONE_SHOT_RUNTIME_NOT_AUTHORIZED",proc.stderr)
         self.assertNotIn("GPT02_DEV_ATTESTOR_RECORD_EXISTING_RPC_SUCCESS",proc.stdout)
 
     def test_rpc_no_ack_rolls_back(self):

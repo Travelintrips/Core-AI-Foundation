@@ -9,6 +9,7 @@ import {
   GPT02_ISSUE159_ISSUER_IDENTITY_SQL,
   GPT02_ISSUE159_ISSUER_LEDGER_SQL,
   readGpt02Issue159IssuerLedgerReadOnly,
+  probeGpt02Issue159IssuerReaderReadOnly,
 } from "../gpt02Issue159IssuerLedgerReadOnly.js";
 
 const approvalClaims = {
@@ -83,7 +84,7 @@ type Patch = { identity?: Record<string, unknown>; rows?: Record<string, unknown
   queryFailure?: string; tls?: boolean; };
 function fixture(patch: Patch = {}) {
   const calls: { sql: string; args?: readonly unknown[] }[] = [];
-  let releases = 0;
+  const releases: boolean[] = [];
   const client = {
     connection: { stream: { encrypted: patch.tls ?? true, authorized: patch.tls ?? true } },
     async query(sql: string, args?: readonly unknown[]) {
@@ -97,10 +98,11 @@ function fixture(patch: Patch = {}) {
       }
       return { rows: [] as Record<string, unknown>[] };
     },
-    release(force?: boolean) { expect(force).toBe(true); releases++; },
+    release(force?: boolean) { releases.push(force === true); },
   };
   const pool = { async connect() { return client; } };
-  return { pool, calls, released: () => releases };
+  return { pool, calls, released: () => releases.length,
+    destroyed: () => [...releases] };
 }
 
 describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
@@ -125,6 +127,32 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
       claims().linkId, claims().receiptId, claims().fenceId,
     ]);
     expect(f.released()).toBe(1);
+    expect(f.destroyed()).toEqual([false]);
+    await readGpt02Issue159IssuerLedgerReadOnly(f.pool, {
+      claims: claims(), observedAt: 5000,
+    });
+    // Reused sessions must still BEGIN READ ONLY and ROLLBACK each time.
+    expect(f.calls.filter(c => c.sql === "BEGIN READ ONLY")).toHaveLength(2);
+    expect(f.calls.filter(c => c.sql === "ROLLBACK")).toHaveLength(2);
+    expect(f.destroyed()).toEqual([false, false]);
+  });
+
+  it("reuses only native verified issuer health sessions", async () => {
+    const good = fixture();
+    const health = await probeGpt02Issue159IssuerReaderReadOnly(good.pool);
+    expect(health.readOnlySessionVerified).toBe(true);
+    expect(health.tlsVerified).toBe(true);
+    expect(good.destroyed()).toEqual([false]);
+
+    const invalid = fixture({ identity: { restricted_role: false } });
+    const deniedHealth = await probeGpt02Issue159IssuerReaderReadOnly(invalid.pool);
+    expect(deniedHealth.nativeRoleAuthenticated).toBe(false);
+    expect(invalid.destroyed()).toEqual([true]);
+
+    const badRollback = fixture({ queryFailure: "ROLLBACK" });
+    await expect(probeGpt02Issue159IssuerReaderReadOnly(badRollback.pool))
+      .rejects.toThrow("ISSUER_READONLY_SESSION_CLEANUP_FAILED");
+    expect(badRollback.destroyed()).toEqual([true]);
   });
 
   it("rejects historical, stale, wrong tenant and injected input before DB connect", async () => {
@@ -165,6 +193,7 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
       expect(f.calls.some(c=>c.sql===GPT02_ISSUE159_ISSUER_LEDGER_SQL)).toBe(false);
       expect(f.calls.some(c=>c.sql==="ROLLBACK")).toBe(true);
       expect(f.released()).toBe(1);
+      expect(f.destroyed()).toEqual([true]);
     }
   });
 
@@ -203,7 +232,17 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
       expect(JSON.stringify(result)).not.toContain("SENSITIVE_DB_EXCEPTION");
       expect(f.calls.some(c=>c.sql==="ROLLBACK")).toBe(true);
       expect(f.released()).toBe(1);
+      expect(f.destroyed()).toEqual([true]);
     }
+  });
+
+  it("never reuses a session if ROLLBACK fails", async () => {
+    const f = fixture({ queryFailure: "ROLLBACK" });
+    await expect(readGpt02Issue159IssuerLedgerReadOnly(f.pool, {
+      claims: claims(), observedAt: 5000,
+    })).rejects.toThrow("ISSUER_READONLY_SESSION_CLEANUP_FAILED");
+    expect(f.calls.some(c => c.sql === "ROLLBACK")).toBe(true);
+    expect(f.destroyed()).toEqual([true]);
   });
 
   it("uses only fixed SELECTs and cannot load signer secrets or send commands", async () => {

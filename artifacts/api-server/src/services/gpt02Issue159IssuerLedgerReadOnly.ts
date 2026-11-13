@@ -166,6 +166,7 @@ function identityMatches(r: Row, client: Client) {
 export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
   let client: Client | undefined;
   let began = false;
+  let nativeIdentityVerified = false;
   try {
     client = await pool.connect();
     await client.query("BEGIN READ ONLY");
@@ -183,6 +184,7 @@ export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
         tlsVerified: false as const,
       });
     }
+    nativeIdentityVerified = true;
     return Object.freeze({
       ...denied("ISSUER_READER_NATIVE_SESSION_VERIFIED", true),
       nativeRoleAuthenticated: true as const,
@@ -198,8 +200,20 @@ export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
     });
   } finally {
     if (client) {
-      if (began) try { await client.query("ROLLBACK"); } catch { /* fail-closed */ }
-      try { client.release(true); } catch { /* fail-closed */ }
+      // Every request obtains a fresh read-only transaction and re-verifies
+      // native role, TLS and privileges. Reuse only after verified identity
+      // and a successful ROLLBACK; otherwise destroy the connection.
+      // A single pooled connection avoids needless TLS handshakes.
+      let rolledBack = !began;
+      if (began) {
+        try { await client.query("ROLLBACK"); rolledBack = true; }
+        catch { rolledBack = false; }
+      }
+      let released = false;
+      try { client.release(!(nativeIdentityVerified && rolledBack)); released = true; }
+      catch { /* fail-closed */ }
+      // A failed rollback/release must never return a trusted readback.
+      if (!rolledBack || !released) throw Error("ISSUER_READONLY_SESSION_CLEANUP_FAILED");
     }
   }
 }
@@ -281,11 +295,23 @@ export async function readGpt02Issue159IssuerLedgerReadOnly(
       persistedTrustedReadProven: false as const,
     });
   } catch {
-    return denied("ISSUER_LEDGER_READ_FAILED_CLOSED", verified);
+    verified = false;
+    return denied("ISSUER_LEDGER_READ_FAILED_CLOSED", false);
   } finally {
     if (client) {
-      if (began) try { await client.query("ROLLBACK"); } catch { /* fail-closed */ }
-      try { client.release(true); } catch { /* fail-closed */ }
+      // Never cache an unauthorized or unrolled-back native SQL session.
+      // Every reused connection must still pass the entire fresh identity
+      // and TLS check inside BEGIN READ ONLY on its next query.
+      let rolledBack = !began;
+      if (began) {
+        try { await client.query("ROLLBACK"); rolledBack = true; }
+        catch { rolledBack = false; }
+      }
+      let released = false;
+      try { client.release(!(verified && rolledBack)); released = true; }
+      catch { /* fail-closed */ }
+      // A failed rollback/release must never return a trusted readback.
+      if (!rolledBack || !released) throw Error("ISSUER_READONLY_SESSION_CLEANUP_FAILED");
     }
   }
 }
