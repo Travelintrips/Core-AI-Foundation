@@ -84,6 +84,9 @@ def main():
             actual = sql("SELECT has_schema_privilege('" + role +
                          "','gpt02_private','USAGE')").stdout.strip()
             ensure(actual == "t", "RELEASE_PRIVATE_SCHEMA_USAGE_MISSING_" + role)
+            conn_limit = sql("SELECT rolconnlimit FROM pg_roles WHERE rolname='" +
+                             role + "'").stdout.strip()
+            ensure(conn_limit == "0", "DORMANT_RELEASE_CONNECTION_LIMIT_MUST_BE_ZERO")
         n = sql("""SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
              WHERE n.nspname='gpt02_private' AND c.relname IN
              ('positive_dispatch_permits','positive_dispatch_consumptions')
@@ -121,7 +124,7 @@ def main():
         ensure(restored == "f", "MIGRATOR_OWNER_PRIVILEGE_NOT_RESTORED")
 
         # Only on this disposable fixture, make writer eligible to exercise RPCs.
-        sql("ALTER ROLE dev_gpt02_release_writer LOGIN")
+        sql("ALTER ROLE dev_gpt02_release_writer LOGIN CONNECTION LIMIT 3")
         bad = sql("SELECT gpt02_private.reserve_positive_dispatch_permit('" +
                   CMD + "',gen_random_uuid(),'0')", "dev_gpt02_release_writer",
                   required=False)
