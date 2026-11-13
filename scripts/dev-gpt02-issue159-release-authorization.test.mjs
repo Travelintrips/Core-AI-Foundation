@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import {
   canonicalIssue159Release, issue159Challenge, issue159EventId,
-  verifyIssue159ReleaseCandidate,
+  verifyIssue159ReleaseCandidate, verifyIssue159ReleaseUsingPinnedRoot,
 } from "./dev-gpt02-issue159-release-authorization.mjs";
 import {
   BridgeViolation, dispatchOnce, reconcile, runKey, gatewaySessionKey,
@@ -192,6 +192,13 @@ test("synthetic signed release works with ORIGINAL gateway once-only transport a
   assert.equal(fixture.calls.send,1);
   assert.equal(fixture.calls.callback,1);
   assert.equal(fixture.calls.ack,1);
+});
+test("operational entrypoint cannot accept caller-supplied public key as trust",()=>{
+  const input=setup();
+  assert.throws(
+    ()=>verifyIssue159ReleaseUsingPinnedRoot(input),
+    code("RELEASE_INDEPENDENT_PINNED_ROOT_UNAVAILABLE"),
+  );
 });
 test("release verifier source cannot access gateway or worker directly",async()=>{
   const fs=await import("node:fs");
