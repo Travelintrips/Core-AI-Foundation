@@ -7,7 +7,6 @@ before a production-style writer connection may ever be enabled on DEV.
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
-import ast
 import json
 from pathlib import Path
 import re
@@ -121,8 +120,12 @@ def main():
                   'ai_platform.ai_coding_bridge_commands','UPDATE')""").stdout.strip()=="f",
                "STAGE_ROLE_BROAD_WRITE_GRANT")
         ensure(sql("""SELECT has_table_privilege('dev_gpt02_bridge_stage_login',
-                  'ai_platform.ai_coding_bridge_commands','INSERT')""").stdout.strip()=="t",
-               "STAGE_ROLE_MISSING_EXACT_INSERT_GRANT")
+                  'ai_platform.ai_coding_bridge_commands','INSERT')""").stdout.strip()=="f",
+               "STAGE_ROLE_DIRECT_INSERT_MUST_BE_DENIED")
+        ensure(sql("""SELECT has_function_privilege('dev_gpt02_bridge_stage_login',
+                  'gpt02_private.stage_issue159_held_bridge_command(uuid,text)',
+                  'EXECUTE')""").stdout.strip()=="t",
+               "STAGE_ROLE_PRIVATE_RPC_GRANT_MISSING")
 
         roles = sql("""SELECT string_agg(rolname||':'||rolcanlogin::text,',' ORDER BY rolname)
             FROM pg_roles WHERE rolname IN
@@ -310,27 +313,19 @@ def main():
              FROM gpt02_private.positive_dispatch_outbox""").stdout.strip()
         ensure(outbox == (CMD+":"+ATT+":140:"+CORE+":HELD_NO_DISPATCH:"+("a"*64)),
                "EXACT_COMMAND_OUTBOX_NOT_DURABLY_LINKED")
-        # Parse the SQL constant from source WITHOUT importing the broker,
-        # installing crypto dependencies, or connecting to a real database.
-        module = ast.parse((ROOT /
-          "deploy/ai-coding-standalone-dev/gpt02_issue159_exact_bridge_stage.py"
-        ).read_text())
-        matches = [node.value.value for node in module.body
-          if isinstance(node, ast.Assign)
-          and any(isinstance(t,ast.Name) and t.id=="HELD_BRIDGE_INSERT_SQL"
-                  for t in node.targets)
-          and isinstance(node.value,ast.Constant)
-          and isinstance(node.value.value,str)]
-        ensure(len(matches)==1, "HELD_BRIDGE_SQL_NOT_UNIQUE")
-        held_sql = matches[0]
-        # Only in the disposable fixture, temporarily enable the dedicated
-        # stage login. Live DEV remains NOLOGIN / role absent.
+        # Only in disposable fixture enable role LOGIN; live DEV unchanged.
         sql("ALTER ROLE dev_gpt02_bridge_stage_login LOGIN CONNECTION LIMIT 3")
-        # Simulate stage SQL parameter binding in the disposable psql only.
-        # This inserts a HELD row; it never schedules or wakes any worker.
-        def stage_sql(command=CMD, packet_sha="a"*64):
-            expected = held_sql.replace("%s::uuid", "'" + command + "'::uuid",1)
-            return expected.replace("%s::text", "'" + packet_sha + "'::text",1)
+        direct = sql("""INSERT INTO ai_platform.ai_coding_bridge_commands
+          (id,task_id,external_command_id,source,command_type,instruction)
+          VALUES(gen_random_uuid(),'50000000-0000-4000-8000-000000000005'::uuid,
+           'unauthorized-direct:1','ai-core','ISSUE159_HELD','bad')""",
+           "dev_gpt02_bridge_stage_login",required=False)
+        ensure(direct.returncode!=0 and
+               "permission denied" in direct.stderr.lower(),
+               "DIRECT_BRIDGE_INSERT_BYPASSED_PRIVATE_OWNER_RPC")
+        def stage_sql(command=CMD,packet_sha="a"*64):
+            return ("SELECT * FROM gpt02_private.stage_issue159_held_bridge_command('"+
+                    command+"','" + packet_sha + "')")
         wrong_hash = sql(stage_sql(packet_sha="f"*64), "dev_gpt02_bridge_stage_login")
         ensure(wrong_hash.stdout.strip()=="",
                "UNVERIFIED_PACKET_HASH_COULD_STAGE_COMMAND")
