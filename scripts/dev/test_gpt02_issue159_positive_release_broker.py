@@ -23,16 +23,21 @@ class FakeConnection:
         self.consume_value = consume_value
         self.events = []
         self.result = None
+        self.depth = 0
 
     def transaction(self):
         return self
 
     def __enter__(self):
-        self.events.append("BEGIN")
+        self.depth += 1
+        if self.depth == 1:
+            self.events.append("BEGIN")
         return self
 
     def __exit__(self, typ, error, traceback):
-        self.events.append("ROLLBACK" if typ else "COMMIT")
+        if self.depth == 1:
+            self.events.append("ROLLBACK" if typ else "COMMIT")
+        self.depth -= 1
         return False
 
     def cursor(self):
