@@ -1,5 +1,87 @@
 # GPT02 Issue #159 — DEV writer boundary and lifecycle migration review
 
+## Update 13 Nov 2026 — current evidence supersedes historical blockers
+
+**Authoritative later-status note (DEV only).** This document retains the 12
+November forensic timeline. Statements below that the six lifecycle RPCs
+are absent, the reader/verifier not installed, or the one-shot signer/attestor
+not integrated are **historical**, not current. Do not rebuild any previously
+PASS components merely because an earlier paragraph says they were absent.
+
+### Verified existing capabilities (not an E2E PASS)
+
+- Six lifecycle RPCs are already present in CST-DEV: preparation is in
+  `gpt02_stage`; approval, consumption, fence, issuer evidence and issuer
+  lease functions are in `gpt02_private`. SECURITY DEFINER ownership,
+  pinned `search_path=pg_catalog`, and exact executor-role grants have
+  been verified separately. **Do not reapply the disposable fixture SQL.**
+- On 13 November, database catalog readback verified both
+  `dev_gpt02_attestor_evidence` and `dev_gpt02_issuer_evidence` have
+  `NOLOGIN`, `CONNECTION LIMIT 0`, `NOBYPASSRLS`, no memberships,
+  and no direct table DML across seven private lifecycle ledgers.
+  Attestor has only `record_linked_approval` EXECUTE; issuer has
+  `consume_linked_approval`, `reserve_post_consumption_fence`,
+  `record_issuer_evidence` and `consume_issuer_lease` EXECUTE.
+- The existing verifier, approval reader, issuer reader and lineage reader
+  were observed active on VPS `srv1792369`. Existing root-only supervised
+  one-shot orchestration performs approval → Hub → Core → attestor → issuer
+  *only if* both independent encrypted writer credentials and all
+  prerequisite trust evidence exist. Each one-shot unit remains static and
+  inactive. The runner also proves a **new** systemd ExecStart/exit occurred;
+  a skipped ConditionPathExists service cannot report a false success.
+- Approval, operator-link, receipt, identity-receipt, fence, issuer-evidence
+  and issuer-lease-consumption private ledgers each contained **zero rows**
+  in the latest read-only DEV audit. No real signer execution, writer RPC
+  mutation, fresh task/OTP, or dispatcher activation was performed.
+- GitHub Four-Signer Contract CI
+  [#43390833980](https://github.com/Travelintrips/Core-AI-Foundation/actions/runs/43390833980)
+  completed **SUCCESS** on commit
+  `84ef1605c4f84858de1cfffeaa60f7df190d83a2`, including existing
+  approval/issuer tests and isolated PostgreSQL security checks. This is
+  code readiness only, not proof of operational credentials or DELL E2E.
+- The existing `ai_platform.chatgpt_attestation_final_callbacks_dev`
+  contains 29 **historical** callback records; the latest
+  `verified_at` was **2026-11-09 22:57 WIB**, with **zero**
+  on 12–13 Nov WIB. Those callbacks do not establish a new Issue #159
+  lifecycle Final ACK. Current issuer verifier returns
+  `dispatchPermitted=false` and existing Final ACK remains a separate
+  independently authenticated proof. Do not change a NO-GO field to
+  manufacture dispatch authority.
+
+### Remaining operational boundary — no automatic credential activation
+
+1. An authorized DBA/operator must provision **separate** restricted
+   CST-DEV attestor and issuer PostgreSQL logins and host-encrypted
+   systemd credentials using an approved interactive administrative session,
+   without pasting any passwords or DSNs into ChatGPT, CI, logs or issues.
+   Credential targets consumed by the existing units are
+   `/etc/credstore.encrypted/gpt02-issue159-attestor-dsn` and
+   `/etc/credstore.encrypted/gpt02-issue159-issuer-dsn`.
+   As audited, both are **absent**. Do not bypass the earlier rejected
+   noninteractive administration path.
+2. Before changing login state, recheck exact project `xssrfshdrtdfupgqwfdw`,
+   role-only EXECUTE grants, empty in-flight ledger, FORCE RLS, root-private
+   credential custody, pinned TLS, and all one-shot units inactive/static.
+   Never reuse a reader/service_role/postgres credential for a writer.
+3. Once that independent administrative boundary is satisfied, carry out
+   **one fresh** bound Super Admin approval and one supervised DEV run;
+   read back signed approval, nonce receipt, fence, issuer evidence and lease
+   by exact command/attempt. Do not reuse historical Task #150/#151.
+   A failed run requires reconciliation; there is no automatic retry.
+4. Even an issuer `LEASE_CONSUMED_NO_DISPATCH` receipt is **not**
+   authorization to dispatch to DELL. Review and authorize the separately
+   protected command issue/dispatch path, then verify an independent DELL
+   callback, attestation, and Final ACK linked to that same command.
+   No PROD change or PR merge is justified until this E2E evidence exists.
+5. After a supervised test, review whether writer role LOGIN should be
+   returned to NOLOGIN and sealed credentials disabled; preserve immutable
+   ledger and diagnostic evidence rather than deleting/replaying it.
+
+**Current release decision: DEV standby/CI PASS; real authorized writer
+activation, DELL dispatch and native Final ACK E2E remain NO-GO.**
+
+---
+
 Date: 2026-11-12
 Scope: DEV only. Read-only catalog review plus isolated verifier implementation. No lifecycle mutation.
 
