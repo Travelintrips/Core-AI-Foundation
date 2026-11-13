@@ -560,11 +560,66 @@ export async function getCodingBridgeResponseAckReadback(id: string) {
 
 export async function acknowledgeCodingBridgeResponse(id: string) {
   await ensureCodingControlBridgeTables();
+
+  // The browser-side DEV ACK watcher historically used this generic endpoint.
+  // Promote it to the conversation-bound final ACK path only when the persisted
+  // command and response already prove the exact verified ChatGPT wake.
+  const eligible = await db.execute(sql`
+    SELECT command.metadata_json ->> 'conversationId' AS conversation_id
+    FROM ai_platform.ai_coding_bridge_responses AS response
+    JOIN ai_platform.ai_coding_bridge_commands AS command
+      ON command.id = response.command_id
+    WHERE response.id = ${id}::uuid
+      AND response.kind = 'COMPLETED'
+      AND command.status = 'COMPLETED'
+      AND command.source = 'ai-core'
+      AND command.command_type = 'EXTERNAL_AGENT_WORK'
+      AND command.metadata_json ->> 'capability' = 'chatgpt:wake'
+      AND command.metadata_json ->> 'explicitWorkerTarget' = 'true'
+      AND command.metadata_json ->> 'deliveryCode' = 'DELIVERY_CONFIRMED'
+      AND command.metadata_json ->> 'e2eCode' IN ('E2E_VERIFIED','MCP_ACK_VERIFIED')
+      AND command.metadata_json ->> 'completedBy' = command.metadata_json ->> 'assignedClientId'
+      AND response.metadata_json ->> 'deliveryCode' = 'DELIVERY_CONFIRMED'
+      AND response.metadata_json ->> 'e2eCode' = 'E2E_VERIFIED'
+      AND response.metadata_json ->> 'verifiedAssistantReply' = 'true'
+      AND response.metadata_json ->> 'browserPairingVerified' = 'true'
+      AND response.metadata_json ->> 'chatgptSubmitted' = 'true'
+      AND response.metadata_json ->> 'exitCode' = '0'
+      AND response.metadata_json ->> 'conversationId' = command.metadata_json ->> 'targetConversationId'
+      AND response.metadata_json ->> 'eventId' = command.metadata_json ->> 'eventId'
+      AND NULLIF(command.metadata_json ->> 'conversationId','') IS NOT NULL
+    LIMIT 1
+  `);
+  const conversationId = eligible.rows?.[0]?.["conversation_id"];
+  if (typeof conversationId === "string" && conversationId.length > 0) {
+    const promoted = await acknowledgeCodingBridgeResponseForConversation({
+      responseId: id,
+      conversationId,
+    });
+    if (promoted) {
+      const [row] = await db
+        .select()
+        .from(aiCodingBridgeResponsesTable)
+        .where(eq(aiCodingBridgeResponsesTable.id, id))
+        .limit(1);
+      return row ?? null;
+    }
+  }
+
+  // Preserve generic ACK behavior for non-ChatGPT bridge responses, but make it
+  // idempotent so readback retries never rewrite the original ACK timestamp.
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_bridge_responses
+    SET acknowledged_at = COALESCE(acknowledged_at, NOW())
+    WHERE id = ${id}::uuid
+    RETURNING id
+  `);
+  if (!result.rows?.length) return null;
   const [row] = await db
-    .update(aiCodingBridgeResponsesTable)
-    .set({ acknowledgedAt: new Date() })
+    .select()
+    .from(aiCodingBridgeResponsesTable)
     .where(eq(aiCodingBridgeResponsesTable.id, id))
-    .returning();
+    .limit(1);
   return row ?? null;
 }
 
@@ -582,12 +637,11 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
     return tx.execute(sql`
     WITH acknowledged AS (
       UPDATE ai_platform.ai_coding_bridge_responses AS response
-      SET acknowledged_at = NOW()
+      SET acknowledged_at = COALESCE(response.acknowledged_at, NOW())
       FROM ai_platform.ai_coding_bridge_commands AS command
       WHERE response.command_id = command.id
         AND response.id = ${input.responseId}::uuid
         AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-        AND response.acknowledged_at IS NULL
       RETURNING response.id, response.command_id, response.kind, response.acknowledged_at
     ),
     marked AS (
