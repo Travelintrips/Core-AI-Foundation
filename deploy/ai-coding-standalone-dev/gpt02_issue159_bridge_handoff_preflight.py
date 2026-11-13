@@ -12,6 +12,7 @@ Only a separate authorized and reviewed transaction may ever insert a command.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from typing import Any, Mapping
@@ -164,5 +165,97 @@ def inspect_held_outbox_bridge_identity(
         "workerNotified": False,
         "dispatchPermitted": False,
         "finalAckVerified": False,
+        "releaseDecision": "NO_GO",
+    }
+
+
+# From the existing gpt02_stage.prepare_core_task_v1_internal contract:
+# the immutable task instruction is persisted in ai_coding_tasks, while
+# core_preparations stores its command/attempt/core-task and config digest.
+# This is read-only and must be executed via an independently scoped reader.
+BOUND_CORE_INSTRUCTION_SQL = """
+SELECT p.company_id,p.hub_task_id,
+       p.command_candidate_id::text,p.attempt_id::text,p.core_task_id::text,
+       p.config_sha256,
+       floor(extract(epoch from p.expires_at)*1000)::bigint AS expires_at_ms,
+       c.id::text AS id,c.task_number,c.project_name,c.repository,c.branch,
+       c.instruction,c.status
+FROM gpt02_stage.core_preparations p
+JOIN ai_platform.ai_coding_tasks c ON c.id=p.core_task_id
+WHERE p.company_id='default' AND p.hub_task_id=%s::integer
+  AND p.command_candidate_id=%s::uuid
+  AND p.attempt_id=%s::uuid
+ORDER BY p.core_task_id LIMIT 2
+"""
+BOUND_PREP_FIELDS = frozenset({
+    "company_id","hub_task_id","command_candidate_id","attempt_id",
+    "core_task_id","config_sha256","expires_at_ms",
+})
+BOUND_TASK_FIELDS = frozenset({
+    "id","task_number","project_name","repository","branch",
+    "instruction","status",
+})
+
+
+def inspect_persisted_core_instruction(
+    outbox: Any, prepared: Any, core_task: Any, now_ms: int,
+) -> dict[str, Any]:
+    """Attest proposal identity and instruction hash, never approve a send.
+
+    Inputs must come from a trusted read-only SQL adapter. A caller may forge
+    the JSON objects, so this pure function NEVER grants dispatch authority.
+    """
+    if type(now_ms) is not int or now_ms <= 0:
+        deny("CORE_INSTRUCTION_CLOCK_INVALID")
+    if not isinstance(outbox, Mapping) or set(outbox) != OUTBOX_FIELDS:
+        deny("HELD_OUTBOX_ROW_SHAPE_INVALID")
+    if outbox.get("delivery_state") != HELD or outbox.get("worker_id") != WORKER:
+        deny("HELD_OUTBOX_SCOPE_INVALID")
+    if not isinstance(prepared, Mapping) or set(prepared) != BOUND_PREP_FIELDS:
+        deny("CORE_PREPARATION_READBACK_SHAPE_INVALID")
+    if not isinstance(core_task, Mapping) or set(core_task) != BOUND_TASK_FIELDS:
+        deny("CORE_TASK_READBACK_SHAPE_INVALID")
+    for field in ("command_id", "attempt_id", "core_task_id"):
+        canonical_uuid(outbox.get(field), "OUTBOX_UUID_INVALID")
+    for field in ("command_candidate_id", "attempt_id", "core_task_id"):
+        canonical_uuid(prepared.get(field), "CORE_PREPARATION_UUID_INVALID")
+    canonical_uuid(core_task.get("id"), "CORE_TASK_UUID_INVALID")
+    task_id = outbox.get("hub_task_id")
+    config_hash = prepared.get("config_sha256")
+    expires_at_ms = prepared.get("expires_at_ms")
+    instruction = core_task.get("instruction")
+    if (
+        type(task_id) is not int or task_id <= 139
+        or prepared.get("company_id") != "default"
+        or prepared.get("hub_task_id") != task_id
+        or prepared.get("command_candidate_id") != outbox["command_id"]
+        or prepared.get("attempt_id") != outbox["attempt_id"]
+        or prepared.get("core_task_id") != outbox["core_task_id"]
+        or core_task.get("id") != outbox["core_task_id"]
+        or type(expires_at_ms) is not int or expires_at_ms <= now_ms
+        or not isinstance(config_hash, str) or not HEX64.fullmatch(config_hash)
+        or core_task.get("task_number") !=
+            ("GPT02DEV-" + str(task_id) + "-" + config_hash[:14])
+        or core_task.get("project_name") != "GPT02 DEV coding lifecycle"
+        or core_task.get("repository") != "Travelintrips/Core-AI-Foundation"
+        or core_task.get("branch") != "develop"
+        or core_task.get("status") != "PENDING"
+        or not isinstance(instruction, str) or not (1 <= len(instruction) <= 2000)
+        or any(ord(c) < 32 or ord(c) == 127 for c in instruction)
+    ):
+        deny("IMMUTABLE_CORE_INSTRUCTION_BINDING_REQUIRED")
+    return {
+        "environment": "DEV",
+        "stage": "READONLY_CORE_INSTRUCTION_SOURCE_BOUND",
+        "commandId": outbox["command_id"],
+        "coreTaskId": outbox["core_task_id"],
+        "attemptId": outbox["attempt_id"],
+        "instructionSha256": hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
+        "source": "gpt02_stage.core_preparations+ai_platform.ai_coding_tasks",
+        "trustedReaderMustAuthenticate": True,
+        "ownerChannelVerified": False,
+        "targetConversationVerified": False,
+        "bridgeCommandInserted": False,
+        "dispatchPermitted": False,
         "releaseDecision": "NO_GO",
     }
