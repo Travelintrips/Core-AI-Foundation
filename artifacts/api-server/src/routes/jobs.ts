@@ -82,8 +82,8 @@ router.get("/dev-center/jobs", async (req, res): Promise<void> => {
     const str=(v:unknown):string=>typeof v==="string"?v.slice(0,180):"";
     const [bridgeResult, executionResult] = await Promise.allSettled([
       db.execute(sql`SELECT id::text AS id, source, external_id, title, status, owner, created_at, updated_at FROM ai_task_bridge.jobs ORDER BY CASE WHEN status IN ('QUEUED','RUNNING','REVIEW_REQUIRED') THEN 0 ELSE 1 END, updated_at DESC LIMIT 100`),
-      db.execute(sql`SELECT e.id::text AS id,e.task_id,e.external_id,e.command_id::text AS command_id,e.title,e.source,e.status,e.progress,e.worker_id,e.worker_type,e.assigned_client_id,e.error_message,e.final_ack_verified,e.metadata,e.updated_at,t.assigned_to
-        FROM public.ai_execution_jobs e LEFT JOIN public.ai_tasks t ON t.id=e.task_id ORDER BY CASE WHEN e.status IN ('received','processing','dispatching','verifying','review_required','blocked') THEN 0 ELSE 1 END, e.updated_at DESC LIMIT 100`),
+      db.execute(sql`SELECT e.id::text AS id,e.task_id,e.external_id,e.command_id::text AS command_id,e.title,e.source,e.status,e.progress,e.worker_id,e.worker_type,e.assigned_client_id,e.error_message,e.callback_verified,e.attestation_verified,e.final_ack_verified,e.metadata,e.updated_at,t.status AS parent_task_status,t.assigned_to
+        FROM public.ai_execution_jobs e LEFT JOIN public.ai_tasks t ON t.id=e.task_id AND t.company_id=e.company_id ORDER BY CASE WHEN e.status IN ('received','processing','dispatching','verifying','review_required','blocked') THEN 0 ELSE 1 END, e.updated_at DESC LIMIT 100`),
     ]);
     const warnings:string[]=[];
     if(bridgeResult.status==="rejected")warnings.push("AI_TASK_BRIDGE_UNAVAILABLE");
@@ -107,8 +107,9 @@ router.get("/dev-center/jobs", async (req, res): Promise<void> => {
       const metadata=read(row["metadata"]);const status=String(row["status"]??"UNKNOWN").toUpperCase();
       const evidenceId=str(metadata["progressEvidenceId"])||str(metadata["checkpointId"]);
       const progressValue=metadata["verifiedProgress"];
-      const verifiedProgress=evidenceId && typeof progressValue==="number" && Number.isInteger(progressValue) && progressValue>=0 && progressValue<=100 && !["FAILED","BLOCKED","CANCELLED"].includes(status)?progressValue:status==="COMPLETED"&&row["final_ack_verified"]===true?100:null;
-      items.push({id:String(row["id"]),deleteKey:"execution:"+String(row["id"]),title:str(row["title"])||"AI Task",source:str(row["source"])||"AI Tasks",status,stage:str(metadata["stage"])||null,verifiedProgress,worker:str(row["worker_id"])||str(row["assigned_client_id"])||null,accountable:str(row["assigned_to"])||null,workerType:str(row["worker_type"])||null,blocker:str(row["error_message"])||str(metadata["lastDispatchError"])||null,evidence:evidenceId|| (row["final_ack_verified"]===true?"Final ACK terverifikasi":null),updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
+      const fullyVerified=status==="COMPLETED" && row["callback_verified"]===true && row["attestation_verified"]===true && row["final_ack_verified"]===true;
+      const verifiedProgress=evidenceId && typeof progressValue==="number" && Number.isInteger(progressValue) && progressValue>=0 && progressValue<=100 && !["FAILED","BLOCKED","CANCELLED"].includes(status)?progressValue:fullyVerified?100:null;
+      items.push({id:String(row["id"]),deleteKey:"execution:"+String(row["id"]),title:str(row["title"])||"AI Task",source:str(row["source"])||"AI Tasks",status,parentTaskStatus:str(row["parent_task_status"])||null,executionVerified:fullyVerified,stage:str(metadata["stage"])||null,verifiedProgress,worker:str(row["worker_id"])||str(row["assigned_client_id"])||null,accountable:str(row["assigned_to"])||null,workerType:str(row["worker_type"])||null,blocker:str(row["error_message"])||str(metadata["lastDispatchError"])||null,evidence:evidenceId|| (fullyVerified?"Callback, attestation, dan final ACK terverifikasi":null),updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null});
     }
     const viewerId = req.internalUser?.id;
     const hiddenRows = viewerId ? (await db.execute(sql`SELECT job_key FROM ai_platform.dev_monitor_dismissed_jobs WHERE user_id = ${viewerId}`)).rows : [];
