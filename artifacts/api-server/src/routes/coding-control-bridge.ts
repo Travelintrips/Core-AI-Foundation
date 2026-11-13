@@ -85,9 +85,9 @@ async function prepareAiTaskChatGptExecution(input: {
             worker_type='chatgpt_browser',
             status=CASE WHEN status='prepared' THEN 'received' ELSE status END,
             metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
-              'environment','development','accountAlias',${input.accountAlias},
+              'environment','development','accountAlias',${input.accountAlias}::text,
               'executionType','chatgpt_dispatch','productionAllowed',false,
-              'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}
+              'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}::text
             ),
             updated_at=NOW()
         WHERE id=${String(current["id"])}::uuid
@@ -105,9 +105,9 @@ async function prepareAiTaskChatGptExecution(input: {
         ${String(task["title"] ?? "AI Task ChatGPT dispatch")},${input.instruction},
         ${input.workerId},${input.workerId},'chatgpt_browser','received',0,
         jsonb_build_object(
-          'environment','development','accountAlias',${input.accountAlias},
+          'environment','development','accountAlias',${input.accountAlias}::text,
           'executionType','chatgpt_dispatch','productionAllowed',false,
-          'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}
+          'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}::text
         )
       )
       RETURNING id
@@ -129,8 +129,8 @@ async function markAiTaskChatGptExecutionDispatched(input: {
         worker_id=${input.workerId}, worker_type='chatgpt_browser', status='processing',
         progress=10, started_at=COALESCE(started_at,NOW()),
         metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
-          'dispatchStarted',true,'commandId',${input.commandId},
-          'eventId',${input.eventId},'dispatchCorrelationId',${input.correlationId}
+          'dispatchStarted',true,'commandId',${input.commandId}::text,
+          'eventId',${input.eventId}::text,'dispatchCorrelationId',${input.correlationId}::text
         ), updated_at=NOW()
     WHERE id=${input.executionId}::uuid AND status IN ('prepared','received','processing')
     RETURNING id

@@ -1300,9 +1300,9 @@ export async function completeCodingBridgeCommand(input: {
             attestation_verified = CASE WHEN ${executionAttested} THEN TRUE ELSE attestation_verified END,
             completed_at = CASE WHEN ${verifiedStatus} = 'FAILED' THEN COALESCE(completed_at,NOW()) ELSE completed_at END,
             metadata = COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
-              'statusCode',${evidence.statusCode},
-              'deliveryCode',${evidence.deliveryCode},
-              'e2eCode',${evidence.e2eCode},
+              'statusCode',${evidence.statusCode}::text,
+              'deliveryCode',${evidence.deliveryCode}::text,
+              'e2eCode',${evidence.e2eCode}::text,
               'callbackAt',NOW()::text
             ),
             updated_at = NOW()
