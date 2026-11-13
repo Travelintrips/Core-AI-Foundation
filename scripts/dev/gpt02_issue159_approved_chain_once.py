@@ -21,6 +21,11 @@ import sys
 import time
 from typing import Callable
 
+# Reuse already-installed GPT02 DEV modules; no package installation or
+# alternate trust implementation is permitted for this one-shot.
+if "/opt/ai-coding-standalone-dev" not in sys.path:
+    sys.path.insert(0, "/opt/ai-coding-standalone-dev")
+
 from gpt02_issue159_signer_approval_guard import canonical_sha, persisted_approval_fresh
 from gpt02_issue159_hub_core_signer_guard import require_hub_core_facts
 
