@@ -13,6 +13,7 @@ import grp
 import json
 import os
 import pwd
+import re
 import signal
 import struct
 import socket
@@ -195,7 +196,7 @@ def _require_persisted_admin_decision(
     chunks = []
     n = 0
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(2.0)
+        conn.settimeout(4.0)
         conn.connect(reader_socket_path)
         conn.sendall(request)
         while True:
@@ -303,7 +304,7 @@ def _require_persisted_lineage(
     chunks: list[bytes] = []
     size = 0
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(2.0)
+        conn.settimeout(4.0)
         conn.connect(reader_socket)
         if not hasattr(socket, "SO_PEERCRED"):
             raise RuntimeError("LINEAGE_PEER_CREDENTIALS_UNAVAILABLE")
@@ -423,8 +424,13 @@ class _Handler(socketserver.StreamRequestHandler):
                 "dispatchPermitted": False, "releaseDecision": "NO_GO",
             }))
         except BrokerAdmissionError as exc:
-            self.wfile.write(_response(403 if str(exc).startswith("PERSISTED_") else 400, {
-                "ok": False, "reason": "PERSISTED_APPROVAL_OR_SIGNED_EVIDENCE_DENIED",
+            code = str(exc)
+            # Never echo arbitrary exception text; a stable uppercase code
+            # is safe to expose while all authorization flags remain false.
+            if not re.fullmatch(r"[A-Z0-9_:-]{1,120}", code):
+                code = "PERSISTED_APPROVAL_OR_SIGNED_EVIDENCE_DENIED"
+            self.wfile.write(_response(403 if code.startswith("PERSISTED_") else 400, {
+                "ok": False, "reason": code,
                 "writerEnabled": False, "signingPermitted": False,
                 "authorizationGranted": False, "dispatchPermitted": False,
                 "releaseDecision": "NO_GO",
