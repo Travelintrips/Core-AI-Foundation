@@ -144,13 +144,18 @@ GRANT SELECT ON gpt02_private.positive_dispatch_permits,
 -- verifier. The dedicated writer credential must only become operational
 -- after separate four-signature, pinned-key, exact-command verifier review.
 CREATE FUNCTION gpt02_private.reserve_positive_dispatch_permit(
- p_command uuid,p_issuer_evidence uuid,p_verified_packet_sha256 text
+ p_command uuid,p_verified_packet_sha256 text,
+ p_issuer_claims_sha256 text,p_issuer_signature text
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $fn$
 DECLARE v record; v_now timestamptz; v_permit uuid;
 BEGIN
  IF session_user <> 'dev_gpt02_release_writer'
  OR p_verified_packet_sha256 IS NULL
  OR p_verified_packet_sha256 !~ '^[0-9a-f]{64}$'
+ OR p_issuer_claims_sha256 IS NULL
+ OR p_issuer_claims_sha256 !~ '^[0-9a-f]{64}$'
+ OR p_issuer_signature IS NULL
+ OR p_issuer_signature !~ '^[A-Za-z0-9_-]{86}$'
  THEN RAISE EXCEPTION USING ERRCODE='42501',
   MESSAGE='TRUSTED_RELEASE_WRITER_AND_PACKET_REQUIRED'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(p_command::text,0));
@@ -183,12 +188,21 @@ BEGIN
    ON p.command_candidate_id=e.command_id AND p.attempt_id=e.attempt_id
    AND p.hub_task_id=e.hub_task_id AND p.core_task_id=f.core_task_id
    AND p.hub_execution_id=f.hub_execution_id AND p.company_id='default'
- WHERE e.evidence_id=p_issuer_evidence AND e.command_id=p_command
+ WHERE e.command_id=p_command
+   AND e.digest=p_issuer_claims_sha256
+   AND e.signature=p_issuer_signature
    AND e.company_id='default' AND e.hub_task_id>139
    AND e.claims->>'environment'='DEV'
    AND e.claims->>'audience'='GPT02_ISSUER_LEASE_EVIDENCE_V1'
    AND e.claims->>'commandId'=e.command_id::text
    AND e.claims->>'attemptId'=e.attempt_id::text
+   AND e.claims->>'hubTaskId'=e.hub_task_id::text
+   AND e.claims->>'hubExecutionId'=f.hub_execution_id::text
+   AND e.claims->>'coreTaskId'=f.core_task_id::text
+   AND e.claims->>'linkId'=e.link_id::text
+   AND e.claims->>'fenceId'=e.fence_id::text
+   AND e.claims->>'receiptId'=e.receipt_id::text
+   AND e.claims->>'approvalDigest'=a.digest
    -- Original proof-only rows stay NO_DISPATCH, forever.
    AND NOT e.signing_grant AND NOT e.dispatch_allowed
    AND NOT c.dispatch_allowed AND NOT f.dispatch_allowed
@@ -254,10 +268,10 @@ BEGIN
 END $fn$;
 
 REVOKE ALL ON FUNCTION
- gpt02_private.reserve_positive_dispatch_permit(uuid,uuid,text),
+ gpt02_private.reserve_positive_dispatch_permit(uuid,text,text,text),
  gpt02_private.consume_positive_dispatch_permit(uuid,uuid,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
- gpt02_private.reserve_positive_dispatch_permit(uuid,uuid,text),
+ gpt02_private.reserve_positive_dispatch_permit(uuid,text,text,text),
  gpt02_private.consume_positive_dispatch_permit(uuid,uuid,text)
  TO dev_gpt02_release_writer;
 
