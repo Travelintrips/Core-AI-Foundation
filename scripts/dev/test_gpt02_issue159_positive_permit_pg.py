@@ -105,7 +105,24 @@ def main():
               CHECK (status IN ('RECEIVED','PROCESSING','COMPLETED','FAILED','CANCELLED')),
             UNIQUE(source,external_command_id)
           );
+          ALTER SCHEMA ai_platform OWNER TO gpt02_fixture_migrator;
+          ALTER TABLE ai_platform.ai_coding_tasks OWNER TO gpt02_fixture_migrator;
+          ALTER TABLE ai_platform.ai_coding_bridge_commands OWNER TO gpt02_fixture_migrator;
+          ALTER TABLE ai_platform.ai_coding_tasks ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE ai_platform.ai_coding_bridge_commands ENABLE ROW LEVEL SECURITY;
         """)
+        apply_file(ROOT /
+          "docs/dev/gpt02-issue159-exact-bridge-stage-role.PROPOSED.sql",
+          "/tmp/stage-role.sql", MIGRATOR, replace_migrator=True)
+        role_state = sql("""SELECT rolcanlogin::text||':'||rolconnlimit::text
+                 FROM pg_roles WHERE rolname='dev_gpt02_bridge_stage_login'""").stdout.strip()
+        ensure(role_state=="false:0", "STAGE_ROLE_NOT_DORMANT")
+        ensure(sql("""SELECT has_table_privilege('dev_gpt02_bridge_stage_login',
+                  'ai_platform.ai_coding_bridge_commands','UPDATE')""").stdout.strip()=="f",
+               "STAGE_ROLE_BROAD_WRITE_GRANT")
+        ensure(sql("""SELECT has_table_privilege('dev_gpt02_bridge_stage_login',
+                  'ai_platform.ai_coding_bridge_commands','INSERT')""").stdout.strip()=="t",
+               "STAGE_ROLE_MISSING_EXACT_INSERT_GRANT")
 
         roles = sql("""SELECT string_agg(rolname||':'||rolcanlogin::text,',' ORDER BY rolname)
             FROM pg_roles WHERE rolname IN
@@ -306,17 +323,20 @@ def main():
           and isinstance(node.value.value,str)]
         ensure(len(matches)==1, "HELD_BRIDGE_SQL_NOT_UNIQUE")
         held_sql = matches[0]
+        # Only in the disposable fixture, temporarily enable the dedicated
+        # stage login. Live DEV remains NOLOGIN / role absent.
+        sql("ALTER ROLE dev_gpt02_bridge_stage_login LOGIN CONNECTION LIMIT 3")
         # Simulate stage SQL parameter binding in the disposable psql only.
         # This inserts a HELD row; it never schedules or wakes any worker.
         def stage_sql(command=CMD, packet_sha="a"*64):
             expected = held_sql.replace("%s::uuid", "'" + command + "'::uuid",1)
             return expected.replace("%s::text", "'" + packet_sha + "'::text",1)
-        wrong_hash = sql(stage_sql(packet_sha="f"*64))
+        wrong_hash = sql(stage_sql(packet_sha="f"*64), "dev_gpt02_bridge_stage_login")
         ensure(wrong_hash.stdout.strip()=="",
                "UNVERIFIED_PACKET_HASH_COULD_STAGE_COMMAND")
-        wrong_id = sql(stage_sql(command="ffffffff-ffff-4fff-8fff-ffffffffffff"))
+        wrong_id = sql(stage_sql(command="ffffffff-ffff-4fff-8fff-ffffffffffff"), "dev_gpt02_bridge_stage_login")
         ensure(wrong_id.stdout.strip()=="","UNRELATED_ISSUER_UUID_STAGED")
-        staged = sql(stage_sql())
+        staged = sql(stage_sql(), "dev_gpt02_bridge_stage_login")
         ensure(staged.stdout.strip().startswith(
             CMD+"|"+CORE+"|ai-core|gpt02-issue159:"+CMD+"|ISSUE159_HELD|RECEIVED|"),
             "EXACT_HELD_BRIDGE_INSERT_MISSING_OR_ID_CHANGED: "+
@@ -328,7 +348,7 @@ def main():
           FROM ai_platform.ai_coding_bridge_commands""").stdout.strip()
         ensure(check==CMD+":"+CORE+":ai-core:ISSUE159_HELD:RECEIVED:false:true",
                "HELD_BRIDGE_COMMAND_COULD_BE_GENERIC_CLAIMED")
-        duplicate = sql(stage_sql())
+        duplicate = sql(stage_sql(), "dev_gpt02_bridge_stage_login")
         ensure(duplicate.stdout.strip()=="","HELD_BRIDGE_REPLAY_INSERTED_DUPLICATE")
         ensure(sql("SELECT count(*) FROM ai_platform.ai_coding_bridge_commands"
                    ).stdout.strip()=="1","HELD_BRIDGE_NOT_EXACTLY_ONCE")
