@@ -26,6 +26,7 @@ describe("AI Task GPT02 execution lifecycle linkage", () => {
     expect(wake).toContain("executionJobId?: string");
     expect(wake).toContain("UUID.test(input.executionJobId)");
     expect(wake).toContain("{ executionJobId: input.executionJobId }");
+    expect(wake).toContain('const activeStatus = command.status === undefined ||');
     expect(wake).toContain('["RECEIVED","PENDING","QUEUED","PROCESSING"].includes(command.status)');
     expect(wake).toContain('metadata["executionJobId"] !== input.executionJobId');
   });
