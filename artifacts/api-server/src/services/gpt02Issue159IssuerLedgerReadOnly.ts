@@ -36,6 +36,9 @@ const denied = (reason: string, readOnlySessionVerified = false) => Object.freez
   environment: "DEV" as const,
   reason,
   readOnlySessionVerified,
+  tlsVerified: false,
+  clientTlsVerified: false,
+  backendTlsVerified: false,
   issuerLedgerMatched: false,
   persistedTrustedReadProven: false,
   cryptographicSignaturesVerified: false,
@@ -143,12 +146,18 @@ function validRequest(input: unknown): input is Request {
       .every((k) => typeof c[k] === "string" && UUID.test(c[k] as string));
 }
 
+function clientTlsIsVerified(client: Client): boolean {
+  const stream = client.connection?.stream;
+  return stream?.encrypted === true && stream?.authorized === true &&
+    !stream.authorizationError;
+}
+
 function identityMatches(r: Row, client: Client) {
   const stream = client.connection?.stream;
   return r.db === "postgres" && r.login === ROLE && r.session === ROLE &&
     r.tx_readonly === true && r.search_path_locked === true &&
     r.statement_timeout_locked === true && r.lock_timeout_locked === true &&
-    r.idle_timeout_locked === true && r.db_tls === true &&
+    r.idle_timeout_locked === true &&
     Number.isSafeInteger(r.backend_pid) && Number(r.backend_pid) > 0 &&
     r.restricted_role === true && r.no_memberships === true &&
     r.no_global_read === true && r.no_global_write === true &&
@@ -176,17 +185,23 @@ export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
     await client.query("SET LOCAL idle_in_transaction_session_timeout='10s'");
     await client.query("SET LOCAL row_security=on");
     const identity = await client.query(GPT02_ISSUE159_ISSUER_IDENTITY_SQL);
+    const clientTlsVerified = clientTlsIsVerified(client);
+    const backendTlsVerified = identity.rows[0]?.db_tls === true;
     if (identity.rows.length !== 1 || !identityMatches(identity.rows[0], client)) {
       return Object.freeze({
         ...denied("ISSUER_RESTRICTED_READER_IDENTITY_NOT_VERIFIED"),
         nativeRoleAuthenticated: false as const,
-        tlsVerified: false as const,
+        tlsVerified: clientTlsVerified,
+        clientTlsVerified,
+        backendTlsVerified,
       });
     }
     return Object.freeze({
       ...denied("ISSUER_READER_NATIVE_SESSION_VERIFIED", true),
       nativeRoleAuthenticated: true as const,
       tlsVerified: true as const,
+      clientTlsVerified: true as const,
+      backendTlsVerified,
       readOnlySessionVerified: true as const,
       businessEvidenceRead: false as const,
     });
@@ -195,6 +210,8 @@ export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
       ...denied("ISSUER_READER_HEALTH_PROBE_FAILED_CLOSED"),
       nativeRoleAuthenticated: false as const,
       tlsVerified: false as const,
+      clientTlsVerified: false as const,
+      backendTlsVerified: false as const,
     });
   } finally {
     if (client) {
@@ -252,6 +269,8 @@ export async function readGpt02Issue159IssuerLedgerReadOnly(
     await client.query("SET LOCAL idle_in_transaction_session_timeout='10s'");
     await client.query("SET LOCAL row_security=on");
     const identity = await client.query(GPT02_ISSUE159_ISSUER_IDENTITY_SQL);
+    const clientTlsVerified = clientTlsIsVerified(client);
+    const backendTlsVerified = identity.rows[0]?.db_tls === true;
     if (identity.rows.length !== 1 || !identityMatches(identity.rows[0], client))
       return denied("ISSUER_RESTRICTED_READER_IDENTITY_NOT_VERIFIED");
     verified = true;
@@ -260,7 +279,12 @@ export async function readGpt02Issue159IssuerLedgerReadOnly(
       c.hubTaskId, c.companyId, c.commandId, c.attemptId,
       c.linkId, c.receiptId, c.fenceId,
     ]);
-    if (data.rows.length !== 1) return denied("ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE", true);
+    if (data.rows.length !== 1) return Object.freeze({
+      ...denied("ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE", true),
+      tlsVerified: clientTlsVerified,
+      clientTlsVerified,
+      backendTlsVerified,
+    });
     const row = data.rows[0];
     const approvalDigest = createHash("sha256")
       .update(canonicalGpt02Issue159Approval(row.approval_claims)).digest("hex");
@@ -277,6 +301,9 @@ export async function readGpt02Issue159IssuerLedgerReadOnly(
     return Object.freeze({
       ...denied("ISSUER_LEDGER_LINEAGE_MATCHED_NO_AUTHORITY", true),
       issuerLedgerMatched: true as const,
+      tlsVerified: clientTlsVerified,
+      clientTlsVerified,
+      backendTlsVerified,
       // A caller-supplied pool cannot attest its own independent custody.
       persistedTrustedReadProven: false as const,
     });

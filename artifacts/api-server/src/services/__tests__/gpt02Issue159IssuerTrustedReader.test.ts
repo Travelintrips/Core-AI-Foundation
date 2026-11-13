@@ -104,6 +104,8 @@ describe("GPT02 Issue159 issuer trusted-read adapter", () => {
     expect(health.readOnlySessionVerified).toBe(true);
     expect(health.nativeRoleAuthenticated).toBe(true);
     expect(health.tlsVerified).toBe(true);
+    expect(health.clientTlsVerified).toBe(true);
+    expect(health.backendTlsVerified).toBe(true);
     expect(health.operationalTrustedReaderRuntime).toBe(false);
     expect(health.persistedTrustedReadProven).toBe(false);
     expect(health.signingPermitted).toBe(false);
@@ -113,6 +115,8 @@ describe("GPT02 Issue159 issuer trusted-read adapter", () => {
     const result = await reader.read({ claims, observedAt: 5000 });
     expect(result.reason).toBe("ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE");
     expect(result.readOnlySessionVerified).toBe(true);
+    expect(result.clientTlsVerified).toBe(true);
+    expect(result.backendTlsVerified).toBe(true);
     // A test-injected pool can never be promoted to operational provenance.
     expect(result.persistedTrustedReadProven).toBe(false);
     expect(result.signingPermitted).toBe(false);
