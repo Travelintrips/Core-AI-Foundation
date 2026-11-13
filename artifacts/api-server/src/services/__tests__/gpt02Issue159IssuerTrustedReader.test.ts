@@ -5,6 +5,7 @@ import {
 } from "../gpt02Issue159IssuerTrustedReader.js";
 import {
   GPT02_ISSUE159_ISSUER_IDENTITY_SQL,
+  GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL,
   GPT02_ISSUE159_ISSUER_LEDGER_SQL,
 } from "../gpt02Issue159IssuerLedgerReadOnly.js";
 
@@ -44,7 +45,8 @@ class FakeClient {
   released = false;
   connection = { stream: { encrypted: true, authorized: true } };
   async query(sql: string) {
-    if (sql === GPT02_ISSUE159_ISSUER_IDENTITY_SQL) {
+    if (sql === GPT02_ISSUE159_ISSUER_IDENTITY_SQL ||
+        sql === GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL) {
       return { rows: [{
         db: "postgres",
         login: role,

@@ -81,6 +81,30 @@ export const GPT02_ISSUE159_ISSUER_IDENTITY_SQL = [
   " FROM pg_roles r WHERE r.rolname=current_user",
 ].join(" ");
 
+// Request-time identity check: read-only session and TLS are proved on every
+// issuer request; the exhaustive privilege audit remains in the health probe.
+export const GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL = [
+  "SELECT current_database() AS db,current_user AS login,session_user AS session,",
+  " current_setting('transaction_read_only')='on' AS tx_readonly,",
+  " current_setting('search_path')='pg_catalog' AS search_path_locked,",
+  " current_setting('statement_timeout')='5s' AS statement_timeout_locked,",
+  " current_setting('lock_timeout')='1s' AS lock_timeout_locked,",
+  " current_setting('idle_in_transaction_session_timeout')='10s' AS idle_timeout_locked,",
+  " pg_backend_pid() AS backend_pid,",
+  " EXISTS(SELECT 1 FROM pg_stat_ssl s WHERE s.pid=pg_backend_pid() AND s.ssl) AS db_tls",
+].join(" ");
+
+function fastIdentityMatches(r: Row, client: Client) {
+  const stream = client.connection?.stream;
+  return r.db === "postgres" && r.login === ROLE && r.session === ROLE &&
+    r.tx_readonly === true && r.search_path_locked === true &&
+    r.statement_timeout_locked === true && r.lock_timeout_locked === true &&
+    r.idle_timeout_locked === true && r.db_tls === true &&
+    Number.isSafeInteger(r.backend_pid) && Number(r.backend_pid) > 0 &&
+    stream?.encrypted === true && stream?.authorized === true &&
+    !stream.authorizationError;
+}
+
 export const GPT02_ISSUE159_ISSUER_LEDGER_SQL = [
   "SELECT a.claims AS approval_claims,a.digest AS approval_digest,",
   " l.claims AS link_claims,l.link_digest AS stored_link_digest,",
@@ -166,6 +190,7 @@ function identityMatches(r: Row, client: Client) {
 export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
   let client: Client | undefined;
   let began = false;
+  let nativeIdentityVerified = false;
   try {
     client = await pool.connect();
     await client.query("BEGIN READ ONLY");
@@ -183,6 +208,7 @@ export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
         tlsVerified: false as const,
       });
     }
+    nativeIdentityVerified = true;
     return Object.freeze({
       ...denied("ISSUER_READER_NATIVE_SESSION_VERIFIED", true),
       nativeRoleAuthenticated: true as const,
@@ -198,8 +224,21 @@ export async function probeGpt02Issue159IssuerReaderReadOnly(pool: Pool) {
     });
   } finally {
     if (client) {
-      if (began) try { await client.query("ROLLBACK"); } catch { /* fail-closed */ }
-      try { client.release(true); } catch { /* fail-closed */ }
+      let rolledBack = !began;
+      if (began) {
+        try {
+          await client.query("ROLLBACK");
+          rolledBack = true;
+        } catch {
+          rolledBack = false;
+        }
+      }
+      let released = false;
+      try {
+        client.release(!(nativeIdentityVerified && rolledBack));
+        released = true;
+      } catch { /* fail-closed */ }
+      if (!rolledBack || !released) throw Error("ISSUER_READONLY_SESSION_CLEANUP_FAILED");
     }
   }
 }
@@ -251,8 +290,8 @@ export async function readGpt02Issue159IssuerLedgerReadOnly(
     await client.query("SET LOCAL lock_timeout='1s'");
     await client.query("SET LOCAL idle_in_transaction_session_timeout='10s'");
     await client.query("SET LOCAL row_security=on");
-    const identity = await client.query(GPT02_ISSUE159_ISSUER_IDENTITY_SQL);
-    if (identity.rows.length !== 1 || !identityMatches(identity.rows[0], client))
+    const identity = await client.query(GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL);
+    if (identity.rows.length !== 1 || !fastIdentityMatches(identity.rows[0], client))
       return denied("ISSUER_RESTRICTED_READER_IDENTITY_NOT_VERIFIED");
     verified = true;
     const c = input.claims as Row;
@@ -280,12 +319,32 @@ export async function readGpt02Issue159IssuerLedgerReadOnly(
       // A caller-supplied pool cannot attest its own independent custody.
       persistedTrustedReadProven: false as const,
     });
-  } catch {
-    return denied("ISSUER_LEDGER_READ_FAILED_CLOSED", verified);
+  } catch (error) {
+    verified = false;
+    const failure = error as { message?: unknown; code?: unknown };
+    // Never pass arbitrary DB exception messages into public evidence.
+    // PostgreSQL SQLSTATE is a stable five-character alphanumeric code.
+    const safe = typeof failure?.code === "string" &&
+      /^[0-9A-Z]{5}$/.test(failure.code)
+      ? "DB_" + failure.code : "ISSUER_LEDGER_READ_FAILED_CLOSED";
+    return denied(safe, false);
   } finally {
     if (client) {
-      if (began) try { await client.query("ROLLBACK"); } catch { /* fail-closed */ }
-      try { client.release(true); } catch { /* fail-closed */ }
+      let rolledBack = !began;
+      if (began) {
+        try {
+          await client.query("ROLLBACK");
+          rolledBack = true;
+        } catch {
+          rolledBack = false;
+        }
+      }
+      let released = false;
+      try {
+        client.release(!(verified && rolledBack));
+        released = true;
+      } catch { /* fail-closed */ }
+      if (!rolledBack || !released) throw Error("ISSUER_READONLY_SESSION_CLEANUP_FAILED");
     }
   }
 }
