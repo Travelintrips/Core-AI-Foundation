@@ -6,7 +6,7 @@ import {
   verifyIssue159ReleaseCandidate, verifyIssue159ReleaseUsingPinnedRoot,
 } from "./dev-gpt02-issue159-release-authorization.mjs";
 import {
-  BridgeViolation, dispatchOnce, reconcile, runKey, gatewaySessionKey,
+  BridgeViolation, dispatchOnce, reconcile, runKey, gatewaySessionKey, verifyReceipt,
 } from "./dev-gpt02-gateway-bridge.mjs";
 
 const CMD="10000000-0000-4000-8000-000000000001";
@@ -192,6 +192,16 @@ test("synthetic signed release works with ORIGINAL gateway once-only transport a
   assert.equal(fixture.calls.send,1);
   assert.equal(fixture.calls.callback,1);
   assert.equal(fixture.calls.ack,1);
+  const stored=await fixture.store.read(runKey(r.work,binding));
+  assert.equal(stored.status,"FINAL_ACK");
+  assert.equal(verifyReceipt(stored.receipt,assistant.publicKey,{
+    ...r.work,ownerChannel:OWNER,workerId:binding.workerId,
+    provider:binding.provider,principalFingerprint:binding.principalFingerprint,
+    runId:"11111111-2222-4333-8444-555555555555",
+    sessionKey:gatewaySessionKey(binding,r.work),
+    assistantMessageId:"22222222-3333-4333-8444-555555555555",
+    assistantResponseHash:stored.receipt.assistantResponseHash,
+  }),true);
 });
 test("operational entrypoint cannot accept caller-supplied public key as trust",()=>{
   const input=setup();
