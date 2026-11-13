@@ -18,6 +18,33 @@ function normalizeDevWakeAccountAlias(accountAlias: string): string {
   return match?.[1] ?? normalized;
 }
 
+/** Read-only configured account/owner/target check; does not inspect worker health or dispatch. */
+export async function isConfiguredDevWakeAccountTarget(input: {
+  accountAlias: string;
+  ownerChannel: string;
+  targetConversationId: string;
+  requestHost?: string;
+}): Promise<boolean> {
+  try {
+    if (!isDevWakeRuntime(input.requestHost)) return false;
+    const config = await loadDevWakeRuntimeConfig(input.requestHost);
+    if (!config.enabled) return false;
+    const alias = normalizeDevWakeAccountAlias(input.accountAlias);
+    const targetConversationId = input.targetConversationId.toLowerCase();
+    if (alias === "GPT01") {
+      return config.legacyTargets.some(value =>
+        value.ownerChannel === input.ownerChannel &&
+        value.targetConversationId === targetConversationId);
+    }
+    return config.bindings.some(value =>
+      value.accountAlias === alias &&
+      value.ownerChannel === input.ownerChannel &&
+      value.targetConversationId === targetConversationId);
+  } catch {
+    return false;
+  }
+}
+
 /** Aliases need an already verified receipt; raw confirmed wake bootstraps an exact configured pair. */
 export async function resolveVerifiedDevWakeTarget(
   accountAlias: string,
