@@ -33,7 +33,10 @@ VERIFIER_SOCKET = "/run/gpt02-issue159-verifier/verify.sock"
 VERIFIER_USER = "gpt02-issue159-verifier"
 VERIFIER_GROUP = "gpt02-issue159-signers"
 MAX_RESPONSE = 32768
-REQUEST_TIMEOUT_S = 3.0
+# Verifier performs two independent bounded trusted readbacks (4s each).
+# Keep this request bounded, but do not time out before those readers can finish.
+# The broker separately refuses an issuer lease with <3.5s remaining.
+REQUEST_TIMEOUT_S = 9.0
 
 TOP_FIELDS = frozenset((
     "ok", "environment", "result", "writerEnabled", "databaseConnected",
