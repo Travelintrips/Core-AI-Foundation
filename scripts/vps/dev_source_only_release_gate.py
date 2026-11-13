@@ -72,11 +72,15 @@ def classify_compare(data, base_sha, target_sha):
     if not isinstance(data, dict):
         raise ComparisonError("compare result unavailable")
     base = data.get("base_commit")
-    head = data.get("head_commit")
     ancestor = data.get("merge_base_commit")
-    if any(not isinstance(x, dict) for x in (base, head, ancestor)):
+    commits = data.get("commits")
+    # GitHub REST compare endpoint returns base_commit, merge_base_commit and
+    # commits[-1] as head. It does NOT have a "head_commit" member.
+    if (not isinstance(base, dict) or not isinstance(ancestor, dict) or
+            not isinstance(commits, list) or not commits or
+            not all(isinstance(commit, dict) for commit in commits)):
         raise ComparisonError("missing Git ancestry evidence")
-    if (base.get("sha") != base_sha or head.get("sha") != target_sha or
+    if (base.get("sha") != base_sha or commits[-1].get("sha") != target_sha or
             ancestor.get("sha") != base_sha):
         raise ComparisonError("comparison not pinned to deployed SHA")
     status = data.get("status")
@@ -89,8 +93,8 @@ def classify_compare(data, base_sha, target_sha):
         raise ComparisonError("missing or potentially truncated file list")
     if type(data.get("total_commits")) is not int or not 1 <= data["total_commits"] <= 250:
         raise ComparisonError("missing or truncated commit history")
-    if data["total_commits"] != ahead:
-        raise ComparisonError("inconsistent commit count")
+    if data["total_commits"] != ahead or len(commits) != ahead:
+        raise ComparisonError("incomplete compare commit list")
     seen = set()
     app_changes = []
     for entry in files:

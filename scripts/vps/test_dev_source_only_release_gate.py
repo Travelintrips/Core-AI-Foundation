@@ -15,7 +15,7 @@ def make_compare(names, status="ahead"):
     files = [{"filename": name, "status": "modified"} for name in names]
     return {
         "base_commit": {"sha": BASE},
-        "head_commit": {"sha": HEAD},
+        "commits": [{"sha": HEAD}],
         "merge_base_commit": {"sha": BASE},
         "status": status,
         "ahead_by": 1,
@@ -79,6 +79,18 @@ class GateTests(unittest.TestCase):
     def test_empty_diff_not_assumed_source_only(self):
         d = make_compare([])
         with self.assertRaisesRegex(ComparisonError, "file list"):
+            classify_compare(d, BASE, HEAD)
+
+    def test_last_commit_must_equal_target_sha(self):
+        d = make_compare(["scripts/windows/ai-core/a.py"])
+        d["commits"][-1]["sha"] = "3" * 40
+        with self.assertRaisesRegex(ComparisonError, "not pinned"):
+            classify_compare(d, BASE, HEAD)
+
+    def test_incomplete_commits_list_fails_closed(self):
+        d = make_compare(["scripts/windows/ai-core/a.py"])
+        d["commits"] = []
+        with self.assertRaises(ComparisonError):
             classify_compare(d, BASE, HEAD)
 
     def test_missing_merge_base_blocks(self):

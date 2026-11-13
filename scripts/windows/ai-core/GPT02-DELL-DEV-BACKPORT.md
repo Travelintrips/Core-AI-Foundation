@@ -39,6 +39,7 @@ Historical details and source custody are recorded in PR #1723 and review-only P
 The verified browser-wake → DELL → callback path still does **not** prove Task Hub/issuer Task #166 → same command ID: Task #166 retains `NO_DISPATCH`, and no signed dispatch grant is inferred.
 ## Source-only develop merge: no DEV runtime restart
 
+- The source-only classifier was verified against **actual GitHub REST Compare JSON**, where the exact target SHA is `commits[-1].sha`. Its tests require exact base/merge ancestry, complete commits, and the full changed-path list. A real 42-file GPT02 source-only comparison produced `SKIP_DEV_RESTART`; a real 25-file application change produced `NORMAL_DEV_RELEASE`.
 - `scripts/vps/dev_source_only_release_gate.py` verifies a **complete** GitHub Compare response from the current healthy DEV deployed commit to the exact target `develop` SHA. A SHA/name mismatch, non-descendant commit, malformed path, rename, duplicate filename, or GitHub failure is **BLOCKED**.
 - Only `scripts/windows/ai-core/**` and explicitly reviewed DEV source-only release-control files can be `SKIP_DEV_RESTART`. Any API, Dockerfile, frontend, dependency lock, unrelated workflow or runtime change remains `NORMAL_DEV_RELEASE`.
 - `.github/workflows/hostinger-dev-deploy.yml` has a read-only `source-only-scope` job before the existing `deploy` job. Source-only commits skip container deployment; application changes continue the original DEV deployment checks.
