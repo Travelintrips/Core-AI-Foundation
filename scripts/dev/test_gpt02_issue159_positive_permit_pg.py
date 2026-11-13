@@ -63,7 +63,13 @@ def main():
         for _ in range(100):
             ready = sql("SELECT 1", required=False)
             if ready.returncode == 0 and ready.stdout.strip() == "1":
-                break
+                # postgres:16-alpine bootstrap can briefly accept connections
+                # before terminating its temporary server and starting the
+                # final one; require two stable probes before loading the seed.
+                time.sleep(.45)
+                stable = sql("SELECT 1", required=False)
+                if stable.returncode == 0 and stable.stdout.strip() == "1":
+                    break
             time.sleep(.25)
         else:
             raise AssertionError("POSTGRES_16_DISPOSABLE_NOT_READY")
