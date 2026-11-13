@@ -8,6 +8,8 @@ type Job = {
   title: string;
   source: string;
   status: string;
+  parentTaskStatus?: string | null;
+  executionVerified?: boolean;
   stage?: string | null;
   verifiedProgress?: number | null;
   worker?: string | null;
@@ -231,13 +233,14 @@ function FragmentRow({ job, open, stale, checked, toggleChecked, assistance, onA
         disabled={!terminal.has(job.status) || !job.deleteKey} onClick={event => event.stopPropagation()}
         onChange={event => toggleChecked(event.target.checked)} /></td>
       <td className="p-3"><strong className="font-medium">{job.title}</strong><div className="text-xs text-muted-foreground break-all">{job.source} · {job.id}</div></td>
-      <td className="p-3"><span className="rounded bg-muted px-2 py-1 text-xs">{job.status}</span>{isHistorical(job) && <div className="mt-1 text-xs text-muted-foreground">Riwayat lama</div>}{stale && <div className="mt-1 text-xs text-amber-600">Tidak diperbarui &gt;60 menit</div>}</td>
+      <td className="p-3"><span className="rounded bg-muted px-2 py-1 text-xs">{job.status}</span>{job.executionVerified && <div className="mt-1 text-xs font-medium text-green-700 dark:text-green-400">Eksekusi selesai — ACK terverifikasi</div>}{isHistorical(job) && <div className="mt-1 text-xs text-muted-foreground">Riwayat lama</div>}{stale && <div className="mt-1 text-xs text-amber-600">Tidak diperbarui &gt;60 menit</div>}</td>
       <td className="p-3">{typeof job.verifiedProgress === "number" ? <div className="flex items-center gap-2"><progress className="w-28" max={100} value={job.verifiedProgress} /><span>{job.verifiedProgress}%</span></div> : <span className="text-muted-foreground">Belum terverifikasi</span>}</td>
       <td className="p-3">{job.worker || "Belum ditetapkan"}{job.workerType && <div className="text-xs text-muted-foreground">{job.workerType}</div>}</td>
       <td className="p-3">{job.accountable || assistance?.assigned_user || "Belum ditetapkan"}{!job.accountable && assistance?.assigned_user && <div className="text-xs text-muted-foreground">PIC bantuan Human</div>}</td>
       <td className="p-3">{formatWib(job.updatedAt)} WIB</td>
     </tr>
     {open && <tr className="border-t bg-muted/20"><td colSpan={7} className="p-4 space-y-1 text-sm">
+      {job.parentTaskStatus && <div><strong>Status tugas induk:</strong> {job.parentTaskStatus} <span className="text-muted-foreground">(workflow terpisah dari eksekusi)</span></div>}
       <div><strong>Tahap:</strong> {job.stage || "Belum terverifikasi"}</div>
       <div><strong>Hambatan:</strong> {job.blocker || "Tidak tercatat"}</div>
       <div><strong>Bukti / ACK:</strong> {job.evidence || "Belum tersedia"}</div>
