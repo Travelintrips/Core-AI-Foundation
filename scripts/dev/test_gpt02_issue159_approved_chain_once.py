@@ -44,6 +44,48 @@ class ApprovedChainOnceTest(unittest.TestCase):
                 with self.assertRaisesRegex(mod.ChainDenied,"CHAIN_ATTESTOR_SECRET_NOT_PREPARED"):
                     mod.preflight(no_external_calls)
 
+    def test_missing_dedicated_issuer_secret_blocks_before_any_signing(self):
+        with tempfile.TemporaryDirectory() as d:
+            cred=SimpleNamespace(
+                is_file=lambda: True, is_symlink=lambda: False,
+                stat=lambda: SimpleNamespace(st_uid=0, st_mode=0o100600),
+            )
+            with patch.object(mod.os,"geteuid",return_value=0), \
+                 patch.dict(os.environ,{"APP_ENV":"development",
+                                       "GPT02_ISSUE159_CHAIN_ONCE":"explicit-supervised"}), \
+                 patch.object(mod,"ATTESTOR_CRED",cred), \
+                 patch.object(mod,"ISSUER_CRED",Path(d)/"absent"):
+                with self.assertRaisesRegex(mod.ChainDenied,"CHAIN_ISSUER_SECRET_NOT_PREPARED"):
+                    mod.preflight(lambda *args,**kwargs: (_ for _ in ()).throw(
+                        AssertionError("NO_SIGNER_OR_READER_CALL_ALLOWED")))
+
+    def test_issuer_finalizer_failure_stops_outer_chain_without_false_success(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            units=(("approval","fixture-approval",root/"approval"),
+                   ("hub","fixture-hub",root/"hub"),
+                   ("core","fixture-core",root/"core"))
+            called=[]
+            def fake_start(unit,run):
+                called.append(unit)
+                if unit=="fixture-issuer":
+                    raise RuntimeError("SYNTHETIC_ISSUER_FINALIZER_FAILURE")
+                for _,name,path in units:
+                    if name==unit: path.write_text("synthetic")
+            with patch.object(mod,"LOCK",root/"lock"), \
+                 patch.object(mod,"LINK_ASSEMBLER",root/"builder"), \
+                 patch.object(mod,"SIGNER_UNITS",units), \
+                 patch.object(mod,"ATTESTOR_UNIT","fixture-attestor"), \
+                 patch.object(mod,"ISSUER_UNIT","fixture-issuer"), \
+                 patch.object(mod,"preflight"), \
+                 patch.object(mod,"require_link_and_time"), \
+                 patch.object(mod,"start_once",side_effect=fake_start):
+                with self.assertRaisesRegex(RuntimeError,"SYNTHETIC_ISSUER_FINALIZER_FAILURE"):
+                    mod.execute(lambda *args,**kw: SimpleNamespace(stdout=""))
+                self.assertEqual(called,["fixture-approval","fixture-hub",
+                                         "fixture-core","fixture-attestor",
+                                         "fixture-issuer"])
+
     def test_preexisting_signer_output_denies_replay_before_service_start(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
@@ -59,6 +101,8 @@ class ApprovedChainOnceTest(unittest.TestCase):
                  patch.dict(os.environ,{"APP_ENV":"development",
                                        "GPT02_ISSUE159_CHAIN_ONCE":"explicit-supervised"}), \
                  patch.object(mod,"ATTESTOR_CRED",cred), \
+                 patch.object(mod,"ISSUER_CRED",cred), \
+                 patch.object(mod,"ISSUER_SIGNER_KEY",cred), \
                  patch.object(mod,"LINK_ASSEMBLER",assembler), \
                  patch.object(mod,"LINK",root/"absent-link"), \
                  patch.object(mod,"SIGNER_UNITS",(("approval","fixture-unit",output),)):
@@ -81,6 +125,7 @@ class ApprovedChainOnceTest(unittest.TestCase):
                  patch.object(mod,"LINK_ASSEMBLER",root/"builder.py"), \
                  patch.object(mod,"SIGNER_UNITS",units), \
                  patch.object(mod,"ATTESTOR_UNIT","fixture-attestor.service"), \
+                 patch.object(mod,"ISSUER_UNIT","fixture-issuer.service"), \
                  patch.object(mod,"preflight") as check, \
                  patch.object(mod,"require_link_and_time") as verified, \
                  patch.object(mod,"start_once",side_effect=fake_start):
@@ -88,7 +133,8 @@ class ApprovedChainOnceTest(unittest.TestCase):
                     stdout="",returncode=0))
                 self.assertEqual(started,
                     ["fixture-approval.service","fixture-hub.service",
-                     "fixture-core.service","fixture-attestor.service"])
+                     "fixture-core.service","fixture-attestor.service",
+                     "fixture-issuer.service"])
                 self.assertEqual(check.call_count,2)
                 verified.assert_called_once()
 

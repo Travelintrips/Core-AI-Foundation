@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""One supervised DEV Issue159 invocation: signed approval -> Hub/Core -> attestor.
+"""One supervised DEV Issue159 invocation: approval -> Hub/Core -> attestor -> issuer.
 
 Reuse the existing signer units, root-owned approval evidence, independent
 Hub/Core and Super Admin read-only sockets, and existing attestor RPC unit.
 This does NOT provision credentials, create/refresh a task or approval,
-dispatch to DELL, consume a nonce, reserve a fence or authorize issuer work.
+or dispatch to DELL. It delegates issuer nonce/fence/lease operations only to
+the separately reviewed, dedicated issuer one-shot service.
 
 No timers, background jobs, retries, daemon, or restart of custody services.
 Refuse until every dependency is ready so a 4-minute approval is not wasted.
@@ -34,6 +35,10 @@ APPROVED = APP_ROOT / "gpt02_issue159_approved_claims.json"
 LINK = APP_ROOT / "gpt02_issue159_hub_core_link_claims.json"
 LINK_ASSEMBLER = Path("/root/gpt02-issue159-assemble-hub-core-link.py")
 ATTESTOR_CRED = Path("/etc/credstore.encrypted/gpt02-issue159-attestor-dsn")
+ISSUER_CRED = Path("/etc/credstore.encrypted/gpt02-issue159-issuer-dsn")
+ISSUER_SIGNER_KEY = Path("/etc/credstore.encrypted/gpt02-issue159-issuer-private-key.pkcs8")
+ISSUER_CLAIMS = APP_ROOT / "gpt02_issue159_issuer_claims.json"
+ISSUER_SIGNATURE = Path("/run/gpt02-issue159-sign-once-issuer/issuer-signature.json")
 LOCK = Path("/run/lock/gpt02-issue159-approved-chain.lock")
 SIGNER_UNITS = (
     ("approval", "gpt02-issue159-sign-once-approval.service",
@@ -44,6 +49,8 @@ SIGNER_UNITS = (
      Path("/run/gpt02-issue159-sign-once-core/core-signature.json")),
 )
 ATTESTOR_UNIT = "gpt02-issue159-attestor-record-once.service"
+ISSUER_UNIT = "gpt02-issue159-issuer-finalize-once.service"
+ISSUER_SIGNER_UNIT = "gpt02-issue159-sign-once-issuer.service"
 MIN_PRE_SIGN_MS = 125_000
 MIN_AFTER_LINK_MS = 55_000
 
@@ -88,10 +95,23 @@ def preflight(run=subprocess.run, *, now_fn=lambda: int(time.time()*1000)) -> No
             or ATTESTOR_CRED.stat().st_uid!=0
             or stat.S_IMODE(ATTESTOR_CRED.stat().st_mode)!=0o600):
         deny("CHAIN_ATTESTOR_SECRET_NOT_PREPARED")
+    # Both isolated writer roles must be provisioned before any short-lived
+    # approval is spent; never issue three signatures then stop at issuer.
+    if (not ISSUER_CRED.is_file() or ISSUER_CRED.is_symlink()
+            or ISSUER_CRED.stat().st_uid != 0
+            or stat.S_IMODE(ISSUER_CRED.stat().st_mode) != 0o600):
+        deny("CHAIN_ISSUER_SECRET_NOT_PREPARED")
+    if (not ISSUER_SIGNER_KEY.is_file() or ISSUER_SIGNER_KEY.is_symlink()
+            or ISSUER_SIGNER_KEY.stat().st_uid != 0
+            or stat.S_IMODE(ISSUER_SIGNER_KEY.stat().st_mode) != 0o600):
+        deny("CHAIN_ISSUER_SIGNER_KEY_NOT_PREPARED")
     if not LINK_ASSEMBLER.is_file() or LINK_ASSEMBLER.is_symlink():
         deny("CHAIN_EXISTING_OPERATOR_LINK_ASSEMBLER_REQUIRED")
     if LINK.exists() or LINK.is_symlink():
         deny("CHAIN_OPERATOR_LINK_ALREADY_EXISTS")
+    if (ISSUER_CLAIMS.exists() or ISSUER_CLAIMS.is_symlink()
+            or ISSUER_SIGNATURE.exists() or ISSUER_SIGNATURE.is_symlink()):
+        deny("CHAIN_ISSUER_REPLAY_EVIDENCE_ALREADY_EXISTS")
     for _, _, output in SIGNER_UNITS:
         if output.exists() or output.is_symlink():
             deny("CHAIN_SIGNER_RECEIPT_ALREADY_EXISTS")
@@ -102,6 +122,20 @@ def preflight(run=subprocess.run, *, now_fn=lambda: int(time.time()*1000)) -> No
     state, setting=safe_service_state(ATTESTOR_UNIT,run)
     if state!="inactive" or setting!="static":
         deny("CHAIN_ATTESTOR_UNIT_NOT_STANDBY")
+    for unit in (ISSUER_UNIT, ISSUER_SIGNER_UNIT):
+        state, setting=safe_service_state(unit,run)
+        if state!="inactive" or setting!="static":
+            deny("CHAIN_ISSUER_UNIT_NOT_STATIC_STANDBY")
+    # Independent readers must already be active. Never start a service to
+    # rescue a short-lived approval after signing has begun.
+    for unit in ("gpt02-issue159-reader.service",
+                 "gpt02-issue159-approval-reader.service",
+                 "gpt02-issue159-verifier.service",
+                 "gpt02-issue159-issuer-reader.service",
+                 "gpt02-issue159-lineage-reader.service"):
+        state, _setting=safe_service_state(unit,run)
+        if state!="active":
+            deny("CHAIN_TRUSTED_READER_NOT_READY")
     approval=private_json(APPROVED)
     if set(approval)!={"claims","claimsSha256"}:
         deny("CHAIN_APPROVAL_ENVELOPE_INVALID")
@@ -160,8 +194,11 @@ def execute(run=subprocess.run) -> None:
             if not output.is_file():
                 deny("CHAIN_EXPECTED_SIGNER_EVIDENCE_ABSENT_"+role.upper())
         start_once(ATTESTOR_UNIT,run)
-        print("GPT02_DEV_THREE_SIGNERS_AND_ATTESTOR_RPC_FINISHED")
-        print("issuer_enabled",False)
+        # The existing finalizer independently rechecks the real Stage-A
+        # verifier, issuer reader, receipt/fence lineage and dedicated DB role.
+        # It must run directly after attestor, not from a timed worker.
+        start_once(ISSUER_UNIT,run)
+        print("GPT02_DEV_ATTESTOR_AND_ISSUER_LEASE_COMPLETED_NO_DISPATCH")
         print("dispatch_permitted",False)
     except BlockingIOError as exc:
         raise ChainDenied("CHAIN_CONCURRENT_OPERATION_DENIED") from exc
