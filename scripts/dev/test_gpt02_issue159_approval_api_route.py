@@ -218,6 +218,45 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["pending"])
         self.assertEqual(body["reason"], "PENDING_REQUEST_ALREADY_APPROVED")
 
+    def test_expired_but_previously_approved_request_shows_ledger_not_refresh(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID,
+            "email": "fixture@example.com",
+            "role": "super_admin",
+            "auth_level": "aal1",
+        }
+        expired = {**CLAIMS, "issuedAt": BASE_NOW_MS - 200000,
+                   "expiresAt": BASE_NOW_MS - 100000}
+        Path(self.pending).write_text(json.dumps({"claims": expired}))
+        os.chmod(self.pending, 0o600)
+        # An expired request with no matching approval remains expired.
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertEqual(body["reason"], "PENDING_REQUEST_EXPIRED")
+        digest = api.validate_approval_claims(expired)["claimsSha256"]
+        con = sqlite3.connect(self.db)
+        con.execute(
+            """INSERT INTO gpt02_issue159_approval_intents
+            (id,task_id,command_id,attempt_id,company_id,claims_sha256,
+             actor_id,auth_method,role_at_decision,decision,recorded_at_ms,expires_at_ms)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("33333333-3333-4333-8333-333333333333", expired["taskId"],
+             expired["commandId"], expired["attemptId"], expired["companyId"],
+             digest, expired["superAdminId"], "supabase_admin_session",
+             "super_admin", "APPROVE", BASE_NOW_MS - 150000, expired["expiresAt"]),
+        )
+        con.commit()
+        con.close()
+        # The approved historical request must not offer another approval/refresh.
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertFalse(body["pending"])
+        self.assertEqual(body["reason"], "PENDING_REQUEST_ALREADY_APPROVED")
+        self.assertEqual(body["taskId"], expired["taskId"])
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertNotIn("claims", body)
+        self.assertEqual(self.count(), 1)
+
     def test_pending_route_returns_json_for_malformed_contract_claims(self):
         api.admin_identity = lambda token, connection: {
             "user_id": AUTH_USER_ID,

@@ -79,9 +79,9 @@ def load_issue159_pending_claims(actor_id):
   validated=validate_approval_claims(claims)
   if claims['superAdminId']!=actor_id:
    return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_ACTOR_MISMATCH','releaseDecision':'NO_GO'}
-  observed=int(time.time()*1000)
-  if observed<claims['issuedAt'] or observed>=claims['expiresAt']:
-   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  # An expired request can already have an APPROVE record from its valid
+  # window. Read the bound, immutable ledger before displaying expiry, while
+  # never re-enabling the approval button or extending the request.
   con=sqlite3.connect('file:'+DB+'?mode=ro',uri=True,timeout=2)
   try:
    con.execute('PRAGMA query_only=ON')
@@ -91,8 +91,13 @@ def load_issue159_pending_claims(actor_id):
    ).fetchone()
   finally:
    con.close()
-  if not row or row[0]!=0:
+  if not row:
+   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_INVALID','releaseDecision':'NO_GO'}
+  if row[0]!=0:
    return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_ALREADY_APPROVED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  observed=int(time.time()*1000)
+  if observed<claims['issuedAt'] or observed>=claims['expiresAt']:
+   return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   return {
    'environment':'DEV','pending':True,'taskId':claims['taskId'],
    'commandId':claims['commandId'],'expiresAt':claims['expiresAt'],
