@@ -1,0 +1,6 @@
+{
+  "name": "gpt02-dell-dev-runtime-candidate",
+  "private": true,
+  "type": "commonjs",
+  "description": "Review-only module boundary for the existing DELL DEV CommonJS snapshot; no publish or deploy scripts"
+}

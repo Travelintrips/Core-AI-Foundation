@@ -1,0 +1,100 @@
+name: GPT02 DELL DEV Source Candidate (No Deploy)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/windows/ai-core/gpt02-dell-runtime-candidate/**'
+      - '.github/workflows/gpt02-dell-dev-source-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ensure candidate source manifest has exact bytes
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path('scripts/windows/ai-core/gpt02-dell-runtime-candidate')
+          manifest=json.loads((root/'source-manifest.json').read_text())
+          assert manifest['scope']=='DEV_ONLY_NONDEPLOYED_REVIEW_CANDIDATE'
+          listed=set()
+          for row in manifest['files']:
+              f=root/row['name']
+              assert f.is_file() and f.name not in listed
+              assert f.stat().st_size==row['bytes']
+              assert hashlib.sha256(f.read_bytes()).hexdigest()==row['sha256']
+              listed.add(f.name)
+          actual={p.name for p in root.iterdir() if p.suffix in {'.py','.js','.cjs','.mjs','.ps1'} or p.name=='package.json'}
+          assert actual==listed, (sorted(actual-listed),sorted(listed-actual))
+          assert not list(root.glob('*.log'))
+          print('CANDIDATE_MANIFEST_PASS files=',len(listed))
+          PY
+      - name: Keep existing canonical Python runtime regressions passing
+        env:
+          LOCALAPPDATA: /tmp
+        run: |
+          PYTHONPATH=scripts/windows/ai-core python3 -m unittest discover \
+            -s scripts/windows/ai-core -p test_dev_chatgpt_native_transport.py -v
+      - name: Candidate Python syntax and isolated behavior contracts
+        run: |
+          C=scripts/windows/ai-core/gpt02-dell-runtime-candidate
+          BASE=scripts/windows/ai-core
+          python3 -m compileall -q "$C"
+          PYTHONPATH="$C:$BASE" python3 -B "$C/test_gpt02_cache_readiness_contract_readonly_20261113.py"
+          PYTHONPATH="$C:$BASE" python3 -B "$C/test_gpt02_submit_stream_contract_20261113.py"
+          PYTHONPATH="$C:$BASE" python3 -B "$C/test_gpt02_passive_submit_rate_gate.py"
+          PYTHONPATH="$C:$BASE" python3 -B "$C/test_gpt02_native_legacy_compatibility_20261113.py"
+      - name: Candidate JavaScript syntax and fail-closed rate contract
+        run: |
+          C=scripts/windows/ai-core/gpt02-dell-runtime-candidate
+          for src in "$C"/*.js "$C"/*.cjs "$C"/*.mjs; do
+            node --check "$src"
+          done
+          node "$C/test_gpt02_passive_submit_rate_gate.cjs"
+
+  windows-contract:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify GPT02 Windows native candidate contracts without browser or credentials
+        shell: pwsh
+        run: |
+          $c = 'scripts/windows/ai-core/gpt02-dell-runtime-candidate'
+          $env:PYTHONPATH = 'scripts/windows/ai-core'
+          python -m compileall -q $c
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate Python syntax failed' }
+          python -B "$c/test_gpt02_cache_readiness_contract_readonly_20261113.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Cache readiness regression failed' }
+          python -B "$c/test_gpt02_submit_stream_contract_20261113.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Passive stream contract failed' }
+          python -B "$c/test_gpt02_passive_submit_rate_gate.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Python passive rate guard failed' }
+          python -B "$c/test_gpt02_native_legacy_compatibility_20261113.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native compatibility regression failed' }
+          Get-ChildItem -LiteralPath $c -File | Where-Object {
+            $_.Extension -in @('.js','.cjs','.mjs')
+          } | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Node syntax failed" }
+          }
+          node "$c/test_gpt02_passive_submit_rate_gate.cjs"
+          if ($LASTEXITCODE -ne 0) { throw 'JavaScript passive rate guard failed' }

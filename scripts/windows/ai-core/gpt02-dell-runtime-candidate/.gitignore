@@ -1,0 +1,11 @@
+# GPT02 DEV review-only source: no diagnostic output, auth state or credentials.
+*.log
+*.jsonl
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+auth.json
+__pycache__/
+*.pyc
