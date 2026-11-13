@@ -1,5 +1,16 @@
 # GPT02 Issue #159 — DEV writer boundary and lifecycle migration review
 
+## Credential admission audit — 13 November 2026 (latest readback)
+
+- VPS srv1792369 now has both host-encrypted credential files, owner root, permissions 0600. Both dedicated writer PostgreSQL roles are now LOGIN, connection limit 1, and NOBYPASSRLS. This supersedes older notes below saying credentials were absent and roles NOLOGIN.
+- A systemd LoadCredentialEncrypted-only **read-only** probe was executed separately for the attestor and issuer. Both **failed closed before the database connection** because the encrypted DSNs did not match the existing pinned CST-DEV contract on two fields: user and host. Neither password nor actual supplied host/username was displayed; the probe printed field names only. No writer RPC, signer, or dispatch executed.
+- The already-deployed adapter pins host aws-1-ap-southeast-2.pooler.supabase.com and username as the dedicated role name plus project suffix .xssrfshdrtdfupgqwfdw, with sslmode=verify-full and the pinned CA. An authorized administrator must reconcile and correct the underlying credential values through the official secret-management path. Never relax the pinned contract to suit an unverified DSN or reuse a reader/service-role/admin credential.
+- The added scripts/dev/gpt02_issue159_writer_credential_probe.py accepts credentials ONLY through systemd, verifies strict project-specific DSN fields, native PostgreSQL role, TLS and scoped EXECUTE rights within BEGIN READ ONLY / ROLLBACK. It never changes a role, rotates a password, calls a privileged RPC, writes a table, signs or dispatches.
+- After authorized correction, rerun this exact read-only admission test. **Do not request a fresh short-lived Super Admin approval** until both credentials and the existing supervised chain pass readiness checks.
+- Previously successful code CI and earlier lifecycle tests remain valid; this new credential rejection means live Issue159 E2E and independent DELL Final ACK are still **NO-GO**.
+
+---
+
 ## Update 13 Nov 2026 — current evidence supersedes historical blockers
 
 **Authoritative later-status note (DEV only).** This document retains the 12
