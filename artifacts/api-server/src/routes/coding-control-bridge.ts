@@ -76,6 +76,8 @@ async function prepareAiTaskChatGptExecution(input: {
       const status = String(current["status"] ?? "");
       if (["failed","completed","cancelled","blocked","review_required"].includes(status))
         throw new Error("AI_TASK_EXECUTION_TERMINAL_REVIEW_REQUIRED");
+      if (current["idempotency_key"] !== idempotencyKey && status !== "prepared")
+        throw new Error("AI_TASK_EXECUTION_ACTIVE");
       const refreshed = await tx.execute(sql`
         UPDATE public.ai_execution_jobs
         SET instruction=COALESCE(instruction,${input.instruction}),
