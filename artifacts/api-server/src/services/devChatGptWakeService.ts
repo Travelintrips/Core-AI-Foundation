@@ -109,6 +109,7 @@ export type DevBrowserWakeInput = {
   watchCommandId?: string;
   jobId?: string;
   correlationId?: string;
+  executionJobId?: string;
   checkpointRevision?: number;
   expiresAt?: string;
   instruction?: string;
@@ -153,7 +154,8 @@ function matchesExistingWake(input: DevBrowserWakeInput, instruction: string, wo
       metadata["conversationId"] !== input.ownerChannel || metadata["capability"] !== "chatgpt:wake" ||
       metadata["targetConversationId"] !== input.targetConversationId.toLowerCase() ||
       metadata["eventId"] !== input.eventId.toLowerCase() ||
-      metadata["assistantAttestationChallenge"] !== challenge) return false;
+      metadata["assistantAttestationChallenge"] !== challenge ||
+      (input.executionJobId !== undefined && metadata["executionJobId"] !== input.executionJobId)) return false;
   if (wakeBinding && !devWakeAttestationExpected(metadata)) return false;
   if (input.watchCommandId !== undefined) {
     if (metadata["explicitWorkerTarget"] !== true) return false;
@@ -223,6 +225,7 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
   if ((input.watchCommandId !== undefined && (typeof input.watchCommandId !== "string" || input.watchCommandId.length !== 36 || !UUID.test(input.watchCommandId))) ||
       (input.jobId !== undefined && (typeof input.jobId !== "string" || input.jobId.length !== 36 || !UUID.test(input.jobId))) ||
       (input.correlationId !== undefined && (typeof input.correlationId !== "string" || !/^[a-zA-Z0-9:_-]{1,160}$/.test(input.correlationId))) ||
+      (input.executionJobId !== undefined && (typeof input.executionJobId !== "string" || !UUID.test(input.executionJobId))) ||
       ((input.watchCommandId === undefined) !== (input.jobId === undefined)) ||
       ((input.watchCommandId === undefined) !== (input.expiresAt === undefined)) ||
       ((input.watchCommandId === undefined) !== (input.checkpointRevision === undefined)) ||
@@ -268,6 +271,7 @@ export async function queueDevBrowserWake(input: DevBrowserWakeInput): Promise<{
     ...(input.watchCommandId !== undefined ? { watchCommandId: input.watchCommandId } : {}),
     ...(input.jobId !== undefined ? { jobId: input.jobId } : {}),
     ...(input.correlationId !== undefined ? { correlationId: input.correlationId } : {}),
+    ...(input.executionJobId !== undefined ? { executionJobId: input.executionJobId } : {}),
     ...(input.checkpointRevision !== undefined ? { checkpointRevision: input.checkpointRevision } : {}),
     ...(userInstruction ? { requestedInstructionHash: createHash("sha256").update(userInstruction).digest("hex") } : {}),
     ...(input.jobAlias ? { jobAlias: input.jobAlias } : {}),
