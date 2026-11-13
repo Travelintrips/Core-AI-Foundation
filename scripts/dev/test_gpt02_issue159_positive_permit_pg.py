@@ -122,12 +122,12 @@ def main():
                   CMD + "',gen_random_uuid(),'0')", "dev_gpt02_release_writer",
                   required=False)
         ensure(bad.returncode != 0 and "TRUSTED_RELEASE_WRITER_AND_PACKET_REQUIRED"
-               in bad.stderr, "BAD_PACKET_HASH_ACCEPTED")
+               in bad.stderr, f"BAD_PACKET_HASH_ACCEPTED status={bad.returncode} stderr={bad.stderr[-1400:]} stdout={bad.stdout[-500:]}")
         missing = sql("SELECT gpt02_private.reserve_positive_dispatch_permit('" +
                       CMD + "',gen_random_uuid(),repeat('a',64))",
                       "dev_gpt02_release_writer", required=False)
         ensure(missing.returncode != 0 and "PERSISTED_LINKED_ISSUER_PROOF_REQUIRED"
-               in missing.stderr, "MISSING_LINKED_LINEAGE_ACCEPTED")
+               in missing.stderr, f"MISSING_LINKED_LINEAGE_ACCEPTED status={missing.returncode} stderr={missing.stderr[-1400:]} stdout={missing.stdout[-500:]}")
 
         # Synthetic parent evidence is inserted by disposable fixture superuser.
         # This does not count as a real four-signer packet or live DEV approval.
