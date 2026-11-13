@@ -47,10 +47,12 @@ END $preflight$;
 
 CREATE ROLE dev_gpt02_release_writer NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE dev_gpt02_release_reader NOLOGIN NOINHERIT NOBYPASSRLS;
-GRANT USAGE ON SCHEMA gpt02_private TO
- dev_gpt02_release_writer,dev_gpt02_release_reader;
 GRANT gpt02_store_owner TO postgres WITH SET TRUE;
 SET ROLE gpt02_store_owner;
+-- The private schema owner, not the migration account, must grant USAGE.
+-- PostgreSQL can only WARN (rather than error) when a non-grantor tries.
+GRANT USAGE ON SCHEMA gpt02_private TO
+ dev_gpt02_release_writer,dev_gpt02_release_reader;
 
 CREATE TABLE gpt02_private.positive_dispatch_permits (
  permit_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
