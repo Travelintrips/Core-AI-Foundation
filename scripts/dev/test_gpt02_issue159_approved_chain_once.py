@@ -110,6 +110,38 @@ class ApprovedChainOnceTest(unittest.TestCase):
                     mod.preflight(lambda *args,**kw: (_ for _ in ()).throw(
                         AssertionError("NO_SYSTEMCTL_EXPECTED")))
 
+    def test_skipped_systemd_condition_cannot_count_as_success(self):
+        marks={"ExecMainStartTimestampMonotonic":"0",
+               "ExecMainExitTimestampMonotonic":"0",
+               "ExecMainStatus":"0","Result":"success","ActiveState":"inactive"}
+        actions=[]
+        def fake_run(args,**kw):
+            actions.append(args)
+            if args[:2]==["systemctl","show"]:
+                return SimpleNamespace(stdout="".join(f"{k}={v}\n" for k,v in marks.items()))
+            if args[:2]==["systemctl","start"]:
+                return SimpleNamespace(stdout="",returncode=0)
+            raise AssertionError("UNEXPECTED_SYSTEMCTL_CALL")
+        with patch.object(mod,"safe_service_state",return_value=("inactive","static")):
+            with self.assertRaisesRegex(mod.ChainDenied,"CHAIN_ONE_SHOT_NEW_EXECUTION_NOT_PROVEN"):
+                mod.start_once("synthetic.service",run=fake_run)
+        self.assertEqual(sum(args[:2]==["systemctl","start"] for args in actions),1)
+
+    def test_new_systemd_execution_marks_are_required_for_success(self):
+        marks={"ExecMainStartTimestampMonotonic":"0",
+               "ExecMainExitTimestampMonotonic":"0",
+               "ExecMainStatus":"0","Result":"success","ActiveState":"inactive"}
+        def fake_run(args,**kw):
+            if args[:2]==["systemctl","show"]:
+                return SimpleNamespace(stdout="".join(f"{k}={v}\n" for k,v in marks.items()))
+            if args[:2]==["systemctl","start"]:
+                marks["ExecMainStartTimestampMonotonic"]="10000"
+                marks["ExecMainExitTimestampMonotonic"]="10150"
+                return SimpleNamespace(stdout="",returncode=0)
+            raise AssertionError("UNEXPECTED_SYSTEMCTL_CALL")
+        with patch.object(mod,"safe_service_state",return_value=("inactive","static")):
+            mod.start_once("synthetic.service",run=fake_run)
+
     def test_one_shot_order_runs_approval_hub_core_then_attestor(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)

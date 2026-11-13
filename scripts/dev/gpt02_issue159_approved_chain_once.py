@@ -163,18 +163,39 @@ def require_link_and_time(*, now_fn=lambda: int(time.time()*1000)) -> None:
     require_hub_core_facts("hub",link,approved["claims"],now_ms=now)
 
 
+def execution_marks(unit: str, run=subprocess.run) -> dict[str, str]:
+    fields=("ExecMainStartTimestampMonotonic", "ExecMainExitTimestampMonotonic",
+            "ExecMainStatus", "Result", "ActiveState")
+    output=run(["systemctl","show",unit,*[arg for field in fields
+               for arg in ("-p",field)]], timeout=4,check=True,
+               capture_output=True,text=True).stdout
+    values=dict(line.split("=",1) for line in output.splitlines() if "=" in line)
+    if set(values)!=set(fields):
+        deny("CHAIN_ONE_SHOT_EXECUTION_MARKS_MISSING")
+    return values
+
+
 def start_once(unit: str, run=subprocess.run) -> None:
     state,setting=safe_service_state(unit,run)
     if state!="inactive" or setting!="static":
         deny("CHAIN_UNIT_NOT_STATIC_STANDBY")
+    before=execution_marks(unit,run)
+    start_before=before["ExecMainStartTimestampMonotonic"]
+    if not start_before.isdigit():
+        deny("CHAIN_ONE_SHOT_PREVIOUS_START_UNTRUSTED")
     run(["systemctl","start",unit],timeout=24,check=True,
         capture_output=True,text=True)
-    result=run(["systemctl","show",unit,"-p","Result","--value"],
-               timeout=4,check=True,capture_output=True,text=True).stdout.strip()
-    exitcode=run(["systemctl","show",unit,"-p","ExecMainStatus","--value"],
-                 timeout=4,check=True,capture_output=True,text=True).stdout.strip()
-    if result!="success" or exitcode!="0":
-        deny("CHAIN_ONE_SHOT_UNIT_DID_NOT_SUCCEED")
+    after=execution_marks(unit,run)
+    start_after=after["ExecMainStartTimestampMonotonic"]
+    exit_after=after["ExecMainExitTimestampMonotonic"]
+    # systemctl start can return 0 for a skipped ConditionPathExists unit.
+    # A NEW monotonic execution timestamp proves ExecStart really ran.
+    if (not start_after.isdigit() or not exit_after.isdigit()
+            or int(start_after)<=int(start_before)
+            or int(exit_after)<int(start_after)
+            or after["Result"]!="success" or after["ExecMainStatus"]!="0"
+            or after["ActiveState"]!="inactive"):
+        deny("CHAIN_ONE_SHOT_NEW_EXECUTION_NOT_PROVEN")
 
 
 def execute(run=subprocess.run) -> None:
