@@ -95,9 +95,9 @@ def main():
             ensure(conn_limit == "0", "DORMANT_RELEASE_CONNECTION_LIMIT_MUST_BE_ZERO")
         n = sql("""SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
              WHERE n.nspname='gpt02_private' AND c.relname IN
-             ('positive_dispatch_permits','positive_dispatch_consumptions')
+             ('positive_dispatch_permits','positive_dispatch_consumptions','positive_dispatch_outbox')
              AND c.relrowsecurity AND c.relforcerowsecurity""").stdout.strip()
-        ensure(n == "2", "POSITIVE_LEDGER_MUST_FORCE_RLS")
+        ensure(n == "3", "ALL_POSITIVE_LEDGERS_MUST_FORCE_RLS")
         for fn in ("reserve_positive_dispatch_permit(uuid,uuid,text)",
                    "consume_positive_dispatch_permit(uuid,uuid,text)"):
             signature = "gpt02_private." + fn
@@ -108,7 +108,7 @@ def main():
             allowed = sql("SELECT has_function_privilege('dev_gpt02_release_writer','" +
                           signature + "','EXECUTE')").stdout.strip()
             ensure(allowed == "t", "RELEASE_RPC_NOT_SCOPED_TO_WRITER")
-        for table in ("positive_dispatch_permits", "positive_dispatch_consumptions"):
+        for table in ("positive_dispatch_permits", "positive_dispatch_consumptions", "positive_dispatch_outbox"):
             for role in ("anon", "authenticated", "service_role", "dev_gpt02_release_writer"):
                 allowed = sql("SELECT has_table_privilege('" + role + "','gpt02_private." +
                               table + "','INSERT,UPDATE,DELETE')").stdout.strip()
@@ -210,6 +210,25 @@ def main():
                "DUPLICATE_PERMIT_RESERVATION_ACCEPTED")
         consume = ("SELECT gpt02_private.consume_positive_dispatch_permit('" +
                    permit + "','" + CMD + "',repeat('a',64))")
+        # Inject a disposable failure AFTER the consumption insert, at the
+        # outbox insert. The whole RPC must roll back; no orphan consumed permit.
+        sql("""CREATE FUNCTION public.reject_outbox_fixture()
+               RETURNS trigger LANGUAGE plpgsql AS $$
+               BEGIN RAISE EXCEPTION 'OUTBOX_SYNTHETIC_FAILURE'; END $$;
+               CREATE TRIGGER reject_outbox_fixture
+               BEFORE INSERT ON gpt02_private.positive_dispatch_outbox
+               FOR EACH ROW EXECUTE FUNCTION public.reject_outbox_fixture();""")
+        rejected = sql(consume, "dev_gpt02_release_writer", required=False)
+        ensure(rejected.returncode != 0 and "OUTBOX_SYNTHETIC_FAILURE" in rejected.stderr,
+               "INJECTED_OUTBOX_FAILURE_NOT_OBSERVED")
+        rollback_counts = sql("""SELECT
+          (SELECT count(*) FROM gpt02_private.positive_dispatch_consumptions)::text
+          ||':'||
+          (SELECT count(*) FROM gpt02_private.positive_dispatch_outbox)::text""").stdout.strip()
+        ensure(rollback_counts == "0:0", "CONSUMPTION_NOT_ROLLED_BACK_WITH_OUTBOX")
+        sql("""DROP TRIGGER reject_outbox_fixture
+               ON gpt02_private.positive_dispatch_outbox;
+               DROP FUNCTION public.reject_outbox_fixture();""")
         with ThreadPoolExecutor(max_workers=2) as pool:
             attempts = list(pool.map(lambda _: sql(
                 consume, "dev_gpt02_release_writer", required=False), range(2)))
@@ -220,12 +239,22 @@ def main():
         check_count = sql("SELECT count(*) FROM gpt02_private.positive_dispatch_consumptions"
                           ).stdout.strip()
         ensure(check_count == "1", "CONSUMPTION_LEDGER_WRONG_COUNT")
+        outbox = sql("""SELECT command_id::text||':'||attempt_id::text||':'||
+             hub_task_id::text||':'||core_task_id::text||':'||
+             delivery_state||':'||packet_sha256
+             FROM gpt02_private.positive_dispatch_outbox""").stdout.strip()
+        ensure(outbox == (CMD+":"+ATT+":140:"+CORE+":HELD_NO_DISPATCH:"+("a"*64)),
+               "EXACT_COMMAND_OUTBOX_NOT_DURABLY_LINKED")
+        denied_update = sql("""UPDATE gpt02_private.positive_dispatch_outbox
+               SET delivery_state='SENT'""", required=False)
+        ensure(denied_update.returncode!=0 and "APPEND_ONLY_EVIDENCE" in denied_update.stderr,
+               "OUTBOX_IMMUTABILITY_BYPASSED")
         check_legacy = sql("SELECT signing_grant::text||':'||dispatch_allowed::text "
                            "FROM gpt02_private.issuer_evidences").stdout.strip()
         ensure(check_legacy == "false:false", "HISTORIC_NO_DISPATCH_PROOF_MUTATED")
         print("PASS: disposable PG16 positive-permit migration; dormant roles, "
               "forced RLS, legacy NO_DISPATCH retained, exact lineage, "
-              "one-use concurrency and replay denied; NOT live E2E")
+              "one-use concurrency, rollback and replay denied; outbox remains HELD_NO_DISPATCH; NOT live E2E")
     finally:
         run("docker", "rm", "-f", NAME, required=False)
 
