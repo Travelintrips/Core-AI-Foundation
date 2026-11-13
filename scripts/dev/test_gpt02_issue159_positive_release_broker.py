@@ -101,7 +101,7 @@ class PositiveReleaseBrokerTest(unittest.TestCase):
         self.assertEqual(self.db.events[3][1][1], cmd)
         self.assertEqual(self.db.events[3][1][0], PERMIT)
         self.assertEqual(self.db.events[3][1][2], self.db.events[2][1][1])
-        self.assertEqual(self.db.events[2][1][2], self.fixture.check()["issuerClaimsSha"])
+        self.assertEqual(self.db.events[2][1][2], self.fixture.check()["issuerClaimsSha256"])
         self.assertEqual(self.db.events[2][1][3],
                          self.packet["issuerEvidence"]["signature"])
 
