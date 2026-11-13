@@ -70,6 +70,7 @@ class FakeCursor:
         if "session_user" in sql:
             return self.owner, self.owner, "postgres", "off"
         if "consume_linked_approval(" in sql: return (RECEIPT,)
+        if "extract(epoch from clock_timestamp())" in sql: return (issuer.ms(),)
         if "reserve_post_consumption_fence(" in sql: return (FENCE,)
         if "record_issuer_evidence(" in sql: return (EVIDENCE,)
         if "consume_issuer_lease(" in sql:
@@ -98,13 +99,16 @@ class IssuerFinalizerTests(unittest.TestCase):
     def test_consumption_then_fence_exact_two_rpc_calls_one_commit(self):
         pkt, proof = packet()
         con = FakeDB()
-        self.assertEqual(issuer.consume_and_reserve(con, pkt, proof), (RECEIPT, FENCE))
+        receipt, fence, db_before = issuer.consume_and_reserve(con, pkt, proof)
+        self.assertEqual((receipt, fence), (RECEIPT, FENCE))
+        self.assertIs(type(db_before), int)
         self.assertEqual(con.commits, 1)
         self.assertEqual(con.rollbacks, 0)
-        self.assertEqual(len(con.q.calls), 4)
+        self.assertEqual(len(con.q.calls), 5)
         self.assertIn("consume_linked_approval(", con.q.calls[2][0])
-        self.assertIn("reserve_post_consumption_fence(", con.q.calls[3][0])
-        self.assertEqual(con.q.calls[3][1],
+        self.assertIn("clock_timestamp()", con.q.calls[3][0])
+        self.assertIn("reserve_post_consumption_fence(", con.q.calls[4][0])
+        self.assertEqual(con.q.calls[4][1],
                          (RECEIPT, COMMAND, LINK, issuer.WORKER))
 
     def test_wrong_issuer_role_fails_before_rpc_and_rolls_back(self):
@@ -124,6 +128,18 @@ class IssuerFinalizerTests(unittest.TestCase):
         self.assertEqual(con.commits, 0)
         self.assertEqual(con.rollbacks, 1)
 
+    def test_database_clock_failure_rolls_back_receipt_before_fence(self):
+        pkt, proof = packet()
+        con = FakeDB(fail_on="extract(epoch from clock_timestamp())")
+        with self.assertRaisesRegex(RuntimeError, "SYNTHETIC_RPC_REJECTION"):
+            issuer.consume_and_reserve(con, pkt, proof)
+        self.assertEqual(con.commits, 0)
+        self.assertEqual(con.rollbacks, 1)
+        self.assertFalse(any(
+            "reserve_post_consumption_fence(" in sql
+            for sql, _ in con.q.calls
+        ))
+
     def test_expired_parent_fails_before_any_db_call(self):
         pkt, proof = packet()
         pkt["hubLink"]["claims"]["expiresAt"] = issuer.ms() + 3_000
@@ -134,7 +150,8 @@ class IssuerFinalizerTests(unittest.TestCase):
 
     def test_trusted_rpc_uuid_claims_bind_parent_and_nonce(self):
         pkt, proof = packet()
-        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE)
+        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE,
+                                     fence_db_before_ms=issuer.ms())
         self.assertEqual(claims["receiptId"], RECEIPT)
         self.assertEqual(claims["fenceId"], FENCE)
         self.assertEqual(claims["approvalDigest"], proof["approvalDigest"])
@@ -143,15 +160,54 @@ class IssuerFinalizerTests(unittest.TestCase):
         self.assertLessEqual(claims["expiresAt"] - claims["issuedAt"], issuer.ISSUER_TTL_MS)
         self.assertEqual(claims["workerId"], issuer.WORKER)
 
+    def test_issuer_expiry_bounded_below_database_fence_window(self):
+        pkt, proof = packet()
+        now = issuer.ms()
+        db_before = now - 150
+        claims = issuer.issuer_claims(
+            pkt, proof, RECEIPT, FENCE,
+            fence_db_before_ms=db_before, now_ms=now,
+        )
+        self.assertLessEqual(
+            claims["expiresAt"],
+            db_before + issuer.FENCE_MAX_MS - issuer.FENCE_SAFETY_MS,
+        )
+        self.assertLessEqual(
+            claims["expiresAt"] - claims["issuedAt"], issuer.ISSUER_TTL_MS)
+        self.assertLess(claims["expiresAt"], db_before + 15_000)
+        self.assertFalse(claims.get("dispatchPermitted",False))
+
+    def test_lagging_db_fence_or_clock_skew_refuses_issuer_claim(self):
+        pkt, proof = packet()
+        now = issuer.ms()
+        for before in (now-8_000, now+3_000):
+            with self.assertRaisesRegex(issuer.IssuerDenied,
+                                        "ISSUER_FENCE_TIME_BUDGET_UNTRUSTED"):
+                issuer.issuer_claims(
+                    pkt, proof, RECEIPT, FENCE,
+                    fence_db_before_ms=before, now_ms=now,
+                )
+        # Parent approval/link expiry must never be extended by an issuer
+        # fence or synthetic clock proof.
+        pkt["hubLink"]["claims"]["expiresAt"] = now+4_000
+        with self.assertRaisesRegex(issuer.IssuerDenied,
+                                    "ISSUER_NO_SAFE_CLAIM_WINDOW"):
+            issuer.issuer_claims(
+                pkt, proof, RECEIPT, FENCE,
+                fence_db_before_ms=now-1_000, now_ms=now,
+            )
+
     def test_non_rpc_receipt_or_matching_fence_rejected(self):
         pkt, proof = packet()
         for receipt, fence in (("not-a-uuid", FENCE), (RECEIPT, RECEIPT)):
             with self.assertRaisesRegex(issuer.IssuerDenied, "ISSUER_TRUSTED_RPC_UUIDS_REQUIRED"):
-                issuer.issuer_claims(pkt, proof, receipt, fence)
+                issuer.issuer_claims(pkt, proof, receipt, fence,
+                                     fence_db_before_ms=issuer.ms())
 
     def test_exclusive_claim_file_no_overwrite(self):
         pkt, proof = packet()
-        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE)
+        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE,
+                                     fence_db_before_ms=issuer.ms())
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "issuer.json"
             issuer.write_private_claims(claims, dest)
@@ -162,7 +218,8 @@ class IssuerFinalizerTests(unittest.TestCase):
 
     def test_signature_claim_mismatch_fails_before_verifier_socket(self):
         pkt, proof = packet()
-        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE)
+        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE,
+                                     fence_db_before_ms=issuer.ms())
         fake_sig = {
             "environment": "DEV", "role": "issuer", "algorithm": "Ed25519",
             "claimsSha256": "0" * 64, "signatureBase64url": "Z" * 86,
@@ -174,7 +231,8 @@ class IssuerFinalizerTests(unittest.TestCase):
 
     def test_evidence_requires_persisted_four_signer_verification(self):
         pkt, proof = packet()
-        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE)
+        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE,
+                                     fence_db_before_ms=issuer.ms())
         conn = FakeDB()
         unverified = {"persistedLineageMatched": False,
                       "trustedAdapterAuthenticated": True,
@@ -185,7 +243,8 @@ class IssuerFinalizerTests(unittest.TestCase):
 
     def test_four_verified_issuer_evidence_and_lease_one_transaction(self):
         pkt, proof = packet()
-        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE)
+        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE,
+                                     fence_db_before_ms=issuer.ms())
         verified = {"persistedLineageMatched": True,
                     "trustedAdapterAuthenticated": True,
                     "issuerEvidenceVerified": True, "releaseDecision": "NO_GO"}
@@ -200,7 +259,8 @@ class IssuerFinalizerTests(unittest.TestCase):
 
     def test_bad_lease_ack_rolls_back_evidence(self):
         pkt, proof = packet()
-        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE)
+        claims = issuer.issuer_claims(pkt, proof, RECEIPT, FENCE,
+                                     fence_db_before_ms=issuer.ms())
         verified = {"persistedLineageMatched": True,
                     "trustedAdapterAuthenticated": True,
                     "issuerEvidenceVerified": True, "releaseDecision": "NO_GO"}
@@ -240,7 +300,7 @@ class IssuerFinalizerTests(unittest.TestCase):
         start = source.index("def run_once(")
         scope = source[start:]
         self.assertLess(scope.index("require_issuer_reader_warm()"),
-                        scope.index("receipt, fence = consume_and_reserve("))
+                        scope.index("receipt, fence, fence_clock = consume_and_reserve("))
         self.assertIn("GET /health HTTP/1.1", source)
         self.assertIn("SO_PEERCRED", source)
 

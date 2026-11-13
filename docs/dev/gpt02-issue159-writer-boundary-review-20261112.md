@@ -1,5 +1,37 @@
 # GPT02 Issue #159 — DEV writer boundary and lifecycle migration review
 
+## Fence-bounded issuer claim timing — 13 November 2026
+
+New independent read-only database evidence: Task #162's existing 15-second
+fence started at 09:28:39 UTC and expired 09:28:54 UTC. The issuer signer
+and finalizer exited by 09:28:46 UTC without issuer evidence; the finalizer
+logged `ISSUER_SIGNATURE_WINDOW_EXPIRED`. The earlier 8-second claim TTL
+and the later unreviewed 15-second live-runtime TTL are not evidence of E2E
+success. Task #162 is immutable/expired and must not be replayed.
+
+The scoped source correction to the **existing** issuer finalizer obtains
+the CST-DEV PostgreSQL clock inside the existing restricted issuer transaction,
+*immediately before* `reserve_post_consumption_fence`. It retains the same
+two authorized writer RPC calls and one transaction, with a read-only clock
+SELECT in between. The issuer claim TTL is capped at **13 seconds** and its
+expiry is also capped at **the measured database time before the fence plus
+14 seconds** (the original 15 seconds minus at least one second of safety
+margin), as well as original approval/link expiration. Untrusted clock skew,
+excessive delay, and insufficient remaining window all fail closed.
+
+No new writer role, table, grant, migration, force-RLS exception, background
+worker or dispatch authority. If the DB clock query fails after receipt
+insertion, both the receipt and unreserved fence are rolled back. Tests use
+synthetic data only; **no new operational approval, nonce, or lease** has been
+consumed.
+
+**Operational gate:** GitHub CI PASS is required, followed by a conflict-free,
+supervised standby deployment. Do **not** overwrite a live runtime while new
+Tasks #163/#164 preparations are active, and do not treat historical
+receipt/fence entries as a valid source of dispatch or Final ACK.
+
+---
+
 ## Issuer read-only latency fix — 13 November 2026
 
 **Existing infrastructure retained; no new signer, RPC, dispatcher, or task.**

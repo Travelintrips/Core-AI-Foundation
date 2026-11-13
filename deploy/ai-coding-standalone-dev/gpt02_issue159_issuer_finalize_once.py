@@ -48,7 +48,11 @@ SIGNER_SECRET = Path("/etc/credstore.encrypted/gpt02-issue159-issuer-private-key
 LOCK = Path("/run/lock/gpt02-issue159-issuer-finalize.lock")
 UUID = re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
 MIN_PARENT_MS = 30_000
-ISSUER_TTL_MS = 8_000
+# Max DB fence is 15s; cap the signed claim BEFORE its recorded start bound.
+# Never use the entire 15s as the issuer claim window.
+FENCE_MAX_MS = 15_000
+FENCE_SAFETY_MS = 1_000
+ISSUER_TTL_MS = 13_000
 MIN_POST_SIGN_MS = 1_200
 
 class IssuerDenied(RuntimeError):
@@ -271,6 +275,16 @@ def consume_and_reserve(connection, packet, proof):
             receipt = str(cursor.fetchone()[0])
             if not UUID.fullmatch(receipt):
                 deny("ISSUER_CONSUME_RECEIPT_INVALID")
+            # The same database clock provides a conservative lower bound
+            # on fence start. This is a read-only SELECT within the existing
+            # transaction; no new roles, grants, RPCs, tables or writes.
+            cursor.execute(
+                "SELECT floor(extract(epoch from clock_timestamp())*1000)::bigint"
+            )
+            db_before_fence_ms = cursor.fetchone()[0]
+            if (type(db_before_fence_ms) is not int
+                    or db_before_fence_ms < 1_000_000_000_000):
+                deny("ISSUER_FENCE_DATABASE_CLOCK_UNTRUSTED")
             cursor.execute(
                 "SELECT gpt02_private.reserve_post_consumption_fence("
                 "%s::uuid,%s::uuid,%s::uuid,%s)",
@@ -279,18 +293,28 @@ def consume_and_reserve(connection, packet, proof):
             if not UUID.fullmatch(fence) or fence == receipt:
                 deny("ISSUER_RESERVED_FENCE_INVALID")
         connection.commit()
-        return receipt, fence
+        return receipt, fence, db_before_fence_ms
     except Exception:
         connection.rollback()
         raise
 
 def issuer_claims(packet, proof, receipt: str, fence: str,
-                  *, now_ms: int | None = None) -> dict:
+                  *, fence_db_before_ms: int, now_ms: int | None = None) -> dict:
     a, link = packet["approval"]["claims"], packet["hubLink"]["claims"]
     if now_ms is None:
         now_ms = ms()
+    if (type(fence_db_before_ms) is not int
+            or fence_db_before_ms > now_ms + 1_000
+            or now_ms - fence_db_before_ms > 5_000):
+        deny("ISSUER_FENCE_TIME_BUDGET_UNTRUSTED")
     earliest = min(a["expiresAt"], link["expiresAt"])
-    expiry = min(now_ms + ISSUER_TTL_MS, earliest)
+    # DB fence starts AFTER the captured DB clock and expires <=15s after
+    # its actual start. Bound our issuer expiry to the earlier DB floor+14s.
+    # This never grants or prolongs the actual DB fence.
+    expiry = min(
+        now_ms + ISSUER_TTL_MS, earliest,
+        fence_db_before_ms + FENCE_MAX_MS - FENCE_SAFETY_MS,
+    )
     if earliest - now_ms < MIN_PARENT_MS or expiry - now_ms < 5_000:
         deny("ISSUER_NO_SAFE_CLAIM_WINDOW")
     if not (UUID.fullmatch(receipt) and UUID.fullmatch(fence) and receipt != fence):
@@ -494,8 +518,11 @@ def run_once(*, run=subprocess.run):
             # irreversible receipt/fence transaction, never inside its
             # 15-second lease window.
             require_issuer_reader_warm()
-            receipt, fence = consume_and_reserve(conn, packet, proof)
-            claims = issuer_claims(packet, proof, receipt, fence)
+            receipt, fence, fence_clock = consume_and_reserve(conn, packet, proof)
+            claims = issuer_claims(
+                packet, proof, receipt, fence,
+                fence_db_before_ms=fence_clock,
+            )
             write_private_claims(claims)
             signed = start_signer(run=run)
             _full, verified = verify_four_role_packet(packet, claims, signed)
