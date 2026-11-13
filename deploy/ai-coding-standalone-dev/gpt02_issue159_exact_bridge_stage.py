@@ -23,7 +23,9 @@ from typing import Any
 from gpt02_issue159_positive_release_broker import _make_verified_request
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
 
-STAGING_ROLE = "dev_gpt02_bridge_stage_writer"
+# Dedicated login role does not exist in any live database.
+# Never use service_role, postgres, the shared API role or SET ROLE.
+STAGING_ROLE = "dev_gpt02_bridge_stage_login"
 WORKER = "openclaw-dell-chatgpt-wake-dev"
 SOURCE = "ai-core"
 TYPE = "ISSUE159_HELD"
@@ -129,6 +131,15 @@ def stage_exact_held_bridge_command(packet: dict[str, Any],
         _deny("HELD_STAGE_DISABLED")
     verified = _make_verified_request(packet)
     command_id = _canonical_uuid(verified["commandId"])
+    try:
+        core_id = _canonical_uuid(packet["coreLink"]["claims"]["coreTaskId"])
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise BrokerAdmissionError("VERIFIED_CORE_TASK_ID_REQUIRED") from exc
+    if (
+        packet["coreLink"]["claims"]["coreCommandId"] != command_id
+        or packet["coreLink"]["claims"]["attemptId"] != verified["attemptId"]
+    ):
+        _deny("VERIFIED_CORE_COMMAND_BINDING_REQUIRED")
     with connection.transaction():
         with connection.cursor() as cursor:
             cursor.execute(ROLE_SQL)
@@ -145,7 +156,7 @@ def stage_exact_held_bridge_command(packet: dict[str, Any],
             if (
                 not isinstance(row, (tuple, list)) or len(row) != 7
                 or row[0] != command_id
-                or row[1] != verified["coreTaskId"]
+                or row[1] != core_id
                 or row[2] != SOURCE
                 or row[3] != "gpt02-issue159:" + command_id
                 or row[4] != TYPE
