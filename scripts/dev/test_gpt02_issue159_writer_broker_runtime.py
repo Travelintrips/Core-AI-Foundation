@@ -222,6 +222,22 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertFalse(out["dispatchPermitted"])
         self.assertEqual(out["releaseDecision"],"NO_GO")
 
+    def test_invalid_packet_gets_bounded_http_denial_not_closed_socket(self):
+        # Regression for live DEV 14 Nov: handler once raised NameError
+        # while formatting BrokerAdmissionError after a malformed packet.
+        self._start()
+        status, out = self._post({}, "/verify-persisted-lineage")
+        self.assertEqual(status, 400)
+        self.assertEqual(out["reason"], "PACKET_SHAPE_INVALID")
+        self.assertFalse(out["ok"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+        # Listener survives the rejected request and still handles a
+        # valid signature-only verification on the same socket.
+        status2, out2 = self._post(self.packet)
+        self.assertEqual(status2, 200)
+        self.assertFalse(out2["dispatchPermitted"])
+
     def test_socket_rejects_tampered_packet(self):
         self._start()
         packet=json.loads(json.dumps(self.packet))
