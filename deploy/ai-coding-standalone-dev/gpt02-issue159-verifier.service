@@ -1,0 +1,56 @@
+[Unit]
+Description=GPT02 DEV read-only four-signer evidence verifier (NO_DISPATCH)
+After=local-fs.target gpt02-issue159-approval-reader.service
+Wants=gpt02-issue159-approval-reader.service
+ConditionPathExists=/etc/gpt02-dev/trust-fingerprints.json
+ConditionPathExists=/etc/gpt02-dev/verifier-public/approval-public.pem
+ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_writer_broker_runtime.py
+ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_writer_broker_contract.py
+ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_staged_admission.py
+ConditionPathExists=/opt/gpt02-verifier/gpt02_issue159_lineage_readback_contract.py
+
+[Service]
+Type=simple
+User=gpt02-issue159-verifier
+Group=gpt02-issue159-signers
+WorkingDirectory=/opt/gpt02-verifier
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -u /opt/gpt02-verifier/gpt02_issue159_writer_broker_runtime.py --socket /run/gpt02-issue159-verifier/verify.sock --public-roots /etc/gpt02-dev/verifier-public --fingerprint-manifest /etc/gpt02-dev/trust-fingerprints.json --approval-reader-socket /run/gpt02-approval-reader/approval.sock --socket-group gpt02-issue159-signers
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=15s
+TimeoutStopSec=10s
+RuntimeDirectory=gpt02-issue159-verifier
+RuntimeDirectoryMode=0750
+UMask=0077
+LimitNOFILE=128
+MemoryMax=128M
+TasksMax=16
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_UNIX
+ReadOnlyPaths=/opt/gpt02-verifier /etc/gpt02-dev/verifier-public /etc/gpt02-dev/trust-fingerprints.json
+ReadWritePaths=/run/gpt02-issue159-verifier
+InaccessiblePaths=-/opt/ai-coding-standalone-dev/tasks.db -/etc/credstore.encrypted -/run/credentials
+
+[Install]
+WantedBy=multi-user.target
