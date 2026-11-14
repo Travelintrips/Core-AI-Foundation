@@ -26,6 +26,14 @@ The authorized DELL desktop was accessible for read-only inspection at the time 
 
 **Not yet established:** who generated the signal; whether two Gateway processes competed for shared state; whether lock invalidation caused or merely coincided with failed shutdown; whether the stability bundle offers more detail; whether Task Scheduler `0x80070001` fully maps to the Gateway exit cause; whether the remote connection's brief interruption reflects anything about Gateway state. The DELL remote connection was later observed online again; this does **not** prove the local Gateway listener has resumed. In particular, **never delete/rename lock or database files** or force-kill processes as a first repair.
 
+## Follow-up owner-lock and process census (read-only)
+
+A targeted parse of the error path identified the **`openclaw-state-owners` ownership-lock directory** and a `state.<id>.lock` file. The original path was **absent** when checked later; the containing directory existed and held **five other `.lock` files** with last-modified metadata from 21 Oct 2026. Their contents were not read, and their mere existence does **not** prove active ownership or safe staleness. Do **not** remove, recreate, rename, or overwrite any lock as a workaround.
+
+The stability-bundle PID (8532) was **not alive** at follow-up; independent process inventory found **seven** other `node.exe` processes, without evidence from name/command classification that any was the targeted Gateway, and there were still **zero** listeners on port 18789. These other Node processes may belong to unrelated services and must not be terminated as a group. Windows Scheduled Task `OpenClaw Gateway` remained in `Ready` state.
+
+**Interpretation:** this is a lost/replaced **shared-state ownership** problem followed by unsuccessful Codex/plugin resource shutdown; it is not evidence that the GPT02 auth credential file or its SQLite database is corrupt. The source of the ownership-lock change and the source of `SIGUSR2` are still unknown.
+
 ## Strictly read-only prerequisites before a separately approved recovery
 
 1. Recover the DELL remote connection; independently check process IDs, Scheduled Task state, port `18789` listener, and the intended Gateway owner/state. No retry loops that write state.
