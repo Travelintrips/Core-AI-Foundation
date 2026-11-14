@@ -32,6 +32,26 @@ LIVE_OUTPUT = "/opt/ai-coding-standalone-dev/gpt02_issue159_pending_claims.json"
 UUID = re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
 
 
+def _reject_reused_approval_intent(db_path: str, task_id: int,
+                                   command_id: str, attempt_id: str) -> None:
+    """A prior approval decision, even expired, cannot be rotated by CLI."""
+    try:
+        with sqlite3.connect("file:" + db_path + "?mode=ro",
+                             uri=True, timeout=2) as con:
+            con.execute("PRAGMA query_only=ON")
+            prior = con.execute(
+                "SELECT count(*) FROM gpt02_issue159_approval_intents "
+                "WHERE task_id=? OR command_id=? OR attempt_id=?",
+                (task_id, command_id, attempt_id),
+            ).fetchone()
+        if prior is None or len(prior) != 1:
+            raise RuntimeError("ISSUE159_APPROVAL_REPLAY_READBACK_INVALID")
+    except sqlite3.Error as exc:
+        raise RuntimeError("ISSUE159_APPROVAL_REPLAY_READBACK_UNAVAILABLE") from exc
+    if prior[0] != 0:
+        raise RuntimeError("ISSUE159_APPROVAL_INTENT_ALREADY_CONSUMED")
+
+
 def _require_operational_pre_sign(claims: dict, now_ms: int) -> None:
     """Authenticate independent read-only Hub/Core facts, never caller JSON.
 
@@ -123,6 +143,9 @@ def prepare(db_path: str, output_path: str, task_id: int,
     }
     validate_approval_claims(claims)
     if operational:
+        # Even an expired persisted approval is one-use: never prepare another
+        # packet for its task/command/attempt through the direct CLI.
+        _reject_reused_approval_intent(db_path, task_id, command_id, attempt_id)
         # The direct preparer CLI is NOT a substitute for trusted Hub/Core
         # proof. Read the same pinned independent pre-sign-facts socket used
         # by the already-deployed refresh path and bind exact immutable IDs,
