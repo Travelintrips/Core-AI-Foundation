@@ -203,12 +203,39 @@ test("synthetic signed release works with ORIGINAL gateway once-only transport a
     assistantResponseHash:stored.receipt.assistantResponseHash,
   }),true);
 });
-test("operational entrypoint cannot accept caller-supplied public key as trust",()=>{
-  const input=setup();
+test("operational release uses only pinned system key and server clock",()=>{
+  const {publicKeyPem, nowMs, ...input}=setup();
+  // The independent root has not been provisioned in disposable CI.
   assert.throws(
     ()=>verifyIssue159ReleaseUsingPinnedRoot(input),
     code("RELEASE_INDEPENDENT_PINNED_ROOT_UNAVAILABLE"),
   );
+  // Even a caller-supplied *correct* public key or a historical time
+  // cannot override the operational trust root or revive an expired claim.
+  for(const injected of [
+    {publicKeyPem},
+    {nowMs},
+    {nowMs:0},
+    {nowMs:nowMs-1000000000},
+    {publicKeyPem,nowMs},
+    {observationDate:"fake"},
+  ]) {
+    assert.throws(
+      ()=>verifyIssue159ReleaseUsingPinnedRoot({...input,...injected}),
+      code("OPERATIONAL_RELEASE_INPUT_SHAPE_INVALID"),
+    );
+  }
+});
+test("operational release clock comes from server not supplied claims",async()=>{
+  const fs=await import("node:fs");
+  const source=fs.readFileSync(
+    new URL("./dev-gpt02-issue159-release-authorization.mjs",import.meta.url),
+    "utf8");
+  const operational=source.slice(
+    source.indexOf("export function verifyIssue159ReleaseUsingPinnedRoot"));
+  assert.match(operational,/nowMs: Date\.now\(\)/);
+  assert.match(operational,/exactKeys\(input, \["release", "signatureBase64", "held", "binding"\]\)/);
+  assert.doesNotMatch(operational,/\.\.\.input/);
 });
 test("release verifier source cannot access gateway or worker directly",async()=>{
   const fs=await import("node:fs");
