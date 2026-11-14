@@ -111,6 +111,7 @@ export async function resolveIssue159TrustedGatewayBinding(release,trusted) {
     trusted && typeof trusted === "object" &&
     typeof trusted.loadBinding === "function" &&
     typeof trusted.inspectGatewayCredential === "function" &&
+    typeof trusted.inspectGatewayReachability === "function" &&
     typeof trusted.inspectOpenClawModelStatus === "function",
     "TRUSTED_GATEWAY_READ_ADAPTER_REQUIRED");
   const binding=await trusted.loadBinding(WORKER);
@@ -140,6 +141,17 @@ export async function resolveIssue159TrustedGatewayBinding(release,trusted) {
     // credential proof must be the same proof authorized by the release.
     identity.proofId === binding.proofId,
     "INDEPENDENT_GATEWAY_PROVIDER_IDENTITY_UNVERIFIED");
+  // A model config snapshot can exist even when the live Gateway is down.
+  // This separate host-owned read-only reachability port must observe the
+  // actual DELL loopback endpoint just before claim admission. No send.
+  const health=await trusted.inspectGatewayReachability(WORKER);
+  const ageMs=Date.now()-health?.observedAtMs;
+  ensure(health?.source === "local-openclaw-gateway" &&
+    health.endpoint === "ws://127.0.0.1:18789" &&
+    health.reachable === true &&
+    Number.isSafeInteger(health.observedAtMs) &&
+    ageMs >= 0 && ageMs <= 5000,
+    "TRUSTED_GPT02_GATEWAY_UNREACHABLE");
   // Check the selected model's actual Gateway state separately from stored
   // profile metadata. These methods must be supplied by the HOST, not a job.
   const modelStatus=await trusted.inspectOpenClawModelStatus("gpt02-dev");

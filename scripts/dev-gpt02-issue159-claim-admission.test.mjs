@@ -76,8 +76,13 @@ function readyModelStatus() {
       runtimeAuthRoutes:[{provider:"openai",runtime:"codex",status:"ready"}],
       modelRouteIssues:[],missingProvidersInUse:[]}};
 }
-function trustedFixture({b=binding,identity,modelStatus}={}) {
-  const calls={load:0,inspect:0,model:0};
+function healthyGatewayObservation() {
+  return {source:"local-openclaw-gateway",
+    endpoint:"ws://127.0.0.1:18789",reachable:true,
+    observedAtMs:Date.now()};
+}
+function trustedFixture({b=binding,identity,modelStatus,gatewayHealth}={}) {
+  const calls={load:0,inspect:0,health:0,model:0};
   return {
     calls,
     trusted: {
@@ -98,6 +103,11 @@ function trustedFixture({b=binding,identity,modelStatus}={}) {
           proofId:b.proofId,
         };
       },
+      async inspectGatewayReachability(workerId) {
+        calls.health++;
+        assert.equal(workerId,"openclaw-dell-chatgpt-wake-dev");
+        return gatewayHealth === undefined ? healthyGatewayObservation() : gatewayHealth;
+      },
       async inspectOpenClawModelStatus(agentId) {
         calls.model++;
         assert.equal(agentId,"gpt02-dev");
@@ -115,7 +125,7 @@ test("signed release requires matching separately read provider registry identit
   assert.equal(actual.targetConversationId,CONV);
   assert.equal(actual.gatewayAgentId,binding.gatewayAgentId);
   assert.equal(actual.principalFingerprint,binding.principalFingerprint);
-  assert.deepEqual(t.calls,{load:1,inspect:1,model:1});
+  assert.deepEqual(t.calls,{load:1,inspect:1,health:1,model:1});
   assert.ok(Object.isFrozen(actual));
 });
 test("mismatched owner/target/provider/proof never passes the trusted binding readback",async()=>{
@@ -162,7 +172,7 @@ test("false gateway provider identity, wrong source or rotated principal fails c
       resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
       errorCode("INDEPENDENT_GATEWAY_PROVIDER_IDENTITY_UNVERIFIED"),
     );
-    assert.deepEqual(t.calls,{load:1,inspect:1,model:0});
+    assert.deepEqual(t.calls,{load:1,inspect:1,health:0,model:0});
   }
   for(const bad of [null,{}, {loadBinding:async()=>binding}]) {
     await assert.rejects(
@@ -172,6 +182,33 @@ test("false gateway provider identity, wrong source or rotated principal fails c
   }
 });
 
+
+test("actual DELL-like gateway connection refusal blocks admission before model status",async()=>{
+  const f=fixture(), baseline=healthyGatewayObservation();
+  for(const bad of [
+    {...baseline,reachable:false},
+    {...baseline,source:"caller-metadata"},
+    {...baseline,endpoint:"ws://127.0.0.1:18790"},
+    {...baseline,observedAtMs:Date.now()-60000},
+    {...baseline,observedAtMs:Date.now()+60000},
+    {...baseline,observedAtMs:undefined},
+    null,
+  ]) {
+    const t=trustedFixture({gatewayHealth:bad});
+    await assert.rejects(
+      resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
+      errorCode("TRUSTED_GPT02_GATEWAY_UNREACHABLE"),
+    );
+    assert.deepEqual(t.calls,{load:1,inspect:1,health:1,model:0});
+  }
+  const t=trustedFixture();
+  await assert.rejects(
+    resolveIssue159TrustedGatewayBinding(f.release,{
+      ...t.trusted,inspectGatewayReachability:undefined,
+    }),errorCode("TRUSTED_GATEWAY_READ_ADAPTER_REQUIRED"),
+  );
+  assert.deepEqual(t.calls,{load:0,inspect:0,health:0,model:0});
+});
 
 test("separate model status denies stored OAuth when selected GPT02 route is missing",async()=>{
   const f=fixture(), healthy=readyModelStatus();
@@ -187,13 +224,13 @@ test("separate model status denies stored OAuth when selected GPT02 route is mis
     const t=trustedFixture({modelStatus:bad});
     await assert.rejects(resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
       errorCode("TRUSTED_GPT02_MODEL_ROUTE_UNREADY"));
-    assert.deepEqual(t.calls,{load:1,inspect:1,model:1});
+    assert.deepEqual(t.calls,{load:1,inspect:1,health:1,model:1});
   }
   const t=trustedFixture();
   await assert.rejects(resolveIssue159TrustedGatewayBinding(f.release,{
     ...t.trusted,inspectOpenClawModelStatus:undefined,
   }),errorCode("TRUSTED_GATEWAY_READ_ADAPTER_REQUIRED"));
-  assert.deepEqual(t.calls,{load:0,inspect:0,model:0});
+  assert.deepEqual(t.calls,{load:0,inspect:0,health:0,model:0});
 });
 
 test("synthetic signed release -> exact 12 immutable SQL claim parameters",()=>{
@@ -325,7 +362,7 @@ test("forged Gateway credential readback cannot reach the claim RPC",async()=>{
       reserveIssue159ClaimWithoutDispatch(input,db,trusted.trusted),
       errorCode("CLAIM_RESERVATION_OUTCOME_UNCERTAIN_NO_DISPATCH"),
     );
-    assert.deepEqual(trusted.calls,{load:1,inspect:1,model:0});
+    assert.deepEqual(trusted.calls,{load:1,inspect:1,health:0,model:0});
     assert.equal(seen.length,4);
     assert.equal(seen[0][0],"BEGIN");
     assert.equal(seen[3][0],"ROLLBACK");
