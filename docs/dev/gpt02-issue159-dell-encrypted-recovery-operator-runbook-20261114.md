@@ -2,6 +2,64 @@
 
 **Scope: CST DEV only.** Prepared 14 Nov 2026 from read-only evidence for Draft PR #1754. **This is an operator plan, not authorization to run any mutating command or recover the live Gateway.** Nothing in this file authorizes PROD, signer, agent dispatch or a new gateway process.
 
+## Approved provider choice — Cloudflare R2 (14 November 2026)
+
+**Owner decision recorded:** use a **dedicated private Cloudflare R2 bucket for CST-DEV OpenClaw DELL backup**, using the **existing** bundled `cloudflare` storage provider and native OpenClaw 2026.10.7 backup CLI. This approves the **provider and isolated DEV use case**, not a specific account, bucket, token, credential read, archive operation, Gateway restart, or PROD change.
+
+**Provisioning state:** **NOT PROVISIONED / NO-GO.** No authorized Cloudflare account connection or bucket creation is evidenced in this ChatGPT session; the exact configured DELL Gateway CLI last reported **0 storage locations**. Do not present a proposed name as a created bucket or a stored passphrase as recovered until independently checked.
+
+**Proposed nonsecret design, subject to owner/account confirmation:**
+
+| Decision | Selected design / evidence still required |
+| --- | --- |
+| Workload | CST-DEV DELL OpenClaw backup only, no PROD |
+| Storage provider | Bundled Cloudflare R2 provider `r2` in installed OpenClaw 2026.10.7 |
+| Bucket | **New dedicated private bucket**; exact name, Cloudflare account and jurisdiction **not yet assigned/verified** |
+| Prefix | Dedicated non-shared prefix (proposal: `cst-dev/dell-openclaw`), not a security boundary |
+| Named OpenClaw location | Proposed `cst-dev-dell-offsite` (configuration key only; not created) |
+| R2 credentials | New bucket-scoped **Object Read & Write** S3 API token, stored in an approved secret manager; no plaintext strings |
+| At-rest archive encryption | OpenClaw storage encryption with independently recoverable passphrase via `SecretRef`; never set `encryption: "none"` |
+| Recovery custody | Restore key access independently of DELL and independently reviewed, with at least one authorized recovery custodian |
+| Retention and deletion | Owner to approve retention, deletion controls, operational costs and periodic restore checks before production of any backup |
+| Host-runtime recovery | Separate pinned Gateway Node 24.22.1, Gateway package 2026.10.7, Wake Node 26.11.1, optional staging package 2026.11.1, scripts and task bindings per Stage D2–D4 |
+
+**Configuration shape only, intentionally not a working credential-bearing config** (based on the [installed-version Cloudflare plugin guide](https://github.com/openclaw/openclaw/blob/v2026.10.7/docs/plugins/cloudflare.md)):
+
+```json5
+{
+  storage: {
+    locations: {
+      "cst-dev-dell-offsite": {
+        provider: "r2",
+        settings: {
+          accountId: "<OWNER_CONFIGURED_ACCOUNT_ID>",
+          bucket: "<OWNER_CREATED_PRIVATE_BUCKET>",
+          prefix: "cst-dev/dell-openclaw",
+          accessKeyId: { source: "env", provider: "default", id: "R2_ACCESS_KEY_ID" },
+          secretAccessKey: { source: "env", provider: "default", id: "R2_SECRET_ACCESS_KEY" },
+        },
+        encryption: {
+          passphrase: { source: "env", provider: "default", id: "OPENCLAW_STORAGE_PASSPHRASE" },
+        },
+      },
+    },
+  },
+}
+```
+
+The placeholders are **not valid runtime values**. Do not commit real account bindings, tokens, or the passphrase; inject approved SecretRefs through a restricted credential pathway only after separate authorization. Never print environment values or reuse existing Gateway/provider credentials for the R2 bucket. Do **not** modify the live Gateway's config just because this template exists.
+
+**Next required owner/operator steps (Cloudflare account access required):**
+
+1. In the intended Cloudflare account, create a **private** R2 bucket dedicated to this workload. Record bucket identity and selected jurisdiction in an **access-controlled operator record**, not a public PR comment.
+2. Create a bucket-only Object Read & Write R2 S3 API token. Save its Access Key ID and Secret Access Key to an approved secret manager; the secret is shown once. Restrict and audit account users and token access.
+3. Establish a **distinct** encryption passphrase and independent recovery custody, with a documented off-DELL retrieval procedure and ownership of the storage-location marker. Confirm the encryption key is not stored exclusively on DELL or bundled inside the archive.
+4. Approve the protected full-config/credential backup access *through the existing access-control boundary*, rather than evading a previous denial. Confirm backup retention, cleanup/deletion controls, and a separate restore target.
+5. **Only after these conditions are evidenced and maintenance authorization explicitly covers the change**, configure the official named storage entry, then run official `storage init` / `storage test` and verify `state: "ok"` and the expected encrypted destination marker. Those steps **write to the bucket and are not authorized by this runbook**.
+6. Create an authorized encrypted full archive with workspaces included using `backup create --to` (never use `--output` as a plaintext fallback), run native `backup verify --from` for the exact archive key, and perform an offline independent `backup restore --from --target` plus separate host-runtime reconstruction. Do not start the restored Gateway during this stage.
+
+**Go/no-go:** the owner's Cloudflare R2 *provider selection* is approved; **Stage A remains NO-GO** until bucket/token/encryption/key-custody/authorized access are independently verified. No archived data, credential copy, bucket, secret, Gateway process, or dispatch was created/changed by recording this decision.
+
 ## Current evidence and restrictions
 
 - Gateway Scheduled Task `OpenClaw Gateway` is `Ready`, its original task exited nonzero; no listener on TCP 18789. A separate `AI Core DELL Wake Executor DEV` remains Running. Do not terminate all Node processes or run a second Gateway.
@@ -31,7 +89,7 @@ Additional metadata-only discovery on **14 Nov 2026**, without touching credenti
 1. **Separate protected object store:** operator chooses a designated encrypted bucket/prefix using a plugin/provider already supported by the *exact installed* OpenClaw version; provider compatibility, authorization, retention and recovery key custody must be verified independently. OpenClaw v2026.10.7 documents Cloudflare R2 through its Cloudflare plugin as one possible provider. This is an example, not evidence of an existing bucket or working plugin.
 2. **Separate protected filesystem storage:** operator mounts or provides an existing encrypted and recoverable removable/remote destination and registers it with built-in OpenClaw `filesystem` storage, with an approved `SecretRef` or other appropriately scoped secret injection. The destination must persist if DELL fails, and its key/marker must be recoverable on a *different* machine. The presently observed C:/D: drives do not satisfy independence by themselves.
 
-For both choices, require explicit permission to access protected full-config/credential content, an approved destination identity and recoverable key before `storage init`, `storage test`, `backup create --to` or `backup restore` can be run. The previously denied protected-file copy must not be circumvented. **Do not choose a destination automatically.**
+For both choices, require explicit permission to access protected full-config/credential content, an approved destination identity and recoverable key before `storage init`, `storage test`, `backup create --to` or `backup restore` can be run. The previously denied protected-file copy must not be circumvented. **Do not provision a specific account/bucket or access protected credentials automatically.**
 
 ## Stage A — operator provisions protected location, before any archive is created
 
