@@ -84,6 +84,7 @@ function trustedFixture({b=binding,identity}={}) {
         assert.equal(agentId,b.gatewayAgentId);
         return identity ?? {
           authenticated:true,source:"gateway-credential-store",
+          runtimeAuthStatus:"ready",modelRouteReady:true,
           gatewayAgentId:b.gatewayAgentId,
           provider:b.provider,
           principalFingerprint:b.principalFingerprint,
@@ -130,13 +131,17 @@ test("false gateway provider identity, wrong source or rotated principal fails c
   const f=fixture();
   for(const patch of [
     {authenticated:false}, {source:"job-metadata"},
-    {provider:"other-provider"},{gatewayAgentId:"other-agent"},
+    // Profile presence/OAuth freshness alone is not a usable model route.
+    {runtimeAuthStatus:"missing"}, {runtimeAuthStatus:undefined},
+    {modelRouteReady:false}, {modelRouteReady:undefined},
+    {provider:"other-provider",{gatewayAgentId:"other-agent"},
     {principalFingerprint:"e".repeat(64)},
     {proofId:undefined},
     {proofId:"99999999-9999-4999-8999-999999999999"},
   ]) {
     const t=trustedFixture({identity:{
       authenticated:true,source:"gateway-credential-store",
+      runtimeAuthStatus:"ready",modelRouteReady:true,
       provider:binding.provider,gatewayAgentId:binding.gatewayAgentId,
       principalFingerprint:binding.principalFingerprint,
       proofId:binding.proofId,...patch,
@@ -274,6 +279,7 @@ test("forged Gateway credential readback cannot reach the claim RPC",async()=>{
     };
     const trusted=trustedFixture({identity:{
       authenticated:true,
+      runtimeAuthStatus:"ready",modelRouteReady:true,
       source:"caller-metadata",
       provider:binding.provider,
       gatewayAgentId:binding.gatewayAgentId,
