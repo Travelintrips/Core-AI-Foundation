@@ -65,7 +65,7 @@ jobs:
         env:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
-        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts --testNamePattern "Windows"
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts --testNamePattern "(uses native process identity for local Windows owners|uses process identity for a .* Windows owner|inspects and acquires a legacy Windows lock)"
 
   linux-shutdown:
     name: Linux plugin-close / SIGUSR2 lifecycle regressions (upstream fixture)
