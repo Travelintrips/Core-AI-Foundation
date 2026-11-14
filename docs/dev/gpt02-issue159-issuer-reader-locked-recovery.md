@@ -25,6 +25,47 @@ activation procedure, a deploy workflow, or authorization to dispatch.
   mismatch**, not proof that the Supabase database, TLS certificate,
   gateway, credentials, code, or DELL worker is broken.
 
+## 14 November 2026 — applied DEV boot-custody correction
+
+An independent VPS inspection found the issuer reader and **all four
+operational signers** still configured `enabled` for `multi-user.target`,
+although the reader role was locked and signer units were inactive. The
+operational signer units also declare `Requires=gpt02-issue159-issuer-reader.service`,
+so those enabled signers can pull the reader back into a failed start attempt.
+
+The five explicit DEV units were therefore disabled from auto-start only
+(no restart, no database role/credential changes, no DELL worker call):
+
+```text
+gpt02-issue159-issuer-reader.service                   disabled / inactive
+gpt02-issue159-operational-signer@approval.service     disabled / inactive
+gpt02-issue159-operational-signer@hub.service          disabled / inactive
+gpt02-issue159-operational-signer@core.service         disabled / inactive
+gpt02-issue159-operational-signer@issuer.service       disabled / inactive
+```
+
+The failed state of the reader was reset after disable; journal evidence is
+retained. This is **CUSTODY_HOLD_APPLIED**, not a connectivity PASS.
+Reader/signing services are only eligible for a future approved one-shot or
+persistent authorization after their distinct credential and authorization
+requirements have been met.
+
+### Defense in depth for future DEV service rollouts
+
+The proposed source units now require additional root-owned opt-in paths:
+
+- Reader: `/etc/gpt02-dev/issue159-issuer-reader-persistent-start.approved`
+- Operational signer per role:
+  `/etc/gpt02-dev/issue159-operational-signer-%i-enabled.approved`
+
+These paths are **not provisioned by this PR**. Do not create dummy files to
+satisfy a failing service. The path condition is merely a second startup
+barrier, not an authorization signature, Super Admin approval, or issuer
+grant. Each signer still needs cryptographically verified admission. A
+future trusted deployment must check file ownership, legitimacy, expiry
+and exact role before provisioning these flags. No automatic promotion
+from reader health to signing or dispatch is permitted.
+
 ## Single read-only preflight
 
 Run from the authorized CST-DEV database administration session (not PROD).
