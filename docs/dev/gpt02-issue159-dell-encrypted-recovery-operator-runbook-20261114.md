@@ -170,6 +170,12 @@ For the **six support code files already pinned in the local Wake Executor imple
 
 A separate protected encrypted off-host backup destination and independent key custody remain unresolved; therefore **Stage A is still NO_GO**. Do not convert this inventory into an archive, copy it into a live service directory, or execute launcher/task artifacts as part of this audit.
 
+### OpenClaw Node host dependency discovered 15 Nov 2026
+
+A read-only inspection of the existing `OpenClaw Node` launcher revealed an additional runtime dependency that earlier backup manifests did not cover: `node.vbs` invokes `node.cmd`, which launches the separate `openclaw-known-good-20260909` package. Its source DELL `package.json` reports **OpenClaw 2026.9.9**, using the separate portable Node **26.11.1** (not the Gateway's pinned Node 24.22.1). The package manifest, `dist/index.js`, and `node.cmd` were located and hashed by read-only inspection; their presence on the original DELL is **not** independent restore proof. The launcher contains machine-specific remote endpoint/context and node-name bindings, so only sanitized structure and hashes belong in GitHub.
+
+The optional full-chain evidence gate now requires `nodeHostPackageRecoveryVerified === true` from independent offline target evidence. A missing third package MUST yield `NODE_HOST_PACKAGE_RECOVERY_UNVERIFIED` and `NO_GO`, even if the Gateway archive, Wake staging package and source-device Node launcher exist. The already-PASS Gateway-only backup evidence function remains unchanged. Do not import or enable `OpenClaw Node` or restore its remote binding without separate review. The private GitHub repository may retain nonsecret hashes and a masked template only, never live credentials or remote-authorizing configuration.
+
 ## Stage E — service operation remains independently gated
 
 Passing all Stage A–D conditions is **necessary, not sufficient**, to turn on the DELL Gateway. Required separately:
