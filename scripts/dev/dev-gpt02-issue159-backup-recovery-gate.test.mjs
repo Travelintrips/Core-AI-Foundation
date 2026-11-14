@@ -137,6 +137,7 @@ const fullyProvenChain = Object.freeze({
   workspaceRecoveryVerified: true,
   openclawNodeLauncherRecoveryVerified: true,
   openclawNodeScheduledTaskRecoveryVerified: true,
+  nodeHostPackageRecoveryVerified: true,
   wakeExecutorScriptRecoveryVerified: true,
   wakeExecutorDependencyClosureRecoveryVerified: true,
   wakeStagedOpenClawPackageRecoveryVerified: true,
@@ -150,6 +151,7 @@ const chainRecoveryDimensions = [
   ["workspaceRecoveryVerified", "WORKSPACE_RECOVERY_UNVERIFIED"],
   ["openclawNodeLauncherRecoveryVerified", "OPENCLAW_NODE_LAUNCHER_RECOVERY_UNVERIFIED"],
   ["openclawNodeScheduledTaskRecoveryVerified", "OPENCLAW_NODE_SCHEDULED_TASK_RECOVERY_UNVERIFIED"],
+  ["nodeHostPackageRecoveryVerified", "NODE_HOST_PACKAGE_RECOVERY_UNVERIFIED"],
   ["wakeExecutorScriptRecoveryVerified", "WAKE_EXECUTOR_SCRIPT_RECOVERY_UNVERIFIED"],
   ["wakeExecutorDependencyClosureRecoveryVerified", "WAKE_EXECUTOR_DEPENDENCY_CLOSURE_RECOVERY_UNVERIFIED"],
   ["wakeStagedOpenClawPackageRecoveryVerified", "WAKE_STAGED_OPENCLAW_PACKAGE_RECOVERY_UNVERIFIED"],
@@ -252,4 +254,23 @@ test("restoring Gateway 2026.10.7 does not prove separate Wake staging OpenClaw 
   assert.deepEqual(report.reasons, ["WAKE_STAGED_OPENCLAW_PACKAGE_RECOVERY_UNVERIFIED"]);
   assert.equal(report.gatewayRestartAuthorized, false);
   assert.equal(report.wakeExecutorRestartAuthorized, false);
+});
+
+
+test("source Node host 2026.9.9 package and node.cmd presence never satisfies independent recovery", () => {
+  const report = evaluateChain({
+    ...fullyProvenChain,
+    nodeHostPackageRecoveryVerified: false,
+    sourceNodeVbsPresent: true,
+    sourceNodeCmdPresent: true,
+    sourceNode2026_9_9PackagePresent: true,
+    sourceNode2026_9_9HashMatch: true,
+    sourcePortableNode2026_11_1Present: true,
+  });
+  assert.equal(report.evidenceStatus, "NO_GO");
+  assert.equal(report.backupEvidenceComplete, true);
+  assert.equal(report.chainRecoveryEvidenceComplete, false);
+  assert.deepEqual(report.reasons, ["NODE_HOST_PACKAGE_RECOVERY_UNVERIFIED"]);
+  assert.equal(report.openclawNodeRestartAuthorized, false);
+  assert.equal(report.workerDispatchAuthorized, false);
 });
