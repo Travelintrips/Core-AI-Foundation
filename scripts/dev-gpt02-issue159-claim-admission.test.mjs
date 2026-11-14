@@ -127,33 +127,54 @@ test("operational claim gate OFF before packet verification and SQL",async()=>{
   }finally{process.env=before;}
 });
 
-test("even with requested feature ON, unavailable independent root denies before DB",async()=>{
+test("operational verification reads HELD from DB before pinned root; never trusts caller JSON",async()=>{
   const f=fixture();
-  const {proof,...input}=f;
+  const {proof,held,...input}=f;
   const prior=Object.assign({},process.env);
   try {
     process.env.APP_ENV="development";
     process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED="true";
-    let calls=0;
-    const db={async query(){calls++;throw Error("SHOULD_NOT_QUERY");}};
+    const seen=[];
+    const db={
+      async query(statement,args) {
+        seen.push([statement,args]);
+        if(statement==="BEGIN"||statement==="ROLLBACK")
+          return {rows:[]};
+        if(statement.startsWith("SELECT session_user::text"))
+          return {rows:[{
+            session_login:"dev_gpt02_claim_gate_login",
+            active_role:"dev_gpt02_claim_gate_login",
+          }]};
+        if(statement.includes("read_issue159_held_for_claim"))
+          return {rows:[{held}]};
+        throw Error("UNEXPECTED_CLAIM_WRITE");
+      },
+    };
+    // Independent root not installed in this disposable environment.
     await assert.rejects(
       reserveIssue159ClaimWithoutDispatch(input,db),
-      errorCode("RELEASE_INDEPENDENT_PINNED_ROOT_UNAVAILABLE"),
+      errorCode("CLAIM_RESERVATION_OUTCOME_UNCERTAIN_NO_DISPATCH"),
     );
-    assert.equal(calls,0);
-  }finally{process.env=prior;}
+    assert.equal(seen.length,4);
+    assert.deepEqual(seen.map(x=>x[0]==="BEGIN"?"BEGIN":
+      x[0]==="ROLLBACK"?"ROLLBACK":
+      x[0].includes("read_issue159_held_for_claim")?"HELD_READER":"ROLE"),
+      ["BEGIN","ROLE","HELD_READER","ROLLBACK"]);
+    assert.deepEqual(seen[2][1],[COMMAND,PERMIT,"a".repeat(64)]);
+    assert.ok(seen.every(x=>!x[0].includes("reserve_issue159_release_claim")));
+  } finally {process.env=prior;}
 });
 
 test("unexpected caller clock, public key or claimed proof is forbidden",async()=>{
   const f=fixture();
-  const {proof,...input}=f;
+  const {proof,held,...input}=f;
   const prior=Object.assign({},process.env);
   try {
     process.env.APP_ENV="development";
     process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED="true";
     const db={async query(){throw Error("SHOULD_NOT_QUERY");}};
     for(const extra of [
-      {nowMs:now},{publicKeyPem:"attacker"},
+      {nowMs:now},{publicKeyPem:"attacker"}, {held},
       {proof},{authApproved:true},{dispatchPermitted:true},
     ]) {
       await assert.rejects(
@@ -263,6 +284,35 @@ test("wrong DB identity and forged readback status fail closed",async()=>{
     readInDev({
       commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
     },forged.db),errorCode("CLAIM_READBACK_RESULT_INVALID"));
+});
+
+test("direct pool-like connection is rejected before transaction",async()=>{
+  const f=fixture();
+  const {proof,held,...input}=f;
+  const previous={...process.env};
+  try {
+    process.env.APP_ENV="development";
+    process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED="true";
+    let called=0;
+    await assert.rejects(
+      reserveIssue159ClaimWithoutDispatch(input,{
+        connect(){called++;},
+        async query(){called++;},
+      }),
+      errorCode("DEDICATED_CLAIM_DB_CLIENT_REQUIRED"),
+    );
+    assert.equal(called,0);
+  }finally{process.env=previous;}
+});
+
+test("operational source never uses caller-held object for signature verification",()=>{
+  const src=readFileSync(
+    new URL("./dev-gpt02-issue159-claim-admission.mjs",import.meta.url),
+    "utf8");
+  assert.match(src,/read_issue159_held_for_claim/);
+  assert.match(src,/held:\s*heldRead\.rows\[0\]\.held/);
+  assert.doesNotMatch(src,/held:\s*input\.held/);
+  assert.doesNotMatch(src,/\["release","signatureBase64","held","binding"\]/);
 });
 
 test("adapter contains no gateway/worker send, network clients or DB secrets",()=>{
