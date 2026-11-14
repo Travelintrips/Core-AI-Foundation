@@ -253,6 +253,12 @@ jobs:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
         run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-restore.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify candidate accepts legacy archive links and manifests
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-verify.test.ts --testNamePattern "older Windows cross-asset links|root-relative internal hardlink targets from older backups" --testTimeout 30000 --hookTimeout 30000
       - name: Verify SQLite backup inventory completeness and omission refusal
         timeout-minutes: 10
         env:
@@ -265,3 +271,40 @@ jobs:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
         run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/backup-create.client-credentials.test.ts --testTimeout 30000 --hookTimeout 30000
+
+  installed-release-backup-baseline:
+    name: Installed OpenClaw 2026.10.7 synthetic archive baseline (not DELL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout immutable original installed-version source
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 157d8c2bc3ea2fa183afdc11088e69690bf8e64e
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Exact packageManager pin comes from this historical checkout.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install original source dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify old-release synthetic archive restore into clean target
+        timeout-minutes: 10
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-restore.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify old-release SQLite snapshot inventory and omission rejection
+        timeout-minutes: 8
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-verify-completeness.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify original storage encryption and key rejection
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.unit.config.ts src/storage/encryption.test.ts src/storage/filesystem.test.ts src/storage/locations.test.ts --testTimeout 30000 --hookTimeout 30000
