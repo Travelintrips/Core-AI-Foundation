@@ -25,7 +25,12 @@ WITH expected(role_name) AS (
          WHERE n.nspname='gpt02_private' AND c.relkind='r'
            AND c.relname = ANY(ARRAY['approvals','operator_links','receipts',
              'core_identity_receipts','post_consumption_fences'])
-           AND has_table_privilege(x.role_name,c.oid,'SELECT')) AS direct_select_tables,
+           AND has_table_privilege(x.role_name,c.oid,'SELECT')) AS table_level_select_tables,
+        (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+         WHERE n.nspname='gpt02_private' AND c.relkind='r'
+           AND c.relname = ANY(ARRAY['approvals','operator_links','receipts',
+             'core_identity_receipts','post_consumption_fences'])
+           AND has_any_column_privilege(x.role_name,c.oid,'SELECT')) AS column_select_tables,
         (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
          WHERE n.nspname='gpt02_private' AND
           (p.proname ILIKE '%lineage%' OR p.proname ILIKE '%read%')
@@ -33,8 +38,8 @@ WITH expected(role_name) AS (
  FROM roles x
 )
 SELECT role_name,rolcanlogin,rolconnlimit,rolinherit,
-       active_sessions,force_rls_tables,direct_select_tables,
-       callable_read_functions,
+       active_sessions,force_rls_tables,table_level_select_tables,
+       column_select_tables,callable_read_functions,
        CASE
          WHEN oid IS NULL THEN 'NO_GO_ROLE_MISSING'
          WHEN coalesce(rolsuper,false) OR coalesce(rolbypassrls,false)
@@ -42,7 +47,7 @@ SELECT role_name,rolcanlogin,rolconnlimit,rolinherit,
               OR coalesce(rolreplication,false) THEN 'NO_GO_ELEVATED_ROLE'
          WHEN role_name='gpt02_issuer_evidence_reader'
               AND rolcanlogin=false AND rolconnlimit=0
-              AND active_sessions=0 AND direct_select_tables=0
+              AND active_sessions=0
               THEN 'EXPECTED_LOCKED_NOT_OPERATIONAL'
          ELSE 'REVIEW_REQUIRED_NOT_AUTHORIZATION'
        END AS custody_decision
@@ -52,3 +57,8 @@ FROM inspected ORDER BY role_name;
 -- authorization, no unrelated row enumeration, strict actor identity,
 -- no credential reuse, and compatibility with native no_privileged_routines.
 -- The mere existence of a readable function does NOT prove any of these.
+-- IMPORTANT: has_table_privilege(...,'SELECT') is FALSE for column-only GRANTs.
+-- Use has_any_column_privilege to detect effective column-scoped read rights.
+-- Some existing policies for receipts are USING (true): SELECT may enumerate
+-- records across more than one task in the same company. This query is
+-- privilege inventory ONLY, and never claims exact-task isolation PASS.
