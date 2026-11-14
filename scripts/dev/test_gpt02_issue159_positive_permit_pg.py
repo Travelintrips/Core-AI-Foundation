@@ -77,6 +77,11 @@ def main():
 
         apply_file(ROOT / "scripts/dev/gpt02_issue159_issuer_delta_disposable_seed.sql",
                    "/tmp/seed.sql")
+        # The disposable source runner substitutes its restricted migrator
+        # identity for "postgres". Mirror the LIVE pgcrypto schema owner
+        # relationship: the fixture migrator, not fixture postgres, must own
+        # the extensions schema before granting narrow SHA-256 USAGE.
+        sql("ALTER SCHEMA extensions OWNER TO " + MIGRATOR)
         apply_file(ROOT / "scripts/dev/gpt02_issue159_issuer_delta_DEV_ONLY.sql",
                    "/tmp/issuer.sql", MIGRATOR, replace_migrator=True)
         candidate = ROOT / "docs/dev/gpt02-issue159-positive-dispatch-permit.PROPOSED.sql"
