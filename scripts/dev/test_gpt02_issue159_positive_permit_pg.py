@@ -409,6 +409,22 @@ def main():
                ":RESERVED_NO_DISPATCH","RELEASE_CLAIM_LEDGER_IDENTITY_DRIFT")
         ensure(sql("SELECT count(*) FROM gpt02_private.issue159_release_claim_intents"
                    ).stdout.strip()=="1", "RELEASE_CLAIM_NOT_EXACTLY_ONCE")
+        # A previously committed reservation never permits a second send.
+        # Missing/non-matching claims also do not confer dispatch authority.
+        read_claim = ("SELECT gpt02_private.inspect_issue159_release_claim('"+
+                      CMD+"',repeat('d',64),'"+event+"')")
+        found = sql(read_claim, "dev_gpt02_claim_gate_login").stdout.strip()
+        ensure(found=="RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED",
+               "CRASH_READBACK_DID_NOT_REQUIRE_GATEWAY_RECONCILIATION")
+        no_match = sql("SELECT gpt02_private.inspect_issue159_release_claim('"+
+                 CMD+"',repeat('d',64),repeat('0',64))",
+                 "dev_gpt02_claim_gate_login").stdout.strip()
+        ensure(no_match=="NO_MATCHING_CLAIM_DO_NOT_SEND",
+               "UNBOUND_RELEASE_READBACK_COULD_AUTHORIZE_SEND")
+        public_reader = sql(read_claim, "dev_gpt02_release_writer",
+                            required=False)
+        ensure(public_reader.returncode!=0,
+               "NON_CLAIM_ROLE_COULD_READ_RELEASE_CLAIM")
         denied_claim_mutation=sql("""UPDATE gpt02_private.issue159_release_claim_intents
            SET claim_state='DISPATCHED'""",required=False)
         ensure(denied_claim_mutation.returncode!=0 and
