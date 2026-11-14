@@ -172,6 +172,12 @@ The DELL Task Scheduler contains `AI Core OpenClaw Repair DEV` (Ready, last obse
 
 In the 14 Nov 16:20–16:40 WIB Windows Task Scheduler event window, the local health monitor executed at 16:20, 16:25, 16:30, and 16:35; the Gateway terminated at 16:33. The monitor's VBS wrapper points to a 162-line `gpt02-dev-monitor-readonly.ps1`; a static PowerShell AST parse found no parse errors, and its named command calls were read/formatting-oriented (`Get-CimInstance`, `Get-ScheduledTask`, `Get-Content`, JSON conversions, etc.). There were five dynamic Node invocations, with no literal `openclaw.mjs`, `gateway.cmd`, process-termination or Scheduled-Task-start command in the examined script. **This does not conclusively establish that all dynamic invocations are side-effect-free or identify the ownership-lock actor.** It does reduce the likelihood of a simple scheduled `Start-ScheduledTask`/restart loop in the monitor. Do not disable it without separately reviewing its owner and dependencies.
 
+## Legacy DELL repair-task safety finding (static, read-only)
+
+The old Windows Scheduled Task `AI Core OpenClaw Repair DEV` is `Ready` and its last observed run was **22 Oct 2026**, not in the 14 Nov crash window. It launches the existing wrapper `openclaw-repair-hidden.vbs`, which references `install-clean10.ps1` (11 lines). A **static string/structure inspection only** shows this installer script includes `npm`, `Start-Process`, `Remove-Item` and `Set-Content`; it does **not** name the current `staged-update-2026.10.7` package or `gateway.cmd` explicitly.
+
+**Do not run this legacy task for Gateway recovery or assume that it owns the current staged installation.** It is a different installation/repair pathway with filesystem and process side effects, and its last known use predates the current package. If a real upgrade is approved in a future maintenance window, identify the current staged package owner and build a reviewed, isolated, rollback-capable replacement procedure instead. No repair task was run, and no file or Scheduled Task was modified in this inspection.
+
 ## Proposed claim admission contract remains dormant
 
 Source-only PR #1754 already requires independently owned read-only `inspectGatewayReachability()`, `inspectOpenClawModelStatus()`, and `inspectGatewayCredential()` evidence, matching exact worker/agent/provider/owner/target/proof and a recent Gateway status. Green synthetic CI **does not** mean an actual DELL reader or dispatcher is installed or the live system is healthy.
