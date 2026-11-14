@@ -164,6 +164,19 @@ test("unexpected caller clock, public key or claimed proof is forbidden",async()
   }finally{process.env=prior;}
 });
 
+// Exercise the real exported readback only in a deliberately scoped DEV test
+// environment; production or missing APP_ENV must remain fail-closed.
+async function readInDev(input, connection) {
+  const original=process.env.APP_ENV;
+  try {
+    process.env.APP_ENV="development";
+    return await inspectIssue159ClaimAfterCrash(input, connection);
+  } finally {
+    if(original === undefined) delete process.env.APP_ENV;
+    else process.env.APP_ENV=original;
+  }
+}
+
 function fakeReadback(status,role="dev_gpt02_claim_gate_login") {
   const queries=[];
   const db={
@@ -179,9 +192,40 @@ function fakeReadback(status,role="dev_gpt02_claim_gate_login") {
   return {db,queries};
 }
 
+test("readback rejects production, absent DEV and injected authority before DB access",async()=>{
+  const original=process.env.APP_ENV;
+  const selector={
+    commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
+  };
+  const {db,queries}=fakeReadback("RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED");
+  try {
+    for(const badEnv of ["production",undefined,"test"]) {
+      if(badEnv===undefined)delete process.env.APP_ENV;
+      else process.env.APP_ENV=badEnv;
+      await assert.rejects(
+        inspectIssue159ClaimAfterCrash(selector,db),
+        errorCode("CLAIM_READBACK_DEV_ONLY"),
+      );
+    }
+    process.env.APP_ENV="development";
+    for(const injected of [
+      {dispatchPermitted:true},{nowMs:0},{publicKeyPem:"attacker"},
+      {claimStatus:"AUTHORIZED_TO_SEND"},{ownerApproved:true},
+    ]) {
+      await assert.rejects(
+        inspectIssue159ClaimAfterCrash({...selector,...injected},db),
+        errorCode("CLAIM_READBACK_INPUT_SHAPE_INVALID"),
+      );
+    }
+    assert.equal(queries.length,0);
+  } finally {
+    if(original===undefined)delete process.env.APP_ENV;
+    else process.env.APP_ENV=original;
+  }
+});
 test("crash readback only points to existing gateway idempotency lookup",async()=>{
   const {db,queries}=fakeReadback("RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED");
-  const result=await inspectIssue159ClaimAfterCrash({
+  const result=await readInDev({
     commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
   },db);
   assert.equal(result.claimStatus,"RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED");
@@ -196,13 +240,13 @@ test("crash readback only points to existing gateway idempotency lookup",async()
 
 test("wrong claim selectors and missing claim can never send",async()=>{
   const {db}=fakeReadback("NO_MATCHING_CLAIM_DO_NOT_SEND");
-  const r=await inspectIssue159ClaimAfterCrash({
+  const r=await readInDev({
     commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
   },db);
   assert.equal(r.gatewayLookupRequired,false);
   assert.equal(r.releaseDecision,"NO_GO");
   await assert.rejects(
-    inspectIssue159ClaimAfterCrash({
+    readInDev({
       commandId:COMMAND,releaseSha256:"X".repeat(64),eventId:"b".repeat(64),
     },db),errorCode("CLAIM_READBACK_SELECTORS_INVALID"));
 });
@@ -210,13 +254,13 @@ test("wrong claim selectors and missing claim can never send",async()=>{
 test("wrong DB identity and forged readback status fail closed",async()=>{
   const bad=fakeReadback("RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED","service_role");
   await assert.rejects(
-    inspectIssue159ClaimAfterCrash({
+    readInDev({
       commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
     },bad.db),errorCode("EXCLUSIVE_RELEASE_CLAIM_ROLE_REQUIRED"));
   assert.equal(bad.queries.length,1);
   const forged=fakeReadback("AUTHORIZED_TO_DISPATCH");
   await assert.rejects(
-    inspectIssue159ClaimAfterCrash({
+    readInDev({
       commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
     },forged.db),errorCode("CLAIM_READBACK_RESULT_INVALID"));
 });
