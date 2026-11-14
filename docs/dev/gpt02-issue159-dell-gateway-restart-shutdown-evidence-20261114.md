@@ -87,6 +87,16 @@ A local nonsecret manifest records which two files were backed up, byte counts a
 
 **Gate status:** G0 read-only partial; **G1 partial (two encrypted DB snapshots only)**; **G2 partial (in-memory roundtrip/integrity for these two snapshots only)**; G3/G4/G5 **NOT performed**. These results do **not** authorize Gateway restart, restore, dispatch, credential activation, merge/deployment or PROD operations.
 
+## OpenClaw official full-backup plan, checked without writing (14 Nov 2026)
+
+The installed DELL OpenClaw CLI `2026.10.7` exposes the official `openclaw backup create` command with `--dry-run`, `--json`, `--no-include-workspace`, `--output`, and `--verify` options. Using **the correct running Gateway state/config paths**, and invoking the installed Node CLI entrypoint directly (not the browser-dev launcher, which overrides the state directory), this read-only preflight completed twice with exit code **0**.
+
+Sanitized plan readback: `dryRun=true`, `includeWorkspace=false`, **2 asset entries**, **5 agent roots**, **28 skipped entries**, `skippedVolatileCount=0`. The excluded entries were **not** reviewed as a full restore coverage audit; `verified=false` is expected on a dry run because **no archive was created**. No source paths, user account IDs, file payloads or credentials were copied into the PR.
+
+The official OpenClaw backup documentation states that full backup archives can include auth profiles, channel/provider credentials and agent state, and require owner-only access and encryption. It also explicitly warns against raw copies of live `.sqlite`, `-wal`, `-shm`, or `-journal` files. The supported path is `backup create`, optional `--verify`, and restoration into a **fresh** target, not replacing live state. References: https://docs.openclaw.ai/install/backups and https://docs.openclaw.ai/cli/backup .
+
+**No native backup create was executed** in this stage: a full archive can contain sensitive credentials, and the local encrypted-credential-copy attempt was already denied by the access safety gate. A new archive must be created and safeguarded through a separately approved operator-controlled, encrypted backup destination, followed by native verification and staged restore inspection. The safe CLI dry-run is useful planning evidence only, and does not clear G1/G2 for full-system recovery.
+
 ## Proposed claim admission contract remains dormant
 
 Source-only PR #1754 already requires independently owned read-only `inspectGatewayReachability()`, `inspectOpenClawModelStatus()`, and `inspectGatewayCredential()` evidence, matching exact worker/agent/provider/owner/target/proof and a recent Gateway status. Green synthetic CI **does not** mean an actual DELL reader or dispatcher is installed or the live system is healthy.
