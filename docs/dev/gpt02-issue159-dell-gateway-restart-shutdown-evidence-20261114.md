@@ -154,6 +154,24 @@ Before a package replacement is proposed on DELL:
 
 **Decision:** `v2026.11.3` is an **unqualified candidate**, not a proven fix for this DELL shutdown. G2R **NO_GO** until equivalence and isolated lifecycle tests pass. This qualification corrects any earlier implication that merging PR #186811 automatically made v2026.11.3 safe to deploy.
 
+## Source-only comparison with v2026.11.5-beta.2 (not an installation recommendation)
+
+Read-only GitHub release inspection on 14 Nov 2026 identified [`v2026.11.5-beta.2`](https://github.com/openclaw/openclaw/releases/tag/v2026.11.5-beta.2), **published as a prerelease on 12 Nov**. The most recent **non-prerelease** version in the checked release list remains `v2026.11.3`. The beta [package metadata](https://github.com/openclaw/openclaw/blob/v2026.11.5-beta.2/package.json) accepts DELL's Node `24.22.1` (engine `>=24.16.0 <25 || >=26.1.0`), but this is only a dependency version gate.
+
+In the beta release's **actual tag source**:
+- `src/infra/gateway-lock-payload.ts` has the Windows boot-observation identity guard.
+- `src/plugins/plugin-cache.ts` retains the `waitForSettlement`/resource disposal option.
+- [`src/cli/gateway-cli/run-loop.ts`](https://github.com/openclaw/openclaw/blob/v2026.11.5-beta.2/src/cli/gateway-cli/run-loop.ts) now gates watchdog removal with `!forcedExitStarted && cleanup.canClearRequestWatchdogs()`, unlike stable `v2026.11.3` where that location only tests `!forcedExitStarted`.
+- [`src/cli/gateway-cli/run-loop-cleanup.ts`](https://github.com/openclaw/openclaw/blob/v2026.11.5-beta.2/src/cli/gateway-cli/run-loop-cleanup.ts) defines `canClearRequestWatchdogs()` as `!resourcesRetained && (!ownsProcessLifecycle || !cleanupFailed)`, which **appears to retain the watchdog** when a process-owned Gateway shutdown fails or resources remain held. This is a plausible source-level semantic equivalent to the targeted watchdog retention requirement.
+
+**Qualification:** The beta passes only this **static source-feature inspection**. It has not been installed, run on Windows DELL, tested with the existing Codex plugin, or subjected to `SIGUSR2`/lock conflict/restore tests. This is **NOT** an approved live DEV release. Prefer a subsequent fully reviewed stable release containing the equivalent guard; otherwise, only an independently approved isolated beta/candidate test environment can assess it. Never change the active Gateway launcher or credential store based on these source markers alone.
+
+## Scheduled-task interference check (read-only)
+
+The DELL Task Scheduler contains `AI Core OpenClaw Repair DEV` (Ready, last observed execution 22 Oct), `GPT02 DEV Local Health Monitor` (five-minute timer), and `AI Core DELL Wake Executor DEV` (Running) **in addition to** `OpenClaw Gateway` (Ready/offline). This confirms that unrelated Node processes and worker services must not be indiscriminately terminated.
+
+In the 14 Nov 16:20–16:40 WIB Windows Task Scheduler event window, the local health monitor executed at 16:20, 16:25, 16:30, and 16:35; the Gateway terminated at 16:33. The monitor's VBS wrapper points to a 162-line `gpt02-dev-monitor-readonly.ps1`; a static PowerShell AST parse found no parse errors, and its named command calls were read/formatting-oriented (`Get-CimInstance`, `Get-ScheduledTask`, `Get-Content`, JSON conversions, etc.). There were five dynamic Node invocations, with no literal `openclaw.mjs`, `gateway.cmd`, process-termination or Scheduled-Task-start command in the examined script. **This does not conclusively establish that all dynamic invocations are side-effect-free or identify the ownership-lock actor.** It does reduce the likelihood of a simple scheduled `Start-ScheduledTask`/restart loop in the monitor. Do not disable it without separately reviewing its owner and dependencies.
+
 ## Proposed claim admission contract remains dormant
 
 Source-only PR #1754 already requires independently owned read-only `inspectGatewayReachability()`, `inspectOpenClawModelStatus()`, and `inspectGatewayCredential()` evidence, matching exact worker/agent/provider/owner/target/proof and a recent Gateway status. Green synthetic CI **does not** mean an actual DELL reader or dispatcher is installed or the live system is healthy.
