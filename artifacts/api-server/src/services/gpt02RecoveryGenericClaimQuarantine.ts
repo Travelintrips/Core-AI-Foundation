@@ -11,6 +11,9 @@ const recoveryKeys = [
   "gpt02RecoveryParentCommandId",
   "recoveryParentCommandId",
   "recovery_parent_command_id",
+  // Source-only Issue159 outbox candidates must never reach the generic
+  // API or generic worker claim path, even with a null/false marker.
+  "gpt02Issue159PositivePermit",
 ] as const;
 
 export function isQuarantinedGpt02RecoveryMetadata(value: unknown): boolean {
@@ -31,7 +34,8 @@ export function genericClaimNotGpt02RecoverySql() {
   NOT (
     metadata_json ?| ARRAY[
       'gpt02Recovery','gpt02RecoveryParentCommandId',
-      'recoveryParentCommandId','recovery_parent_command_id'
+      'recoveryParentCommandId','recovery_parent_command_id',
+      'gpt02Issue159PositivePermit'
     ]::text[]
     OR (
       metadata_json ->> 'capability' = 'chatgpt:wake'

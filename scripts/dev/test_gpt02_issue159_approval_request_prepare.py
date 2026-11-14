@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 import importlib.util
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import sqlite3
+import sys
 import tempfile
+import threading
+import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/dev/prepare_gpt02_issue159_approval_request.py"
@@ -109,6 +114,182 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
                         now_ms=1_800_000_000_000, operational=False,
                     )
                 self.assertFalse(os.path.exists(self.output))
+
+    def test_direct_preparer_rejects_old_approval_intent_by_any_identity(self):
+        # Missing evidence is a denial, not proof the task has never been
+        # approved. This is the direct CLI's historical replay bypass.
+        with self.assertRaisesRegex(
+            RuntimeError, "ISSUE159_APPROVAL_REPLAY_READBACK_UNAVAILABLE"
+        ):
+            prepare_module._reject_reused_approval_intent(
+                self.db, 172, COMMAND, ATTEMPT,
+            )
+        con = sqlite3.connect(self.db)
+        con.execute("""CREATE TABLE gpt02_issue159_approval_intents(
+            task_id INTEGER, command_id TEXT, attempt_id TEXT
+        )""")
+        con.commit()
+        con.close()
+        prepare_module._reject_reused_approval_intent(
+            self.db, 172, COMMAND, ATTEMPT,
+        )
+        con = sqlite3.connect(self.db)
+        con.execute(
+            "INSERT INTO gpt02_issue159_approval_intents VALUES (?,?,?)",
+            (172, COMMAND, ATTEMPT),
+        )
+        con.commit()
+        con.close()
+        for task_id, cmd, att in (
+            (172, "33333333-3333-4333-8333-333333333333",
+             "44444444-4444-4444-8444-444444444444"),
+            (173, COMMAND, "44444444-4444-4444-8444-444444444444"),
+            (173, "33333333-3333-4333-8333-333333333333", ATTEMPT),
+        ):
+            with self.subTest(task_id=task_id, cmd=cmd, att=att):
+                with self.assertRaisesRegex(
+                    RuntimeError, "ISSUE159_APPROVAL_INTENT_ALREADY_CONSUMED"
+                ):
+                    prepare_module._reject_reused_approval_intent(
+                        self.db, task_id, cmd, att,
+                    )
+                self.assertFalse(os.path.exists(self.output))
+
+    def test_test_mode_cannot_touch_live_approval_paths(self):
+        for db_path, output in (
+            (prepare_module.LIVE_DB, self.output),
+            (self.db, prepare_module.LIVE_OUTPUT),
+            (self.db, "/opt/ai-coding-standalone-dev/forged-pending.json"),
+        ):
+            with self.subTest(db_path=db_path, output=output):
+                with self.assertRaisesRegex(
+                    RuntimeError, "ISSUE159_TEST_MODE_LIVE_TARGET_FORBIDDEN"
+                ):
+                    prepare_module.prepare(
+                        db_path, output, 172, COMMAND, ATTEMPT,
+                        now_ms=1_800_000_000_000, operational=False,
+                    )
+                self.assertFalse(os.path.exists(self.output))
+
+    def test_operational_preparer_rechecks_trusted_hub_core_lineage(self):
+        now = 1_800_000_000_000
+        claims = {
+            "companyId": "default", "taskId": 172,
+            "commandId": COMMAND, "attemptId": ATTEMPT,
+            "expiresAt": now + 240_000,
+        }
+        captured = []
+        facts = {"trusted": "from-pinned-socket"}
+        def reader(query):
+            captured.append(("read", query))
+            return facts
+        def verifier(value, proposed_claims, observed_at):
+            captured.append(("verify", value, proposed_claims, observed_at))
+            return now + 260_000
+        module = types.SimpleNamespace(
+            _socket_fact_reader=reader,
+            _verify_pre_sign_facts=verifier,
+        )
+        with patch.dict(sys.modules, {
+            "gpt02_issue159_approval_request_refresh": module,
+        }):
+            prepare_module._require_operational_pre_sign(claims, now)
+        self.assertEqual(captured[0], ("read", {
+            "companyId": "default", "hubTaskId": 172,
+            "commandCandidateId": COMMAND, "attemptId": ATTEMPT,
+        }))
+        self.assertEqual(captured[1], ("verify", facts, claims, now))
+
+    def test_operational_preparer_denies_reader_failure_or_expired_preparation(self):
+        now = 1_800_000_000_000
+        claims = {
+            "companyId": "default", "taskId": 172,
+            "commandId": COMMAND, "attemptId": ATTEMPT,
+            "expiresAt": now + 240_000,
+        }
+        for module in (
+            types.SimpleNamespace(
+                _socket_fact_reader=lambda _: (_ for _ in ()).throw(
+                    RuntimeError("TRUSTED_SOCKET_ABSENT")
+                ),
+                _verify_pre_sign_facts=lambda *args: now + 260_000,
+            ),
+            types.SimpleNamespace(
+                _socket_fact_reader=lambda _: {"source": "synthetic"},
+                _verify_pre_sign_facts=lambda *args: now + 240_000,
+            ),
+        ):
+            with patch.dict(sys.modules, {
+                "gpt02_issue159_approval_request_refresh": module,
+            }):
+                with self.assertRaisesRegex(
+                    RuntimeError, "ISSUE159_FRESH_TRUSTED_PRESIGN_REQUIRED"
+                ):
+                    prepare_module._require_operational_pre_sign(claims, now)
+            self.assertFalse(os.path.exists(self.output))
+
+    def test_concurrent_same_target_creates_exactly_one_request_without_orphans(self):
+        barrier = threading.Barrier(2, timeout=8)
+        real_link = os.link
+
+        def synchronized_link(source, target):
+            barrier.wait()
+            return real_link(source, target)
+
+        def create():
+            try:
+                prepare_module.prepare(
+                    self.db, self.output, 172, COMMAND, ATTEMPT,
+                    now_ms=1_800_000_000_000, operational=False,
+                )
+                return "CREATED"
+            except RuntimeError as exc:
+                return str(exc)
+
+        with patch.object(prepare_module.os, "link", side_effect=synchronized_link):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                attempts = list(executor.map(lambda _: create(), range(2)))
+        self.assertCountEqual(
+            attempts, ["CREATED", "ISSUE159_PENDING_REQUEST_ALREADY_EXISTS"]
+        )
+        self.assertEqual(
+            list(Path(self.root).glob(".pending.json.tmp.*")), []
+        )
+        self.assertEqual(os.stat(self.output).st_mode & 0o777, 0o600)
+        claims = json.loads(Path(self.output).read_text())["claims"]
+        self.assertEqual(claims["taskId"], 172)
+        self.assertEqual(claims["commandId"], COMMAND)
+        self.assertEqual(claims["attemptId"], ATTEMPT)
+
+    def test_fault_during_publish_or_fsync_leaves_no_orphan(self):
+        failures = (
+            ("link", OSError("SYNTHETIC_LINK_FAULT")),
+            ("fsync", OSError("SYNTHETIC_FSYNC_FAULT")),
+        )
+        for operation, error in failures:
+            with self.subTest(operation=operation):
+                with patch.object(prepare_module.os, operation, side_effect=error):
+                    with self.assertRaisesRegex(OSError, str(error)):
+                        prepare_module.prepare(
+                            self.db, self.output, 172, COMMAND, ATTEMPT,
+                            now_ms=1_800_000_000_000, operational=False,
+                        )
+                self.assertFalse(os.path.lexists(self.output))
+                self.assertEqual(
+                    list(Path(self.root).glob(".pending.json.tmp.*")), []
+                )
+
+    def test_incomplete_write_aborts_without_pending_or_orphan(self):
+        with patch.object(prepare_module.os, "write", return_value=0):
+            with self.assertRaisesRegex(
+                RuntimeError, "ISSUE159_PENDING_FILE_WRITE_INCOMPLETE"
+            ):
+                prepare_module.prepare(
+                    self.db, self.output, 172, COMMAND, ATTEMPT,
+                    now_ms=1_800_000_000_000, operational=False,
+                )
+        self.assertFalse(os.path.lexists(self.output))
+        self.assertEqual(list(Path(self.root).glob(".pending.json.tmp.*")), [])
 
     def test_refuses_to_overwrite_existing_pending_request(self):
         Path(self.output).write_text('{"claims":{}}')
