@@ -211,6 +211,31 @@ GRANT EXECUTE ON FUNCTION
  gpt02_private.reserve_issue159_release_claim(
   uuid,uuid,text,text,text,text,text,uuid,text,text,bigint,bigint
  ) TO dev_gpt02_claim_gate_login;
+-- After a lost response or crash, this is a READ-ONLY status hint.
+-- It never authorizes a second send or turns a reservation into a lease.
+CREATE FUNCTION gpt02_private.inspect_issue159_release_claim(
+ p_command uuid,p_release_sha text,p_event text
+) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $read$
+BEGIN
+ IF session_user<>'dev_gpt02_claim_gate_login'
+ OR p_release_sha IS NULL OR p_release_sha !~ '^[0-9a-f]{64}$'
+ OR p_event IS NULL OR p_event !~ '^[0-9a-f]{64}$'
+ THEN RAISE EXCEPTION USING ERRCODE='42501',
+   MESSAGE='CLAIM_READBACK_TRUSTED_ROLE_REQUIRED'; END IF;
+ IF EXISTS(
+   SELECT 1 FROM gpt02_private.issue159_release_claim_intents x
+   WHERE x.command_id=p_command AND x.release_sha256=p_release_sha
+     AND x.event_id=p_event AND x.claim_state='RESERVED_NO_DISPATCH'
+ ) THEN
+   RETURN 'RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED';
+ END IF;
+ RETURN 'NO_MATCHING_CLAIM_DO_NOT_SEND';
+END $read$;
+REVOKE ALL ON FUNCTION
+ gpt02_private.inspect_issue159_release_claim(uuid,text,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION
+ gpt02_private.inspect_issue159_release_claim(uuid,text,text)
+ TO dev_gpt02_claim_gate_login;
 RESET ROLE;
 GRANT gpt02_store_owner TO postgres WITH SET FALSE;
 
@@ -228,6 +253,8 @@ BEGIN
       'gpt02_private.issue159_release_claim_intents','SELECT')
  OR NOT has_function_privilege('dev_gpt02_claim_gate_login',
       'gpt02_private.reserve_issue159_release_claim(uuid,uuid,text,text,text,text,text,uuid,text,text,bigint,bigint)','EXECUTE')
+ OR NOT has_function_privilege('dev_gpt02_claim_gate_login',
+      'gpt02_private.inspect_issue159_release_claim(uuid,text,text)','EXECUTE')
  THEN RAISE EXCEPTION 'RELEASE_CLAIM_POSTFLIGHT_SECURITY_DRIFT'; END IF;
 END $postflight$;
 COMMIT;
