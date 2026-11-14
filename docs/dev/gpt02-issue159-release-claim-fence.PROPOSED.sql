@@ -28,6 +28,11 @@ BEGIN
  IF (SELECT pg_get_userbyid(nspowner) FROM pg_namespace
        WHERE nspname='extensions') IS DISTINCT FROM 'postgres'
  THEN RAISE EXCEPTION 'RELEASE_CLAIM_DIGEST_SCHEMA_OWNER_DRIFT'; END IF;
+ IF NOT EXISTS(
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='ai_platform' AND c.relname='ai_settings'
+      AND pg_get_userbyid(c.relowner)='postgres' AND c.relrowsecurity
+ ) THEN RAISE EXCEPTION 'RELEASE_CLAIM_REGISTRY_OWNER_RLS_DRIFT'; END IF;
  IF NOT has_table_privilege('gpt02_store_owner',
        'ai_platform.ai_coding_bridge_commands','SELECT')
  OR NOT has_table_privilege('gpt02_store_owner',
@@ -43,6 +48,15 @@ CREATE ROLE dev_gpt02_claim_gate_login
 -- existing Core Task and issuer UUIDs. Only schema USAGE is added; digest()
 -- EXECUTE is already available, and no public grant is broadened.
 GRANT USAGE ON SCHEMA extensions TO gpt02_store_owner;
+-- Reuse the existing central DEV GPT02 account-binding registry. Grant only
+-- SELECT to the private NOLOGIN owner; RLS restricts it to two nonsecret
+-- guardrail keys. A caller-supplied owner/target is never registry evidence.
+GRANT SELECT ON ai_platform.ai_settings TO gpt02_store_owner;
+CREATE POLICY issue159_release_registry_owner_select
+ ON ai_platform.ai_settings FOR SELECT TO gpt02_store_owner
+ USING(is_secret IS FALSE AND category='guardrail'
+   AND key IN ('dev.chatgpt_wake.enabled',
+               'dev.chatgpt_wake.account_bindings'));
 
 GRANT gpt02_store_owner TO postgres WITH SET TRUE;
 SET ROLE gpt02_store_owner;
@@ -105,6 +119,8 @@ CREATE FUNCTION gpt02_private.reserve_issue159_release_claim(
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER
  SET search_path=pg_catalog AS $fn$
 DECLARE v record; v_claim uuid; v_now bigint;
+        v_registry jsonb; v_registry_enabled text;
+        v_matches integer; v_dell_count integer; v_target_count integer;
 BEGIN
  IF session_user<>'dev_gpt02_claim_gate_login'
  OR p_packet_sha IS NULL OR p_packet_sha !~ '^[0-9a-f]{64}$'
@@ -122,6 +138,44 @@ BEGIN
   MESSAGE='RELEASE_CLAIM_ROLE_AND_SIGNED_BINDING_REQUIRED'; END IF;
 
  PERFORM pg_advisory_xact_lock(hashtextextended(p_command::text,0));
+ -- Exact owner + target MUST match the central registry, not caller JSON,
+ -- and exactly one enabled GPT02 tuple may target the DELL worker. Existing
+ -- other GPT02 workers are retained (no re-register or build from scratch).
+ SELECT s.value::jsonb INTO v_registry
+ FROM ai_platform.ai_settings s
+ WHERE s.key='dev.chatgpt_wake.account_bindings'
+   AND s.is_secret IS FALSE AND s.category='guardrail';
+ SELECT s.value INTO v_registry_enabled
+ FROM ai_platform.ai_settings s
+ WHERE s.key='dev.chatgpt_wake.enabled'
+   AND s.is_secret IS FALSE AND s.category='guardrail';
+ IF v_registry_enabled IS DISTINCT FROM 'true'
+ OR v_registry IS NULL OR jsonb_typeof(v_registry)<>'object'
+ OR v_registry->>'version'<>'1'
+ OR jsonb_typeof(v_registry->'bindings') IS DISTINCT FROM 'array'
+ OR jsonb_array_length(v_registry->'bindings')>16
+ THEN RAISE EXCEPTION USING ERRCODE='42501',
+   MESSAGE='DEV_GPT02_TRUSTED_REGISTRY_NOT_READY'; END IF;
+ SELECT
+   count(*) FILTER(WHERE b->>'accountAlias'='GPT02'
+     AND b->>'workerId'='openclaw-dell-chatgpt-wake-dev'
+     AND b->>'ownerChannel'=p_owner_channel
+     AND b->>'targetConversationId'=p_target::text
+     AND jsonb_typeof(b->'enabled')='boolean'
+     AND b->>'enabled'='true'
+     AND (b->>'browserProfile') ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'),
+   count(*) FILTER(WHERE b->>'accountAlias'='GPT02'
+     AND b->>'workerId'='openclaw-dell-chatgpt-wake-dev'
+     AND jsonb_typeof(b->'enabled')='boolean'
+     AND b->>'enabled'='true'),
+   count(*) FILTER(WHERE b->>'targetConversationId'=p_target::text
+     AND jsonb_typeof(b->'enabled')='boolean'
+     AND b->>'enabled'='true')
+ INTO v_matches,v_dell_count,v_target_count
+ FROM jsonb_array_elements(v_registry->'bindings') AS b;
+ IF v_matches<>1 OR v_dell_count<>1 OR v_target_count<>1
+ THEN RAISE EXCEPTION USING ERRCODE='42501',
+   MESSAGE='DEV_GPT02_OWNER_TARGET_REGISTRY_MISMATCH'; END IF;
  v_now := floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
  IF p_issued_ms>v_now OR p_issued_ms<v_now-15000
  OR p_expires_ms<=v_now+1000
@@ -243,6 +297,10 @@ DO $postflight$
 BEGIN
  IF pg_has_role('postgres','gpt02_store_owner','SET')
  OR NOT has_schema_privilege('gpt02_store_owner','extensions','USAGE')
+ OR NOT has_table_privilege('gpt02_store_owner',
+      'ai_platform.ai_settings','SELECT')
+ OR has_table_privilege('dev_gpt02_claim_gate_login',
+      'ai_platform.ai_settings','SELECT')
  OR (SELECT rolcanlogin OR rolbypassrls OR rolsuper
        FROM pg_roles WHERE rolname='dev_gpt02_claim_gate_login')
  OR (SELECT rolconnlimit FROM pg_roles
