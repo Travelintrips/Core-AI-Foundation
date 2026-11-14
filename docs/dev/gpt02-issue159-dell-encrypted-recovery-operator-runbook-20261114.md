@@ -110,6 +110,22 @@ Additional live host file metadata confirmed **each exists on source DELL but is
 
 The pure [backup recovery evidence gate](../../scripts/dev/dev-gpt02-issue159-backup-recovery-gate.mjs) now requires explicit operator-reviewed `customHostPackageRecoveryVerified`, `pinnedNodeRecoveryVerified`, and `gatewayLauncherTaskRecoveryVerified` proof in addition to full encrypted archive, key custody and isolated restore. These are **evidence booleans, not secrets, executable operations or startup permission**. Even if every condition were true, `gatewayRestartAuthorized` remains `false`.
 
+## Stage D3 — DELL OpenClaw/AI Core chain continuity (additional evidence only)
+
+**Metadata-only follow-up, 14 Nov 2026:** A separate passive check on the source DELL found `node.vbs` (278 bytes), `dell-wake-event-listener.mjs` (7,301 bytes), the Gateway-pinned Node **24.22.1**, and the Wake Executor's separate portable Node **26.11.1**. The existing Gateway launcher's pinned Node must **not** be replaced with the Wake Executor Node. `OpenClaw Gateway` and `OpenClaw Node` were both Scheduled Task `Ready` with latest task result **1**; `AI Core DELL Wake Executor DEV` was `Running`; TCP 18789 showed **0 listeners**. These observations show source-host assets/status, not independent restore, healthy Gateway execution, or permission to change any task.
+
+The original `evaluateBackupRecoveryGate` contract (Gateway data archive and host prerequisites) is **unchanged**. For the wider **DELL OpenClaw/AI Core chain**, the optional pure `evaluateDellOpenClawChainRecoveryGate` in the [same gate module](../../scripts/dev/dev-gpt02-issue159-backup-recovery-gate.mjs) requires all original backup evidence **plus** the following separately operator-reviewed proof from a fresh isolated recovery target:
+
+1. `workspaceRecoveryVerified`: all workspaces required by the DELL chain independently recovered; including them in a dry-run is not evidence.
+2. `openclawNodeLauncherRecoveryVerified` and `openclawNodeScheduledTaskRecoveryVerified`: the `node.vbs` artifact and `OpenClaw Node` task definition can be reconstructed safely, with exact intended version, action and ownership.
+3. `wakeExecutorScriptRecoveryVerified` and `wakeExecutorNodeRecoveryVerified`: the exact Wake listener script and its separate portable Node runtime can be sourced/reproduced and integrity-checked independently of DELL.
+4. `wakeExecutorScheduledTaskRecoveryVerified` and `wakeExecutorScopedConfigRecoveryVerified`: the DEV-only Wake Executor task and its working directory, isolation, scoped runtime configuration and authorized credential *references* can be reconstructed without copying or displaying protected secrets. A user-bound DPAPI snapshot is not cross-host proof.
+5. `crossTaskBindingsRecoveryVerified`: review all three task bindings together (Gateway, Node, Wake Executor), including intended startup triggers, principal/logon type, runtime paths, single-instance constraints and separation of authority. Recovered task definitions must be examined **disabled and offline**; this stage does not start a service.
+
+A missing or non-boolean true field fails closed. The function reports `DELL_OPENCLAW_CHAIN_EVIDENCE_COMPLETE` only when every evidence field is true; this status is a **synthetic/evidence checklist**, not a guarantee that all Windows host components have been imaged or independently tested. It always returns `gatewayRestartAuthorized=false`, `openclawNodeRestartAuthorized=false`, `wakeExecutorRestartAuthorized=false`, `workerDispatchAuthorized=false`, and `productionModificationAuthorized=false`.
+
+Never use the source DELL itself as an independent restore target. Never run the legacy repair task, restart the Gateway, promote a task, import unreviewed Scheduled Task XML, install a global runtime, read/copy protected credentials, or dispatch a worker as part of this check.
+
 ## Stage E — service operation remains independently gated
 
 Passing all Stage A–D conditions is **necessary, not sufficient**, to turn on the DELL Gateway. Required separately:
