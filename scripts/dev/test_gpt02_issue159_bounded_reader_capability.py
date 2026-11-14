@@ -25,6 +25,7 @@ def main() -> None:
 CREATE SCHEMA gpt02_private;
 CREATE ROLE capability_owner NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE ROLE reader_test NOLOGIN NOINHERIT NOBYPASSRLS;
+CREATE ROLE anonymous_test NOLOGIN NOINHERIT NOBYPASSRLS;
 CREATE TABLE gpt02_private.approvals (
   task_id integer NOT NULL,
   company_id text NOT NULL,
@@ -84,6 +85,7 @@ CREATE FUNCTION gpt02_private.read_bounded_lineage(
   AND a.environment='DEV' AND NOT a.dispatch_allowed
   AND a.company_id='default'
  $function$;
+GRANT USAGE ON SCHEMA gpt02_private TO capability_owner;
 ALTER FUNCTION gpt02_private.read_bounded_lineage(text,integer,text,uuid,uuid)
  OWNER TO capability_owner;
 REVOKE ALL ON FUNCTION gpt02_private.read_bounded_lineage(text,integer,text,uuid,uuid)
@@ -142,7 +144,7 @@ END $assert$;
 RESET ROLE;
 DO $assert$
 BEGIN
- IF has_function_privilege('PUBLIC',
+ IF has_function_privilege('anonymous_test',
  'gpt02_private.read_bounded_lineage(text,integer,text,uuid,uuid)','EXECUTE') THEN
    RAISE EXCEPTION 'PUBLIC_EXECUTE_LEAK';
  END IF;
