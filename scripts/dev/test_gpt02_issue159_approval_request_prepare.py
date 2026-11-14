@@ -3,9 +3,12 @@ import importlib.util
 import json
 import os
 import sqlite3
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/dev/prepare_gpt02_issue159_approval_request.py"
@@ -109,6 +112,79 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
                         now_ms=1_800_000_000_000, operational=False,
                     )
                 self.assertFalse(os.path.exists(self.output))
+
+    def test_test_mode_cannot_touch_live_approval_paths(self):
+        for db_path, output in (
+            (prepare_module.LIVE_DB, self.output),
+            (self.db, prepare_module.LIVE_OUTPUT),
+            (self.db, "/opt/ai-coding-standalone-dev/forged-pending.json"),
+        ):
+            with self.subTest(db_path=db_path, output=output):
+                with self.assertRaisesRegex(
+                    RuntimeError, "ISSUE159_TEST_MODE_LIVE_TARGET_FORBIDDEN"
+                ):
+                    prepare_module.prepare(
+                        db_path, output, 172, COMMAND, ATTEMPT,
+                        now_ms=1_800_000_000_000, operational=False,
+                    )
+                self.assertFalse(os.path.exists(self.output))
+
+    def test_operational_preparer_rechecks_trusted_hub_core_lineage(self):
+        now = 1_800_000_000_000
+        claims = {
+            "companyId": "default", "taskId": 172,
+            "commandId": COMMAND, "attemptId": ATTEMPT,
+            "expiresAt": now + 240_000,
+        }
+        captured = []
+        facts = {"trusted": "from-pinned-socket"}
+        def reader(query):
+            captured.append(("read", query))
+            return facts
+        def verifier(value, proposed_claims, observed_at):
+            captured.append(("verify", value, proposed_claims, observed_at))
+            return now + 260_000
+        module = types.SimpleNamespace(
+            _socket_fact_reader=reader,
+            _verify_pre_sign_facts=verifier,
+        )
+        with patch.dict(sys.modules, {
+            "gpt02_issue159_approval_request_refresh": module,
+        }):
+            prepare_module._require_operational_pre_sign(claims, now)
+        self.assertEqual(captured[0], ("read", {
+            "companyId": "default", "hubTaskId": 172,
+            "commandCandidateId": COMMAND, "attemptId": ATTEMPT,
+        }))
+        self.assertEqual(captured[1], ("verify", facts, claims, now))
+
+    def test_operational_preparer_denies_reader_failure_or_expired_preparation(self):
+        now = 1_800_000_000_000
+        claims = {
+            "companyId": "default", "taskId": 172,
+            "commandId": COMMAND, "attemptId": ATTEMPT,
+            "expiresAt": now + 240_000,
+        }
+        for module in (
+            types.SimpleNamespace(
+                _socket_fact_reader=lambda _: (_ for _ in ()).throw(
+                    RuntimeError("TRUSTED_SOCKET_ABSENT")
+                ),
+                _verify_pre_sign_facts=lambda *args: now + 260_000,
+            ),
+            types.SimpleNamespace(
+                _socket_fact_reader=lambda _: {"source": "synthetic"},
+                _verify_pre_sign_facts=lambda *args: now + 240_000,
+            ),
+        ):
+            with patch.dict(sys.modules, {
+                "gpt02_issue159_approval_request_refresh": module,
+            }):
+                with self.assertRaisesRegex(
+                    RuntimeError, "ISSUE159_FRESH_TRUSTED_PRESIGN_REQUIRED"
+                ):
+                    prepare_module._require_operational_pre_sign(claims, now)
+            self.assertFalse(os.path.exists(self.output))
 
     def test_refuses_to_overwrite_existing_pending_request(self):
         Path(self.output).write_text('{"claims":{}}')
