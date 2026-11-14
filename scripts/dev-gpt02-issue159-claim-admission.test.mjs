@@ -134,7 +134,7 @@ test("false gateway provider identity, wrong source or rotated principal fails c
     // Profile presence/OAuth freshness alone is not a usable model route.
     {runtimeAuthStatus:"missing"}, {runtimeAuthStatus:undefined},
     {modelRouteReady:false}, {modelRouteReady:undefined},
-    {provider:"other-provider",{gatewayAgentId:"other-agent"},
+    {provider:"other-provider"},{gatewayAgentId:"other-agent"},
     {principalFingerprint:"e".repeat(64)},
     {proofId:undefined},
     {proofId:"99999999-9999-4999-8999-999999999999"},
