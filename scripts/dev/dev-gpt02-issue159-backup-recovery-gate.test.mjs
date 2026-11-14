@@ -139,6 +139,7 @@ const fullyProvenChain = Object.freeze({
   openclawNodeScheduledTaskRecoveryVerified: true,
   wakeExecutorScriptRecoveryVerified: true,
   wakeExecutorDependencyClosureRecoveryVerified: true,
+  wakeStagedOpenClawPackageRecoveryVerified: true,
   wakeExecutorNodeRecoveryVerified: true,
   wakeExecutorScheduledTaskRecoveryVerified: true,
   wakeExecutorScopedConfigRecoveryVerified: true,
@@ -151,6 +152,7 @@ const chainRecoveryDimensions = [
   ["openclawNodeScheduledTaskRecoveryVerified", "OPENCLAW_NODE_SCHEDULED_TASK_RECOVERY_UNVERIFIED"],
   ["wakeExecutorScriptRecoveryVerified", "WAKE_EXECUTOR_SCRIPT_RECOVERY_UNVERIFIED"],
   ["wakeExecutorDependencyClosureRecoveryVerified", "WAKE_EXECUTOR_DEPENDENCY_CLOSURE_RECOVERY_UNVERIFIED"],
+  ["wakeStagedOpenClawPackageRecoveryVerified", "WAKE_STAGED_OPENCLAW_PACKAGE_RECOVERY_UNVERIFIED"],
   ["wakeExecutorNodeRecoveryVerified", "WAKE_EXECUTOR_NODE_RECOVERY_UNVERIFIED"],
   ["wakeExecutorScheduledTaskRecoveryVerified", "WAKE_EXECUTOR_SCHEDULED_TASK_RECOVERY_UNVERIFIED"],
   ["wakeExecutorScopedConfigRecoveryVerified", "WAKE_EXECUTOR_SCOPED_CONFIG_RECOVERY_UNVERIFIED"],
@@ -233,5 +235,21 @@ test("Wake listener on recovery host without its imported executor module is NO_
   });
   assert.equal(report.evidenceStatus, "NO_GO");
   assert.deepEqual(report.reasons, ["WAKE_EXECUTOR_DEPENDENCY_CLOSURE_RECOVERY_UNVERIFIED"]);
+  assert.equal(report.wakeExecutorRestartAuthorized, false);
+});
+
+
+test("restoring Gateway 2026.10.7 does not prove separate Wake staging OpenClaw 2026.11.1", () => {
+  const report = evaluateChain({
+    ...fullyProvenChain,
+    wakeStagedOpenClawPackageRecoveryVerified: false,
+    sourceGatewayPackage2026_10_7Present: true,
+    sourceWakeStagingPackage2026_11_1Present: true,
+    sourceWakeHelperIntegrityMatches: true,
+  });
+  assert.equal(report.backupEvidenceComplete, true);
+  assert.equal(report.chainRecoveryEvidenceComplete, false);
+  assert.deepEqual(report.reasons, ["WAKE_STAGED_OPENCLAW_PACKAGE_RECOVERY_UNVERIFIED"]);
+  assert.equal(report.gatewayRestartAuthorized, false);
   assert.equal(report.wakeExecutorRestartAuthorized, false);
 });
