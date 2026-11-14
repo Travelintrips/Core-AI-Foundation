@@ -97,6 +97,15 @@ The official OpenClaw backup documentation states that full backup archives can 
 
 **No native backup create was executed** in this stage: a full archive can contain sensitive credentials, and the local encrypted-credential-copy attempt was already denied by the access safety gate. A new archive must be created and safeguarded through a separately approved operator-controlled, encrypted backup destination, followed by native verification and staged restore inspection. The safe CLI dry-run is useful planning evidence only, and does not clear G1/G2 for full-system recovery.
 
+## 18:14 WIB independent G0/G1 read-only reconfirmation (14 Nov 2026)
+
+- DELL remote command execution was available again at 18:14 WIB. Gateway listener `127.0.0.1:18789`: **0**; Windows task `OpenClaw Gateway`: **Ready** (not running). No restart was attempted.
+- Against the **actual Gateway state**, `state/openclaw.sqlite` and `agents/gpt02-dev/agent/openclaw-agent.sqlite` both returned `PRAGMA integrity_check: ok` under `sqlite3 -readonly`, exit 0. This is a fresh **source database** integrity check, independent of the earlier DPAPI snapshot roundtrip; it does not prove complete backup coverage or all plugin stores.
+- The installed official `openclaw backup create --dry-run --json --no-include-workspace` again completed with exit code 0 on the correct state/config. It reports `dryRun=true`, **2 assets**, **5 agent roots**, **28 skipped entries**, with skipped-entry reasons **23 `regenerable`** and **5 `covered`**. This reason census was derived from JSON fields only: no source paths, account identities, contents or credentials were reported.
+- The dry-run's `skippedVolatileCount=0` and its planned coverage do **not** certify recovery of secrets or credentials. No archive was written or verified, and no restore was executed. The previously created two user-bound DPAPI SQLite snapshots remain partial G1/G2 evidence; no additional copy or credential access was performed.
+
+**Decision:** The additional diagnostic evidence strengthens the **read-only prerequisites** but does not clear the full encrypted archive, portable credential-custody, isolated restore and owner-approved maintenance gates. G3/G4/G5 remain **NO_GO**. Do not repurpose a source/CI green check as permission to launch the Gateway.
+
 ## Proposed claim admission contract remains dormant
 
 Source-only PR #1754 already requires independently owned read-only `inspectGatewayReachability()`, `inspectOpenClawModelStatus()`, and `inspectGatewayCredential()` evidence, matching exact worker/agent/provider/owner/target/proof and a recent Gateway status. Green synthetic CI **does not** mean an actual DELL reader or dispatcher is installed or the live system is healthy.
