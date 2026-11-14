@@ -122,6 +122,19 @@ def main():
         apply_file(ROOT /
           "docs/dev/gpt02-issue159-release-claim-fence.PROPOSED.sql",
           "/tmp/claim-fence.sql", MIGRATOR, replace_migrator=True)
+        apply_file(ROOT /
+          "docs/dev/gpt02-issue159-held-claim-readback.PROPOSED.sql",
+          "/tmp/held-readback.sql", MIGRATOR, replace_migrator=True)
+        ensure(sql("""SELECT has_function_privilege('dev_gpt02_claim_gate_login',
+          'gpt02_private.read_issue159_held_for_claim(uuid,uuid,text)',
+          'EXECUTE')""").stdout.strip()=="t",
+          "HELD_READBACK_CLAIM_ROLE_MISSING")
+        for restricted_role in ("anon","authenticated","service_role",
+                                "dev_gpt02_release_writer"):
+            ensure(sql("SELECT has_function_privilege('"+restricted_role+
+                "','gpt02_private.read_issue159_held_for_claim(uuid,uuid,text)',"+
+                "'EXECUTE')").stdout.strip()=="f",
+                "HELD_READBACK_FUNCTION_PRIVILEGE_LEAK_"+restricted_role)
         claim_role_state = sql("""SELECT rolcanlogin::text||':'||rolconnlimit::text
              FROM pg_roles WHERE rolname='dev_gpt02_claim_gate_login'""").stdout.strip()
         ensure(claim_role_state == "false:0", "CLAIM_ROLE_NOT_DORMANT")
@@ -360,6 +373,28 @@ def main():
         # An exact-ID, SHORT-LIVED claim intent can be reserved only by its
         # dedicated role. It still cannot claim the generic worker/send.
         sql("ALTER ROLE dev_gpt02_claim_gate_login LOGIN CONNECTION LIMIT 3")
+        held_read=("SELECT gpt02_private.read_issue159_held_for_claim('"+
+                   CMD+"','"+permit+"',repeat('a',64))::text")
+        held_output=sql(held_read,"dev_gpt02_claim_gate_login").stdout.strip()
+        held=json.loads(held_output)
+        ensure(held["id"]==CMD and held["taskId"]==CORE and
+               held["source"]=="ai-core" and
+               held["commandType"]=="ISSUE159_HELD" and
+               held["status"]=="RECEIVED" and
+               held["instruction"]=="Synthetic DEV owner-approved task fixture" and
+               held["metadata"].get("assignedClientId") is None and
+               held["metadata"]["gpt02Issue159PositivePermit"]["commandId"]==CMD,
+               "AUTHENTICATED_HELD_READBACK_NOT_BOUND_TO_CORE_TASK")
+        wrong_held=sql("SELECT gpt02_private.read_issue159_held_for_claim('"+
+           CMD+"','"+permit+"',repeat('f',64))",
+           "dev_gpt02_claim_gate_login",required=False)
+        ensure(wrong_held.returncode!=0 and
+               "PERSISTED_HELD_CLAIM_READBACK_UNAVAILABLE" in wrong_held.stderr,
+               "FORGED_HELD_PACKET_SHA_ACCEPTED")
+        invalid_held_role=sql(held_read,"dev_gpt02_release_writer",
+                              required=False)
+        ensure(invalid_held_role.returncode!=0,
+               "HELD_READBACK_SHARED_ROLE_BYPASS")
         target = "6adc4295-e2ac-83ec-a1e1-2aea7d0c1326"
         event = hashlib.sha256(("gpt02-issue159-event/v1"+chr(10)+CMD+chr(10)+
                                 ATT+chr(10)+permit).encode()).hexdigest()
