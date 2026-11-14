@@ -49,6 +49,8 @@ jobs:
           node-version: "24.22.1"
       - name: Verify source features without executing upstream code
         run: node scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs upstream-stable upstream-beta upstream-original
+      - name: Enforce fail-closed host-plugin-Codex dependency cohort
+        run: node --test scripts/dev/dev-gpt02-codex-cohort-check.test.mjs
 
   windows-owner-lock:
     name: Windows Gateway owner-lock regressions (upstream fixture)
