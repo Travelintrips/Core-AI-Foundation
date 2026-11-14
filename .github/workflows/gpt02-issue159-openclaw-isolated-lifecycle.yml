@@ -126,7 +126,7 @@ jobs:
           node-version: "24.22.1"
       - name: Install candidate dependencies without package lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Test fake Codex auth routes and local client lifecycle
+      - name: Test fake Codex auth selection, connection and client shutdown
         env:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
@@ -134,8 +134,16 @@ jobs:
           OPENCLAW_CONFIG_PATH: "${{ runner.temp }}/issue159-codex-fixture/openclaw.json"
         run: |
           pnpm exec vitest run --config test/vitest/vitest.extension-codex.config.ts \
-            extensions/codex/src/app-server/auth-requirement-matrix.test.ts \
             extensions/codex/src/app-server/auth-profile-selection.test.ts \
-            extensions/codex/src/app-server/auth-profile-runtime-contract.test.ts \
             extensions/codex/src/app-server/connection-health.test.ts \
             extensions/codex/src/app-server/client-shutdown.test.ts
+      - name: Test agent runtime auth requirement and stored-profile isolation
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+          OPENCLAW_STATE_DIR: "${{ runner.temp }}/issue159-codex-fixture"
+          OPENCLAW_CONFIG_PATH: "${{ runner.temp }}/issue159-codex-fixture/openclaw.json"
+        run: |
+          pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts \
+            extensions/codex/src/app-server/auth-requirement-matrix.test.ts \
+            extensions/codex/src/app-server/auth-profile-runtime-contract.test.ts
