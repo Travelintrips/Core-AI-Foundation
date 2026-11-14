@@ -32,6 +32,30 @@ LIVE_OUTPUT = "/opt/ai-coding-standalone-dev/gpt02_issue159_pending_claims.json"
 UUID = re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
 
 
+def _require_operational_pre_sign(claims: dict, now_ms: int) -> None:
+    """Authenticate independent read-only Hub/Core facts, never caller JSON.
+
+    Import lazily because the refresh module reuses this preparer. Neither
+    this helper nor a missing reader can authorize signing or dispatch.
+    """
+    try:
+        from gpt02_issue159_approval_request_refresh import (
+            _socket_fact_reader, _verify_pre_sign_facts,
+        )
+        query = {
+            "companyId": claims["companyId"],
+            "hubTaskId": claims["taskId"],
+            "commandCandidateId": claims["commandId"],
+            "attemptId": claims["attemptId"],
+        }
+        facts = _socket_fact_reader(query)
+        preparation_expiry_ms = _verify_pre_sign_facts(facts, claims, now_ms)
+        if preparation_expiry_ms < claims["expiresAt"] + 1000:
+            raise RuntimeError("ISSUE159_APPROVAL_BEYOND_PREPARATION_EXPIRY")
+    except Exception as exc:
+        raise RuntimeError("ISSUE159_FRESH_TRUSTED_PRESIGN_REQUIRED") from exc
+
+
 def prepare(db_path: str, output_path: str, task_id: int,
             command_id: str, attempt_id: str, *, now_ms: int | None = None,
             operational: bool = True) -> dict:
@@ -43,6 +67,15 @@ def prepare(db_path: str, output_path: str, task_id: int,
                 or db_stat.st_uid != 0 or db_stat.st_gid != 0
                 or stat.S_IMODE(db_stat.st_mode) != 0o600):
             raise RuntimeError("ISSUE159_TASK_DB_SECURITY_INVALID")
+    else:
+        # --test-mode must never emit a real pending approval packet or read
+        # the live approval SQLite database, even if invoked as root.
+        live_dir = str(Path(LIVE_OUTPUT).parent.resolve())
+        db_resolved = str(Path(db_path).resolve())
+        output_resolved = str(Path(output_path).resolve())
+        if (db_resolved == LIVE_DB or output_resolved == LIVE_OUTPUT
+                or output_resolved.startswith(live_dir + os.sep)):
+            raise RuntimeError("ISSUE159_TEST_MODE_LIVE_TARGET_FORBIDDEN")
     if not isinstance(task_id, int) or task_id <= 139:
         raise RuntimeError("ISSUE159_FRESH_TASK_AFTER_139_REQUIRED")
     if (not isinstance(command_id, str) or not UUID.fullmatch(command_id)
@@ -89,6 +122,12 @@ def prepare(db_path: str, output_path: str, task_id: int,
         "expiresAt": now_ms + 240_000,
     }
     validate_approval_claims(claims)
+    if operational:
+        # The direct preparer CLI is NOT a substitute for trusted Hub/Core
+        # proof. Read the same pinned independent pre-sign-facts socket used
+        # by the already-deployed refresh path and bind exact immutable IDs,
+        # PIC audit, owner, Core PENDING, zero commands and freshness.
+        _require_operational_pre_sign(claims, now_ms)
 
     target = Path(output_path)
     parent = target.parent
