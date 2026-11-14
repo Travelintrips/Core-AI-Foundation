@@ -150,9 +150,18 @@ export async function reserveIssue159ClaimWithoutDispatch(input, connection) {
  * Post-crash read-only status. A previously recorded claim requires gateway
  * idempotency reconciliation; it must never trigger a second send.
  */
-export async function inspectIssue159ClaimAfterCrash(
-  {commandId,releaseSha256,eventId}, connection,
-) {
+export async function inspectIssue159ClaimAfterCrash(selectors, connection) {
+  // Recovery remains available with dispatch disabled, but never outside DEV
+  // and never accepts caller-supplied authority, clock, root or work payload.
+  ensure(process.env.APP_ENV === "development",
+    "CLAIM_READBACK_DEV_ONLY");
+  ensure(selectors && typeof selectors === "object" &&
+    !Array.isArray(selectors) &&
+    Object.keys(selectors).length === 3 &&
+    ["commandId","releaseSha256","eventId"]
+      .every(k=>Object.prototype.hasOwnProperty.call(selectors,k)),
+    "CLAIM_READBACK_INPUT_SHAPE_INVALID");
+  const {commandId,releaseSha256,eventId}=selectors;
   canonicalUuid(commandId);
   ensure(typeof releaseSha256 === "string" && HEX.test(releaseSha256) &&
     typeof eventId === "string" && HEX.test(eventId),
