@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/gpt02-issue159-openclaw-isolated-lifecycle.yml"
       - "scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs"
+      - "scripts/dev/dev-gpt02-issue159-backup-recovery-gate.mjs"
+      - "scripts/dev/dev-gpt02-issue159-backup-recovery-gate.test.mjs"
   workflow_dispatch:
 
 permissions:
@@ -51,6 +53,8 @@ jobs:
         run: node scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs upstream-stable upstream-beta upstream-original
       - name: Enforce fail-closed host-plugin-Codex dependency cohort
         run: node --test scripts/dev/dev-gpt02-codex-cohort-check.test.mjs
+      - name: Verify backup evidence remains fail-closed without operator custody
+        run: node --test scripts/dev/dev-gpt02-issue159-backup-recovery-gate.test.mjs
 
   windows-owner-lock:
     name: Windows Gateway owner-lock regressions (upstream fixture)
