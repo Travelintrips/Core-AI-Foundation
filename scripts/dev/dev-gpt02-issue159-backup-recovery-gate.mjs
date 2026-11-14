@@ -43,3 +43,49 @@ export function evaluateBackupRecoveryGate(input = {}) {
     productionModificationAuthorized: false,
   });
 }
+
+
+// Expanded DELL *OpenClaw/AI Core chain* recovery evidence check. The original
+// Gateway backup gate above is intentionally left unchanged (existing PASS
+// baseline). This is NOT proof of recovering the entire Windows host/OS.
+// Source-machine file presence or task status must never satisfy these flags;
+// each flag requires independent recovery-target evidence reviewed by an
+// authorized operator, without exposing credentials to CI or PR comments.
+export function evaluateDellOpenClawChainRecoveryGate(input = {}) {
+  const gatewayBackup = evaluateBackupRecoveryGate(input);
+  const details = input && typeof input === "object" && !Array.isArray(input)
+    ? input : {};
+  const conditions = [
+    ["WORKSPACE_RECOVERY_UNVERIFIED", details.workspaceRecoveryVerified === true],
+    ["OPENCLAW_NODE_LAUNCHER_RECOVERY_UNVERIFIED",
+      details.openclawNodeLauncherRecoveryVerified === true],
+    ["OPENCLAW_NODE_SCHEDULED_TASK_RECOVERY_UNVERIFIED",
+      details.openclawNodeScheduledTaskRecoveryVerified === true],
+    ["WAKE_EXECUTOR_SCRIPT_RECOVERY_UNVERIFIED",
+      details.wakeExecutorScriptRecoveryVerified === true],
+    ["WAKE_EXECUTOR_NODE_RECOVERY_UNVERIFIED",
+      details.wakeExecutorNodeRecoveryVerified === true],
+    ["WAKE_EXECUTOR_SCHEDULED_TASK_RECOVERY_UNVERIFIED",
+      details.wakeExecutorScheduledTaskRecoveryVerified === true],
+    ["WAKE_EXECUTOR_SCOPED_CONFIG_RECOVERY_UNVERIFIED",
+      details.wakeExecutorScopedConfigRecoveryVerified === true],
+    ["CROSS_TASK_BINDINGS_RECOVERY_UNVERIFIED",
+      details.crossTaskBindingsRecoveryVerified === true],
+  ];
+  const reasons = [
+    ...gatewayBackup.reasons,
+    ...conditions.filter(([, verified]) => !verified).map(([reason]) => reason),
+  ];
+  return Object.freeze({
+    evidenceStatus: reasons.length ? "NO_GO" : "DELL_OPENCLAW_CHAIN_EVIDENCE_COMPLETE",
+    backupEvidenceComplete: gatewayBackup.backupEvidenceComplete,
+    chainRecoveryEvidenceComplete: reasons.length === 0,
+    reasons: Object.freeze(reasons),
+    // No evidence gate may operate a Windows service or release a GPT02 task.
+    gatewayRestartAuthorized: false,
+    openclawNodeRestartAuthorized: false,
+    wakeExecutorRestartAuthorized: false,
+    workerDispatchAuthorized: false,
+    productionModificationAuthorized: false,
+  });
+}
