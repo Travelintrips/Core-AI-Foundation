@@ -18,6 +18,8 @@ const ROLE_SQL="SELECT session_user::text AS session_login, current_user::text A
 const CLAIM_SQL="SELECT gpt02_private.reserve_issue159_release_claim("+
  "$1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::text,$7::text,"+
  "$8::uuid,$9::text,$10::text,$11::bigint,$12::bigint) AS claim_id";
+const HELD_READ_SQL="SELECT gpt02_private.read_issue159_held_for_claim("+ 
+ "$1::uuid,$2::uuid,$3::text) AS held";
 const READBACK_SQL="SELECT gpt02_private.inspect_issue159_release_claim("+
  "$1::uuid,$2::text,$3::text) AS status";
 
@@ -96,7 +98,9 @@ export function deriveIssue159ClaimParameters({ release, signatureBase64, proof 
 
 /**
  * ONLY operational admission entrypoint:
- * no injected verifier/clock/public key and no network/worker client.
+ * HELD row is retrieved from the SAME dedicated DB connection before the
+ * pinned-key verifier runs. Caller cannot inject held or overwrite the
+ * server clock, trust root or database session; no gateway/worker client.
  * Requires independently provisioned dedicated DB role, which is ABSENT
  * in live CST-DEV. A COMMIT uncertainty is NEVER an invitation to retry.
  */
@@ -105,22 +109,44 @@ export async function reserveIssue159ClaimWithoutDispatch(input, connection) {
     process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED === "true",
     "CLAIM_ADMISSION_DISABLED");
   ensure(input && typeof input === "object" && !Array.isArray(input) &&
-    Object.keys(input).length === 4 &&
-    ["release","signatureBase64","held","binding"]
+    Object.keys(input).length === 3 &&
+    ["release","signatureBase64","binding"]
       .every(k=>Object.prototype.hasOwnProperty.call(input,k)),
     "OPERATIONAL_CLAIM_INPUT_INVALID");
-  const proof=verifyIssue159ReleaseUsingPinnedRoot(input);
-  const binding=deriveIssue159ClaimParameters({
-    release: input.release, signatureBase64: input.signatureBase64, proof,
-  });
-  ensure(connection && typeof connection.query === "function",
-    "CLAIM_DB_CONNECTION_REQUIRED");
+  ensure(connection && typeof connection.query === "function" &&
+    typeof connection.connect !== "function",
+    "DEDICATED_CLAIM_DB_CLIENT_REQUIRED");
   let transactionStarted=false;
   try {
     await connection.query("BEGIN");
     transactionStarted=true;
     const role=await connection.query(ROLE_SQL);
     assertRole(role?.rows);
+    // SQL SECURITY DEFINER reads the actual consumed outbox, matching
+    // Core Task and HELD bridge row. No caller-supplied HELD JSON is accepted.
+    const release=input.release;
+    ensure(release && typeof release === "object" &&
+      typeof release.commandId === "string" &&
+      typeof release.permitId === "string" &&
+      typeof release.packetSha256 === "string",
+      "SIGNED_RELEASE_IDENTIFIERS_REQUIRED");
+    const heldRead=await connection.query(HELD_READ_SQL,[
+      canonicalUuid(release.commandId),
+      canonicalUuid(release.permitId),
+      release.packetSha256,
+    ]);
+    ensure(heldRead?.rows?.length === 1 &&
+      heldRead.rows[0]?.held &&
+      typeof heldRead.rows[0].held === "object" &&
+      !Array.isArray(heldRead.rows[0].held),
+      "AUTHENTICATED_HELD_READBACK_UNAVAILABLE");
+    const proof=verifyIssue159ReleaseUsingPinnedRoot({
+      release: input.release, signatureBase64: input.signatureBase64,
+      held: heldRead.rows[0].held, binding: input.binding,
+    });
+    const binding=deriveIssue159ClaimParameters({
+      release: input.release, signatureBase64: input.signatureBase64, proof,
+    });
     const result=await connection.query(CLAIM_SQL,binding.params);
     const claimId=result?.rows?.[0]?.claim_id;
     canonicalUuid(claimId);
