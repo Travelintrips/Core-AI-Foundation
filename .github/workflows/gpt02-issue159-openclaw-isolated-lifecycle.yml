@@ -149,3 +149,38 @@ jobs:
           pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts \
             extensions/codex/src/app-server/auth-requirement-matrix.test.ts \
             extensions/codex/src/app-server/auth-profile-runtime-contract.test.ts
+
+  windows-codex-native:
+    name: Windows Codex native package and process-custody fixtures
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout immutable official candidate source
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Use the packageManager field of the pinned upstream checkout.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pinned dependencies without package lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Windows Codex managed native package and synthetic profile tests
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: |
+          pnpm exec vitest run --config test/vitest/vitest.extension-codex.config.ts \
+            extensions/codex/src/app-server/managed-binary.test.ts \
+            extensions/codex/src/app-server/auth-profile-selection.test.ts
+      - name: Windows process custody and auth requirement tests (worker shard)
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: |
+          pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts \
+            extensions/codex/src/app-server/native-process-authority.test.ts \
+            extensions/codex/src/app-server/auth-requirement-matrix.test.ts
