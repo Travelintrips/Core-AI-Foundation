@@ -168,15 +168,40 @@ jobs:
           node-version: "24.22.1"
       - name: Install pinned dependencies without package lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Windows Codex managed native package and synthetic profile tests
+      - name: Windows native package resolution behind isolated install shim
+        timeout-minutes: 6
         env:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
-        run: |
-          pnpm exec vitest run --config test/vitest/vitest.extension-codex.config.ts \
-            extensions/codex/src/app-server/managed-binary.test.ts \
-            extensions/codex/src/app-server/auth-profile-selection.test.ts
+        run: >
+          pnpm exec vitest run
+          --config test/vitest/vitest.extension-codex.config.ts
+          extensions/codex/src/app-server/managed-binary.test.ts
+          --testNamePattern "resolves native dependencies from the real package behind an isolated install shim"
+          --testTimeout 20000 --hookTimeout 20000
+      - name: Windows isolated npm generation resolution without local shim
+        timeout-minutes: 6
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: >
+          pnpm exec vitest run
+          --config test/vitest/vitest.extension-codex.config.ts
+          extensions/codex/src/app-server/managed-binary.test.ts
+          --testNamePattern "resolves the isolated npm generation package without a local shim on Windows"
+          --testTimeout 20000 --hookTimeout 20000
+      - name: Windows synthetic Codex profile selection
+        timeout-minutes: 6
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: >
+          pnpm exec vitest run
+          --config test/vitest/vitest.extension-codex.config.ts
+          extensions/codex/src/app-server/auth-profile-selection.test.ts
+          --testTimeout 20000 --hookTimeout 20000
       - name: Windows process custody and auth requirement tests (worker shard)
+        timeout-minutes: 12
         env:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
