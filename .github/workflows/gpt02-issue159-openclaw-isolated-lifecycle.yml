@@ -54,8 +54,8 @@ jobs:
           ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
           persist-credentials: false
       - uses: pnpm/action-setup@v4
-        with:
-          version: "12.15.0"
+        # Read the precise pnpm version and integrity pin from the
+        # upstream packageManager field. Do not specify it twice.
       - uses: actions/setup-node@v4
         with:
           node-version: "24.22.1"
@@ -78,8 +78,8 @@ jobs:
           ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
           persist-credentials: false
       - uses: pnpm/action-setup@v4
-        with:
-          version: "12.15.0"
+        # Read the precise pnpm version and integrity pin from the
+        # upstream packageManager field. Do not specify it twice.
       - uses: actions/setup-node@v4
         with:
           node-version: "24.22.1"
