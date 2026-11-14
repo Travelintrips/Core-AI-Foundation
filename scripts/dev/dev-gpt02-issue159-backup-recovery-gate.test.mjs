@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { evaluateBackupRecoveryGate as evaluate } from "./dev-gpt02-issue159-backup-recovery-gate.mjs";
+import {
+  evaluateBackupRecoveryGate as evaluate,
+  evaluateDellOpenClawChainRecoveryGate as evaluateChain,
+} from "./dev-gpt02-issue159-backup-recovery-gate.mjs";
 
 const fullyProven = Object.freeze({
   devOnlyScope: true,
@@ -126,4 +129,94 @@ test("all source-device executables existing does not prove independent recovery
     "GATEWAY_LAUNCHER_TASK_RECOVERY_UNVERIFIED",
   ]);
   assert.equal(result.gatewayRestartAuthorized, false);
+});
+
+
+const fullyProvenChain = Object.freeze({
+  ...fullyProven,
+  workspaceRecoveryVerified: true,
+  openclawNodeLauncherRecoveryVerified: true,
+  openclawNodeScheduledTaskRecoveryVerified: true,
+  wakeExecutorScriptRecoveryVerified: true,
+  wakeExecutorNodeRecoveryVerified: true,
+  wakeExecutorScheduledTaskRecoveryVerified: true,
+  wakeExecutorScopedConfigRecoveryVerified: true,
+  crossTaskBindingsRecoveryVerified: true,
+});
+
+const chainRecoveryDimensions = [
+  ["workspaceRecoveryVerified", "WORKSPACE_RECOVERY_UNVERIFIED"],
+  ["openclawNodeLauncherRecoveryVerified", "OPENCLAW_NODE_LAUNCHER_RECOVERY_UNVERIFIED"],
+  ["openclawNodeScheduledTaskRecoveryVerified", "OPENCLAW_NODE_SCHEDULED_TASK_RECOVERY_UNVERIFIED"],
+  ["wakeExecutorScriptRecoveryVerified", "WAKE_EXECUTOR_SCRIPT_RECOVERY_UNVERIFIED"],
+  ["wakeExecutorNodeRecoveryVerified", "WAKE_EXECUTOR_NODE_RECOVERY_UNVERIFIED"],
+  ["wakeExecutorScheduledTaskRecoveryVerified", "WAKE_EXECUTOR_SCHEDULED_TASK_RECOVERY_UNVERIFIED"],
+  ["wakeExecutorScopedConfigRecoveryVerified", "WAKE_EXECUTOR_SCOPED_CONFIG_RECOVERY_UNVERIFIED"],
+  ["crossTaskBindingsRecoveryVerified", "CROSS_TASK_BINDINGS_RECOVERY_UNVERIFIED"],
+];
+
+test("Gateway backup PASS baseline remains unchanged by independent DELL chain gate", () => {
+  assert.equal(evaluate(fullyProven).backupEvidenceComplete, true);
+  const chain = evaluateChain(fullyProven);
+  assert.equal(chain.backupEvidenceComplete, true);
+  assert.equal(chain.chainRecoveryEvidenceComplete, false);
+  assert.equal(chain.evidenceStatus, "NO_GO");
+  assert.deepEqual(chain.reasons, chainRecoveryDimensions.map(([, reason]) => reason));
+});
+
+test("all synthetic DELL chain recovery evidence is necessary but never authorizes operation", () => {
+  const chain = evaluateChain(fullyProvenChain);
+  assert.equal(chain.backupEvidenceComplete, true);
+  assert.equal(chain.chainRecoveryEvidenceComplete, true);
+  assert.equal(chain.evidenceStatus, "DELL_OPENCLAW_CHAIN_EVIDENCE_COMPLETE");
+  assert.deepEqual(chain.reasons, []);
+  for (const key of [
+    "gatewayRestartAuthorized",
+    "openclawNodeRestartAuthorized",
+    "wakeExecutorRestartAuthorized",
+    "workerDispatchAuthorized",
+    "productionModificationAuthorized",
+  ]) assert.equal(chain[key], false, key);
+});
+
+for (const [key, reason] of chainRecoveryDimensions) {
+  test(`DELL chain refuses missing independent ${key} proof`, () => {
+    const report = evaluateChain({ ...fullyProvenChain, [key]: false });
+    assert.equal(report.backupEvidenceComplete, true);
+    assert.equal(report.chainRecoveryEvidenceComplete, false);
+    assert.deepEqual(report.reasons, [reason]);
+    assert.equal(report.gatewayRestartAuthorized, false);
+    assert.equal(report.wakeExecutorRestartAuthorized, false);
+  });
+}
+
+test("host runtime evidence never overrides a missing encrypted full archive", () => {
+  const report = evaluateChain({ ...fullyProvenChain, fullArchiveCreated: false });
+  assert.equal(report.chainRecoveryEvidenceComplete, false);
+  assert.deepEqual(report.reasons, ["FULL_ARCHIVE_NOT_CREATED"]);
+});
+
+test("existing source files, running Wake Executor, and task definitions are not an isolated restore", () => {
+  const report = evaluateChain({
+    ...fullyProven,
+    sourceDeviceGatewayExists: true,
+    sourceDeviceNodeVbsExists: true,
+    sourceDeviceWakeListenerExists: true,
+    sourceDeviceWakeExecutorTaskRunning: true,
+    sourceDeviceScheduledTasksExist: true,
+    sourceDeviceNode24Exists: true,
+    sourceDevicePortableNodeExists: true,
+    workspaceBackupDryRunIncluded: true,
+  });
+  assert.equal(report.chainRecoveryEvidenceComplete, false);
+  assert.deepEqual(report.reasons, chainRecoveryDimensions.map(([, reason]) => reason));
+});
+
+test("unsafe and empty chain evidence inputs fail closed", () => {
+  for (const bad of [undefined, null, 0, [], "", {}]) {
+    const report = evaluateChain(bad);
+    assert.equal(report.evidenceStatus, "NO_GO");
+    assert.equal(report.chainRecoveryEvidenceComplete, false);
+    assert.equal(report.productionModificationAuthorized, false);
+  }
 });
