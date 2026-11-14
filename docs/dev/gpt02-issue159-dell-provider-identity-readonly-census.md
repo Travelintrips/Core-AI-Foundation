@@ -11,8 +11,8 @@ All commands below were run for diagnosis only. No credential file content, toke
 | `openclaw --version` | `2026.10.7` | A working model sign-in |
 | `openclaw status` | local gateway `ws://127.0.0.1:18789` reachable | A provider-authenticated GPT02 principal |
 | `openclaw agents list` | `gpt02-dev` configured; model `openai/gpt-5.5` | Credentials loaded and usable |
-| `openclaw models status --agent gpt02-dev` | `Runtime auth: openai via codex ... status=missing`; OAuth/token profiles = 0 | The old auth file has been safely imported |
-| `openclaw models auth list --agent gpt02-dev` | CLI failed (exit 1) | That credentials are irretrievably absent |
+| `openclaw models status --agent gpt02-dev` through the default CLI launcher | Reported runtime `missing` and 0 OAuth/token profiles from a **different CLI state directory**; see correction below | Live Gateway agent credential-store contents |
+| `openclaw models auth list --agent gpt02-dev` through the default CLI launcher | Failed because launcher state directory differs from active Gateway state | Missing credentials in the actual Gateway state |
 | `openclaw plugins info codex` | Codex plugin `enabled`, version `2026.10.7` | Plugin data/settings upgrade is completed |
 | `openclaw update status --json` | `migrationWarnings`: Codex data/settings upgrade unfinished; retained pre-repair capture, no repair outcome | Safe to run `doctor --fix` unattended |
 | `openclaw doctor --post-upgrade --json` | No findings in the five post-upgrade probes | A successful provider sign-in (warnings remain in update status) |
@@ -22,6 +22,27 @@ All commands below were run for diagnosis only. No credential file content, toke
 File **existence and metadata only**: `gpt02-dev/agent/codex-home/auth.json` exists, 4,183 bytes, last modified 2026-11-13 11:41:40 UTC. The target agent's `openclaw-agent.sqlite` also exists. No credential payload was read. Therefore no conclusion about the validity, expiry or ownership of the old credential is justified.
 
 The upstream migration documentation explicitly states that a per-agent OpenClaw runtime does **not** consume a copied `codex-home/auth.json` directly; an owner-scoped auth-store migration is a separate sensitive action. See https://docs.openclaw.ai/cli/migrate and https://docs.openclaw.ai/plugins/codex-harness-reference/auth .
+
+## Correction — actual Gateway state readback (14 Nov 2026)
+
+**The earlier `OAuth/token profiles = 0` observation was from the wrong state directory and is superseded.** On DELL the CLI launcher chain `openclaw.ps1 -> openclaw.cmd -> openclaw-browser-dev.cmd` sets `OPENCLAW_STATE_DIR` to `openclaw-browser-cli-state`, while the running Gateway uses `gateway-stable3-main`. The launcher overrides a caller-supplied `OPENCLAW_STATE_DIR`. The CLI reports the mismatch and refuses credential operations; this is a safety guard, not proof that the real agent has no stored credentials.
+
+For the corrected checks, a one-shot **read-only** process invoked the installed OpenClaw Node CLI entrypoint directly, using the running Gateway's `OPENCLAW_STATE_DIR` and existing `OPENCLAW_CONFIG_PATH`. No wrapper, file or environment setting was changed persistently; no secrets were requested or printed.
+
+| Actual Gateway-state check | Sanitized finding |
+| --- | --- |
+| `models auth list --agent gpt02-dev --provider openai --json` | 3 saved profiles: 2 OAuth, 1 API-key |
+| Profile health | one OAuth status reported `ok` in metadata (expiry 2026-11-16), one API-key profile `setup_inactive`, one legacy OAuth profile `expired` |
+| `models status --agent gpt02-dev --json` | `auth.storePath` confirms the `gpt02-dev/agent/openclaw-agent.sqlite` store |
+| Runtime authentication | `runtimeAuthRoutes`: `openai` / `codex` / `status=missing` |
+| Selected model | `openai/gpt-5.5`; no fallback configured |
+| Exact route failure | `modelRouteIssues` lists `missing-auth` for `openai/gpt-5.5` and the utility route; required auth `api-key`; the saved API-key profile is inactive |
+
+**Correct root-cause boundary:** stored account/profile existence is not the same as an eligible, authenticated credential for the selected model/runtime. Do not automatically rotate, import, delete or relogin because an old launcher showed 0 profiles. An OAuth profile may be shown as `ok` while the selected `openai/gpt-5.5` route still reports `missing-auth`. The actual DELL provider principal and exact model-route readiness remain unverified; the Gate MUST remain NO_GO.
+
+**Source follow-up:** the Issue159 claim adapter has additional read-only requirements `identity.proofId === binding.proofId`, `identity.runtimeAuthStatus === "ready"`, and `identity.modelRouteReady === true`; missing/stale/unsupported route evidence fails closed. These are synthetic port-contract checks, **not** proof that a real privileged host-owned provider reader exists.
+
+**Revised next step:** determine whether the intended GPT02 provider/model runtime should use the existing OAuth identity or a separately authorized API-key profile, without changing the model or using fallback credentials accidentally. A privileged, host-owned runtime inspector must verify the actual selected model route and authenticated principal before any claim admission. If a credential migration is indeed required, review backups/exclusive state ownership and authorize it as a separate operation; do not infer migration necessity from a file's existence alone.
 
 ## Security interpretation
 
