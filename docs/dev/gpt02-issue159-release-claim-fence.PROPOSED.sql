@@ -151,7 +151,7 @@ BEGIN
    AND s.is_secret IS FALSE AND s.category='guardrail';
  IF v_registry_enabled IS DISTINCT FROM 'true'
  OR v_registry IS NULL OR jsonb_typeof(v_registry)<>'object'
- OR v_registry->>'version'<>'1'
+ OR v_registry->>'version' IS DISTINCT FROM '1'
  OR jsonb_typeof(v_registry->'bindings') IS DISTINCT FROM 'array'
  OR jsonb_array_length(v_registry->'bindings')>16
  THEN RAISE EXCEPTION USING ERRCODE='42501',
