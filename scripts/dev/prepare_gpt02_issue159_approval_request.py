@@ -36,14 +36,17 @@ def _reject_reused_approval_intent(db_path: str, task_id: int,
                                    command_id: str, attempt_id: str) -> None:
     """A prior approval decision, even expired, cannot be rotated by CLI."""
     try:
-        with sqlite3.connect("file:" + db_path + "?mode=ro",
-                             uri=True, timeout=2) as con:
+        con = sqlite3.connect("file:" + db_path + "?mode=ro",
+                              uri=True, timeout=2)
+        try:
             con.execute("PRAGMA query_only=ON")
             prior = con.execute(
                 "SELECT count(*) FROM gpt02_issue159_approval_intents "
                 "WHERE task_id=? OR command_id=? OR attempt_id=?",
                 (task_id, command_id, attempt_id),
             ).fetchone()
+        finally:
+            con.close()
         if prior is None or len(prior) != 1:
             raise RuntimeError("ISSUE159_APPROVAL_REPLAY_READBACK_INVALID")
     except sqlite3.Error as exc:
@@ -93,7 +96,8 @@ def prepare(db_path: str, output_path: str, task_id: int,
         live_dir = str(Path(LIVE_OUTPUT).parent.resolve())
         db_resolved = str(Path(db_path).resolve())
         output_resolved = str(Path(output_path).resolve())
-        if (db_resolved == LIVE_DB or output_resolved == LIVE_OUTPUT
+        if (db_resolved == str(Path(LIVE_DB).resolve())
+                or output_resolved == str(Path(LIVE_OUTPUT).resolve())
                 or output_resolved.startswith(live_dir + os.sep)):
             raise RuntimeError("ISSUE159_TEST_MODE_LIVE_TARGET_FORBIDDEN")
     if not isinstance(task_id, int) or task_id <= 139:
