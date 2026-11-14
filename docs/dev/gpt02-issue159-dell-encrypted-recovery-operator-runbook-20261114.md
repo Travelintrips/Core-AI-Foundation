@@ -13,6 +13,26 @@
 - Two local fixed NTFS drives exist; encryption status could not be verified (BitLocker read-only status returned an error). Free internal disk space is **not** an approved backup security boundary. No removable/network-mounted logical drive appeared in the check.
 - A previous attempt to capture protected config/credential material was blocked by an access-control gate. **Do not bypass this gate**, including through a different script, backup command, copied token, administrator escalation, or an alternate device. Future sensitive backup operations must have an independently authorized access path and a compliant, recoverable encryption mechanism.
 
+## 21:30 WIB destination inventory — no approved off-host destination discovered
+
+Additional metadata-only discovery on **14 Nov 2026**, without touching credentials, backing up files or starting a service:
+
+- DELL has exactly two PowerShell filesystem drives, **C:** and **D:**, and `Get-SmbMapping` returned **0 SMB mappings**. Both mounted logical drives seen by Windows were fixed NTFS, not removable or network volumes. No native `restic`, `rclone`, `borg`, AWS, AzCopy or gcloud CLI was found on its PATH. Built-in Windows OneDrive updater and backup-named Scheduled Tasks exist, but their presence is **not** an approved, independent or credential-safe OpenClaw backup destination.
+- DELL BitLocker status for C: and D: was **not readable** using the current limited access, so do not infer these local disks are encrypted. Do not elevate privileges or use this uncertainty to justify writing a plaintext backup archive.
+- Read-only DEV VPS inspection found **no** pre-installed `restic`, `rclone`, `borg`, AWS, AzCopy, gcloud, S3cmd or duplicity CLI, and no NFS/CIFS/SSHFS/rclone/S3FS-style mount was observed. This is a bounded tool/mount inventory only, **not** a claim that the VPS lacks all other storage capabilities.
+- A listener at VPS loopback port **127.0.0.1:18789** was mapped to a Docker proxy with container **`ai-core-workers-openclaw-1`**, image `ghcr.io/openclaw/openclaw:2026.9.8`, Docker health **healthy**. This is a **separate VPS instance** from the offline DELL Gateway, which has a custom pinned 2026.10.7 installation and zero listeners on port 18789. Do not switch GPT02 to the VPS instance, stop it, update its image, assume shared credentials or use its live container/volumes as an ad hoc backup store. Its data protection and owner boundaries have not been reviewed.
+- Final DELL read-only service check at **21:32:56 WIB**: Scheduled Task `OpenClaw Gateway` **Ready**, port `18789` **0 listeners**, unrelated `AI Core DELL Wake Executor DEV` **Running**.
+- The correct local OpenClaw CLI `storage list --json` still previously reported **0 configured destinations**. No off-host encrypted destination or independent decryption-key custody has been demonstrated.
+
+**Decision after destination discovery: Stage A remains NO_GO.** Nothing in the observed environment is an already-approved backup location. This discovery does not authorize installing a new backup agent or mounting a VPS share; doing so requires its own review and operator approval.
+
+### Safest two operator choices (neither is configured yet)
+
+1. **Separate protected object store:** operator chooses a designated encrypted bucket/prefix using a plugin/provider already supported by the *exact installed* OpenClaw version; provider compatibility, authorization, retention and recovery key custody must be verified independently. OpenClaw v2026.10.7 documents Cloudflare R2 through its Cloudflare plugin as one possible provider. This is an example, not evidence of an existing bucket or working plugin.
+2. **Separate protected filesystem storage:** operator mounts or provides an existing encrypted and recoverable removable/remote destination and registers it with built-in OpenClaw `filesystem` storage, with an approved `SecretRef` or other appropriately scoped secret injection. The destination must persist if DELL fails, and its key/marker must be recoverable on a *different* machine. The presently observed C:/D: drives do not satisfy independence by themselves.
+
+For both choices, require explicit permission to access protected full-config/credential content, an approved destination identity and recoverable key before `storage init`, `storage test`, `backup create --to` or `backup restore` can be run. The previously denied protected-file copy must not be circumvented. **Do not choose a destination automatically.**
+
 ## Stage A — operator provisions protected location, before any archive is created
 
 1. Operator designates a **separate durable destination**: encrypted object store or existing mounted/secured storage. It must have explicit ownership, access control, sufficient capacity, recovery from loss of the DELL machine, and a documented backup retention policy. Neither C: nor D: is assumed secure or independent.
