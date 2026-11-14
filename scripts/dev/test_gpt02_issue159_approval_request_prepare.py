@@ -113,6 +113,46 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
                     )
                 self.assertFalse(os.path.exists(self.output))
 
+    def test_direct_preparer_rejects_old_approval_intent_by_any_identity(self):
+        # Missing evidence is a denial, not proof the task has never been
+        # approved. This is the direct CLI's historical replay bypass.
+        with self.assertRaisesRegex(
+            RuntimeError, "ISSUE159_APPROVAL_REPLAY_READBACK_UNAVAILABLE"
+        ):
+            prepare_module._reject_reused_approval_intent(
+                self.db, 172, COMMAND, ATTEMPT,
+            )
+        con = sqlite3.connect(self.db)
+        con.execute("""CREATE TABLE gpt02_issue159_approval_intents(
+            task_id INTEGER, command_id TEXT, attempt_id TEXT
+        )""")
+        con.commit()
+        con.close()
+        prepare_module._reject_reused_approval_intent(
+            self.db, 172, COMMAND, ATTEMPT,
+        )
+        con = sqlite3.connect(self.db)
+        con.execute(
+            "INSERT INTO gpt02_issue159_approval_intents VALUES (?,?,?)",
+            (172, COMMAND, ATTEMPT),
+        )
+        con.commit()
+        con.close()
+        for task_id, cmd, att in (
+            (172, "33333333-3333-4333-8333-333333333333",
+             "44444444-4444-4444-8444-444444444444"),
+            (173, COMMAND, "44444444-4444-4444-8444-444444444444"),
+            (173, "33333333-3333-4333-8333-333333333333", ATTEMPT),
+        ):
+            with self.subTest(task_id=task_id, cmd=cmd, att=att):
+                with self.assertRaisesRegex(
+                    RuntimeError, "ISSUE159_APPROVAL_INTENT_ALREADY_CONSUMED"
+                ):
+                    prepare_module._reject_reused_approval_intent(
+                        self.db, task_id, cmd, att,
+                    )
+                self.assertFalse(os.path.exists(self.output))
+
     def test_test_mode_cannot_touch_live_approval_paths(self):
         for db_path, output in (
             (prepare_module.LIVE_DB, self.output),
