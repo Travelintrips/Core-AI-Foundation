@@ -187,6 +187,11 @@ function protectedRootFile(path) {
  * On current live DEV these files are deliberately not installed.
  */
 export function verifyIssue159ReleaseUsingPinnedRoot(input) {
+  // Operational callers may supply signed evidence and authenticated reader
+  // results only. Never accept a caller-selected trust root or observation
+  // timestamp: the latter could revalidate an expired release.
+  requireOk(exactKeys(input, ["release", "signatureBase64", "held", "binding"]),
+    "OPERATIONAL_RELEASE_INPUT_SHAPE_INVALID");
   const dir = dirname(PINNED_PUBLIC_ROOT);
   requireOk(dirname(PINNED_ROOT_FINGERPRINT) === dir,
     "RELEASE_PINNED_DIRECTORY_MISMATCH");
@@ -214,6 +219,11 @@ export function verifyIssue159ReleaseUsingPinnedRoot(input) {
   requireOk(createHash("sha256").update(der).digest("hex") === pinnedSha,
     "RELEASE_PINNED_FINGERPRINT_MISMATCH");
   return verifyIssue159ReleaseCandidate({
-    ...input, publicKeyPem: pem,
+    release: input.release,
+    signatureBase64: input.signatureBase64,
+    held: input.held,
+    binding: input.binding,
+    publicKeyPem: pem,
+    nowMs: Date.now(),
   });
 }
