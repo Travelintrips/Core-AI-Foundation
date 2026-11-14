@@ -200,12 +200,21 @@ jobs:
           --config test/vitest/vitest.extension-codex.config.ts
           extensions/codex/src/app-server/auth-profile-selection.test.ts
           --testTimeout 20000 --hookTimeout 20000
-      - name: Windows process custody and auth requirement tests (worker shard)
-        timeout-minutes: 12
+      # IMPORTANT: Windows jobs default to PowerShell, where a Bash-style
+      # trailing backslash is NOT a line continuation. The old multiline
+      # command accidentally ran the entire extension-database-workers shard
+      # (including unrelated Matrix tests) and timed out after 12 minutes.
+      # Use one single-line, file-scoped invocation per test. Do not suppress
+      # real failures or broaden the test set to unrelated extensions.
+      - name: Windows Codex native process custody (worker shard only)
+        timeout-minutes: 7
         env:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
-        run: |
-          pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts \
-            extensions/codex/src/app-server/native-process-authority.test.ts \
-            extensions/codex/src/app-server/auth-requirement-matrix.test.ts
+        run: pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts extensions/codex/src/app-server/native-process-authority.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Windows Codex auth requirement matrix (worker shard only)
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts extensions/codex/src/app-server/auth-requirement-matrix.test.ts --testTimeout 30000 --hookTimeout 30000
