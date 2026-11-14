@@ -138,6 +138,7 @@ const fullyProvenChain = Object.freeze({
   openclawNodeLauncherRecoveryVerified: true,
   openclawNodeScheduledTaskRecoveryVerified: true,
   wakeExecutorScriptRecoveryVerified: true,
+  wakeExecutorDependencyClosureRecoveryVerified: true,
   wakeExecutorNodeRecoveryVerified: true,
   wakeExecutorScheduledTaskRecoveryVerified: true,
   wakeExecutorScopedConfigRecoveryVerified: true,
@@ -149,6 +150,7 @@ const chainRecoveryDimensions = [
   ["openclawNodeLauncherRecoveryVerified", "OPENCLAW_NODE_LAUNCHER_RECOVERY_UNVERIFIED"],
   ["openclawNodeScheduledTaskRecoveryVerified", "OPENCLAW_NODE_SCHEDULED_TASK_RECOVERY_UNVERIFIED"],
   ["wakeExecutorScriptRecoveryVerified", "WAKE_EXECUTOR_SCRIPT_RECOVERY_UNVERIFIED"],
+  ["wakeExecutorDependencyClosureRecoveryVerified", "WAKE_EXECUTOR_DEPENDENCY_CLOSURE_RECOVERY_UNVERIFIED"],
   ["wakeExecutorNodeRecoveryVerified", "WAKE_EXECUTOR_NODE_RECOVERY_UNVERIFIED"],
   ["wakeExecutorScheduledTaskRecoveryVerified", "WAKE_EXECUTOR_SCHEDULED_TASK_RECOVERY_UNVERIFIED"],
   ["wakeExecutorScopedConfigRecoveryVerified", "WAKE_EXECUTOR_SCOPED_CONFIG_RECOVERY_UNVERIFIED"],
@@ -219,4 +221,17 @@ test("unsafe and empty chain evidence inputs fail closed", () => {
     assert.equal(report.chainRecoveryEvidenceComplete, false);
     assert.equal(report.productionModificationAuthorized, false);
   }
+});
+
+
+test("Wake listener on recovery host without its imported executor module is NO_GO", () => {
+  const report = evaluateChain({
+    ...fullyProvenChain,
+    wakeExecutorDependencyClosureRecoveryVerified: false,
+    sourceWakeListenerAndImportedModulePresent: true,
+    sourceWakeListenerStartedBefore: true,
+  });
+  assert.equal(report.evidenceStatus, "NO_GO");
+  assert.deepEqual(report.reasons, ["WAKE_EXECUTOR_DEPENDENCY_CLOSURE_RECOVERY_UNVERIFIED"]);
+  assert.equal(report.wakeExecutorRestartAuthorized, false);
 });
