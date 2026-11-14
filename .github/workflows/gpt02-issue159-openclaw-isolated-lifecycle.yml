@@ -23,6 +23,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Checkout original DELL-version source at immutable commit
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 157d8c2bc3ea2fa183afdc11088e69690bf8e64e
+          path: upstream-original
+          persist-credentials: false
       - name: Checkout official stable source at immutable commit
         uses: actions/checkout@v4
         with:
@@ -41,7 +48,7 @@ jobs:
         with:
           node-version: "24.22.1"
       - name: Verify source features without executing upstream code
-        run: node scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs upstream-stable upstream-beta
+        run: node scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs upstream-stable upstream-beta upstream-original
 
   windows-owner-lock:
     name: Windows Gateway owner-lock regressions (upstream fixture)
@@ -100,3 +107,35 @@ jobs:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
         run: pnpm exec vitest run --config test/vitest/vitest.cli-process.config.ts src/cli/gateway-cli/run-loop.restart-liveness.process.test.ts
+
+  codex-auth-candidate:
+    name: Codex model-route/auth and shutdown contracts (isolated fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned upstream candidate only
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # The upstream packageManager field specifies the exact version/pin.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install candidate dependencies without package lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Test fake Codex auth routes and local client lifecycle
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+          OPENCLAW_STATE_DIR: "${{ runner.temp }}/issue159-codex-fixture"
+          OPENCLAW_CONFIG_PATH: "${{ runner.temp }}/issue159-codex-fixture/openclaw.json"
+        run: |
+          pnpm exec vitest run --config test/vitest/vitest.extension-codex.config.ts \
+            extensions/codex/src/app-server/auth-requirement-matrix.test.ts \
+            extensions/codex/src/app-server/auth-profile-selection.test.ts \
+            extensions/codex/src/app-server/auth-profile-runtime-contract.test.ts \
+            extensions/codex/src/app-server/connection-health.test.ts \
+            extensions/codex/src/app-server/client-shutdown.test.ts
