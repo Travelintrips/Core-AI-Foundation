@@ -356,10 +356,10 @@ def main():
         # dedicated role. It still cannot claim the generic worker/send.
         sql("ALTER ROLE dev_gpt02_claim_gate_login LOGIN CONNECTION LIMIT 3")
         target = "6adc4295-e2ac-83ec-a1e1-2aea7d0c1326"
-        event = hashlib.sha256(("gpt02-issue159-event/v1\\n"+CMD+"\\n"+
-                                ATT+"\\n"+permit).encode()).hexdigest()
-        challenge = hashlib.sha256(("gpt02-issue159-challenge/v1\\n"+
-                                    CMD+"\\n"+("a"*64)+"\\n"+target).encode()).hexdigest()
+        event = hashlib.sha256(("gpt02-issue159-event/v1"+chr(10)+CMD+chr(10)+
+                                ATT+chr(10)+permit).encode()).hexdigest()
+        challenge = hashlib.sha256(("gpt02-issue159-challenge/v1"+chr(10)+
+                                    CMD+chr(10)+("a"*64)+chr(10)+target).encode()).hexdigest()
         owner = "ai-engine-oauth:"+("c"*64)
         instruction_sha = hashlib.sha256(
             b"Synthetic DEV owner-approved task fixture").hexdigest()
@@ -386,7 +386,8 @@ def main():
                         "dev_gpt02_claim_gate_login",required=False)
         ensure(bad_event.returncode!=0 and
                "RELEASE_CLAIM_SIGNED_CONTEXT_OR_LEASE_MISMATCH" in bad_event.stderr,
-               "FORGED_RELEASE_EVENT_ACCEPTED")
+               "FORGED_RELEASE_EVENT_ACCEPTED: rc="+str(bad_event.returncode)+
+               " stderr="+bad_event.stderr[-1200:])
         # Two simultaneous admission attempts, one immutable claim row.
         with ThreadPoolExecutor(max_workers=2) as pool:
             claim_attempts=list(pool.map(lambda _:
