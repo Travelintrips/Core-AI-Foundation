@@ -25,6 +25,9 @@ BEGIN
  THEN RAISE EXCEPTION 'RELEASE_CLAIM_STAGE_OR_OUTBOX_MISSING'; END IF;
  IF pg_has_role('postgres','gpt02_store_owner','SET')
  THEN RAISE EXCEPTION 'RELEASE_CLAIM_OWNER_SET_DRIFT'; END IF;
+ IF (SELECT pg_get_userbyid(nspowner) FROM pg_namespace
+       WHERE nspname='extensions') IS DISTINCT FROM 'postgres'
+ THEN RAISE EXCEPTION 'RELEASE_CLAIM_DIGEST_SCHEMA_OWNER_DRIFT'; END IF;
  IF NOT has_table_privilege('gpt02_store_owner',
        'ai_platform.ai_coding_bridge_commands','SELECT')
  OR NOT has_table_privilege('gpt02_store_owner',
@@ -36,6 +39,10 @@ END $check$;
 
 CREATE ROLE dev_gpt02_claim_gate_login
  NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0;
+-- The private ledger owner must be able to compute SHA-256 from canonical
+-- existing Core Task and issuer UUIDs. Only schema USAGE is added; digest()
+-- EXECUTE is already available, and no public grant is broadened.
+GRANT USAGE ON SCHEMA extensions TO gpt02_store_owner;
 
 GRANT gpt02_store_owner TO postgres WITH SET TRUE;
 SET ROLE gpt02_store_owner;
@@ -210,6 +217,7 @@ GRANT gpt02_store_owner TO postgres WITH SET FALSE;
 DO $postflight$
 BEGIN
  IF pg_has_role('postgres','gpt02_store_owner','SET')
+ OR NOT has_schema_privilege('gpt02_store_owner','extensions','USAGE')
  OR (SELECT rolcanlogin OR rolbypassrls OR rolsuper
        FROM pg_roles WHERE rolname='dev_gpt02_claim_gate_login')
  OR (SELECT rolconnlimit FROM pg_roles
