@@ -13,9 +13,11 @@ vi.mock("@workspace/db", () => ({
 vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
   eq: vi.fn(),
+  exists: vi.fn(),
   inArray: vi.fn(),
   isNotNull: vi.fn(),
   lte: vi.fn(),
+  or: vi.fn(),
 }));
 
 import {
@@ -168,5 +170,34 @@ describe("multi-worker child lifecycle recovery", () => {
       taskStatus: "COMPLETED",
       aiFailure: false,
     });
+  });
+});
+
+describe("bounded workstream recovery candidate scan", () => {
+  it("projects IDs only before the existing row-lock and state revalidation", () => {
+    const source = readFileSync(
+      new URL("../localCodingMultiWorkerRecoveryService.ts", import.meta.url),
+      "utf8",
+    );
+    const scanStart = source.indexOf("const [terminal, expired] = await Promise.all([");
+    const scanEnd = source.indexOf("const candidates = new Map", scanStart);
+    expect(scanStart).toBeGreaterThan(-1);
+    expect(scanEnd).toBeGreaterThan(scanStart);
+    const candidateScan = source.slice(scanStart, scanEnd);
+    expect(candidateScan.match(/\.select\(\{ id: aiCodingWorkstreamsTable\.id \}\)/g)).toHaveLength(2);
+    expect(candidateScan).not.toContain(".select()");
+    expect(source).toContain("const terminalChildNeedsRecovery = or(");
+    expect(source).toContain("eq(aiCodingRunsTable.status, \"RUNNING\")");
+    expect(source).toContain("inArray(aiCodingTasksTable.status, [");
+    expect(candidateScan).toContain("terminalChildNeedsRecovery");
+    // Expired active leases must continue to be considered regardless of
+    // current child state. The new predicate applies only to terminal scans.
+    expect(candidateScan.split("terminalChildNeedsRecovery")).toHaveLength(2);
+
+    // Recovery still re-reads the full workstream under a row lock before
+    // mutating a run, task or lease. No status or fencing gate is bypassed.
+    expect(source).toContain('.for("update")');
+    expect(source).toContain("if (!current?.childRunId || !current.childTaskId) return;");
+    expect(source).toContain("if (!expiredLease && !terminalState) return;");
   });
 });

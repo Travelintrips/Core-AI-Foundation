@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import {
   aiCodingRunsTable,
   aiCodingTaskGraphsTable,
@@ -447,18 +447,44 @@ export async function reconcileStaleMultiWorkerRuns(
     baseConditions.push(eq(aiCodingWorkstreamsTable.childTaskId, options.taskId));
   }
 
+  // Already-settled terminal workstreams require no per-row transaction:
+  // the original recovery body only updates a child run in RUNNING or a child
+  // task in one of the in-progress states below. Keep the expired-lease path
+  // separate: it must still requeue a stale active workstream unconditionally.
+  const terminalChildNeedsRecovery = or(
+    exists(
+      db.select({ id: aiCodingRunsTable.id })
+        .from(aiCodingRunsTable)
+        .where(and(
+          eq(aiCodingRunsTable.id, aiCodingWorkstreamsTable.childRunId),
+          eq(aiCodingRunsTable.status, "RUNNING"),
+        )),
+    ),
+    exists(
+      db.select({ id: aiCodingTasksTable.id })
+        .from(aiCodingTasksTable)
+        .where(and(
+          eq(aiCodingTasksTable.id, aiCodingWorkstreamsTable.childTaskId),
+          inArray(aiCodingTasksTable.status, [
+            "PENDING", "ANALYZING", "CODING", "TESTING", "COMMITTING", "READY_REVIEW",
+          ]),
+        )),
+    ),
+  );
+
   const [terminal, expired] = await Promise.all([
     db
-      .select()
+      .select({ id: aiCodingWorkstreamsTable.id })
       .from(aiCodingWorkstreamsTable)
       .where(
         and(
           ...baseConditions,
           inArray(aiCodingWorkstreamsTable.status, [...TERMINAL_WORKSTREAM_STATUSES]),
+          terminalChildNeedsRecovery,
         ),
       ),
     db
-      .select()
+      .select({ id: aiCodingWorkstreamsTable.id })
       .from(aiCodingWorkstreamsTable)
       .where(
         and(
