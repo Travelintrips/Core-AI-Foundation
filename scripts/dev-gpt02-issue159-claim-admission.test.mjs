@@ -1,0 +1,233 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { readFileSync } from "node:fs";
+import {
+  canonicalIssue159Release, issue159EventId, issue159Challenge,
+  verifyIssue159ReleaseCandidate,
+} from "./dev-gpt02-issue159-release-authorization.mjs";
+import {
+  deriveIssue159ClaimParameters,
+  reserveIssue159ClaimWithoutDispatch,
+  inspectIssue159ClaimAfterCrash,
+} from "./dev-gpt02-issue159-claim-admission.mjs";
+import { BridgeViolation } from "./dev-gpt02-gateway-bridge.mjs";
+
+const COMMAND="10000000-0000-4000-8000-000000000001";
+const ATTEMPT="20000000-0000-4000-8000-000000000002";
+const PERMIT="30000000-0000-4000-8000-000000000003";
+const CORE="50000000-0000-4000-8000-000000000005";
+const CONV="6adc4295-e2ac-83ec-a1e1-2aea7d0c1326";
+const PROOF="44444444-5555-4333-8444-555555555555";
+const OWNER="ai-engine-oauth:"+"c".repeat(64);
+const PROMPT="Return the original verified response.";
+const now=1800000000000;
+const digest=input=>createHash("sha256").update(input).digest("hex");
+const key=generateKeyPairSync("ed25519");
+const binding=Object.freeze({
+  accountAlias:"GPT02",workerId:"openclaw-dell-chatgpt-wake-dev",
+  ownerChannel:OWNER,targetConversationId:CONV,gatewayAgentId:"gpt02-approved",
+  provider:"openai",principalFingerprint:"d".repeat(64),
+  credentialStatus:"VERIFIED",
+  proofSource:"authorized-provider-identity-check",proofId:PROOF,
+});
+function fixture() {
+  const release={
+    version:1,environment:"DEV",
+    audience:"GPT02_ISSUE159_EXACT_COMMAND_RELEASE_V1",
+    hubTaskId:171,commandId:COMMAND,attemptId:ATTEMPT,permitId:PERMIT,
+    coreTaskId:CORE,packetSha256:"a".repeat(64),
+    instructionSha256:digest(PROMPT),ownerChannel:OWNER,
+    targetConversationId:CONV,workerId:binding.workerId,
+    gatewayAgentId:binding.gatewayAgentId,provider:binding.provider,
+    principalFingerprint:binding.principalFingerprint,gatewayProofId:PROOF,
+    eventId:"",challenge:"",correlationId:"ai-task:default:171:"+COMMAND.slice(0,8),
+    issuedAt:now-1000,expiresAt:now+5000,
+  };
+  release.eventId=issue159EventId(release);
+  release.challenge=issue159Challenge(release);
+  const held={
+    id:COMMAND,taskId:CORE,source:"ai-core",
+    commandType:"ISSUE159_HELD",status:"RECEIVED",
+    externalCommandId:"gpt02-issue159:"+COMMAND,
+    instruction:PROMPT,
+    metadata:{
+      devOnly:true,issue159Stage:"NO_DISPATCH",
+      gpt02Issue159PositivePermit:{
+        commandId:COMMAND,attemptId:ATTEMPT,permitId:PERMIT,
+        deliveryState:"HELD_NO_DISPATCH",
+      },
+    },
+  };
+  const signatureBase64=sign(null,canonicalIssue159Release(release),
+    key.privateKey).toString("base64");
+  const publicKeyPem=key.publicKey.export({type:"spki",format:"pem"});
+  const proof=verifyIssue159ReleaseCandidate({
+    release,signatureBase64,publicKeyPem,held,binding,nowMs:now,
+  });
+  return { release,signatureBase64,held,binding,proof };
+}
+const errorCode=code=>err=>err instanceof BridgeViolation&&err.code===code;
+
+test("synthetic signed release -> exact 12 immutable SQL claim parameters",()=>{
+  const {release,signatureBase64,proof}=fixture();
+  const record=deriveIssue159ClaimParameters({release,signatureBase64,proof});
+  assert.equal(record.params.length,12);
+  assert.equal(record.params[0],COMMAND);
+  assert.equal(record.params[1],PERMIT);
+  assert.equal(record.params[2],release.packetSha256);
+  assert.equal(record.params[3],digest(canonicalIssue159Release(release)));
+  assert.equal(record.params[4],digest(Buffer.from(signatureBase64,"base64")));
+  assert.equal(record.params[5],digest(PROMPT));
+  assert.equal(record.params[6],OWNER);
+  assert.equal(record.params[7],CONV);
+  assert.equal(record.params[8],release.eventId);
+  assert.equal(record.params[9],release.challenge);
+  assert.equal(record.params[10],release.issuedAt);
+  assert.equal(record.params[11],release.expiresAt);
+  assert.equal(record.releaseDecision,"NO_GO");
+  assert.equal(record.dispatchPermitted,false);
+  assert.ok(Object.isFrozen(record.params));
+});
+
+test("a forged synthetic proof or unrelated command cannot become claim evidence",()=>{
+  const f=fixture();
+  for(const modified of [
+    {stage:"DISPATCH_GRANTED"},
+    {releaseDecision:"GO"},
+    {dispatchPermitted:true},
+    {oneUseDatabaseFenceVerified:true},
+    {workerCommandSent:true},
+    {work:{...f.proof.work,commandId:CORE}},
+    {work:{...f.proof.work,challenge:"0".repeat(64)}},
+  ]) {
+    assert.throws(()=>deriveIssue159ClaimParameters({
+      release:f.release,signatureBase64:f.signatureBase64,
+      proof:{...f.proof,...modified},
+    }),errorCode("VERIFIED_RELEASE_CANDIDATE_REQUIRED"));
+  }
+  assert.throws(()=>deriveIssue159ClaimParameters({
+    release:f.release,signatureBase64:"A".repeat(85)+"?==",proof:f.proof,
+  }),errorCode("RELEASE_SIGNATURE_CANONICAL_REQUIRED"));
+});
+
+test("operational claim gate OFF before packet verification and SQL",async()=>{
+  const f=fixture();
+  const before={...process.env};
+  try {
+    delete process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED;
+    process.env.APP_ENV="development";
+    let queries=0;
+    const db={async query(){queries++;throw Error("NO_DB_ALLOWED");}};
+    await assert.rejects(
+      reserveIssue159ClaimWithoutDispatch(f,db),
+      errorCode("CLAIM_ADMISSION_DISABLED"),
+    );
+    assert.equal(queries,0);
+  }finally{process.env=before;}
+});
+
+test("even with requested feature ON, unavailable independent root denies before DB",async()=>{
+  const f=fixture();
+  const {proof,...input}=f;
+  const prior=Object.assign({},process.env);
+  try {
+    process.env.APP_ENV="development";
+    process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED="true";
+    let calls=0;
+    const db={async query(){calls++;throw Error("SHOULD_NOT_QUERY");}};
+    await assert.rejects(
+      reserveIssue159ClaimWithoutDispatch(input,db),
+      errorCode("RELEASE_INDEPENDENT_PINNED_ROOT_UNAVAILABLE"),
+    );
+    assert.equal(calls,0);
+  }finally{process.env=prior;}
+});
+
+test("unexpected caller clock, public key or claimed proof is forbidden",async()=>{
+  const f=fixture();
+  const {proof,...input}=f;
+  const prior=Object.assign({},process.env);
+  try {
+    process.env.APP_ENV="development";
+    process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED="true";
+    const db={async query(){throw Error("SHOULD_NOT_QUERY");}};
+    for(const extra of [
+      {nowMs:now},{publicKeyPem:"attacker"},
+      {proof},{authApproved:true},{dispatchPermitted:true},
+    ]) {
+      await assert.rejects(
+        reserveIssue159ClaimWithoutDispatch({...input,...extra},db),
+        errorCode("OPERATIONAL_CLAIM_INPUT_INVALID"),
+      );
+    }
+  }finally{process.env=prior;}
+});
+
+function fakeReadback(status,role="dev_gpt02_claim_gate_login") {
+  const queries=[];
+  const db={
+    async query(sql,args) {
+      queries.push([sql,args]);
+      if(sql.startsWith("SELECT session_user::text"))
+        return {rows:[{session_login:role,active_role:role}]};
+      if(sql.startsWith("SELECT gpt02_private.inspect_issue159_release_claim"))
+        return {rows:[{status}]};
+      throw Error("UNEXPECTED_DATABASE_STATEMENT");
+    },
+  };
+  return {db,queries};
+}
+
+test("crash readback only points to existing gateway idempotency lookup",async()=>{
+  const {db,queries}=fakeReadback("RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED");
+  const result=await inspectIssue159ClaimAfterCrash({
+    commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
+  },db);
+  assert.equal(result.claimStatus,"RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED");
+  assert.equal(result.gatewayLookupRequired,true);
+  assert.equal(result.dispatchPermitted,false);
+  assert.equal(result.workerCommandSent,false);
+  assert.equal(result.releaseDecision,"NO_GO");
+  assert.equal(queries.length,2);
+  assert.deepEqual(queries[1][1],[COMMAND,"d".repeat(64),"b".repeat(64)]);
+  for(const [sql] of queries) assert.doesNotMatch(sql,/INSERT|UPDATE|DELETE|COMMIT|dispatchOnce|gateway\.send/i);
+});
+
+test("wrong claim selectors and missing claim can never send",async()=>{
+  const {db}=fakeReadback("NO_MATCHING_CLAIM_DO_NOT_SEND");
+  const r=await inspectIssue159ClaimAfterCrash({
+    commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
+  },db);
+  assert.equal(r.gatewayLookupRequired,false);
+  assert.equal(r.releaseDecision,"NO_GO");
+  await assert.rejects(
+    inspectIssue159ClaimAfterCrash({
+      commandId:COMMAND,releaseSha256:"X".repeat(64),eventId:"b".repeat(64),
+    },db),errorCode("CLAIM_READBACK_SELECTORS_INVALID"));
+});
+
+test("wrong DB identity and forged readback status fail closed",async()=>{
+  const bad=fakeReadback("RECORDED_NO_DISPATCH_GATEWAY_LOOKUP_REQUIRED","service_role");
+  await assert.rejects(
+    inspectIssue159ClaimAfterCrash({
+      commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
+    },bad.db),errorCode("EXCLUSIVE_RELEASE_CLAIM_ROLE_REQUIRED"));
+  assert.equal(bad.queries.length,1);
+  const forged=fakeReadback("AUTHORIZED_TO_DISPATCH");
+  await assert.rejects(
+    inspectIssue159ClaimAfterCrash({
+      commandId:COMMAND,releaseSha256:"d".repeat(64),eventId:"b".repeat(64),
+    },forged.db),errorCode("CLAIM_READBACK_RESULT_INVALID"));
+});
+
+test("adapter contains no gateway/worker send, network clients or DB secrets",()=>{
+  const src=readFileSync(
+    new URL("./dev-gpt02-issue159-claim-admission.mjs",import.meta.url),
+    "utf8");
+  for(const forbidden of [
+    "dispatchOnce(","gateway.send(","fetch(","http://","https://",
+    "process.env.DATABASE_URL","pg.Pool","createPrivateKey(",
+    "worker.send(","notifyExternalAgentWork(","client.connect(",
+  ]) assert.equal(src.includes(forbidden),false,forbidden);
+});
