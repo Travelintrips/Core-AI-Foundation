@@ -6,6 +6,7 @@ on:
     paths:
       - "docs/dev/gpt02-issue159-positive-dispatch-permit.PROPOSED.sql"
       - "docs/dev/gpt02-issue159-exact-bridge-stage-role.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-release-claim-fence.PROPOSED.sql"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_release_broker.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_bridge_handoff_preflight.py"
