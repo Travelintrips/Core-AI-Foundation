@@ -7,6 +7,7 @@ before a production-style writer connection may ever be enabled on DEV.
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -113,6 +114,21 @@ def main():
         apply_file(ROOT /
           "docs/dev/gpt02-issue159-exact-bridge-stage-role.PROPOSED.sql",
           "/tmp/stage-role.sql", MIGRATOR, replace_migrator=True)
+        apply_file(ROOT /
+          "docs/dev/gpt02-issue159-release-claim-fence.PROPOSED.sql",
+          "/tmp/claim-fence.sql", MIGRATOR, replace_migrator=True)
+        claim_role_state = sql("""SELECT rolcanlogin::text||':'||rolconnlimit::text
+             FROM pg_roles WHERE rolname='dev_gpt02_claim_gate_login'""").stdout.strip()
+        ensure(claim_role_state == "false:0", "CLAIM_ROLE_NOT_DORMANT")
+        for table in ("issue159_release_claim_intents",):
+            for privilege in ("SELECT","INSERT","UPDATE","DELETE"):
+                allowed = sql("SELECT has_table_privilege('dev_gpt02_claim_gate_login',"
+                    "'gpt02_private."+table+"','"+privilege+"')").stdout.strip()
+                ensure(allowed=="f","CLAIM_ROLE_DIRECT_DML_LEAK_"+privilege)
+        allowed = sql("""SELECT has_function_privilege('dev_gpt02_claim_gate_login',
+          'gpt02_private.reserve_issue159_release_claim(uuid,uuid,text,text,text,text,text,uuid,text,text,bigint,bigint)',
+          'EXECUTE')""").stdout.strip()
+        ensure(allowed=="t", "CLAIM_GATE_RPC_NOT_SCOPED")
         role_state = sql("""SELECT rolcanlogin::text||':'||rolconnlimit::text
                  FROM pg_roles WHERE rolname='dev_gpt02_bridge_stage_login'""").stdout.strip()
         ensure(role_state=="false:0", "STAGE_ROLE_NOT_DORMANT")
@@ -336,6 +352,62 @@ def main():
             CMD+"|"+CORE+"|ai-core|gpt02-issue159:"+CMD+"|ISSUE159_HELD|RECEIVED|"),
             "EXACT_HELD_BRIDGE_INSERT_MISSING_OR_ID_CHANGED: "+
             staged.stdout[-180:])
+        # An exact-ID, SHORT-LIVED claim intent can be reserved only by its
+        # dedicated role. It still cannot claim the generic worker/send.
+        sql("ALTER ROLE dev_gpt02_claim_gate_login LOGIN CONNECTION LIMIT 3")
+        target = "6adc4295-e2ac-83ec-a1e1-2aea7d0c1326"
+        event = hashlib.sha256(("gpt02-issue159-event/v1\\n"+CMD+"\\n"+
+                                ATT+"\\n"+permit).encode()).hexdigest()
+        challenge = hashlib.sha256(("gpt02-issue159-challenge/v1\\n"+
+                                    CMD+"\\n"+("a"*64)+"\\n"+target).encode()).hexdigest()
+        owner = "ai-engine-oauth:"+("c"*64)
+        instruction_sha = hashlib.sha256(
+            b"Synthetic DEV owner-approved task fixture").hexdigest()
+        permit_expiry_ms = int(sql("""SELECT floor(extract(epoch from expires_at)*1000)
+          FROM gpt02_private.positive_dispatch_permits
+          WHERE command_id='"""+CMD+"'").stdout.strip())
+        now_ms=int(time.time()*1000)
+        issued_ms=now_ms-500
+        expires_ms=min(now_ms+3000,permit_expiry_ms-150)
+        ensure(expires_ms>now_ms+1200,
+               "DISPOSABLE_CLAIM_FIXTURE_EXPIRED_BEFORE_RESERVATION")
+        def claim_sql(event_id=event,challenge_id=challenge,
+                      command=CMD,packet_sha="a"*64,release_sha="d"*64):
+            args=[
+                "'"+command+"'::uuid", "'"+permit+"'::uuid",
+                "'"+packet_sha+"'", "'"+release_sha+"'", "repeat('e',64)",
+                "'"+instruction_sha+"'", "'"+owner+"'", "'"+target+"'::uuid",
+                "'"+event_id+"'", "'"+challenge_id+"'",
+                str(issued_ms)+"::bigint",str(expires_ms)+"::bigint",
+            ]
+            return ("SELECT gpt02_private.reserve_issue159_release_claim("+
+                    ",".join(args)+")")
+        bad_event = sql(claim_sql(event_id="0"*64),
+                        "dev_gpt02_claim_gate_login",required=False)
+        ensure(bad_event.returncode!=0 and
+               "RELEASE_CLAIM_SIGNED_CONTEXT_OR_LEASE_MISMATCH" in bad_event.stderr,
+               "FORGED_RELEASE_EVENT_ACCEPTED")
+        # Two simultaneous admission attempts, one immutable claim row.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claim_attempts=list(pool.map(lambda _:
+                sql(claim_sql(),"dev_gpt02_claim_gate_login",required=False),
+                range(2)))
+        ensure(sum(x.returncode==0 for x in claim_attempts)==1,
+               "RELEASE_CLAIM_CONCURRENT_EXACTLY_ONCE_FAILED")
+        ensure(sum(x.returncode!=0 for x in claim_attempts)==1,
+               "RELEASE_CLAIM_REPLAY_ACCEPTED")
+        receipt=sql("""SELECT command_id::text||':'||permit_id::text||':'||
+            event_id||':'||challenge||':'||claim_state
+            FROM gpt02_private.issue159_release_claim_intents""").stdout.strip()
+        ensure(receipt==CMD+":"+permit+":"+event+":"+challenge+
+               ":RESERVED_NO_DISPATCH","RELEASE_CLAIM_LEDGER_IDENTITY_DRIFT")
+        ensure(sql("SELECT count(*) FROM gpt02_private.issue159_release_claim_intents"
+                   ).stdout.strip()=="1", "RELEASE_CLAIM_NOT_EXACTLY_ONCE")
+        denied_claim_mutation=sql("""UPDATE gpt02_private.issue159_release_claim_intents
+           SET claim_state='DISPATCHED'""",required=False)
+        ensure(denied_claim_mutation.returncode!=0 and
+               "APPEND_ONLY_EVIDENCE" in denied_claim_mutation.stderr,
+               "RELEASE_CLAIM_IMMUTABILITY_NOT_ENFORCED")
         check = sql("""SELECT
           id::text||':'||task_id::text||':'||source||':'||command_type
           ||':'||status||':'||(metadata_json ? 'assignedClientId')::text
@@ -356,7 +428,7 @@ def main():
         ensure(check_legacy == "false:false", "HISTORIC_NO_DISPATCH_PROOF_MUTATED")
         print("PASS: disposable PG16 positive-permit migration; dormant roles, "
               "forced RLS, legacy NO_DISPATCH retained, exact lineage, "
-              "one-use concurrency, rollback and replay denied; outbox remains HELD_NO_DISPATCH; NOT live E2E")
+              "one-use concurrency, signed-context claim fence, rollback and replay denied; outbox stays HELD_NO_DISPATCH; NOT live E2E")
     finally:
         run("docker", "rm", "-f", NAME, required=False)
 
