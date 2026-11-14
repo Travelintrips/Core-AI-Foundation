@@ -449,7 +449,7 @@ export async function reconcileStaleMultiWorkerRuns(
 
   const [terminal, expired] = await Promise.all([
     db
-      .select()
+      .select({ id: aiCodingWorkstreamsTable.id })
       .from(aiCodingWorkstreamsTable)
       .where(
         and(
@@ -458,7 +458,7 @@ export async function reconcileStaleMultiWorkerRuns(
         ),
       ),
     db
-      .select()
+      .select({ id: aiCodingWorkstreamsTable.id })
       .from(aiCodingWorkstreamsTable)
       .where(
         and(
