@@ -15,6 +15,7 @@ import secrets
 import sqlite3
 import stat
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -158,27 +159,44 @@ def prepare(db_path: str, output_path: str, task_id: int,
 
     target = Path(output_path)
     parent = target.parent
-    parent_stat = os.stat(parent)
-    if operational and (parent_stat.st_uid != 0 or parent_stat.st_gid != 0):
+    parent_stat = os.lstat(parent)
+    if (not stat.S_ISDIR(parent_stat.st_mode)
+            or stat.S_ISLNK(parent_stat.st_mode)
+            or (operational and
+                (parent_stat.st_uid != 0 or parent_stat.st_gid != 0))):
         raise RuntimeError("ISSUE159_PENDING_DIRECTORY_OWNER_INVALID")
-    tmp = parent / ("." + target.name + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    # A deterministic .tmp name can strand an orphan after a crash and block
+    # all later fresh requests. A unique O_EXCL file isolates concurrent
+    # preparers, while hard-link publication still refuses to replace a
+    # pending request from another process.
+    fd, temporary_path = tempfile.mkstemp(
+        prefix="." + target.name + ".tmp.", dir=str(parent)
+    )
+    tmp = Path(temporary_path)
     try:
-        payload = (json.dumps({"claims": claims}, sort_keys=True,
-                              separators=(",", ":")) + "\n").encode("utf-8")
-        os.write(fd, payload)
-        os.fsync(fd)
+        try:
+            payload = (json.dumps({"claims": claims}, sort_keys=True,
+                                  separators=(",", ":")) + "\n").encode("utf-8")
+            remaining = memoryview(payload)
+            while remaining:
+                count = os.write(fd, remaining)
+                if count <= 0:
+                    raise RuntimeError("ISSUE159_PENDING_FILE_WRITE_INCOMPLETE")
+                remaining = remaining[count:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.chmod(tmp, 0o600)
+        if operational:
+            os.chown(tmp, 0, 0)
+        try:
+            os.link(tmp, target)
+        except FileExistsError as exc:
+            raise RuntimeError("ISSUE159_PENDING_REQUEST_ALREADY_EXISTS") from exc
     finally:
-        os.close(fd)
-    os.chmod(tmp, 0o600)
-    if operational:
-        os.chown(tmp, 0, 0)
-    try:
-        os.link(tmp, target)
-    except FileExistsError as exc:
-        os.unlink(tmp)
-        raise RuntimeError("ISSUE159_PENDING_REQUEST_ALREADY_EXISTS") from exc
-    os.unlink(tmp)
+        # This also covers chmod/chown/fsync/link exceptions. Never remove
+        # the published target here: its existence is the replay barrier.
+        tmp.unlink(missing_ok=True)
     return {
         "environment": "DEV",
         "taskId": task_id,
