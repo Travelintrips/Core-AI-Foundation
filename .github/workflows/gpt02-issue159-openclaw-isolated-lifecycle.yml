@@ -308,3 +308,55 @@ jobs:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
         run: pnpm exec vitest run --config test/vitest/vitest.unit.config.ts src/storage/encryption.test.ts src/storage/filesystem.test.ts src/storage/locations.test.ts --testTimeout 30000 --hookTimeout 30000
+
+  cross-release-archive-synthetic:
+    name: Original 2026.10.7 archive into candidate isolated restore (synthetic only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout original immutable release as execution root
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 157d8c2bc3ea2fa183afdc11088e69690bf8e64e
+          persist-credentials: false
+      - name: Checkout immutable candidate in separate subdirectory
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          path: candidate
+          persist-credentials: false
+      - name: Checkout Issue159 fixtures without any credentials
+        uses: actions/checkout@v4
+        with:
+          path: harness
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install original release lockfile without package scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Produce actual synthetic original-release archive
+        timeout-minutes: 8
+        env:
+          ISSUE159_SYNTHETIC_ARCHIVE: ${{ runner.temp }}/issue159-original-synthetic.tar.gz
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: |
+          cp harness/scripts/dev/fixtures/issue159-original-archive-producer.test.ts src/commands/issue159-original-archive-producer.test.ts
+          pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/issue159-original-archive-producer.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Install candidate release lockfile without package scripts
+        working-directory: candidate
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify original archive using candidate code and restore independently
+        timeout-minutes: 8
+        working-directory: candidate
+        env:
+          ISSUE159_SYNTHETIC_ARCHIVE: ${{ runner.temp }}/issue159-original-synthetic.tar.gz
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: |
+          cp ../harness/scripts/dev/fixtures/issue159-candidate-archive-consumer.test.ts src/commands/issue159-candidate-archive-consumer.test.ts
+          pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/issue159-candidate-archive-consumer.test.ts --testTimeout 30000 --hookTimeout 30000
