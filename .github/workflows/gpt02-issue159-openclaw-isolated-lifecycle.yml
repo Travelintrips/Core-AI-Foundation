@@ -1,0 +1,97 @@
+name: GPT02 Issue159 OpenClaw candidate lifecycle (isolated only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - ".github/workflows/gpt02-issue159-openclaw-isolated-lifecycle.yml"
+      - "scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Separate ephemeral CI machines. No repo write, credentials, DELL connectivity,
+# service restart, production resources, migration or worker dispatch.
+jobs:
+  source-identity:
+    name: Verify pinned stable/beta tag source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout this PR's test harness
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout official stable source at immutable commit
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 847611dcaa3bf0e2783335f961dd1fd0580e4d9f
+          path: upstream-stable
+          persist-credentials: false
+      - name: Checkout official beta source at immutable commit
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          path: upstream-beta
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Verify source features without executing upstream code
+        run: node scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs upstream-stable upstream-beta
+
+  windows-owner-lock:
+    name: Windows Gateway owner-lock regressions (upstream fixture)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "12.15.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pinned upstream dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run actual Windows lock regression in ephemeral test state
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts
+
+  linux-shutdown:
+    name: Linux plugin-close / SIGUSR2 lifecycle regressions (upstream fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "12.15.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pinned upstream dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run plugin retirement cleanup regression
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.plugins.config.ts src/plugins/loader.instance-cleanup.test.ts
+      - name: Run real child-process SIGUSR2 shutdown regression (fixture only)
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.cli-process.config.ts src/cli/gateway-cli/run-loop.restart-liveness.process.test.ts
