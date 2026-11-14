@@ -129,6 +129,31 @@ The current [OpenClaw v2026.11.3 release notes](https://github.com/openclaw/open
 
 **Gate result:** Identified three upstream candidate fixes and a specific installed-updater blocker; **no native upgrade action is permitted yet**. Full recovery archive, credential custody and isolated restore remain unverified. The old Gateway's lock owner change is not conclusively attributed to any particular process or diagnostic command.
 
+## Exact source-to-release comparison: OpenClaw v2026.11.3 is not automatically qualified
+
+**Important correction to the earlier broad upgrade recommendation.** The public OpenClaw `v2026.11.3` package is a stable published release (10 Nov 2026), and [its package metadata](https://github.com/openclaw/openclaw/blob/v2026.11.3/package.json) declares Node `>=24.16.0 <25 || >=26.1.0`; DELL Node `24.22.1` meets this **engine requirement only**. The installed DELL OpenClaw remains `2026.10.7`.
+
+A direct **read-only GitHub source comparison** with the three merged upstream PRs identified earlier gives a narrower result:
+
+| Original fix | Exact source feature in official `v2026.11.3` tag | Assessment |
+| --- | --- | --- |
+| [#175118](https://github.com/openclaw/openclaw/pull/175118) — live Windows owner-lock identity | `src/infra/gateway-lock-payload.ts` contains the Windows PID/process-start comment and same-namespace handling from the PR | **Source marker found**; still requires Windows runtime regression |
+| [#181270](https://github.com/openclaw/openclaw/pull/181270) — plugin forced-retirement cleanup | `src/plugins/plugin-cache.ts` has `waitForSettlement` option and forwards it to resource disposal, matching the PR patch | **Source marker found**; still requires Codex/plugin runtime regression |
+| [#186811](https://github.com/openclaw/openclaw/pull/186811) — retained request watchdog on failed Gateway close | The PR patch changes `run-loop.ts` guard to `!forcedExitStarted && !(params.ownsProcessLifecycle && cleanup.failed)` and keeps request watchdogs when cleanup fails. However [`v2026.11.3/src/cli/gateway-cli/run-loop.ts`](https://github.com/openclaw/openclaw/blob/v2026.11.3/src/cli/gateway-cli/run-loop.ts) still contains the narrower `if (!forcedExitStarted)` guard at the analogous finalizer and the PR's exact watchdog guard is absent in the release-tag source | **Equivalent fix NOT proven in this release**; possible refactor must be independently reviewed |
+
+These are **source-level comparisons**, not E2E/Windows runtime tests. A PR marked merged in the upstream repository does **not** by itself prove that the exact target release contains equivalent functionality; release branches/tags and merged commits may differ. Conversely, absence of one exact source guard cannot by itself prove the released binary has the identical flaw if another equivalent guard was introduced elsewhere. **Both cases require release-specific verification.**
+
+### Mandatory additional upgrade acceptance gate (G2R — candidate source equivalence)
+
+Before a package replacement is proposed on DELL:
+
+1. Identify a signed, published candidate version whose **actual release tag or package artifact**, not just main-branch PR history, is verified to retain Windows owner-lock identity, await plugin disposal safely, and preserve a bounded shutdown hard-exit watchdog **when `cleanup.failed`**.
+2. Confirm the actual package bytes/version and installed core/Codex plugin versions in an **isolated staging area** with NO access to DELL live state, tokens, credentials, shared SQLite, active Gateway port or owner locks. Run lifecycle regressions for `SIGUSR2`, failed close, forced retirement and single-owner locking. Do not treat `openclaw update --dry-run` exit 0 as an install success when it returns `unmanaged-package-install`.
+3. Preserve the actual Windows Scheduled Task launcher binding and one-Gateway-instance policy; write a reviewed atomic replace/rollback sequence *only after* full operator-owned encrypted backup and isolated restore rehearsal pass. Do not use global `npm install` as a surrogate for the custom staged package.
+4. Require an independent code/security approval and controlled DEV-only maintenance authorization before changing launcher, package, plugin, service, credential or process state.
+
+**Decision:** `v2026.11.3` is an **unqualified candidate**, not a proven fix for this DELL shutdown. G2R **NO_GO** until equivalence and isolated lifecycle tests pass. This qualification corrects any earlier implication that merging PR #186811 automatically made v2026.11.3 safe to deploy.
+
 ## Proposed claim admission contract remains dormant
 
 Source-only PR #1754 already requires independently owned read-only `inspectGatewayReachability()`, `inspectOpenClawModelStatus()`, and `inspectGatewayCredential()` evidence, matching exact worker/agent/provider/owner/target/proof and a recent Gateway status. Green synthetic CI **does not** mean an actual DELL reader or dispatcher is installed or the live system is healthy.
