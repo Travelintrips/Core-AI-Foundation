@@ -496,6 +496,29 @@ def main():
         sql("UPDATE ai_platform.ai_settings SET value="+
             "'" + registry_before.replace("'","''") + "'" +
             " WHERE key='dev.chatgpt_wake.account_bindings'")
+        # Protect against an otherwise well-formed signed release with a
+        # switched conversation or a malformed configuration version.
+        sql("""UPDATE ai_platform.ai_settings
+          SET value=jsonb_set(value::jsonb,'{bindings,0,targetConversationId}',
+              '"99999999-9999-4999-8999-999999999999"'::jsonb)::text
+          WHERE key='dev.chatgpt_wake.account_bindings'""")
+        denied_target=sql(claim_sql(),"dev_gpt02_claim_gate_login",required=False)
+        ensure(denied_target.returncode!=0 and
+               "DEV_GPT02_OWNER_TARGET_REGISTRY_MISMATCH" in denied_target.stderr,
+               "UNREGISTERED_TARGET_CONVERSATION_ACCEPTED")
+        sql("UPDATE ai_platform.ai_settings SET value="+
+            "'" + registry_before.replace("'","''") + "'" +
+            " WHERE key='dev.chatgpt_wake.account_bindings'")
+        sql("""UPDATE ai_platform.ai_settings
+          SET value=(value::jsonb - 'version')::text
+          WHERE key='dev.chatgpt_wake.account_bindings'""")
+        missing_version=sql(claim_sql(),"dev_gpt02_claim_gate_login",required=False)
+        ensure(missing_version.returncode!=0 and
+               "DEV_GPT02_TRUSTED_REGISTRY_NOT_READY" in missing_version.stderr,
+               "MISSING_CONFIG_VERSION_ACCEPTED")
+        sql("UPDATE ai_platform.ai_settings SET value="+
+            "'" + registry_before.replace("'","''") + "'" +
+            " WHERE key='dev.chatgpt_wake.account_bindings'")
         ensure(sql("SELECT has_table_privilege('dev_gpt02_claim_gate_login',"+
                    "'ai_platform.ai_settings','SELECT')").stdout.strip()=="f",
                "CLAIM_LOGIN_CAN_DIRECTLY_READ_REGISTRY")
