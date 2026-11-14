@@ -8,6 +8,7 @@ import {
 } from "./dev-gpt02-issue159-release-authorization.mjs";
 import {
   deriveIssue159ClaimParameters,
+  resolveIssue159TrustedGatewayBinding,
   reserveIssue159ClaimWithoutDispatch,
   inspectIssue159ClaimAfterCrash,
 } from "./dev-gpt02-issue159-claim-admission.mjs";
@@ -68,6 +69,88 @@ function fixture() {
   return { release,signatureBase64,held,binding,proof };
 }
 const errorCode=code=>err=>err instanceof BridgeViolation&&err.code===code;
+function trustedFixture({b=binding,identity}={}) {
+  const calls={load:0,inspect:0};
+  return {
+    calls,
+    trusted: {
+      async loadBinding(workerId) {
+        calls.load++;
+        assert.equal(workerId,"openclaw-dell-chatgpt-wake-dev");
+        return b;
+      },
+      async inspectGatewayCredential(agentId) {
+        calls.inspect++;
+        assert.equal(agentId,b.gatewayAgentId);
+        return identity ?? {
+          authenticated:true,source:"gateway-credential-store",
+          gatewayAgentId:b.gatewayAgentId,
+          provider:b.provider,
+          principalFingerprint:b.principalFingerprint,
+        };
+      },
+    },
+  };
+}
+test("signed release requires matching separately read provider registry identity",async()=>{
+  const f=fixture();
+  const t=trustedFixture();
+  const actual=await resolveIssue159TrustedGatewayBinding(f.release,t.trusted);
+  assert.equal(actual.accountAlias,"GPT02");
+  assert.equal(actual.ownerChannel,OWNER);
+  assert.equal(actual.targetConversationId,CONV);
+  assert.equal(actual.gatewayAgentId,binding.gatewayAgentId);
+  assert.equal(actual.principalFingerprint,binding.principalFingerprint);
+  assert.deepEqual(t.calls,{load:1,inspect:1});
+  assert.ok(Object.isFrozen(actual));
+});
+test("mismatched owner/target/provider/proof never passes the trusted binding readback",async()=>{
+  const f=fixture();
+  for(const patch of [
+    {ownerChannel:"ai-engine-oauth:"+"e".repeat(64)},
+    {targetConversationId:"77777777-7777-4777-8777-777777777777"},
+    {workerId:"openclaw-travelintrips-dev"},
+    {gatewayAgentId:"other-agent"},
+    {provider:"other-provider"},
+    {principalFingerprint:"e".repeat(64)},
+    {proofId:"99999999-9999-4999-8999-999999999999"},
+    {proofSource:"caller-metadata"},
+    {credentialStatus:"UNKNOWN"},
+  ]) {
+    const t=trustedFixture({b:{...binding,...patch}});
+    await assert.rejects(
+      resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
+      e=>e instanceof BridgeViolation,
+    );
+    assert.equal(t.calls.inspect,0);
+  }
+});
+test("false gateway provider identity, wrong source or rotated principal fails closed",async()=>{
+  const f=fixture();
+  for(const patch of [
+    {authenticated:false}, {source:"job-metadata"},
+    {provider:"other-provider"},{gatewayAgentId:"other-agent"},
+    {principalFingerprint:"e".repeat(64)},
+  ]) {
+    const t=trustedFixture({identity:{
+      authenticated:true,source:"gateway-credential-store",
+      provider:binding.provider,gatewayAgentId:binding.gatewayAgentId,
+      principalFingerprint:binding.principalFingerprint,...patch,
+    }});
+    await assert.rejects(
+      resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
+      errorCode("INDEPENDENT_GATEWAY_PROVIDER_IDENTITY_UNVERIFIED"),
+    );
+    assert.deepEqual(t.calls,{load:1,inspect:1});
+  }
+  for(const bad of [null,{}, {loadBinding:async()=>binding}]) {
+    await assert.rejects(
+      resolveIssue159TrustedGatewayBinding(f.release,bad),
+      errorCode("TRUSTED_GATEWAY_READ_ADAPTER_REQUIRED"),
+    );
+  }
+});
+
 
 test("synthetic signed release -> exact 12 immutable SQL claim parameters",()=>{
   const {release,signatureBase64,proof}=fixture();
@@ -129,7 +212,7 @@ test("operational claim gate OFF before packet verification and SQL",async()=>{
 
 test("operational verification reads HELD from DB before pinned root; never trusts caller JSON",async()=>{
   const f=fixture();
-  const {proof,held,...input}=f;
+  const {proof,held,binding:callerBinding,...input}=f;
   const prior=Object.assign({},process.env);
   try {
     process.env.APP_ENV="development";
@@ -152,7 +235,7 @@ test("operational verification reads HELD from DB before pinned root; never trus
     };
     // Independent root not installed in this disposable environment.
     await assert.rejects(
-      reserveIssue159ClaimWithoutDispatch(input,db),
+      reserveIssue159ClaimWithoutDispatch(input,db,trustedFixture().trusted),
       errorCode("CLAIM_RESERVATION_OUTCOME_UNCERTAIN_NO_DISPATCH"),
     );
     assert.equal(seen.length,4);
@@ -167,14 +250,14 @@ test("operational verification reads HELD from DB before pinned root; never trus
 
 test("unexpected caller clock, public key or claimed proof is forbidden",async()=>{
   const f=fixture();
-  const {proof,held,...input}=f;
+  const {proof,held,binding:callerBinding,...input}=f;
   const prior=Object.assign({},process.env);
   try {
     process.env.APP_ENV="development";
     process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED="true";
     const db={async query(){throw Error("SHOULD_NOT_QUERY");}};
     for(const extra of [
-      {nowMs:now},{publicKeyPem:"attacker"}, {held},
+      {nowMs:now},{publicKeyPem:"attacker"},{held},{binding:callerBinding},
       {proof},{authApproved:true},{dispatchPermitted:true},
     ]) {
       await assert.rejects(
@@ -288,7 +371,7 @@ test("wrong DB identity and forged readback status fail closed",async()=>{
 
 test("direct pool-like connection is rejected before transaction",async()=>{
   const f=fixture();
-  const {proof,held,...input}=f;
+  const {proof,held,binding:callerBinding,...input}=f;
   const previous={...process.env};
   try {
     process.env.APP_ENV="development";
@@ -312,6 +395,10 @@ test("operational source never uses caller-held object for signature verificatio
   assert.match(src,/read_issue159_held_for_claim/);
   assert.match(src,/held:\s*heldRead\.rows\[0\]\.held/);
   assert.doesNotMatch(src,/held:\s*input\.held/);
+  assert.doesNotMatch(src,/binding:\s*input\.binding/);
+  assert.match(src,/resolveIssue159TrustedGatewayBinding\(/);
+  assert.match(src,/trusted\.loadBinding\(WORKER\)/);
+  assert.match(src,/trusted\.inspectGatewayCredential\(binding\.gatewayAgentId\)/);
   assert.doesNotMatch(src,/\["release","signatureBase64","held","binding"\]/);
 });
 
