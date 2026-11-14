@@ -90,7 +90,7 @@ def main():
         call("docker","run","--rm","-d","--network","none",
              "--name",name,"-e","POSTGRES_PASSWORD=fixture_only","postgres:16-alpine")
         for _ in range(90):
-            if call("docker","exec",name,"pg_isready","-U","postgres","-d","postgres",check=False).returncode==0:
+            if call("docker","exec",name,"psql","-X","-U","postgres","-d","postgres","-Atc","SELECT 1",check=False).returncode==0:
                 break
             time.sleep(0.25)
         else: raise RuntimeError("PG_NOT_READY")
