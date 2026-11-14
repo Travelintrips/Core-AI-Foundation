@@ -63,6 +63,8 @@ export function evaluateDellOpenClawChainRecoveryGate(input = {}) {
       details.openclawNodeScheduledTaskRecoveryVerified === true],
     ["WAKE_EXECUTOR_SCRIPT_RECOVERY_UNVERIFIED",
       details.wakeExecutorScriptRecoveryVerified === true],
+    ["WAKE_EXECUTOR_DEPENDENCY_CLOSURE_RECOVERY_UNVERIFIED",
+      details.wakeExecutorDependencyClosureRecoveryVerified === true],
     ["WAKE_EXECUTOR_NODE_RECOVERY_UNVERIFIED",
       details.wakeExecutorNodeRecoveryVerified === true],
     ["WAKE_EXECUTOR_SCHEDULED_TASK_RECOVERY_UNVERIFIED",
