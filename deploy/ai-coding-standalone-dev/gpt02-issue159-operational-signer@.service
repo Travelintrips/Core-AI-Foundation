@@ -7,6 +7,10 @@ ConditionPathExists=/run/gpt02-issuer-reader/reader.sock
 ConditionPathExists=/run/gpt02-approval-reader/approval.sock
 ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-%i-private-key.pkcs8
 ConditionPathExists=/etc/gpt02-dev/trust-fingerprints.json
+# Socket/key presence never constitutes owner authorization to sign.
+# Each role requires separate, root-provisioned operational opt-in in addition
+# to the signed admission/nonce/lease gates enforced by the Python signer.
+ConditionPathExists=/etc/gpt02-dev/issue159-operational-signer-%i-enabled.approved
 
 [Service]
 Type=simple
