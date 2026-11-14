@@ -43,6 +43,31 @@ The stability-bundle PID (8532) was **not alive** at follow-up; independent proc
 5. Only after controlled recovery, verify live Gateway reachability and fresh runtime status. Then separately verify authentic `gpt02-dev` provider principal and `openai/gpt-5.5` route without changing provider or importing credentials by default.
 6. Reassess Issue159 fresh owner/PIC/Core Super Admin authorization and one-use fence only once all independent preconditions pass. No replay of old Task #166. Same-command signed Final ACK remains a separate E2E requirement.
 
+## DEV Gateway recovery preflight — additional independent checks (14 Nov 2026, read-only)
+
+- Task remains `Ready`, port 18789 has **0 listeners**, original Gateway process PID 8532 is absent, and 7 other Node processes are present. No evidence of an active *matching* Gateway in inspected process command-line classification; this alone does not prove no other process holds open SQLite handles.
+- Task trigger: **at user logon**; `StartWhenAvailable=false`; `AllowDemandStart=true`; `MultipleInstances=IgnoreNew`; `RestartCount=3`, `RestartInterval=PT1M`, no execution time limit. Task Scheduler Operational log around 14 Nov 16:25–17:00 shows only Event 201 (action end, nonzero result) and 102 (task completion), **no observed restart attempt** in that window despite the settings. Do not infer a working automatic recovery policy from configured retries alone.
+- Gateway launcher `gateway.cmd` contains 14 lines, sets the expected state/config and port variables, and invokes the bundled Node launcher; it exists. No launcher values, credentials or secret-bearing lines were emitted.
+- Target ownership lock under `openclaw-state-owners` is absent; 5 other old owner-lock files (last modified 21 Oct) remain untouched. Their state/ownership is not proven.
+- Local disk free: about **115.8 GiB**. No verified Gateway backup was identified at the common checked `gateway-stable3-main/{backup,backups,.backups,snapshots}` or `AI-Core/{backup,backups}` paths. This is **not proof that no backup exists elsewhere**.
+- Correct Gateway-state `state/openclaw.sqlite` and `agents/gpt02-dev/agent/openclaw-agent.sqlite` each returned **`ok`** for `sqlite3 -readonly <path> 'PRAGMA quick_check;'`, exit code 0. This is a limited database consistency check, **not** a full `integrity_check`, a verified recovery copy, or a check of all other agent stores. The subsequent full-integrity attempt received no remote response; **do not count it as PASS**.
+- Both the main database and relevant WAL were last modified around the 16:32 shutdown window. Later `-shm` timestamps were observed during diagnostics. A naive file-by-file copy of only a `.sqlite` database is therefore **not** an accepted backup method.
+
+### Bounded recovery plan — prepared, NOT executed or authorized by this document
+
+| Gate | Evidence required | On failure |
+| --- | --- | --- |
+| G0 — independent owner/single-instance preflight | DELL accessible; local Gateway listener and matching PID inspected; task owner, state path, open owner locks, existing queued call state inspected; no competing writer or unowned in-flight transaction | **STOP** without changing any process or lock |
+| G1 — protected recovery snapshot | Create a local access-restricted backup with a **SQLite WAL-consistent backup mechanism** for each relevant live state/agent DB; capture required service configuration and credential-store metadata/contents only in operator-controlled encrypted custody; preserve directory ACLs; record manifest/checksums | **STOP**; no service launch |
+| G2 — restore rehearsal | Independently open backed-up SQLite copies **outside active state**, run integrity checks and verify a bounded restore procedure; don't report recovery-ready based on file existence alone | **STOP**; retain original state |
+| G3 — authorized one-time DEV service launch | Explicit maintenance approval, feature gates still no-dispatch, current owner-lock/PID recheck, then use the **existing** Windows Scheduled Task (not a second manual Gateway process). Never run uncontrolled concurrent launches | If it fails, **no automatic repeated manual retries**; collect sanitized logs and go to review |
+| G4 — service health, no business effects | Port 18789 listening, `gateway status --deep` reachable on correct state, stable ownership/one Gateway PID, no resource-close errors; no worker send | Mark Gateway unhealthy; keep dispatch disabled |
+| G5 — separately authenticated GPT02 route | Check the actual DELL `gpt02-dev` provider principal, selected `openai/gpt-5.5` model route, and authenticated credential-store inspector; do not silently switch provider/model or activate a saved inactive key | Keep Issue159 admission and E2E **NO_GO** |
+
+**Rollback:** preserve the originals. If a newly launched service fails, first verify there is no active writer and capture crash evidence. Do **not** automatically overwrite or delete any SQLite/WAL/SHM files, restore credentials, clear old locks, terminate unrelated Node processes, or restart repeatedly. A restore requires an independently verified snapshot, a quiescent state and a separately reviewed operator procedure. No PROD data or services are in scope.
+
+**Execution state:** G0 has only partial read-only evidence, G1/G2 have **NOT** been performed or proven, G3/G4/G5 **NOT** performed. This document explicitly does **not** approve service launch/restart.
+
 ## Proposed claim admission contract remains dormant
 
 Source-only PR #1754 already requires independently owned read-only `inspectGatewayReachability()`, `inspectOpenClawModelStatus()`, and `inspectGatewayCredential()` evidence, matching exact worker/agent/provider/owner/target/proof and a recent Gateway status. Green synthetic CI **does not** mean an actual DELL reader or dispatcher is installed or the live system is healthy.
