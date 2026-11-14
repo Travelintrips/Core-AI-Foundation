@@ -90,6 +90,29 @@ def main():
         # for a disposable-only HELD command insert. No external database.
         sql("""
           CREATE SCHEMA ai_platform;
+          CREATE TABLE ai_platform.ai_settings (
+            key text PRIMARY KEY,
+            value text NOT NULL,
+            category text NOT NULL,
+            is_secret boolean NOT NULL DEFAULT false
+          );
+          INSERT INTO ai_platform.ai_settings (key,value,category,is_secret)
+          VALUES
+            ('dev.chatgpt_wake.enabled','true','guardrail',false),
+            ('dev.chatgpt_wake.account_bindings',
+             jsonb_build_object('version',1,'bindings',
+               jsonb_build_array(
+                jsonb_build_object('accountAlias','GPT02',
+                  'ownerChannel','ai-engine-oauth:'||repeat('c',64),
+                  'targetConversationId','6adc4295-e2ac-83ec-a1e1-2aea7d0c1326',
+                  'workerId','openclaw-dell-chatgpt-wake-dev',
+                  'browserProfile','gpt02-dell','enabled',true),
+                jsonb_build_object('accountAlias','GPT02',
+                  'ownerChannel','ai-engine-oauth:'||repeat('c',64),
+                  'targetConversationId','88888888-8888-4888-8888-888888888888',
+                  'workerId','openclaw-pchp-dev',
+                  'browserProfile','gpt02-pchp','enabled',true)
+               ))::text,'guardrail',false);
           CREATE TABLE ai_platform.ai_coding_tasks (
             id uuid PRIMARY KEY,
             task_number text NOT NULL,
@@ -111,6 +134,8 @@ def main():
             UNIQUE(source,external_command_id)
           );
           ALTER SCHEMA ai_platform OWNER TO gpt02_fixture_migrator;
+          ALTER TABLE ai_platform.ai_settings OWNER TO gpt02_fixture_migrator;
+          ALTER TABLE ai_platform.ai_settings ENABLE ROW LEVEL SECURITY;
           ALTER TABLE ai_platform.ai_coding_tasks OWNER TO gpt02_fixture_migrator;
           ALTER TABLE ai_platform.ai_coding_bridge_commands OWNER TO gpt02_fixture_migrator;
           ALTER TABLE ai_platform.ai_coding_tasks ENABLE ROW LEVEL SECURITY;
@@ -422,6 +447,59 @@ def main():
             ]
             return ("SELECT gpt02_private.reserve_issue159_release_claim("+
                     ",".join(args)+")")
+        # The SAME DB transaction reads central GPT02 owner/target registry.
+        # A signed-looking release with the wrong owner/target/worker,
+        # disabled binding, or duplicate DELL mapping must not reserve.
+        registry_before = sql("""SELECT value FROM ai_platform.ai_settings
+          WHERE key='dev.chatgpt_wake.account_bindings'""").stdout.strip()
+        registry_enabled = ("UPDATE ai_platform.ai_settings SET value='false'"+
+                            " WHERE key='dev.chatgpt_wake.enabled'")
+        sql(registry_enabled)
+        denied_off = sql(claim_sql(),"dev_gpt02_claim_gate_login",required=False)
+        ensure(denied_off.returncode!=0 and
+               "DEV_GPT02_TRUSTED_REGISTRY_NOT_READY" in denied_off.stderr,
+               "DISABLED_CENTRAL_REGISTRY_ACCEPTED")
+        sql("""UPDATE ai_platform.ai_settings SET value='true'
+          WHERE key='dev.chatgpt_wake.enabled'""")
+        sql("""UPDATE ai_platform.ai_settings
+          SET value=jsonb_set(value::jsonb,'{bindings,0,ownerChannel}',
+                    to_jsonb('ai-engine-oauth:'||repeat('e',64)))::text
+          WHERE key='dev.chatgpt_wake.account_bindings'""")
+        denied_owner=sql(claim_sql(),"dev_gpt02_claim_gate_login",
+                         required=False)
+        ensure(denied_owner.returncode!=0 and
+               "DEV_GPT02_OWNER_TARGET_REGISTRY_MISMATCH" in denied_owner.stderr,
+               "UNREGISTERED_OWNER_ACCEPTED")
+        sql("UPDATE ai_platform.ai_settings SET value="+
+            "'" + registry_before.replace("'","''") + "'" +
+            " WHERE key='dev.chatgpt_wake.account_bindings'")
+        sql("""UPDATE ai_platform.ai_settings
+          SET value=jsonb_set(value::jsonb,'{bindings,0,enabled}','false'::jsonb)::text
+          WHERE key='dev.chatgpt_wake.account_bindings'""")
+        denied_disabled=sql(claim_sql(),"dev_gpt02_claim_gate_login",
+                            required=False)
+        ensure(denied_disabled.returncode!=0 and
+               "DEV_GPT02_OWNER_TARGET_REGISTRY_MISMATCH" in denied_disabled.stderr,
+               "DISABLED_DELL_BINDING_ACCEPTED")
+        sql("UPDATE ai_platform.ai_settings SET value="+
+            "'" + registry_before.replace("'","''") + "'" +
+            " WHERE key='dev.chatgpt_wake.account_bindings'")
+        sql("""UPDATE ai_platform.ai_settings
+          SET value=jsonb_set(value::jsonb,'{bindings,1,workerId}',
+                '"openclaw-dell-chatgpt-wake-dev"'::jsonb)::text
+          WHERE key='dev.chatgpt_wake.account_bindings'""")
+        denied_duplicate=sql(claim_sql(),"dev_gpt02_claim_gate_login",
+                             required=False)
+        ensure(denied_duplicate.returncode!=0 and
+               "DEV_GPT02_OWNER_TARGET_REGISTRY_MISMATCH" in denied_duplicate.stderr,
+               "DUPLICATE_DELL_TARGET_ACCEPTED")
+        sql("UPDATE ai_platform.ai_settings SET value="+
+            "'" + registry_before.replace("'","''") + "'" +
+            " WHERE key='dev.chatgpt_wake.account_bindings'")
+        ensure(sql("SELECT has_table_privilege('dev_gpt02_claim_gate_login',"+
+                   "'ai_platform.ai_settings','SELECT')").stdout.strip()=="f",
+               "CLAIM_LOGIN_CAN_DIRECTLY_READ_REGISTRY")
+
         bad_event = sql(claim_sql(event_id="0"*64),
                         "dev_gpt02_claim_gate_login",required=False)
         ensure(bad_event.returncode!=0 and
