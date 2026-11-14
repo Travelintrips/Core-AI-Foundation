@@ -241,6 +241,12 @@ jobs:
           node-version: "24.22.1"
       - name: Install exact upstream lockfile without scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Check encrypted filesystem storage, wrong keys and location markers (fixtures)
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.unit.config.ts src/storage/encryption.test.ts src/storage/filesystem.test.ts src/storage/locations.test.ts --testTimeout 30000 --hookTimeout 30000
       - name: Exercise disposable archive verification and isolated restore
         timeout-minutes: 10
         env:
