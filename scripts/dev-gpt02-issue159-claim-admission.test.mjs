@@ -248,6 +248,46 @@ test("operational verification reads HELD from DB before pinned root; never trus
   } finally {process.env=prior;}
 });
 
+test("forged Gateway credential readback cannot reach the claim RPC",async()=>{
+  const f=fixture();
+  const {proof,held,binding:callerBinding,...input}=f;
+  const old={...process.env};
+  try {
+    process.env.APP_ENV="development";
+    process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED="true";
+    const seen=[];
+    const db={
+      async query(sql,args) {
+        seen.push([sql,args]);
+        if(sql==="BEGIN" || sql==="ROLLBACK")return {rows:[]};
+        if(sql.startsWith("SELECT session_user::text"))return {
+          rows:[{session_login:"dev_gpt02_claim_gate_login",
+                 active_role:"dev_gpt02_claim_gate_login"}],
+        };
+        if(sql.includes("read_issue159_held_for_claim"))return {rows:[{held}]};
+        throw Error("CLAIM_RPC_MUST_NEVER_BE_CALLED");
+      },
+    };
+    const trusted=trustedFixture({identity:{
+      authenticated:true,
+      source:"caller-metadata",
+      provider:binding.provider,
+      gatewayAgentId:binding.gatewayAgentId,
+      principalFingerprint:binding.principalFingerprint,
+    }});
+    await assert.rejects(
+      reserveIssue159ClaimWithoutDispatch(input,db,trusted.trusted),
+      errorCode("CLAIM_RESERVATION_OUTCOME_UNCERTAIN_NO_DISPATCH"),
+    );
+    assert.deepEqual(trusted.calls,{load:1,inspect:1});
+    assert.equal(seen.length,4);
+    assert.equal(seen[0][0],"BEGIN");
+    assert.equal(seen[3][0],"ROLLBACK");
+    assert.ok(!seen.some(([sql])=>sql.includes("reserve_issue159_release_claim")));
+    assert.ok(!seen.some(([sql])=>sql==="COMMIT"));
+  }finally{process.env=old;}
+});
+
 test("unexpected caller clock, public key or claimed proof is forbidden",async()=>{
   const f=fixture();
   const {proof,held,binding:callerBinding,...input}=f;
