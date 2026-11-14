@@ -14,6 +14,9 @@ const fullyProven = Object.freeze({
   credentialCoverageVerified: true,
   independentRestorePassed: true,
   operatorRecoveryKeyCustodyVerified: true,
+  customHostPackageRecoveryVerified: true,
+  pinnedNodeRecoveryVerified: true,
+  gatewayLauncherTaskRecoveryVerified: true,
 });
 test("actual observed DELL state with no location and only two DPAPI SQLite copies is NO_GO", () => {
   const report = evaluate({
@@ -89,4 +92,38 @@ test("undefined or unsafe input is NO_GO", () => {
     assert.equal(report.evidenceStatus, "NO_GO");
     assert.equal(report.gatewayRestartAuthorized, false);
   }
+});
+
+test("full data archive alone cannot stand in for custom host executable recovery", () => {
+  const result = evaluate({...fullyProven, customHostPackageRecoveryVerified: false});
+  assert.equal(result.evidenceStatus, "NO_GO");
+  assert.deepEqual(result.reasons, ["CUSTOM_HOST_PACKAGE_RECOVERY_UNVERIFIED"]);
+});
+test("pinned Node binary must be reproducible on the recovery computer", () => {
+  const result = evaluate({...fullyProven, pinnedNodeRecoveryVerified: false});
+  assert.equal(result.evidenceStatus, "NO_GO");
+  assert.deepEqual(result.reasons, ["PINNED_NODE_RECOVERY_UNVERIFIED"]);
+});
+test("existing launcher file without a recoverable Windows Scheduled Task remains NO_GO", () => {
+  const result = evaluate({...fullyProven, gatewayLauncherTaskRecoveryVerified: false});
+  assert.equal(result.evidenceStatus, "NO_GO");
+  assert.deepEqual(result.reasons, ["GATEWAY_LAUNCHER_TASK_RECOVERY_UNVERIFIED"]);
+});
+test("all source-device executables existing does not prove independent recovery", () => {
+  const result = evaluate({
+    ...fullyProven,
+    customHostPackageRecoveryVerified: false,
+    pinnedNodeRecoveryVerified: false,
+    gatewayLauncherTaskRecoveryVerified: false,
+    sourceDevicePackageExists: true,
+    sourceDeviceNodeExists: true,
+    sourceDeviceLauncherExists: true,
+  });
+  assert.equal(result.backupEvidenceComplete, false);
+  assert.deepEqual(result.reasons, [
+    "CUSTOM_HOST_PACKAGE_RECOVERY_UNVERIFIED",
+    "PINNED_NODE_RECOVERY_UNVERIFIED",
+    "GATEWAY_LAUNCHER_TASK_RECOVERY_UNVERIFIED",
+  ]);
+  assert.equal(result.gatewayRestartAuthorized, false);
 });

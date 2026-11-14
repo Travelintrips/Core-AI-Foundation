@@ -19,6 +19,16 @@ export function evaluateBackupRecoveryGate(input = {}) {
     ["CREDENTIAL_COVERAGE_UNVERIFIED", details.credentialCoverageVerified === true],
     ["INDEPENDENT_FULL_RESTORE_UNVERIFIED", details.independentRestorePassed === true],
     ["RESTORE_KEY_CUSTODY_UNVERIFIED", details.operatorRecoveryKeyCustodyVerified === true],
+    // OpenClaw's native archive captures application data, not the custom
+    // staged host package, pinned Windows Node executable or Scheduled Task
+    // launcher outside the state tree. An independent recovery must prove
+    // these separately, never by assuming the source DELL remains available.
+    ["CUSTOM_HOST_PACKAGE_RECOVERY_UNVERIFIED",
+      details.customHostPackageRecoveryVerified === true],
+    ["PINNED_NODE_RECOVERY_UNVERIFIED",
+      details.pinnedNodeRecoveryVerified === true],
+    ["GATEWAY_LAUNCHER_TASK_RECOVERY_UNVERIFIED",
+      details.gatewayLauncherTaskRecoveryVerified === true],
   ];
   for (const [reason, ok] of conditions) if (!ok) reasons.push(reason);
   return Object.freeze({

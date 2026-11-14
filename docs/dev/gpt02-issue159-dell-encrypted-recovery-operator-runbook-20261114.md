@@ -95,6 +95,21 @@ Acceptance must include:
 
 Source reference: [OpenClaw backup CLI at v2026.10.7](https://github.com/openclaw/openclaw/blob/v2026.10.7/docs/cli/backup.md).
 
+## Stage D2 — recover the host runtime separately from the data archive
+
+**Read-only DELL inventory, 14 Nov 2026:** the official installed 2026.10.7 command `backup create --dry-run --json` (without excluding workspaces) reported **6 assets**: four workspaces, one active config and one state directory; it also reported five agent roots, 6 `covered` skips and 23 `regenerable` skips. It reported `dryRun=true` and `verified=false`, so no archive was written. None of the 6 asset source roots lies within the custom `staged-update-2026.10.7` package. Therefore this official archive plan does **not** establish recoverability of the OpenClaw installation itself.
+
+Additional live host file metadata confirmed **each exists on source DELL but is outside the state directory**:
+
+- Existing Task Scheduler executable `gateway.cmd`: file exists, size **890 bytes**, last modified **7 Nov 2026**; neither in state tree nor package tree. The Scheduled Task entry and launcher bindings need an independently reviewable reconstruction method; storing Task Scheduler metadata must not expose sensitive arguments or task identities.
+- Pinned Windows Node executable **24.22.1** is outside the state tree. The exact binary/architecture/source/integrity must be supplied from an approved reproducible package or a controlled recovery point, not by assuming Node on PATH is equivalent.
+- Custom installed OpenClaw **2026.10.7** package manifest exists outside state; the exact package owner, immutable artifact digest, dependency lock and safe replacement/restore method remain separately required. `openclaw update --dry-run` earlier returned `unmanaged-package-install`; a global npm reinstall or old `AI Core OpenClaw Repair DEV` task is not a replacement.
+- The Gateway's **Codex 2026.10.7 plugin** is present *inside* Gateway state; the state asset may cover it, but the final archive inventory must still prove plugin files, native Codex package, any excluded/generated files, credentials and loader/binding metadata are recoverable.
+
+**Operator G2-host acceptance, separate from data restoration:** demonstrate an isolated recovery host can reproduce verified bytes/versions of the approved host package and pinned Node, restore a sanitized launcher + Task Scheduler binding, keep a single owner/no-dispatch configuration, and inspect startup readiness without attaching live credentials. Never copy private config/credential content or launch any recovered Gateway from this task. The existing source DELL itself is not an independent recovery environment.
+
+The pure [backup recovery evidence gate](../../scripts/dev/dev-gpt02-issue159-backup-recovery-gate.mjs) now requires explicit operator-reviewed `customHostPackageRecoveryVerified`, `pinnedNodeRecoveryVerified`, and `gatewayLauncherTaskRecoveryVerified` proof in addition to full encrypted archive, key custody and isolated restore. These are **evidence booleans, not secrets, executable operations or startup permission**. Even if every condition were true, `gatewayRestartAuthorized` remains `false`.
+
 ## Stage E — service operation remains independently gated
 
 Passing all Stage A–D conditions is **necessary, not sufficient**, to turn on the DELL Gateway. Required separately:
