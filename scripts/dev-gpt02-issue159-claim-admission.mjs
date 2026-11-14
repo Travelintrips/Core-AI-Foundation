@@ -126,6 +126,11 @@ export async function resolveIssue159TrustedGatewayBinding(release,trusted) {
   const identity=await trusted.inspectGatewayCredential(binding.gatewayAgentId);
   ensure(identity && typeof identity === "object" &&
     identity.authenticated === true &&
+    // A saved OAuth/API-key profile is not the same as usable authentication
+    // for the selected OpenClaw runtime and model route. Read this from the
+    // host-owned provider inspector; absent/unknown must fail closed.
+    identity.runtimeAuthStatus === "ready" &&
+    identity.modelRouteReady === true &&
     identity.source === "gateway-credential-store" &&
     identity.gatewayAgentId === binding.gatewayAgentId &&
     identity.provider === binding.provider &&
