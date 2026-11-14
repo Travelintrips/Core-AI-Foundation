@@ -110,7 +110,8 @@ export async function resolveIssue159TrustedGatewayBinding(release,trusted) {
     release.workerId === WORKER &&
     trusted && typeof trusted === "object" &&
     typeof trusted.loadBinding === "function" &&
-    typeof trusted.inspectGatewayCredential === "function",
+    typeof trusted.inspectGatewayCredential === "function" &&
+    typeof trusted.inspectOpenClawModelStatus === "function",
     "TRUSTED_GATEWAY_READ_ADAPTER_REQUIRED");
   const binding=await trusted.loadBinding(WORKER);
   validateTrustedBinding(binding);
@@ -139,6 +140,27 @@ export async function resolveIssue159TrustedGatewayBinding(release,trusted) {
     // credential proof must be the same proof authorized by the release.
     identity.proofId === binding.proofId,
     "INDEPENDENT_GATEWAY_PROVIDER_IDENTITY_UNVERIFIED");
+  // Check the selected model's actual Gateway state separately from stored
+  // profile metadata. These methods must be supplied by the HOST, not a job.
+  const modelStatus=await trusted.inspectOpenClawModelStatus("gpt02-dev");
+  const auth=modelStatus?.auth;
+  const routes=auth?.runtimeAuthRoutes;
+  const openaiRoutes=Array.isArray(routes) ? routes.filter(r=>
+    r?.provider === "openai" && r?.runtime === "codex") : [];
+  ensure(modelStatus?.agentId === "gpt02-dev" &&
+    modelStatus.defaultModel === "openai/gpt-5.5" &&
+    modelStatus.resolvedDefault === "openai/gpt-5.5" &&
+    typeof auth?.storePath === "string" &&
+    auth.storePath.replace(/\\/g,"/").toLowerCase()
+      .endsWith("/agents/gpt02-dev/agent/openclaw-agent.sqlite") &&
+    openaiRoutes.length === 1 &&
+    (openaiRoutes[0].status === "ok" ||
+     openaiRoutes[0].status === "ready") &&
+    Array.isArray(auth.modelRouteIssues) &&
+    !auth.modelRouteIssues.some(issue=>issue?.provider === "openai") &&
+    Array.isArray(auth.missingProvidersInUse) &&
+    !auth.missingProvidersInUse.includes("openai"),
+    "TRUSTED_GPT02_MODEL_ROUTE_UNREADY");
   return Object.freeze({ ...binding });
 }
 

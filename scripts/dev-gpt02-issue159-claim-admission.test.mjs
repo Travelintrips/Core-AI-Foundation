@@ -69,8 +69,15 @@ function fixture() {
   return { release,signatureBase64,held,binding,proof };
 }
 const errorCode=code=>err=>err instanceof BridgeViolation&&err.code===code;
-function trustedFixture({b=binding,identity}={}) {
-  const calls={load:0,inspect:0};
+function readyModelStatus() {
+  return {agentId:"gpt02-dev",defaultModel:"openai/gpt-5.5",
+    resolvedDefault:"openai/gpt-5.5",
+    auth:{storePath:"C:/AI-Core/gateway-stable3-main/agents/gpt02-dev/agent/openclaw-agent.sqlite",
+      runtimeAuthRoutes:[{provider:"openai",runtime:"codex",status:"ready"}],
+      modelRouteIssues:[],missingProvidersInUse:[]}};
+}
+function trustedFixture({b=binding,identity,modelStatus}={}) {
+  const calls={load:0,inspect:0,model:0};
   return {
     calls,
     trusted: {
@@ -91,6 +98,11 @@ function trustedFixture({b=binding,identity}={}) {
           proofId:b.proofId,
         };
       },
+      async inspectOpenClawModelStatus(agentId) {
+        calls.model++;
+        assert.equal(agentId,"gpt02-dev");
+        return modelStatus ?? readyModelStatus();
+      },
     },
   };
 }
@@ -103,7 +115,7 @@ test("signed release requires matching separately read provider registry identit
   assert.equal(actual.targetConversationId,CONV);
   assert.equal(actual.gatewayAgentId,binding.gatewayAgentId);
   assert.equal(actual.principalFingerprint,binding.principalFingerprint);
-  assert.deepEqual(t.calls,{load:1,inspect:1});
+  assert.deepEqual(t.calls,{load:1,inspect:1,model:1});
   assert.ok(Object.isFrozen(actual));
 });
 test("mismatched owner/target/provider/proof never passes the trusted binding readback",async()=>{
@@ -150,7 +162,7 @@ test("false gateway provider identity, wrong source or rotated principal fails c
       resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
       errorCode("INDEPENDENT_GATEWAY_PROVIDER_IDENTITY_UNVERIFIED"),
     );
-    assert.deepEqual(t.calls,{load:1,inspect:1});
+    assert.deepEqual(t.calls,{load:1,inspect:1,model:0});
   }
   for(const bad of [null,{}, {loadBinding:async()=>binding}]) {
     await assert.rejects(
@@ -160,6 +172,29 @@ test("false gateway provider identity, wrong source or rotated principal fails c
   }
 });
 
+
+test("separate model status denies stored OAuth when selected GPT02 route is missing",async()=>{
+  const f=fixture(), healthy=readyModelStatus();
+  for(const bad of [
+    {...healthy,agentId:"main"},
+    {...healthy,resolvedDefault:"openai/gpt-6-astra"},
+    {...healthy,auth:{...healthy.auth,storePath:"C:/unrelated/openclaw-agent.sqlite"}},
+    {...healthy,auth:{...healthy.auth,runtimeAuthRoutes:[{provider:"openai",runtime:"codex",status:"missing"}]}},
+    {...healthy,auth:{...healthy.auth,runtimeAuthRoutes:[]}},
+    {...healthy,auth:{...healthy.auth,modelRouteIssues:[{kind:"missing-auth",provider:"openai",model:"gpt-5.5",authRequirement:"api-key"}]}},
+    {...healthy,auth:{...healthy.auth,missingProvidersInUse:["openai"]}},
+  ]) {
+    const t=trustedFixture({modelStatus:bad});
+    await assert.rejects(resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
+      errorCode("TRUSTED_GPT02_MODEL_ROUTE_UNREADY"));
+    assert.deepEqual(t.calls,{load:1,inspect:1,model:1});
+  }
+  const t=trustedFixture();
+  await assert.rejects(resolveIssue159TrustedGatewayBinding(f.release,{
+    ...t.trusted,inspectOpenClawModelStatus:undefined,
+  }),errorCode("TRUSTED_GATEWAY_READ_ADAPTER_REQUIRED"));
+  assert.deepEqual(t.calls,{load:0,inspect:0,model:0});
+});
 
 test("synthetic signed release -> exact 12 immutable SQL claim parameters",()=>{
   const {release,signatureBase64,proof}=fixture();
@@ -290,7 +325,7 @@ test("forged Gateway credential readback cannot reach the claim RPC",async()=>{
       reserveIssue159ClaimWithoutDispatch(input,db,trusted.trusted),
       errorCode("CLAIM_RESERVATION_OUTCOME_UNCERTAIN_NO_DISPATCH"),
     );
-    assert.deepEqual(trusted.calls,{load:1,inspect:1});
+    assert.deepEqual(trusted.calls,{load:1,inspect:1,model:0});
     assert.equal(seen.length,4);
     assert.equal(seen[0][0],"BEGIN");
     assert.equal(seen[3][0],"ROLLBACK");
