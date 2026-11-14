@@ -65,7 +65,7 @@ jobs:
         env:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
-        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts --testNamePattern "Windows"
 
   linux-shutdown:
     name: Linux plugin-close / SIGUSR2 lifecycle regressions (upstream fixture)
@@ -85,6 +85,11 @@ jobs:
           node-version: "24.22.1"
       - name: Install pinned upstream dependencies without lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run cross-platform namespace regression on its native Linux runner
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts
       - name: Run plugin retirement cleanup regression
         env:
           OPENCLAW_NO_RESPAWN: "1"
