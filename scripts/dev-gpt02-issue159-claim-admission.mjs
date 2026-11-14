@@ -129,7 +129,10 @@ export async function resolveIssue159TrustedGatewayBinding(release,trusted) {
     identity.source === "gateway-credential-store" &&
     identity.gatewayAgentId === binding.gatewayAgentId &&
     identity.provider === binding.provider &&
-    identity.principalFingerprint === binding.principalFingerprint,
+    identity.principalFingerprint === binding.principalFingerprint &&
+    // A claimed source is not sufficient: the independently inspected
+    // credential proof must be the same proof authorized by the release.
+    identity.proofId === binding.proofId,
     "INDEPENDENT_GATEWAY_PROVIDER_IDENTITY_UNVERIFIED");
   return Object.freeze({ ...binding });
 }
