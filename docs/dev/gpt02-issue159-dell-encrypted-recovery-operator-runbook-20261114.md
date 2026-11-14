@@ -10,6 +10,16 @@ The owner has explicitly requested **not to use Cloudflare** for DELL/OpenClaw b
 
 **Stage A remains NO-GO:** the real OpenClaw CLI previously reported zero configured storage locations. The actual independent destination, encryption and secret custody, access to protected config/data through authorized controls, retention, isolated restore, and host-runtime reconstruction must be evidenced before a real backup is attempted. Do not use source DELL C:/D: as an off-host destination or repurpose the active VPS OpenClaw instance.
 
+## Owner choice — private GitHub encrypted backup (15 November 2026)
+
+Owner now directs backup to **GitHub**, explicitly **not Cloudflare**. A dedicated **PRIVATE** GitHub repository has been created and independently checked as private. Nonsecret versioned recovery evidence is preserved there (runtime fingerprint inventory, gate code/tests, runbook). **Do not treat this as a full OpenClaw state backup.**
+
+GitHub is **not a built-in OpenClaw storage-location provider** in the installed CLI. A future complete backup may use **client-side encrypted archive payloads uploaded as private GitHub Release assets**, not plaintext files in Git commits. Private repository visibility does not provide encryption. Never store credentials, auth profiles, plaintext databases, unencrypted archives, or the decryption key in repository history, releases, PR discussions, logs, or Actions artifacts. Key custody must be recoverable separately from the DELL machine and this GitHub account. GitHub Releases has per-asset size limits; package and verify accordingly. Do not use `backup create --output` as a plaintext fallback.
+
+**Current evidence:** the initial nonsecret recovery source/metadata backup exists in the dedicated private repository. **Not yet proven:** encrypted native full-state archive, independent key custody, upload/download integrity of a private release asset, isolated restore and recoverable host-runtime components. Prior access-control denial for protected source files must not be circumvented through GitHub CLI or a different script.
+
+**Decision: Stage A still NO-GO for live data backup/recovery.** Do not restart DELL Gateway, promote tasks, activate signer/dispatch, or modify PROD on the basis of GitHub repository creation.
+
 ## Current evidence and restrictions
 
 - Gateway Scheduled Task `OpenClaw Gateway` is `Ready`, its original task exited nonzero; no listener on TCP 18789. A separate `AI Core DELL Wake Executor DEV` remains Running. Do not terminate all Node processes or run a second Gateway.
