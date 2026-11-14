@@ -1,8 +1,6 @@
 # Read-only PC2 diagnostics. Does not open a browser, claim tasks, or access credentials.
-[CmdletBinding()]
-param(
-  [string]$ExpectedHostname = 'DESKTOP-CPS76BH'
-)
+# Intentionally not configurable at runtime: never inspect a different device.
+$ExpectedHostname = 'DESKTOP-CPS76BH'
 
 $ErrorActionPreference = 'Stop'
 
