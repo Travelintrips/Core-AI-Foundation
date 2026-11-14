@@ -9,11 +9,12 @@ import { createHash } from "node:crypto";
 import {
   canonicalIssue159Release, verifyIssue159ReleaseUsingPinnedRoot,
 } from "./dev-gpt02-issue159-release-authorization.mjs";
-import { BridgeViolation } from "./dev-gpt02-gateway-bridge.mjs";
+import { BridgeViolation, validateTrustedBinding } from "./dev-gpt02-gateway-bridge.mjs";
 
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const HEX=/^[0-9a-f]{64}$/;
 const CLAIM_ROLE="dev_gpt02_claim_gate_login";
+const WORKER="openclaw-dell-chatgpt-wake-dev";
 const ROLE_SQL="SELECT session_user::text AS session_login, current_user::text AS active_role";
 const CLAIM_SQL="SELECT gpt02_private.reserve_issue159_release_claim("+
  "$1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::text,$7::text,"+
@@ -97,6 +98,43 @@ export function deriveIssue159ClaimParameters({ release, signatureBase64, proof 
 }
 
 /**
+ * Query independent Gateway credential identity as in existing trusted
+ * callback contract. A shape-valid binding from a request is NOT proof.
+ * The host must provide trusted methods from its server-owned registry and
+ * authenticated Gateway credential store, not from caller-controlled data.
+ * This module is read-only and cannot instantiate credentials or send work.
+ */
+export async function resolveIssue159TrustedGatewayBinding(release,trusted) {
+  ensure(release && typeof release === "object" &&
+    release.environment === "DEV" &&
+    release.workerId === WORKER &&
+    trusted && typeof trusted === "object" &&
+    typeof trusted.loadBinding === "function" &&
+    typeof trusted.inspectGatewayCredential === "function",
+    "TRUSTED_GATEWAY_READ_ADAPTER_REQUIRED");
+  const binding=await trusted.loadBinding(WORKER);
+  validateTrustedBinding(binding);
+  ensure(binding.accountAlias === "GPT02" &&
+    binding.workerId === WORKER &&
+    binding.ownerChannel === release.ownerChannel &&
+    binding.targetConversationId === release.targetConversationId &&
+    binding.gatewayAgentId === release.gatewayAgentId &&
+    binding.provider === release.provider &&
+    binding.principalFingerprint === release.principalFingerprint &&
+    binding.proofId === release.gatewayProofId,
+    "TRUSTED_GATEWAY_BINDING_RELEASE_MISMATCH");
+  const identity=await trusted.inspectGatewayCredential(binding.gatewayAgentId);
+  ensure(identity && typeof identity === "object" &&
+    identity.authenticated === true &&
+    identity.source === "gateway-credential-store" &&
+    identity.gatewayAgentId === binding.gatewayAgentId &&
+    identity.provider === binding.provider &&
+    identity.principalFingerprint === binding.principalFingerprint,
+    "INDEPENDENT_GATEWAY_PROVIDER_IDENTITY_UNVERIFIED");
+  return Object.freeze({ ...binding });
+}
+
+/**
  * ONLY operational admission entrypoint:
  * HELD row is retrieved from the SAME dedicated DB connection before the
  * pinned-key verifier runs. Caller cannot inject held or overwrite the
@@ -104,13 +142,13 @@ export function deriveIssue159ClaimParameters({ release, signatureBase64, proof 
  * Requires independently provisioned dedicated DB role, which is ABSENT
  * in live CST-DEV. A COMMIT uncertainty is NEVER an invitation to retry.
  */
-export async function reserveIssue159ClaimWithoutDispatch(input, connection) {
+export async function reserveIssue159ClaimWithoutDispatch(input, connection, trusted) {
   ensure(process.env.APP_ENV === "development" &&
     process.env.GPT02_ISSUE159_CLAIM_ADMISSION_ENABLED === "true",
     "CLAIM_ADMISSION_DISABLED");
   ensure(input && typeof input === "object" && !Array.isArray(input) &&
-    Object.keys(input).length === 3 &&
-    ["release","signatureBase64","binding"]
+    Object.keys(input).length === 2 &&
+    ["release","signatureBase64"]
       .every(k=>Object.prototype.hasOwnProperty.call(input,k)),
     "OPERATIONAL_CLAIM_INPUT_INVALID");
   ensure(connection && typeof connection.query === "function" &&
@@ -140,9 +178,12 @@ export async function reserveIssue159ClaimWithoutDispatch(input, connection) {
       typeof heldRead.rows[0].held === "object" &&
       !Array.isArray(heldRead.rows[0].held),
       "AUTHENTICATED_HELD_READBACK_UNAVAILABLE");
+    const bindingFromRegistry=await resolveIssue159TrustedGatewayBinding(
+      release, trusted,
+    );
     const proof=verifyIssue159ReleaseUsingPinnedRoot({
       release: input.release, signatureBase64: input.signatureBase64,
-      held: heldRead.rows[0].held, binding: input.binding,
+      held: heldRead.rows[0].held, binding: bindingFromRegistry,
     });
     const binding=deriveIssue159ClaimParameters({
       release: input.release, signatureBase64: input.signatureBase64, proof,
