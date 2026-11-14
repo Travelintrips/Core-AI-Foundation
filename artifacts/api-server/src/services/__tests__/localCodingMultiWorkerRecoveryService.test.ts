@@ -13,9 +13,11 @@ vi.mock("@workspace/db", () => ({
 vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
   eq: vi.fn(),
+  exists: vi.fn(),
   inArray: vi.fn(),
   isNotNull: vi.fn(),
   lte: vi.fn(),
+  or: vi.fn(),
 }));
 
 import {
@@ -184,6 +186,13 @@ describe("bounded workstream recovery candidate scan", () => {
     const candidateScan = source.slice(scanStart, scanEnd);
     expect(candidateScan.match(/\.select\(\{ id: aiCodingWorkstreamsTable\.id \}\)/g)).toHaveLength(2);
     expect(candidateScan).not.toContain(".select()");
+    expect(source).toContain("const terminalChildNeedsRecovery = or(");
+    expect(source).toContain("eq(aiCodingRunsTable.status, \"RUNNING\")");
+    expect(source).toContain("inArray(aiCodingTasksTable.status, [");
+    expect(candidateScan).toContain("terminalChildNeedsRecovery");
+    // Expired active leases must continue to be considered regardless of
+    // current child state. The new predicate applies only to terminal scans.
+    expect(candidateScan.split("terminalChildNeedsRecovery")).toHaveLength(2);
 
     // Recovery still re-reads the full workstream under a row lock before
     // mutating a run, task or lease. No status or fencing gate is bypassed.
