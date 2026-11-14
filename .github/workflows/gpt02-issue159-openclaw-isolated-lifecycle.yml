@@ -218,3 +218,40 @@ jobs:
           OPENCLAW_NO_RESPAWN: "1"
           OPENCLAW_LIVE_TEST: "0"
         run: pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts extensions/codex/src/app-server/auth-requirement-matrix.test.ts --testTimeout 30000 --hookTimeout 30000
+
+  backup-restore-disposable:
+    name: Synthetic OpenClaw backup verify/restore and credential inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout immutable official candidate only
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Use upstream packageManager, no second version override.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install exact upstream lockfile without scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Exercise disposable archive verification and isolated restore
+        timeout-minutes: 10
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-restore.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify SQLite backup inventory completeness and omission refusal
+        timeout-minutes: 10
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-verify-completeness.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify synthetic credential coverage without copying real credentials
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/backup-create.client-credentials.test.ts --testTimeout 30000 --hookTimeout 30000
