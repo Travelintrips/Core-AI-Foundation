@@ -127,6 +127,31 @@ A missing or non-boolean true field fails closed. The function reports `DELL_OPE
 
 Never use the source DELL itself as an independent restore target. Never run the legacy repair task, restart the Gateway, promote a task, import unreviewed Scheduled Task XML, install a global runtime, read/copy protected credentials, or dispatch a worker as part of this check.
 
+## Stage D4 — source runtime checksum inventory (nonsecret metadata only)
+
+**Snapshot date:** 14 Nov 2026. Read-only DELL metadata and SHA-256 file hashes were collected without creating a backup or reading the contents of protected configuration, environment files, credentials, session data or private keys. This is a **source fingerprint list**, not a signed bill of materials, immutable upstream attestation, approved backup, or proof of independent recovery. A source checksum cannot by itself establish that the file is trustworthy. Do not use these hash values as an authorization for service start, credential transfer or dispatch.
+
+| Asset identifier | Bytes observed on source DELL | SHA-256 (source file) |
+| --- | ---: | --- |
+| Gateway pinned Node 24.22.1 binary | 93915464 | `d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5` |
+| Gateway OpenClaw 2026.10.7 package manifest | 149337 | `362f8c0fda7b71a116e0ca2f812e896bfe9cfec41e64b6b66243f95703aaf7b8` |
+| Gateway OpenClaw 2026.10.7 entrypoint | 24736 | `98caf565334400768d4a8ee54f7f9302c4b2c79881552c79785ed7d66da6a996` |
+| Wake portable Node 26.11.1 binary | 105052136 | `a619e2e09eb0d50ef4c733d678b4d22689d2afef138cd67fd3fa107b535f8819` |
+| Wake conditional OpenClaw staging 2026.11.1 package manifest | 152608 | `0bd1b84babac67876154f4072663d51c1f7fe6ffbc32c9c3bcd4555daab11d71` |
+| Wake conditional OpenClaw staging 2026.11.1 entrypoint | 23906 | `469e60c9f60b615ff71c985a54238ee532a8f949866d76aebe7d6e4bc7219902` |
+| Global Node binary referenced conditionally by Wake CDP path (observed Node 25.8.0) | 95392256 | `d0100ef59988cdfcb48a6876b36ea98b1ce006470de24e1e59ab7d5752750c21` |
+| Gateway `gateway.cmd` launcher | 890 | `19c403af720537cd504158c7d893e554552378dbc265e72675de1f3e94eed118` |
+| OpenClaw Node `node.vbs` launcher | 278 | `8a672a1267e63f4eaed8df864691e6ed467ed550f95188f040292dd70fbf8ec0` |
+| Wake `dell-wake-event-listener.mjs` | 7301 | `1e4050711926c3c87af2fcfcedf03ef8b5da8f7d0cdac88e712b9853b476c950` |
+| Wake `dell-wake-executor-once.mjs` | 56110 | `6f3bc3a6b6f1d814d08602df0fffc3f8a8f5ca47f9a73275f6d2b757b6da8eb1` |
+| Wake `dev-chatgpt-wake-once.py` | 33676 | `379c413269f98308919cddeec8355cb159ccd3646a2c787671dc8c3736bb6c03` |
+
+For the **six support code files already pinned in the local Wake Executor implementation**, the source DELL read-only SHA-256 check reported **six matches out of six**. That check does not cover the entire package tree, downstream Python dependencies, native Codex components, browser/CDP binaries, or private environment/configuration. The existing local script `dell-wake-executor-once.mjs` also references `dev_chatgpt_native_transport.py`, passive capture helpers and an existing GPT02 local cache readback adapter; their full portable dependency closure still requires independent verification.
+
+**Independent recovery acceptance procedure (offline, disabled and isolated):** obtain the original/versioned release artifacts from authorized owners; verify package provenance/immutable release records and complete dependency closure; compare the recovered file bytes and hashes against approved references *as one evidence layer*; reconstruct the three Scheduled Tasks with verified identities and paths while keeping them disabled; then independently inspect the restored state and secrets by an authorized custodian without copying protected material into CI, logs, GitHub or chat. Source DELL file presence, hash equality alone, a dry-run, or synthetic CI must **never** switch any recovery evidence field to `true`.
+
+A separate protected encrypted off-host backup destination and independent key custody remain unresolved; therefore **Stage A is still NO_GO**. Do not convert this inventory into an archive, copy it into a live service directory, or execute launcher/task artifacts as part of this audit.
+
 ## Stage E — service operation remains independently gated
 
 Passing all Stage A–D conditions is **necessary, not sufficient**, to turn on the DELL Gateway. Required separately:
