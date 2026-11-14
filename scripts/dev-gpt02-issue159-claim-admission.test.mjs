@@ -87,6 +87,7 @@ function trustedFixture({b=binding,identity}={}) {
           gatewayAgentId:b.gatewayAgentId,
           provider:b.provider,
           principalFingerprint:b.principalFingerprint,
+          proofId:b.proofId,
         };
       },
     },
@@ -131,11 +132,14 @@ test("false gateway provider identity, wrong source or rotated principal fails c
     {authenticated:false}, {source:"job-metadata"},
     {provider:"other-provider"},{gatewayAgentId:"other-agent"},
     {principalFingerprint:"e".repeat(64)},
+    {proofId:undefined},
+    {proofId:"99999999-9999-4999-8999-999999999999"},
   ]) {
     const t=trustedFixture({identity:{
       authenticated:true,source:"gateway-credential-store",
       provider:binding.provider,gatewayAgentId:binding.gatewayAgentId,
-      principalFingerprint:binding.principalFingerprint,...patch,
+      principalFingerprint:binding.principalFingerprint,
+      proofId:binding.proofId,...patch,
     }});
     await assert.rejects(
       resolveIssue159TrustedGatewayBinding(f.release,t.trusted),
@@ -274,6 +278,7 @@ test("forged Gateway credential readback cannot reach the claim RPC",async()=>{
       provider:binding.provider,
       gatewayAgentId:binding.gatewayAgentId,
       principalFingerprint:binding.principalFingerprint,
+      proofId:binding.proofId,
     }});
     await assert.rejects(
       reserveIssue159ClaimWithoutDispatch(input,db,trusted.trusted),
