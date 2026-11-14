@@ -66,7 +66,26 @@ The stability-bundle PID (8532) was **not alive** at follow-up; independent proc
 
 **Rollback:** preserve the originals. If a newly launched service fails, first verify there is no active writer and capture crash evidence. Do **not** automatically overwrite or delete any SQLite/WAL/SHM files, restore credentials, clear old locks, terminate unrelated Node processes, or restart repeatedly. A restore requires an independently verified snapshot, a quiescent state and a separately reviewed operator procedure. No PROD data or services are in scope.
 
-**Execution state:** G0 has only partial read-only evidence, G1/G2 have **NOT** been performed or proven, G3/G4/G5 **NOT** performed. This document explicitly does **not** approve service launch/restart.
+**Execution state (updated):** G0 has partial read-only evidence. G1 and G2 have PARTIAL PASS for two protected SQLite snapshots, but full-system backup and operator-controlled restoration remain unverified. G3/G4/G5 **NOT** performed. This document explicitly does **not** approve service launch/restart.
+
+## Protected local SQLite snapshot and restoration rehearsal — 14 Nov 2026
+
+**Direct DELL evidence, not merely CI:** The actual Gateway remained offline (`OpenClaw Gateway` Scheduled Task `Ready`, last result 1; **0** listeners on 18789; no matching main Gateway process in the inspected Node process list). The local account held approximately 115.6 GiB free space. Independent `sqlite3 -readonly ... 'PRAGMA integrity_check;'` checks on **two** identified DEV SQLite databases both returned `ok`, exit code 0.
+
+A new backup directory was created **on DELL only** under the local user's `AI-Core` area, outside active `gateway-stable3-main` state, with ACL inheritance disabled and **one FullControl rule for the current Windows user**. No file was uploaded or copied to GitHub or the assistant's container.
+
+Two SQLite-consistent snapshots were created with Python `sqlite3.Connection.backup` **to memory**, including committed WAL state, then serialized to standalone rollback-mode SQLite snapshots. The WAL-mode header's two mode flags required normalization for in-memory standalone restore; the normalized snapshot was independently rechecked using SQLite `PRAGMA integrity_check`. Each snapshot was then encrypted using Windows **DPAPI CurrentUser** and written as a distinct `.sqlite.dpapi` file in the protected local directory. The script read the saved ciphertext back, decrypted it in memory, verified its SHA-256 equality against the snapshot, and ran SQLite integrity verification **again** on the recovered image.
+
+| Scope | Encrypted backup | In-memory decrypt/restore/integrity | Result |
+| --- | --- | --- | --- |
+| `state/openclaw.sqlite` (Gateway shared state) | Created locally, ~5.28 MB | PASS | **PARTIAL G1/G2 PASS** |
+| `agents/gpt02-dev/agent/openclaw-agent.sqlite` | Created locally, ~0.91 MB | PASS | **PARTIAL G1/G2 PASS** |
+
+A local nonsecret manifest records which two files were backed up, byte counts and digests. The script emits status only; it neither queried credential records nor displayed tokens. **No plaintext database backup was written to disk**; source files, original WAL/SHM files, lock files and running processes were left untouched. The encrypted files can be recovered through the original Windows user's DPAPI context; they are **not portable** to a different Windows account or computer without separately managed recovery of that DPAPI identity.
+
+**Required qualification:** These two snapshots are **not a complete Gateway disaster-recovery backup**. Full configuration, task launcher, remaining agents/plugins and credential-store file backups and a fully isolated end-to-end restore rehearsal have not been completed. An attempted local encrypted copy of config/credential files was blocked by the access safety gate *before executing*; subsequent read-only confirmation found none of those three proposed extra `.dpapi` files. Do not retry by bypassing that gate. The remainder requires an approved operator-controlled credential backup/recovery mechanism; do not put secrets into a PR, shell logs or ChatGPT.
+
+**Gate status:** G0 read-only partial; **G1 partial (two encrypted DB snapshots only)**; **G2 partial (in-memory roundtrip/integrity for these two snapshots only)**; G3/G4/G5 **NOT performed**. These results do **not** authorize Gateway restart, restore, dispatch, credential activation, merge/deployment or PROD operations.
 
 ## Proposed claim admission contract remains dormant
 
