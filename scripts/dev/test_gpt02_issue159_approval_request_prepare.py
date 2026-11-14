@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import importlib.util
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import sqlite3
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -225,6 +227,69 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
                 ):
                     prepare_module._require_operational_pre_sign(claims, now)
             self.assertFalse(os.path.exists(self.output))
+
+    def test_concurrent_same_target_creates_exactly_one_request_without_orphans(self):
+        barrier = threading.Barrier(2, timeout=8)
+        real_link = os.link
+
+        def synchronized_link(source, target):
+            barrier.wait()
+            return real_link(source, target)
+
+        def create():
+            try:
+                prepare_module.prepare(
+                    self.db, self.output, 172, COMMAND, ATTEMPT,
+                    now_ms=1_800_000_000_000, operational=False,
+                )
+                return "CREATED"
+            except RuntimeError as exc:
+                return str(exc)
+
+        with patch.object(prepare_module.os, "link", side_effect=synchronized_link):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                attempts = list(executor.map(lambda _: create(), range(2)))
+        self.assertCountEqual(
+            attempts, ["CREATED", "ISSUE159_PENDING_REQUEST_ALREADY_EXISTS"]
+        )
+        self.assertEqual(
+            list(Path(self.root).glob(".pending.json.tmp.*")), []
+        )
+        self.assertEqual(os.stat(self.output).st_mode & 0o777, 0o600)
+        claims = json.loads(Path(self.output).read_text())["claims"]
+        self.assertEqual(claims["taskId"], 172)
+        self.assertEqual(claims["commandId"], COMMAND)
+        self.assertEqual(claims["attemptId"], ATTEMPT)
+
+    def test_fault_during_publish_or_fsync_leaves_no_orphan(self):
+        failures = (
+            ("link", OSError("SYNTHETIC_LINK_FAULT")),
+            ("fsync", OSError("SYNTHETIC_FSYNC_FAULT")),
+        )
+        for operation, error in failures:
+            with self.subTest(operation=operation):
+                with patch.object(prepare_module.os, operation, side_effect=error):
+                    with self.assertRaisesRegex(OSError, str(error)):
+                        prepare_module.prepare(
+                            self.db, self.output, 172, COMMAND, ATTEMPT,
+                            now_ms=1_800_000_000_000, operational=False,
+                        )
+                self.assertFalse(os.path.lexists(self.output))
+                self.assertEqual(
+                    list(Path(self.root).glob(".pending.json.tmp.*")), []
+                )
+
+    def test_incomplete_write_aborts_without_pending_or_orphan(self):
+        with patch.object(prepare_module.os, "write", return_value=0):
+            with self.assertRaisesRegex(
+                RuntimeError, "ISSUE159_PENDING_FILE_WRITE_INCOMPLETE"
+            ):
+                prepare_module.prepare(
+                    self.db, self.output, 172, COMMAND, ATTEMPT,
+                    now_ms=1_800_000_000_000, operational=False,
+                )
+        self.assertFalse(os.path.lexists(self.output))
+        self.assertEqual(list(Path(self.root).glob(".pending.json.tmp.*")), [])
 
     def test_refuses_to_overwrite_existing_pending_request(self):
         Path(self.output).write_text('{"claims":{}}')
