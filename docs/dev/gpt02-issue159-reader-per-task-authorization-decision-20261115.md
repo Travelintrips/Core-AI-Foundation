@@ -567,3 +567,64 @@ a point-in-time check, not a permanently enforceable release token.
 No CST-DEV/PROD database schema, real role, role password, service or
 signer/dispatch/DELL path has been modified. The PR remains Draft and
 LIVE_CREDENTIAL_ISSUANCE=NO_GO, FINAL_ACK=NO_GO.
+
+
+## Restricted, native one-read consumption writer — 16 Nov 2026
+
+The prior Draft had a VERIFIED committed-consumption boolean readback but
+no source adapter implementing the database WRITE/CONSUME side. Relying on
+a broad postgres owner connection in the broker would cross the owner
+custody boundary and expose private ledger write privileges.
+
+An additional SOURCE-ONLY SQL extension,
+docs/dev/gpt02-issue159-one-read-consumer-rpc.PROPOSED.sql, now proposes
+the dedicated role dev_gpt02_reader_claim_consumer, which starts
+NOLOGIN/NOINHERIT/NOBYPASSRLS/connection-limit 0 and has ZERO direct
+SELECT/INSERT/UPDATE/DELETE on the private ledger or access to the
+five original lineage tables. The only privilege is USAGE on the
+private auditor schema and EXECUTE on one SECURITY DEFINER function
+consume_reader_once(name,text,text,uuid,uuid,uuid,uuid,text), not exposed
+to PUBLIC, issuer/lineage, or the low-privilege relock auditor.
+The function rejects wrong session_user, malformed names/hashes/challenges,
+wrong signed packet/scope/command/attempt/receipt/fence, and expired
+issuance. INSERT ... ON CONFLICT DO NOTHING on the exact one-read PK
+returns TRUE only for the first committed claim. No dynamic SQL,
+credential grant, signer or dispatch side effect.
+
+The EXISTING uninstalled broker now also provides
+consume_once_via_pinned_connection(connection,candidate,challenge), an
+injectable fixed-query adapter using a separately supplied consumer
+connection. It pins the native consumer pooler username, database,
+host/port, libpq verify-full/CA and autocommit=false; verifies signed
+scope/hash, lease, and challenge; executes only SET TRANSACTION READ WRITE,
+SET LOCAL statement_timeout, and one fixed parameterized
+consume_reader_once RPC; and returns an inert receipt ONLY AFTER a
+definite successful connection.commit(). FALSE/NULL/duplicate DB result,
+unverified TLS, query failure and uncertain commit fail closed with
+rollback attempts. The main broker STILL independently queries the
+low-privilege auditor's committed ledger via fresh challenge BEFORE any
+reader SELECT, and relocks/audits afterward.
+
+The EXISTING networkless PG16 test now additionally executes this
+consumer proposal using a disposable non-superuser migrator and
+temporary consumer LOGIN (test only): it proves actual native two-session
+concurrency yields EXACTLY ONE TRUE and one FALSE, forged/expired/no
+issuance denied, direct ledger/pg_authid/private table reads and ALTER
+ROLE denied, unexpected postgres session_user denied, and both consumer
+and auditor returned to NOLOGIN/password NULL afterward. It retains
+the signed task/nonce/receipt lineage fixture and immutable ledger/false
+replay checks. The existing offline broker tests now cover this adapter:
+47/47 PASS, including commit-unknown and precise query binding. No new
+workflow was created; the existing Draft CI triggers on this SQL path
+and runs both relevant original suites.
+
+Important unresolved boundary: a trusted service/owner must still create
+an issuance row from genuine persisted Super Admin approval and securely
+supply the dedicated consumer TLS connection. No consumer service or
+credential exists on CST-DEV, no unit is installed, and the proposed
+SECURITY DEFINER must receive separate independent privilege review before
+any schema/role/RPC is deployed. A committed one-use ledger does not
+prevent direct password reuse before the scoped reader is relocked;
+a short fixed RLS TTL, private credential, backend termination,
+fail-closed native relock and crash watchdog remain mandatory. All
+source work remains PR Draft, LIVE_ISSUANCE=NO_GO and FINAL_ACK=NO_GO.
