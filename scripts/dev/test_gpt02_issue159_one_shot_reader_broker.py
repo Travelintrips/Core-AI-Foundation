@@ -367,6 +367,10 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                   "deploy/ai-coding-standalone-dev/" /
                   "gpt02_issue159_one_shot_reader_broker.py").read_text()
         self.assertIn("UNINSTALLED_REVIEW_ONLY_NO_CREDENTIAL_OR_DB_DISPATCH", source)
+        self.assertIn("attest_boolean_relock", source)
+        self.assertIn("open_minimal_auditor_connection", source)
+        self.assertNotIn("attest_native_relock(", source)
+        self.assertNotIn("open_trusted_admin_connection", source)
         for forbidden in ("psycopg.connect(", "ALTER ROLE ", "CREATE ROLE ",
                           "dispatchOnce(", "gateway.send(", "private_key(",):
             self.assertNotIn(forbidden, source)
