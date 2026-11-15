@@ -299,5 +299,71 @@ def review_sql_from_authenticated_signed_packet(packet: object) -> str:
     candidate = inspect_postlineage_scoped_reader_candidate(packet, roots)
     return proposed_sql(candidate, int(time.time() * 1000))
 
+
+# A source-only review of owner-issued reader ledger values. Operational
+# issuance remains a separately reviewed, unimplemented trust boundary:
+# NOTHING in this module performs INSERT, COMMIT, CREATE ROLE, or LOGIN.
+MAX_REVIEW_LEDGER_LIFETIME_MS = 15_000
+
+
+def review_issuance_bindings_from_authenticated_signed_packet(packet: object) -> dict:
+    """Derive a bounded, inert issuance row from EXISTING pinned trust evidence.
+
+    Uses the same four-root verifier + persisted Super Admin approval and
+    lineage readback as exact-task policy review. The only output is a
+    candidate set of ledger values for independent owner/security review,
+    never a credential, INSERT, permission or operational issuance token.
+    No caller can pass a role, packet digest, approval, clock, or public roots.
+    """
+    from gpt02_issue159_writer_broker_runtime import (
+        _load_public_roots, DEFAULT_FINGERPRINT_MANIFEST,
+    )
+    from gpt02_issue159_positive_permit_handoff import (
+        VERIFIER_PUBLIC_ROOT_DIR, inspect_postlineage_scoped_reader_candidate,
+    )
+    roots = _load_public_roots(
+        VERIFIER_PUBLIC_ROOT_DIR, DEFAULT_FINGERPRINT_MANIFEST,
+    )
+    candidate = inspect_postlineage_scoped_reader_candidate(packet, roots)
+    observed_ms = int(time.time() * 1000)
+    scope, role, signed_expiry = validate_inert_candidate(
+        candidate, observed_ms,
+    )
+    # This cap is an extra review constraint, NOT a server-enforced bound.
+    # The final database writer must enforce signed expiry and this cap
+    # atomically against DB clock before any future issuance is allowed.
+    proposed_expiry = min(
+        signed_expiry, observed_ms + MAX_REVIEW_LEDGER_LIFETIME_MS,
+    )
+    if proposed_expiry - observed_ms < 3500:
+        deny("REVIEW_ISSUANCE_LEASE_TOO_CLOSE_TO_EXPIRY")
+    return {
+        "environment": "DEV",
+        "stage": "SIGNED_PERSISTED_APPROVAL_LEDGER_ISSUANCE_REVIEW_ONLY",
+        "sourceVerified": True,
+        "signedLeaseExpiresAt": signed_expiry,
+        "proposedLedgerExpiresAt": proposed_expiry,
+        "issuanceParameters": {
+            "scope_sha": candidate["scopeSha256"],
+            "packet_sha": candidate["verifiedPacketSha256"],
+            "role_name": role,
+            "task_id": scope["task_id"],
+            "company_id": scope["company_id"],
+            "command_id": scope["command_id"],
+            "attempt_id": scope["attempt_id"],
+            "receipt_id": scope["receipt_id"],
+            "fence_id": scope["fence_id"],
+            "expires_at_ms": proposed_expiry,
+        },
+        "databaseWritePerformed": False,
+        "ownerIssuanceCommitted": False,
+        "databaseRoleProvisioned": False,
+        "credentialIssuancePermitted": False,
+        "signingPermitted": False,
+        "authorizationGranted": False,
+        "dispatchPermitted": False,
+        "releaseDecision": "NO_GO",
+    }
+
 if __name__ == "__main__":
     raise SystemExit("REVIEW_ONLY_NO_CLI_NO_LIVE_APPLY")
