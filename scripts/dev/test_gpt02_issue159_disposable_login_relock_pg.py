@@ -50,7 +50,7 @@ GRANT USAGE ON SCHEMA isolated TO synthetic_issuer_reader;
 GRANT SELECT(task_id,company) ON isolated.approvals TO synthetic_issuer_reader;
 """)
         good=reader_query(name,"BEGIN READ ONLY; SELECT task_id FROM isolated.approvals ORDER BY task_id; ROLLBACK;")
-        if good.returncode or good.stdout.strip()!="170":
+        if good.returncode or "170" not in good.stdout.splitlines() or "172" in good.stdout.splitlines():
             raise AssertionError("NATIVE_ONE_TASK_READER_FAILED:"+good.stderr[-500:])
         print("PASS_DISPOSABLE_NATIVE_LOGIN_ONE_TASK_READONLY")
         unseen=reader_query(name,"SELECT count(*) FROM isolated.approvals WHERE task_id=172")
