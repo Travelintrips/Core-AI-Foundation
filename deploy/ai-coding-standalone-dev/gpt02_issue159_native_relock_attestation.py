@@ -210,5 +210,84 @@ def attest_native_relock(connection: Any, candidate: Any) -> dict[str, Any]:
     }
 
 
+
+# Least-privilege alternative to a broad postgres-admin credential.
+# Independent security review of the private SECURITY DEFINER boolean-only
+# function in docs/dev/gpt02-issue159-minimal-catalog-relock-auditor.PROPOSED.sql
+# is REQUIRED before any real auditor LOGIN can be provisioned.
+AUDITOR_DB_USER = "dev_gpt02_relock_catalog_auditor." + PROJECT
+BOOLEAN_READBACK_SQL = (
+    "SELECT gpt02_relock_audit.scoped_reader_fully_locked("
+    "%(role)s::name) AS fully_locked"
+)
+
+
+def _require_pinned_minimal_auditor(connection: Any) -> None:
+    """The auditor cannot be postgres, service_role or existing issuer."""
+    info = getattr(connection, "info", None)
+    if (
+        info is None
+        or getattr(info, "user", None) != AUDITOR_DB_USER
+        or getattr(info, "dbname", None) != "postgres"
+        or getattr(info, "host", None) != HOST
+        or str(getattr(info, "port", "")) != PORT
+        or getattr(connection, "autocommit", None) is not False
+    ):
+        _fail("RELOCK_MINIMAL_AUDITOR_DB_IDENTITY_INVALID")
+    params_fn = getattr(info, "get_parameters", None)
+    params = params_fn() if callable(params_fn) else None
+    if (
+        not isinstance(params, Mapping)
+        or params.get("sslmode") != "verify-full"
+        or not isinstance(params.get("sslrootcert"), str)
+        or not params["sslrootcert"]
+    ):
+        _fail("RELOCK_MINIMAL_AUDITOR_TLS_REQUIRED")
+
+
+def attest_boolean_relock(connection: Any, candidate: Any) -> dict[str, Any]:
+    """Read ONE database-computed boolean through the approved private RPC.
+
+    The isolated DB routine alone may evaluate pg_authid password-null; this
+    caller has NO direct pg_authid SELECT, DDL, role alteration or task reads.
+    No credential/SQL function is installed by this source. Result represents
+    native DB cleanup AT ONE INSTANT, never future authorization.
+    """
+    role, digest = _target(candidate)
+    _require_pinned_minimal_auditor(connection)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SET TRANSACTION READ ONLY")
+            cursor.execute("SET LOCAL statement_timeout = '1500ms'")
+            cursor.execute(BOOLEAN_READBACK_SQL, {"role": role})
+            rows = cursor.fetchmany(2)
+            cols = tuple(col.name for col in cursor.description)
+    finally:
+        connection.rollback()
+    if (
+        cols != ("fully_locked",)
+        or len(rows) != 1
+        or len(rows[0]) != 1
+        or rows[0][0] is not True
+    ):
+        _fail("RELOCK_MINIMAL_CATALOG_BOOL_NOT_PROVEN")
+    return {
+        "environment": "DEV",
+        "stage": "NATIVE_MINIMAL_BOOLEAN_RELOCK_READBACK_ONLY",
+        "role": role,
+        "scopeSha256": digest,
+        "nativeCatalogReadBack": True,
+        "noLogin": True,
+        "passwordNull": True,
+        "connectionLimitZero": True,
+        "zeroActiveSessions": True,
+        "grantsRevoked": True,
+        "credentialIssuancePermitted": False,
+        "authorizationGranted": False,
+        "signingPermitted": False,
+        "dispatchPermitted": False,
+        "releaseDecision": "NO_GO",
+    }
+
 if __name__ == "__main__":
     raise SystemExit("SOURCE_ONLY_NO_CONNECTION_NO_ROLE_CHANGE_NO_RELEASE")
