@@ -84,10 +84,10 @@ def main() -> None:
         admin(name, "REVOKE USAGE ON SCHEMA isolated FROM " + ROLE)
         admin(name, "ALTER ROLE " + ROLE +
               " NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL")
-        killed = admin(name, "SELECT count(*) FROM pg_stat_activity "
-                       "WHERE usename='" + ROLE + "' AND "
-                       "pg_terminate_backend(pid)")
-        if killed != "1":
+        killed = admin(name, "SELECT pg_terminate_backend(pid) "
+                       "FROM pg_stat_activity WHERE usename='" + ROLE +
+                       "' AND pid <> pg_backend_pid()")
+        if killed != "t":
             raise AssertionError("ACTIVE_READER_NOT_TERMINATED:" + killed)
         session.communicate(timeout=12)
         if session.returncode == 0:
