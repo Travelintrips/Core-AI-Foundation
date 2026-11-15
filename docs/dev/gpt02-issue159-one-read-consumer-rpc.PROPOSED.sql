@@ -19,6 +19,39 @@ BEGIN
     )
     OR to_regclass('gpt02_relock_audit.reader_issuances') IS NULL
     OR to_regclass('gpt02_relock_audit.reader_consumptions') IS NULL
+    -- Fail closed if the earlier ledger was replaced, made non-RLS, had
+    -- its owner/policies changed, or lost an immutability trigger. Mere
+    -- to_regclass() existence is not sufficient for a privileged RPC.
+    OR (
+      SELECT count(*) FROM pg_class c
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='gpt02_relock_audit'
+        AND c.relname IN ('reader_issuances','reader_consumptions')
+        AND c.relkind='r'
+        AND c.relowner='postgres'::regrole
+        AND c.relrowsecurity AND c.relforcerowsecurity
+    ) <> 2
+    OR (
+      SELECT count(*) FROM pg_policy p
+      JOIN pg_class c ON c.oid=p.polrelid
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='gpt02_relock_audit'
+        AND c.relname IN ('reader_issuances','reader_consumptions')
+        AND p.polname='owner_only' AND p.polcmd='*'
+        AND p.polroles=ARRAY['postgres'::regrole::oid]
+    ) <> 2
+    OR EXISTS (
+      SELECT 1 FROM pg_class c
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='gpt02_relock_audit'
+        AND c.relname IN ('reader_issuances','reader_consumptions')
+        AND (
+          SELECT count(*) FROM pg_trigger t
+          WHERE t.tgrelid=c.oid AND NOT t.tgisinternal
+            AND t.tgname IN ('immutable_rows','immutable_truncate')
+            AND t.tgenabled IN ('O','A')
+        ) <> 2
+    )
     OR to_regprocedure(
       'gpt02_relock_audit.reader_consumption_persisted(name,text,text,uuid,uuid,uuid,uuid,text)'
     ) IS NULL
