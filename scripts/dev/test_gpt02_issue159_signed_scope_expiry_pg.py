@@ -112,7 +112,15 @@ def main():
             raise RuntimeError("FINAL_POSTGRES_SERVER_NOT_READY")
         # Fixed expiry applies to each table, independent of session variables
         # or source reader/broker health. Keep the synthetic window short.
-        expiry = datetime.now(timezone.utc) + timedelta(seconds=5)
+        signed_expiry = datetime.fromtimestamp(
+            candidate["expiresAt"] / 1000, timezone.utc,
+        )
+        expiry = min(
+            signed_expiry,
+            datetime.now(timezone.utc) + timedelta(seconds=5),
+        )
+        if expiry > signed_expiry:
+            raise AssertionError("RLS_EXCEEDS_SIGNED_LEASE")
         fixture = scoped_fixture(candidate, expiry)
         result = admin(name, fixture)
         if "PASS_FIVE_TABLE_DIRECT_ENUMERATION_SCOPED" not in result.stderr:
@@ -158,6 +166,14 @@ def main():
         if canonical.stdout.strip() != "0":
             raise AssertionError("CANONICAL_QUERY_READ_AFTER_FIXED_EXPIRY")
         print("PASS_CANONICAL_QUERY_DENIED_AFTER_FIXED_EXPIRY")
+        # A session-controlled GUC must never override the fixed task/expiry.
+        override = reader(name, role, password,
+            "SET gpt02.task_id TO '172'; "
+            "SET gpt02.lease_override TO 'true'; "
+            "SELECT count(*) FROM gpt02_private.approvals")
+        if override.stdout.strip().splitlines()[-1] != "0":
+            raise AssertionError("CLIENT_GUC_OVERRIDDEN_RLS")
+        print("PASS_CLIENT_GUC_CANNOT_OVERRIDE_EXPIRED_FIXED_RLS")
 
         # Recover the synthetic role: revoke old grants, lock all credentials,
         # terminate backends and prove new logins fail. No live instance used.
