@@ -26,6 +26,12 @@ class NativeConnection:
         self.info = type("Info", (), {
             "user": role + broker.POOLER_USER_SUFFIX,
             "dbname": "postgres",
+            "host": broker.POOLER_HOST,
+            "port": 5432,
+            "get_parameters": lambda _self: {
+                "sslmode": "verify-full",
+                "sslrootcert": "/synthetic/ca.pem",
+            },
         })()
         self.autocommit = False
         self.closed = False
@@ -148,13 +154,34 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertTrue(self.supervisor.connection.closed)
 
     def test_wrong_database_name_and_autocommit_deny(self):
-        for field, value in (("dbname", "other"), ("autocommit", True)):
+        for field, value in (
+            ("dbname", "other"), ("autocommit", True),
+            ("host", "localhost"), ("port", 5433),
+        ):
             with self.subTest(field=field):
                 self.setUp()
-                obj = (self.supervisor.connection.info
-                       if field == "dbname" else self.supervisor.connection)
+                obj = (self.supervisor.connection
+                       if field == "autocommit"
+                       else self.supervisor.connection.info)
                 setattr(obj, field, value)
                 with self.assertRaises(BrokerAdmissionError):
+                    self.call()
+                self.last_read.assert_not_called()
+                self.assertEqual(len(self.supervisor.relock_calls), 1)
+
+    def test_weak_or_unverified_tls_denied_before_query_and_relocked(self):
+        for params in (
+            {"sslmode": "require", "sslrootcert": "/synthetic/ca.pem"},
+            {"sslmode": "verify-full", "sslrootcert": ""},
+            {"sslmode": "verify-full"},
+        ):
+            with self.subTest(params=params):
+                self.setUp()
+                self.supervisor.connection.info.get_parameters = (
+                    lambda p=params: p
+                )
+                with self.assertRaisesRegex(BrokerAdmissionError,
+                                            "ONE_SHOT_TLS_VERIFY_FULL_REQUIRED"):
                     self.call()
                 self.last_read.assert_not_called()
                 self.assertEqual(len(self.supervisor.relock_calls), 1)
