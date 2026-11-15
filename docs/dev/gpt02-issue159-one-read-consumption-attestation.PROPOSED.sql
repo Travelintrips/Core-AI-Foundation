@@ -121,75 +121,13 @@ SET search_path = pg_catalog, pg_temp
 AS $readback$
 DECLARE v_match boolean;
 BEGIN
- -- Callers must authenticate as the dedicated auditor itself, not as a
- -- role accidentally granted EXECUTE or set via a membership chain.
+ -- Reject accidental grants or membership-based impersonation: the
+ -- minimal audit RPC can only be called by its own native LOGIN identity.
  IF session_user <> 'dev_gpt02_relock_catalog_auditor'
  THEN RAISE EXCEPTION 'ONE_READ_AUDITOR_CALLER_INVALID'
    USING ERRCODE = '42501';
  END IF;
- IF p_role::text !~ '^dev_gpt02_task_[1-9][0-9]*_[a-f0-9]{12}    OR p_scope_sha !~ '^[0-9a-f]{64}$'
-    OR p_packet_sha !~ '^[0-9a-f]{64}$'
-    OR p_read_challenge !~ '^[0-9a-f]{64}$'
- THEN RAISE EXCEPTION 'ONE_READ_CLAIM_SCOPE_INVALID'
-   USING ERRCODE = '22023';
- END IF;
-
- SELECT EXISTS(
-   SELECT 1 FROM gpt02_relock_audit.reader_issuances i
-   JOIN gpt02_relock_audit.reader_consumptions c
-     ON c.scope_sha=i.scope_sha
-   WHERE i.scope_sha=p_scope_sha
-     AND i.packet_sha=p_packet_sha
-     AND i.role_name=p_role
-     AND i.command_id=p_command_id
-     AND i.attempt_id=p_attempt_id
-     AND i.receipt_id=p_receipt_id
-     AND i.fence_id=p_fence_id
-     AND i.task_id>139 AND i.company_id='default'
-     AND c.read_challenge = p_read_challenge
-     AND c.consumed_at >= i.issued_at
-     AND c.consumed_at < i.expires_at
-     AND i.expires_at > clock_timestamp()
- ) INTO v_match;
-
- RETURN COALESCE(v_match,FALSE);
-END
-$readback$;
-
-REVOKE ALL ON FUNCTION
- gpt02_relock_audit.reader_consumption_persisted(
-  name,text,text,uuid,uuid,uuid,uuid,text
- ) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION
- gpt02_relock_audit.reader_consumption_persisted(
-  name,text,text,uuid,uuid,uuid,uuid,text
- ) TO dev_gpt02_relock_catalog_auditor;
-
--- Ensure ordinary auditor/reader cannot read the tables or write/alter
--- their contents; only the trusted migrator/owner inserts ledger evidence.
-DO $postflight$
-BEGIN
- IF has_table_privilege(
-      'dev_gpt02_relock_catalog_auditor',
-      'gpt02_relock_audit.reader_issuances','SELECT'
-    )
-    OR has_table_privilege(
-      'dev_gpt02_relock_catalog_auditor',
-      'gpt02_relock_audit.reader_consumptions','SELECT'
-    )
-    OR has_table_privilege(
-      'dev_gpt02_relock_catalog_auditor',
-      'gpt02_relock_audit.reader_consumptions','INSERT'
-    )
-    OR (SELECT rolcanlogin FROM pg_roles
-        WHERE rolname='dev_gpt02_relock_catalog_auditor')
- THEN RAISE EXCEPTION 'ONE_READ_AUDITOR_LEDGER_PRIVILEGE_LEAK';
- END IF;
-END $postflight$;
-COMMIT;
-
--- No credential issuance, CREATE LOGIN, dispatch, signer or PROD mutation.
-
+ IF p_role::text !~ '^dev_gpt02_task_[1-9][0-9]*_[a-f0-9]{12}$'
     OR p_scope_sha !~ '^[0-9a-f]{64}$'
     OR p_packet_sha !~ '^[0-9a-f]{64}$'
     OR p_read_challenge !~ '^[0-9a-f]{64}$'
