@@ -5,7 +5,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from gpt02_issue159_live_approval_readiness import readiness
+import importlib.util
+
+_SOURCE = Path(__file__).with_name("gpt02_issue159_live_approval_readiness.READONLY.py")
+_SPEC = importlib.util.spec_from_file_location("gpt02_issue159_approval_readiness_gate", _SOURCE)
+assert _SPEC is not None and _SPEC.loader is not None
+_MOD = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MOD)
+readiness = _MOD.readiness
 
 NOW = 1_800_000_000_000
 
