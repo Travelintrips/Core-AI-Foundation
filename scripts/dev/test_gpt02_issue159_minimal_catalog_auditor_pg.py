@@ -204,6 +204,26 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         if write.returncode == 0:
             raise AssertionError("AUDITOR_CAN_ALTER_ROLES")
         print("PASS_ONLY_BOOLEAN_RESULT_NO_HASHES_NO_PRIVATE_ROWS_NO_ROLE_WRITES")
+        # Simulate a future ACL mistake. Even if an unrelated LOGIN gets
+        # schema USAGE and direct EXECUTE, the SECURITY DEFINER function
+        # itself must reject the wrong native session_user.
+        login(name, "postgres", "synthetic_postgres_admin",
+              "GRANT USAGE ON SCHEMA gpt02_relock_audit TO unrelated_test; "
+              "GRANT EXECUTE ON FUNCTION " + AUDIT_FN +
+              "(name) TO unrelated_test;")
+        wrong_login = login(name, "unrelated_test", "synthetic_unrelated",
+                            "SELECT " + AUDIT_FN + "(" + quote(role) +
+                            "::name)", check=False)
+        if (wrong_login.returncode == 0 or
+                "RELOCK_AUDITOR_CALLER_INVALID" not in wrong_login.stderr):
+            raise AssertionError("AUDITOR_EXECUTE_GRANT_IMPERSONATION_PASSED")
+        login(name, "postgres", "synthetic_postgres_admin",
+              "REVOKE EXECUTE ON FUNCTION " + AUDIT_FN +
+              "(name) FROM unrelated_test; "
+              "REVOKE USAGE ON SCHEMA gpt02_relock_audit FROM unrelated_test;")
+        if probe(name, AUDITOR, audit_password, role).stdout.strip() != "f":
+            raise AssertionError("LEGITIMATE_AUDITOR_NO_LONGER_WORKS")
+        print("PASS_RELOCK_SECURITY_DEFINER_WRONG_NATIVE_LOGIN_DENIED")
 
         admin(name, "ALTER ROLE " + role +
               " LOGIN CONNECTION LIMIT 1 PASSWORD " +
