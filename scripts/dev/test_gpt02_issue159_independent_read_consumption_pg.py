@@ -36,7 +36,7 @@ def call(name, user, password, statement, check=True):
     return login(name, user, password, statement, check=check)
 
 
-def attest(name, password, candidate, *, override=None, check=True):
+def attest(name, password, candidate, read_challenge, *, override=None, check=True):
     scope = candidate["scope"]
     fields = {
         "role": candidate["candidateRole"],
@@ -46,6 +46,7 @@ def attest(name, password, candidate, *, override=None, check=True):
         "attempt": scope["attempt_id"],
         "receipt": scope["receipt_id"],
         "fence": scope["fence_id"],
+        "read_challenge": read_challenge,
     }
     if override:
         fields.update(override)
@@ -57,7 +58,8 @@ def attest(name, password, candidate, *, override=None, check=True):
         + quote(fields["command"]) + "::uuid,"
         + quote(fields["attempt"]) + "::uuid,"
         + quote(fields["receipt"]) + "::uuid,"
-        + quote(fields["fence"]) + "::uuid)"
+        + quote(fields["fence"]) + "::uuid,"
+        + quote(fields["read_challenge"]) + ")"
     )
     return call(name, AUDITOR, password, query, check=check)
 
@@ -88,6 +90,7 @@ def main():
 
     name = "issue159-ledger-audit-" + uuid.uuid4().hex[:10]
     auditor_password = secrets.token_urlsafe(32)
+    read_challenge = secrets.token_hex(32)
     pg_password = "synthetic_pg_actor_only"
     try:
         run("docker", "run", "--rm", "-d", "--network", "none",
@@ -149,8 +152,8 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         for sql in (
             "SELECT * FROM " + issued,
             "SELECT * FROM " + consumed,
-            "INSERT INTO " + consumed + "(scope_sha) VALUES (" +
-                quote(candidate["scopeSha256"]) + ")",
+            "INSERT INTO " + consumed + "(scope_sha,read_challenge) VALUES (" +
+                quote(candidate["scopeSha256"]) + "," + quote(read_challenge) + ")",
             "SELECT rolpassword FROM pg_catalog.pg_authid",
             "ALTER ROLE " + role + " LOGIN",
         ):
@@ -159,10 +162,10 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
                 raise AssertionError("AUDITOR_UNEXPECTED_PRIVILEGE:" + sql[:55])
         has_rpc = admin(name,
             "SELECT has_function_privilege(" + quote(AUDITOR) + ","
-            + quote(FUNCTION + "(name,text,text,uuid,uuid,uuid,uuid)")
+            + quote(FUNCTION + "(name,text,text,uuid,uuid,uuid,uuid,text)")
             + ",'EXECUTE')::text,"
             "has_function_privilege('unrelated_test',"
-            + quote(FUNCTION + "(name,text,text,uuid,uuid,uuid,uuid)")
+            + quote(FUNCTION + "(name,text,text,uuid,uuid,uuid,uuid,text)")
             + ",'EXECUTE')::text")
         if has_rpc.stdout.strip() not in ("true|false", "t|f"):
             raise AssertionError("RPC_EXECUTE_NOT_RESTRICTED:" + has_rpc.stdout)
@@ -170,7 +173,7 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
 
         # An asserted successful consumption with no committed DB row is
         # not proof, and an issuer-only record is insufficient too.
-        absent = attest(name, auditor_password, candidate)
+        absent = attest(name, auditor_password, candidate, read_challenge)
         if absent.stdout.strip() != "f":
             raise AssertionError("NONEXISTENT_CONSUMPTION_WAS_ACCEPTED")
         issued_sql = (
@@ -190,7 +193,7 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             "clock_timestamp()+interval '3 minutes')"
         )
         call(name, "postgres", pg_password, issued_sql)
-        issuer_only = attest(name, auditor_password, candidate)
+        issuer_only = attest(name, auditor_password, candidate, read_challenge)
         if issuer_only.stdout.strip() != "f":
             raise AssertionError("ISSUANCE_ONLY_NOT_A_CONSUMPTION")
         print("PASS_NO_CLAIM_OR_ISSUANCE_ONLY_CANNOT_FAKE_DB_CONSUMPTION")
@@ -198,15 +201,15 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         # Inject a transactional failure AFTER INSERT but BEFORE COMMIT:
         # the audit RPC must continue to show FALSE, with NO row persisted.
         rollback = (
-            "BEGIN; INSERT INTO " + consumed + "(scope_sha) VALUES ("
-            + quote(candidate["scopeSha256"]) + ");"
+            "BEGIN; INSERT INTO " + consumed + "(scope_sha,read_challenge) VALUES ("
+            + quote(candidate["scopeSha256"]) + "," + quote(read_challenge) + ");"
             " DO $fail$ BEGIN RAISE EXCEPTION 'SYNTHETIC_PRECOMMIT_FAULT';"
             " END $fail$; COMMIT;"
         )
         failed = call(name, "postgres", pg_password, rollback, check=False)
         if failed.returncode == 0 or "SYNTHETIC_PRECOMMIT_FAULT" not in failed.stderr:
             raise AssertionError("EXPECTED_ROLLBACK_INJECTION_NOT_TRIGGERED")
-        if attest(name, auditor_password, candidate).stdout.strip() != "f":
+        if attest(name, auditor_password, candidate, read_challenge).stdout.strip() != "f":
             raise AssertionError("UNCOMMITTED_CONSUMPTION_FALSE_POSITIVE")
         print("PASS_ROLLED_BACK_PRECOMMIT_CLAIM_NEVER_ATTESTS")
 
@@ -217,7 +220,8 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             "BEGIN;"
             "SELECT pg_advisory_xact_lock(hashtextextended("
               + quote(candidate["scopeSha256"]) + ",0));"
-            "INSERT INTO " + consumed + "(scope_sha) SELECT i.scope_sha"
+            "INSERT INTO " + consumed + "(scope_sha,read_challenge) SELECT i.scope_sha,"
+              + quote(read_challenge)
             " FROM " + issued + " i WHERE i.scope_sha="
               + quote(candidate["scopeSha256"])
             + " AND i.packet_sha=" + quote(candidate["verifiedPacketSha256"])
@@ -241,10 +245,19 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         if codes != [0, 1]:
             raise AssertionError("DUPLICATE_PERSISTED_CONSUMPTION_NOT_REJECTED:" +
                                  repr(codes))
-        first = attest(name, auditor_password, candidate)
+        first = attest(name, auditor_password, candidate, read_challenge)
         if first.stdout.strip() != "t":
             raise AssertionError("COMMITTED_MATCHING_DB_CLAIM_NOT_ATTESTED")
         print("PASS_TWO_CONCURRENT_CLAIMS_ONE_DB_COMMIT_ONE_REJECT_AND_AUDIT_TRUE")
+        # Each attempted broker call gets a fresh unpredictable challenge.
+        # A stale positive persisted row MUST NOT pass a future invocation.
+        fresh_read_challenge = secrets.token_hex(32)
+        if fresh_read_challenge == read_challenge:
+            raise AssertionError("FRESH_CHALLENGE_REUSED")
+        stale = attest(name, auditor_password, candidate, fresh_read_challenge)
+        if stale.stdout.strip() != "f":
+            raise AssertionError("OLD_COMMITTED_ROW_REPLAYED_FOR_NEW_CHALLENGE")
+        print("PASS_OLD_COMMITTED_CONSUMPTION_CANNOT_ATTEST_FRESH_CHALLENGE")
 
         for variant in (
             {"role": "dev_gpt02_task_171_ffffffffffff"},
@@ -254,11 +267,12 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             {"attempt": "22222222-2222-4222-8222-222222222222"},
             {"receipt": "33333333-3333-4333-8333-333333333333"},
             {"fence": "44444444-4444-4444-8444-444444444444"},
+            {"read_challenge": "f" * 64},
         ):
-            invalid = attest(name, auditor_password, candidate, override=variant)
+            invalid = attest(name, auditor_password, candidate, read_challenge, override=variant)
             if invalid.stdout.strip() != "f":
                 raise AssertionError("WRONG_SIGNED_SCOPE_ATTESTED:" + repr(variant))
-        invalid_role = attest(name, auditor_password, candidate,
+        invalid_role = attest(name, auditor_password, candidate, read_challenge,
                               override={"role": "postgres"}, check=False)
         if invalid_role.returncode == 0:
             raise AssertionError("ARBITRARY_ROLE_AUDIT_ACCEPTED")
@@ -269,7 +283,7 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         replay = call(name, "postgres", pg_password, claim_sql, check=False)
         if replay.returncode == 0:
             raise AssertionError("PERSISTED_CONSUMPTION_REPLAY_SUCCEEDED")
-        if attest(name, auditor_password, candidate).stdout.strip() != "t":
+        if attest(name, auditor_password, candidate, read_challenge).stdout.strip() != "t":
             raise AssertionError("REPLAY_MODIFIED_COMMITTED_AUDIT")
         for statement in (
             "DELETE FROM " + consumed,
