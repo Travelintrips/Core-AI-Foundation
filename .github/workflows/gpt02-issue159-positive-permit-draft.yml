@@ -40,6 +40,8 @@ on:
       - "scripts/dev/test_gpt02_issue159_postlineage_reader_scope.py"
       - "scripts/dev/test_gpt02_issue159_signed_scope_pg.py"
       - "scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py"
+      - "docs/dev/gpt02-issue159-one-read-consumption-attestation.PROPOSED.sql"
+      - "scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py"
       - "scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py"
       - "scripts/dev/test_gpt02_issue159_independent_relock_watchdog_pg.py"
       - "scripts/dev/test_gpt02_issue159_broker_finally_relock_pg.py"
@@ -118,6 +120,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
+          python3 scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py
           python3 scripts/dev/test_gpt02_issue159_independent_relock_watchdog_pg.py
           python3 scripts/dev/test_gpt02_issue159_broker_finally_relock_pg.py
