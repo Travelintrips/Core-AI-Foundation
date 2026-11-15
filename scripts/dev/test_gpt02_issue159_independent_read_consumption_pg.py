@@ -244,6 +244,9 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         absent = attest(name, auditor_password, candidate, read_challenge)
         if absent.stdout.strip() != "f":
             raise AssertionError("NONEXISTENT_CONSUMPTION_WAS_ACCEPTED")
+        if consume(name, consumer_password, candidate, read_challenge).stdout.strip() != "f":
+            raise AssertionError("LOW_PRIV_CONSUMER_MINTED_WITHOUT_ISSUANCE")
+        print("PASS_CONSUMER_WITHOUT_OWNER_ISSUANCE_DENIED")
         issued_sql = (
             "INSERT INTO " + issued
             + "(scope_sha,packet_sha,role_name,task_id,company_id,"
@@ -264,8 +267,6 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         issuer_only = attest(name, auditor_password, candidate, read_challenge)
         if issuer_only.stdout.strip() != "f":
             raise AssertionError("ISSUANCE_ONLY_NOT_A_CONSUMPTION")
-        if consume(name, consumer_password, candidate, read_challenge).stdout.strip() != "f":
-            raise AssertionError("LOW_PRIV_CONSUMER_MINTED_WITHOUT_ISSUANCE")
         print("PASS_NO_CLAIM_OR_ISSUANCE_ONLY_CANNOT_FAKE_DB_CONSUMPTION")
 
         for wrong in (
