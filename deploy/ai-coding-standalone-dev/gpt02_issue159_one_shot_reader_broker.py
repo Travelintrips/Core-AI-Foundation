@@ -18,7 +18,9 @@ import time
 from typing import Any
 
 from gpt02_issue159_lineage_db_reader import read_lineage_once
-from gpt02_issue159_native_relock_attestation import attest_boolean_relock
+from gpt02_issue159_native_relock_attestation import (
+    attest_boolean_relock, attest_persisted_read_consumption,
+)
 from gpt02_issue159_lineage_readback_contract import validate_trusted_lineage_row
 from gpt02_issue159_positive_permit_handoff import (
     VERIFIER_PUBLIC_ROOT_DIR, inspect_postlineage_scoped_reader_candidate,
@@ -146,6 +148,21 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
             consumed = supervisor.consume_scope_once(candidate)
             if not _review_consumption_binding(consumed, candidate):
                 _fail("ONE_SHOT_CONSUMPTION_BINDING_NOT_PROVEN")
+            # A self-reported supervisor receipt alone is insufficient.
+            # Before opening ANY reader connection, use the independently
+            # authenticated low-privilege auditor to verify a genuine
+            # committed one-use PostgreSQL ledger row. This does not
+            # issue or authorize a credential.
+            with supervisor.open_minimal_auditor_connection(candidate) as audit_conn:
+                persisted = attest_persisted_read_consumption(audit_conn, candidate)
+            if (
+                persisted.get("consumptionPersistedInDatabase") is not True
+                or persisted.get("role") != candidate["candidateRole"]
+                or persisted.get("scopeSha256") != candidate["scopeSha256"]
+                or persisted.get("verifiedPacketSha256") != candidate["verifiedPacketSha256"]
+                or persisted.get("releaseDecision") != "NO_GO"
+            ):
+                _fail("ONE_SHOT_NATIVE_CONSUMPTION_ATTESTATION_INVALID")
             with supervisor.open_one_scoped_connection(candidate) as conn:
                 info = getattr(conn, "info", None)
                 if (
@@ -210,6 +227,7 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
         "stage": "SIGNED_SCOPED_READER_CLEANUP_REVIEW_ONLY",
         "oneCanonicalReadReviewed": True,
         "preReadConsumptionClaimReviewed": True,
+        "preReadConsumptionVerifiedByPostgres": True,
         "postReadRelockReported": True,
         "postReadRelockVerifiedByNativePostgres": True,
         "databaseRoleProvisioned": False,
