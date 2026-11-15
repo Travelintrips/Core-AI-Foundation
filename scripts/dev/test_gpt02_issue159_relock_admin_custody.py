@@ -137,18 +137,16 @@ class CustodyMetaTest(unittest.TestCase):
     def test_symlink_credential_is_rejected_without_read(self):
         self.credential.unlink()
         self.credential.symlink_to(self.unit)
-        with patch.object(Path, "lstat",
-                          wraps=Path.lstat) as fake:
-            # We do not need to read contents of a symlinked credential;
-            # unit ownership may differ on non-root CI, so test low-level
-            # stat guard for credential target directly.
-            self.assertFalse(MOD._safe_regular(self.credential, unit=False))
+        # Real pathlib lstat does not follow the symlink. No mock needed.
+        self.assertFalse(MOD._safe_regular(self.credential, unit=False))
         self.assert_denied(MOD._fail("UNSAFE_AUDITOR_ENCRYPTED_CREDENTIAL_METADATA"))
 
     def test_readonly_program_never_has_success_exit_or_secret_read(self):
         with patch.object(MOD, "check_custody_metadata",
                           return_value=self.check()):
-            self.assertEqual(MOD.main(), 3)
+            with patch("builtins.print") as output:
+                self.assertEqual(MOD.main(), 3)
+                output.assert_called_once()
         source = SOURCE.read_text()
         self.assertNotIn("encrypted_credential.read_text(", source)
         self.assertNotIn("encrypted_credential.read_bytes(", source)
