@@ -173,3 +173,42 @@ the Draft DDL or enabling LOGIN. Independent security approval, a real
 one-use credential broker, signed persisted Super Admin approval and
 rollback/credential invalidation are still REQUIRED before live DEV changes.
 Do not activate signers, dispatch, DELL or PROD.
+
+
+## One-shot broker review contract — 15 Nov 2026
+
+New UNINSTALLED source-only module:
+deploy/ai-coding-standalone-dev/gpt02_issue159_one_shot_reader_broker.py.
+It is not a new service, route, credential manager or PostgreSQL writer.
+There is deliberately no CLI, DSN secret, private signing key, privilege
+DDL, worker client, signer call or deploy instructions. It reuses the
+existing pinned four-signature/verifier persisted lineage handoff and the
+exact bounded read-only canonical lineage query. Before querying a
+supervisor-supplied connection, the library checks the expected derived
+per-task pooler username, exact CST-DEV pooler host/port, database, read-only
+transaction behavior, and libpq effective sslmode=verify-full with a
+configured sslrootcert. It then validates the original signed receipt and
+fence using the existing trusted-lineage contract, and *always* requests
+relock in a finally block, even after connection-open failure, wrong identity,
+query timeout or invalid row. A returned review-only answer contains NO
+database data, credential, grant, dispatch or authorization.
+
+Offline synthetic tests:
+scripts/dev/test_gpt02_issue159_one_shot_reader_broker.py.
+The test suite verifies exactly one original bound SELECT call,
+wrong native username/database/host/port/transaction/TLS denial, missing
+or forged lineage row, expired issuer lease, query/open failures, and
+missing or wrong relock evidence. Source-only test returns NO_GO throughout.
+Existing GitHub Actions Draft workflow executes these tests.
+
+BLOCKING SECURITY LIMITATION: The supervisor interface is a TEST/REVIEW
+dependency only, not a currently implemented trusted credential/role owner.
+Its reported cleanup shape is *not independently authenticated by this
+library*, cannot be treated as a native database attestation, and does not
+confer permissions. A real service must implement separately reviewed
+privileged issue-once/consume-once ledger, actual trusted PostgreSQL
+role/TLS/SSL-root custody, cleanup verification querying pg_authid and
+pg_stat_activity through its owner identity, crash watchdog, and rate-bounded
+one-query execution. Existing shared lineage reader's fixed role identity
+must not be weakened. None of these operational components is installed
+or enabled by this Draft.
