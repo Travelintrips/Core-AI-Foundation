@@ -252,9 +252,9 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         admin(name, """
 CREATE FUNCTION public.issue159_synthetic_privileged_read()
 RETURNS bigint LANGUAGE sql SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp AS $
+SET search_path = pg_catalog, pg_temp AS $leak$
  SELECT count(*) FROM gpt02_private.approvals;
-$;
+$leak$;
 REVOKE ALL ON FUNCTION
  public.issue159_synthetic_privileged_read() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
