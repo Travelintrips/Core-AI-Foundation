@@ -389,3 +389,53 @@ secrets MUST NOT be reused), implement privileged one-use role issuer and
 independent watchdog with durable atomic ledger, and perform a separately
 authorized one-shot live DEV test with fresh Super Admin approval. Signer,
 dispatch, DELL, PROD and Final ACK remain NO_GO.
+
+
+## Security review — indirect privilege paths after scoped relock (16 Nov 2026)
+
+An adversarial network-isolated PostgreSQL 16 test found TWO FALSE-POSITIVE
+cleanup attestations in the original minimal boolean function, even after
+direct private-table SELECT and schema USAGE had been revoked:
+
+1. The revoked reader could still execute a separately granted
+   SECURITY DEFINER routine in public schema, owned by a privileged
+   administrator, and read BOTH same-company synthetic tasks. The original
+   boolean audit returned TRUE despite that indirect path.
+2. The revoked reader could still SELECT an owner-privileged default VIEW
+   in public schema that exposed private rows without requiring the reader
+   to hold direct base-table grants. Again the original boolean returned TRUE.
+
+Fixed ONLY in the Draft proposal
+docs/dev/gpt02-issue159-minimal-catalog-relock-auditor.PROPOSED.sql:
+
+- Check pg_proc/pg_namespace for any effective EXECUTE on reachable
+  non-system SECURITY DEFINER routines, including privileges inherited
+  from PUBLIC. If present, return FALSE.
+- Check pg_class/pg_namespace for reachable non-security-invoker owner VIEWs
+  and materialized views where the role has effective SELECT, including
+  PUBLIC and column-level grants. If present, return FALSE.
+- Preserve the distinction that a PostgreSQL 15+ security_invoker=true
+  view enforces the invoker's own base-table privileges, so its mere
+  presence is not the same owner-privilege bypass.
+- Only the boolean audit's SQL predicates and the disposable test changed;
+  no live grant, view, routine, role, RLS or service was touched.
+
+The new adversarial PG16 fixture proves false results for callable
+privileged routines, PUBLIC EXECUTE, owner views, PUBLIC SELECT on owner
+views, and materialized copies. It also proves the audit returns TRUE
+again only after those rights are revoked, and does not falsely reject a
+security_invoker view when base-table access is denied. The exact committed
+source test passed end-to-end with exit 0. This is an independently useful
+security finding, NOT an independent production security sign-off.
+
+These are deliberately **conservative** restrictions. In CST-DEV, unrelated
+PUBLIC function/view grants may exist and would make a newly scoped role
+remain NO_GO until reviewed; do NOT weaken the check or revoke unrelated
+production grants just to force a PASS. Other grant mechanisms, including
+new grants after the audit instant and code paths outside PostgreSQL, still
+require a separate full privilege review.
+
+The minimum viable live role remains unavailable until the entire privileged
+issuer/cleanup/watchdog model, role provenance, timestamp validity,
+credential custody, and external owner-approved task are independently
+reviewed. Never treat a synthetic TRUE as deployment authorization.
