@@ -192,7 +192,7 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             ("IMMUTABLE_TRIGGER_WRONG_FUNCTION",
              "CREATE FUNCTION gpt02_relock_audit.issue159_synthetic_noop() "
              "RETURNS trigger LANGUAGE plpgsql AS "
-             "$BEGIN RETURN NEW; END$;"
+             "$tag$BEGIN RETURN NEW; END$tag$;"
              "DROP TRIGGER immutable_rows ON " + table + ";"
              "CREATE TRIGGER immutable_rows BEFORE UPDATE OR DELETE ON " +
              table + " FOR EACH ROW EXECUTE FUNCTION "
