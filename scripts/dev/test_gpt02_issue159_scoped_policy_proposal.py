@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Proof-only exact-task policy proposal against disposable PG16.
+
+Current CST-DEV's actual five table names and column types inform the
+generator. All DDL is applied ONLY to a network-isolated disposable
+PostgreSQL 16 fixture. NO live migration, role activation, credentials,
+signer, worker or dispatch.
+"""
+from __future__ import annotations
+
+import copy
+import re
+import subprocess
+import time
+import unittest
+import uuid
+
+from gpt02_issue159_scoped_policy_proposal import (
+    proposed_sql, validate_inert_candidate, TABLE_COLUMNS
+)
+from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
+from test_gpt02_issue159_signed_scope_pg import (
+    make_candidate, FIVE_TABLE_FIXTURE, quote, bound_query
+)
+
+
+def run(*args, stdin=None, check=True):
+    r = subprocess.run(args, input=stdin, text=True,
+                       capture_output=True, timeout=60)
+    if check and r.returncode:
+        raise RuntimeError("DISPOSABLE_SQL_FAILED:" + r.stderr[-1800:])
+    return r
+
+
+def sql(name, body, check=True):
+    return run("docker", "exec", "-i", name, "psql", "-X",
+               "-v", "ON_ERROR_STOP=1", "-U", "postgres",
+               "-d", "postgres", "-At", stdin=body, check=check)
+
+
+class PolicyProposalSourceTest(unittest.TestCase):
+    def setUp(self):
+        self.candidate = make_candidate()
+        # Existing signed packet fixture uses this synthetic clock.
+        self.observed_ms = 1_800_000_000_000
+
+    def test_exact_signed_scope_renders_only_dormant_role_and_five_policies(self):
+        ddl = proposed_sql(self.candidate, self.observed_ms)
+        self.assertEqual(ddl.count("CREATE ROLE "), 1)
+        self.assertEqual(ddl.count(" NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0"), 1)
+        self.assertEqual(ddl.count("CREATE POLICY "), 5)
+        self.assertEqual(ddl.count("GRANT SELECT ("), 5)
+        self.assertEqual(ddl.count("clock_timestamp() < to_timestamp("), 5)
+        self.assertNotIn("SECURITY DEFINER", ddl)
+        self.assertNotIn("ALTER ROLE", ddl)
+        self.assertNotIn("PASSWORD", ddl)
+        self.assertNotIn("service_role", ddl)
+        self.assertNotIn("dispatch_enabled", ddl)
+        self.assertEqual(ddl.count("GRANT USAGE ON SCHEMA"), 1)
+        self.assertEqual(len(TABLE_COLUMNS), 5)
+
+    def test_malformed_or_caller_overridden_scope_does_not_render(self):
+        attempts = [
+            ("candidateRole", "postgres"),
+            ("scopeSha256", "f" * 64),
+            ("verifiedPacketSha256", "f" * 64),
+            ("environment", "PROD"),
+            ("releaseDecision", "GO"),
+            ("persistedLineageMatched", False),
+            ("credentialIssuancePermitted", True),
+            ("expiresAt", self.observed_ms),
+        ]
+        for field, changed in attempts:
+            with self.subTest(field=field):
+                altered = copy.deepcopy(self.candidate)
+                altered[field] = changed
+                with self.assertRaises(BrokerAdmissionError):
+                    proposed_sql(altered, self.observed_ms)
+
+    def test_signed_role_binding_rejects_attempted_sql_injection(self):
+        altered = copy.deepcopy(self.candidate)
+        altered["scope"]["company_id"] = "default'; DROP SCHEMA gpt02_private; --"
+        with self.assertRaises(BrokerAdmissionError):
+            proposed_sql(altered, self.observed_ms)
+        altered = copy.deepcopy(self.candidate)
+        altered["scope"]["task_id"] = 172
+        with self.assertRaises(BrokerAdmissionError):
+            proposed_sql(altered, self.observed_ms)
+        altered = copy.deepcopy(self.candidate)
+        altered["scope"]["approval_digest"] = "f" * 64
+        with self.assertRaises(BrokerAdmissionError):
+            proposed_sql(altered, self.observed_ms)
+
+    def test_expired_candidate_not_accepted_for_policy(self):
+        with self.assertRaises(BrokerAdmissionError):
+            proposed_sql(self.candidate, self.candidate["expiresAt"])
+        with self.assertRaises(BrokerAdmissionError):
+            proposed_sql(self.candidate, 0)
+
+
+def disposable_live_schema_layout_test():
+    candidate = make_candidate()
+    scope = candidate["scope"]
+    role = candidate["candidateRole"]
+    proposal = proposed_sql(candidate, 1_800_000_000_000)
+    name = "issue159-schema-grounded-" + uuid.uuid4().hex[:10]
+    try:
+        run("docker", "run", "--rm", "-d", "--network", "none",
+            "--name", name, "-e", "POSTGRES_PASSWORD=fixture_only",
+            "postgres:16-alpine")
+        for _ in range(120):
+            ready = run(
+                "docker", "exec", "-e", "PGPASSWORD=fixture_only",
+                name, "psql", "-X", "-w", "-h", "127.0.0.1",
+                "-U", "postgres", "-d", "postgres", "-Atc", "SELECT 1",
+                check=False,
+            )
+            if ready.returncode == 0:
+                break
+            time.sleep(.25)
+        else:
+            raise RuntimeError("FINAL_PG_TCP_NOT_READY")
+
+        # Existing fixture tests a second, same-company Task172. Extend its
+        # columns to match exact LIVE CST-DEV names used by this proposal.
+        fixture = FIVE_TABLE_FIXTURE
+        for old, new in (
+            ("'n170'", quote(scope["approval_nonce"])),
+            ("'d170'", quote(scope["approval_digest"])),
+            ("'link170'", quote(scope["link_digest"])),
+        ):
+            if old not in fixture:
+                raise AssertionError("SOURCE_FIXTURE_MISMATCH")
+            fixture = fixture.replace(old, new)
+        seeded = sql(name, fixture)
+        if "PASS_FIVE_TABLE_DIRECT_ENUMERATION_SCOPED" not in seeded.stderr:
+            raise AssertionError("INITIAL_FIXTURE_NOT_PASS")
+        sql(name, """
+ALTER TABLE gpt02_private.approvals
+  ADD COLUMN operator_namespace text DEFAULT 'ai-task-hub.public.users';
+ALTER TABLE gpt02_private.operator_links
+  ADD COLUMN attempt_number integer DEFAULT 1;
+ALTER TABLE gpt02_private.operator_links
+  ADD COLUMN claims jsonb DEFAULT '{"environment":"DEV"}';
+""")
+        sql(name, proposal)
+        print("PASS_SOURCE_ONLY_POLICY_COMPILES_AGAINST_LIVE_COLUMN_NAMES")
+
+        role_state = sql(name,
+            "SELECT NOT rolcanlogin AND rolconnlimit=0 AND "
+            "NOT rolinherit AND NOT rolbypassrls FROM pg_roles "
+            "WHERE rolname=" + quote(role))
+        if role_state.stdout.strip() != "t":
+            raise AssertionError("POLICY_ROLE_NOT_DORMANT")
+        print("PASS_NEW_SCOPED_ROLE_NOLOGIN_CONN_LIMIT_ZERO")
+
+        # Under SELECT-column grants (NOT table SELECT) every required
+        # canonical query field and RLS predicate must still work.
+        query = bound_query(scope)
+        one = sql(name,
+            "SET ROLE " + role + "; SELECT count(*) FROM (" +
+            query + ") AS scoped; RESET ROLE;")
+        if "1" not in one.stdout.splitlines():
+            raise AssertionError("ORIGINAL_QUERY_FAILED_ON_COLUMN_GRANTS")
+        print("PASS_ORIGINAL_CANONICAL_SQL_USING_COLUMN_ONLY_GRANTS")
+
+        for table in TABLE_COLUMNS:
+            got = sql(name, "SET ROLE " + role +
+                      "; SELECT count(*) FROM gpt02_private." +
+                      table + "; RESET ROLE;")
+            if "1" not in got.stdout.splitlines():
+                raise AssertionError("EXACT_ROLE_ENUMERATION_" + table)
+        wrong = sql(name, "SET ROLE " + role +
+                    "; SELECT count(*) FROM gpt02_private.approvals "
+                    "WHERE task_id=172; RESET ROLE;")
+        if "0" not in wrong.stdout.splitlines():
+            raise AssertionError("SAME_COMPANY_OTHER_TASK_VISIBLE")
+        print("PASS_FIVE_TABLE_DIRECT_ENUMERATION_ONLY_OWN_TASK")
+
+        denied = sql(name, "SET ROLE " + role +
+                     "; INSERT INTO gpt02_private.approvals(task_id) "
+                     "VALUES (999); RESET ROLE;", check=False)
+        if denied.returncode == 0:
+            raise AssertionError("UNEXPECTED_SCOPED_ROLE_WRITE")
+        improper = sql(name, "SET ROLE " + role +
+                       "; SELECT approver_id FROM gpt02_private.approvals; "
+                       "RESET ROLE;", check=False)
+        if improper.returncode == 0:
+            raise AssertionError("UNEXPECTED_SENSITIVE_COLUMN_READ")
+        print("PASS_WRITES_AND_NON_GRANTED_COLUMNS_DENIED")
+
+        # The exact proposal may not be re-applied to silently create a
+        # second task/role, or change an existing policy.
+        dup = sql(name, proposal, check=False)
+        if dup.returncode == 0:
+            raise AssertionError("PROPOSAL_WAS_NOT_DUPLICATE_SAFE_FAIL_CLOSED")
+        print("PASS_REAPPLY_FAILS_CLOSED_NO_SILENT_REPLACE")
+        print("PROPOSAL_ONLY_NO_CST_DEV_OR_PROD_MUTATION")
+    finally:
+        run("docker", "rm", "-f", name, check=False)
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, argv=["source-only"], verbosity=0)
+    disposable_live_schema_layout_test()
