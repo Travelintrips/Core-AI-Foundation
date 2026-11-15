@@ -380,6 +380,19 @@ def inspect_postlineage_scoped_reader_candidate(
         _fail("POSTLINEAGE_SIGNED_PACKET_HASH_MISMATCH")
 
     now_ms = int(time.time() * 1000)
+    # A reader result must not become an alternate authority over fields that
+    # the result omits (notably receipt_id and link_id). Recheck the original
+    # signed packet even after the pinned verifier has authenticated it.
+    independent = verify_lifecycle_evidence_packet(
+        packet, pinned_public_roots, now_ms,
+    )
+    if (
+        proof.get("approvalDigest") != independent["approvalDigest"]
+        or proof.get("hubLinkDigest") != independent["hubLinkDigest"]
+        or proof.get("coreLinkDigest") != independent["coreLinkDigest"]
+        or independent.get("fourDistinctRoleRootsUsed") is not True
+    ):
+        _fail("POSTLINEAGE_INDEPENDENT_SIGNATURE_BINDING_MISMATCH")
     # Prevent a stale previously authenticated handoff being reused after
     # the issuer lease or the Super Admin approval has expired.
     expires_at = min(approval["expiresAt"], link["expiresAt"], issuer["expiresAt"])
