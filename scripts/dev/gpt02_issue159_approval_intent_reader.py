@@ -121,7 +121,7 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
         if (
             not isinstance(recorded, int) or not isinstance(expires, int) or
             recorded <= 0 or expires <= recorded or expires - recorded > 300000 or
-            observed_at_ms < recorded or observed_at_ms > expires
+            observed_at_ms < recorded or observed_at_ms >= expires
         ):
             return denied("APPROVAL_INTENT_EXPIRED_OR_INVALID")
 
