@@ -286,6 +286,15 @@ REVOKE ALL ON gpt02_private.reader_read_consumptions FROM PUBLIC;
             "SELECT count(*) FROM gpt02_private.reader_read_consumptions",
         ), check=False).returncode == 0:
             raise AssertionError("ROLE_READ_CONSUMPTION_LEDGER")
+        if run(login_cmd(
+            name, role, password,
+            "INSERT INTO gpt02_private.reader_read_consumptions"
+            " (scope_sha,packet_sha,command_id,attempt_id) VALUES ("
+            + quote("f"*64) + "," + quote("e"*64) + ","
+            + quote(scope["command_id"]) + "::uuid,"
+            + quote(scope["attempt_id"]) + "::uuid)",
+        ), check=False).returncode == 0:
+            raise AssertionError("ROLE_WRITE_CONSUMPTION_LEDGER")
         print("PASS_SCOPED_LOGIN_CANNOT_READ_OR_WRITE_CONSUMPTION_LEDGER")
 
         # Verify native DB identity and one-connection read-only SELECT,
@@ -306,6 +315,17 @@ REVOKE ALL ON gpt02_private.reader_read_consumptions FROM PUBLIC;
                           + ") AS canonical"))
         if canonical.stdout.strip() != "1":
             raise AssertionError("NATIVE_ROLE_CANONICAL_LINEAGE_MISSING")
+        # Exact limitation: the database read-consumption ledger does NOT
+        # prevent a holder of the unrevoked reader password from opening
+        # another connection before relock. The credential MUST stay private
+        # to the audited one-query supervisor and be revoked immediately.
+        replay_via_direct_password = run(login_cmd(
+            name, role, password, "SELECT count(*) FROM (" +
+            bound_query(scope) + ") AS canonical",
+        ))
+        if replay_via_direct_password.stdout.strip() != "1":
+            raise AssertionError("TEST_DID_NOT_REPRODUCE_STOLEN_PASSWORD_RISK")
+        print("EXPECTED_RISK_DIRECT_PASSWORD_CAN_REQUERY_BEFORE_RELOCK_NO_GO")
         print("PASS_NATIVE_ONE_TASK_LOGIN_READONLY_CANONICAL_SQL")
 
         # The login must not be able to inspect issuance ledger or write
