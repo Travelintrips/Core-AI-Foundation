@@ -201,5 +201,10 @@ ALTER TABLE gpt02_private.operator_links
 
 
 if __name__ == "__main__":
-    unittest.main(exit=False, argv=["source-only"], verbosity=0)
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(
+        PolicyProposalSourceTest,
+    )
+    unit = unittest.TextTestRunner(verbosity=1).run(suite)
+    if not unit.wasSuccessful():
+        raise SystemExit("SCOPED_POLICY_UNIT_TEST_FAILURE")
     disposable_live_schema_layout_test()
