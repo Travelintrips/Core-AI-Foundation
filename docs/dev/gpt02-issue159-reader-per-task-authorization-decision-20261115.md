@@ -435,6 +435,14 @@ production grants just to force a PASS. Other grant mechanisms, including
 new grants after the audit instant and code paths outside PostgreSQL, still
 require a separate full privilege review.
 
+Read-only CST-DEV catalog risk inventory additionally found one non-system
+schema with PUBLIC USAGE, zero user-defined SECURITY DEFINER functions both
+PUBLIC-executable and reachable through that schema, and zero owner-view or
+materialized-view objects both PUBLIC-selectable and reachable through it.
+That is a narrowly scoped PUBLIC-ACL snapshot, not a claim that future
+per-task identities have no other indirect grant paths; per-role privileges
+and new schema changes must be audited again at release.
+
 The minimum viable live role remains unavailable until the entire privileged
 issuer/cleanup/watchdog model, role provenance, timestamp validity,
 credential custody, and external owner-approved task are independently
