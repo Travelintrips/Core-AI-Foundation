@@ -175,8 +175,11 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             "FROM pg_roles WHERE rolname=" + quote(CONSUMER))
         if privileged_consumer.stdout.strip() != "t":
             raise AssertionError("READER_CONSUMER_NOT_DORMANT")
+        # Only inside this network-isolated fixture allow two concurrent
+        # sessions to contend at the DB unique constraint, rather than
+        # failing first at the PostgreSQL connection-limit gate.
         admin(name, "ALTER ROLE " + CONSUMER +
-              " LOGIN CONNECTION LIMIT 1 PASSWORD " +
+              " LOGIN CONNECTION LIMIT 2 PASSWORD " +
               quote(consumer_password) + ";")
         # The source proposal never grants a LOGIN. This is strictly
         # a disposable fixture for native low-privilege SQL testing.
