@@ -79,6 +79,8 @@ def main():
         or "GRANT SELECT ON pg_catalog.pg_authid" in commands
         or "GRANT EXECUTE" not in commands
         or "pg_catalog.has_function_privilege(" not in commands
+        or "'security_invoker=true'" not in commands
+        or "pg_catalog.has_any_column_privilege(" not in commands
         or "pg_catalog.has_schema_privilege(" not in commands
     ):
         raise AssertionError("MINIMAL_AUDITOR_PROPOSAL_SECURITY_CONTRACT_BROKEN")
@@ -321,6 +323,24 @@ GRANT SELECT ON public.issue159_synthetic_owner_view TO """ + role + ";")
         if probe(name, AUDITOR, audit_password, role).stdout.strip() != "t":
             raise AssertionError("PUBLIC_OWNER_VIEW_REVOKE_NOT_RECOGNIZED")
         print("PASS_PUBLIC_OWNER_VIEW_GRANT_BYPASS_DETECTED")
+        # A security_invoker=true view uses the READER'S base-table
+        # privileges, not its owner. It must not make the conservative
+        # auditor reject a role when private base-table access is denied.
+        admin(name, """
+CREATE VIEW public.issue159_synthetic_invoker_view
+ WITH (security_invoker=true) AS
+ SELECT task_id FROM gpt02_private.approvals;
+REVOKE ALL ON public.issue159_synthetic_invoker_view FROM PUBLIC;
+GRANT SELECT ON public.issue159_synthetic_invoker_view TO """ + role + ";")
+        invoker_query = admin(name, "SET ROLE " + role + "; "
+            "SELECT count(*) FROM public.issue159_synthetic_invoker_view;",
+            check=False)
+        if invoker_query.returncode == 0:
+            raise AssertionError("SECURITY_INVOKER_VIEW_WRONGLY_BYPASSED_RLS")
+        if probe(name, AUDITOR, audit_password, role).stdout.strip() != "t":
+            raise AssertionError("SAFE_SECURITY_INVOKER_VIEW_FALSE_POSITIVE")
+        print("PASS_SECURITY_INVOKER_VIEW_DOES_NOT_GRANT_INDIRECT_READ")
+
 
 
         # Both signed reader and dedicated auditor remain locked after the
