@@ -14,6 +14,7 @@ not an authorization. Never expose this module through a web/API route.
 from __future__ import annotations
 
 from collections.abc import Mapping
+import secrets
 import time
 from typing import Any
 
@@ -58,7 +59,9 @@ def _verified_cleanup(cleanup: Any, candidate: dict) -> bool:
     )
 
 
-def _review_consumption_binding(consumption: Any, candidate: dict) -> bool:
+def _review_consumption_binding(
+    consumption: Any, candidate: dict, read_challenge: str,
+) -> bool:
     """Inert receipt-shape check; NOT native proof of a committed DB write.
 
     Only a separately authenticated, independently reviewed supervisor may
@@ -70,7 +73,7 @@ def _review_consumption_binding(consumption: Any, candidate: dict) -> bool:
     if not isinstance(consumption, dict) or set(consumption) != {
         "scopeSha256", "verifiedPacketSha256", "role",
         "commandId", "attemptId", "receiptId", "fenceId",
-        "consumedExactlyOnce", "releaseDecision",
+        "consumedExactlyOnce", "readChallenge", "releaseDecision",
     }:
         return False
     scope = candidate["scope"]
@@ -83,6 +86,7 @@ def _review_consumption_binding(consumption: Any, candidate: dict) -> bool:
         and consumption["receiptId"] == scope["receipt_id"]
         and consumption["fenceId"] == scope["fence_id"]
         and consumption["consumedExactlyOnce"] is True
+        and consumption["readChallenge"] == read_challenge
         and consumption["releaseDecision"] == "NO_GO"
     )
 
@@ -145,8 +149,14 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
     # This is a SOURCE-ONLY trust contract, not a deployed ledger writer.
     try:
         try:
-            consumed = supervisor.consume_scope_once(candidate)
-            if not _review_consumption_binding(consumed, candidate):
+            # NEW 256-bit challenge for every broker invocation. An old
+            # committed ledger row cannot satisfy a new independent read,
+            # even if a supervisor replays an old signed-scope receipt.
+            read_challenge = secrets.token_hex(32)
+            consumed = supervisor.consume_scope_once(candidate, read_challenge)
+            if not _review_consumption_binding(
+                consumed, candidate, read_challenge,
+            ):
                 _fail("ONE_SHOT_CONSUMPTION_BINDING_NOT_PROVEN")
             # A self-reported supervisor receipt alone is insufficient.
             # Before opening ANY reader connection, use the independently
@@ -154,12 +164,15 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
             # committed one-use PostgreSQL ledger row. This does not
             # issue or authorize a credential.
             with supervisor.open_minimal_auditor_connection(candidate) as audit_conn:
-                persisted = attest_persisted_read_consumption(audit_conn, candidate)
+                persisted = attest_persisted_read_consumption(
+                    audit_conn, candidate, read_challenge,
+                )
             if (
                 persisted.get("consumptionPersistedInDatabase") is not True
                 or persisted.get("role") != candidate["candidateRole"]
                 or persisted.get("scopeSha256") != candidate["scopeSha256"]
                 or persisted.get("verifiedPacketSha256") != candidate["verifiedPacketSha256"]
+                or persisted.get("readChallenge") != read_challenge
                 or persisted.get("releaseDecision") != "NO_GO"
             ):
                 _fail("ONE_SHOT_NATIVE_CONSUMPTION_ATTESTATION_INVALID")
