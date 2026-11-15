@@ -39,7 +39,7 @@ def call(name, user, password, statement, check=True):
     return login(name, user, password, statement, check=check)
 
 
-def attest(name, password, candidate, read_challenge, *, override=None, check=True):
+def attest(name, password, candidate, read_challenge, *, override=None, check=True, user=AUDITOR):
     scope = candidate["scope"]
     fields = {
         "role": candidate["candidateRole"],
@@ -64,7 +64,7 @@ def attest(name, password, candidate, read_challenge, *, override=None, check=Tr
         + quote(fields["fence"]) + "::uuid,"
         + quote(fields["read_challenge"]) + ")"
     )
-    return call(name, AUDITOR, password, query, check=check)
+    return call(name, user, password, query, check=check)
 
 
 def consume(name, password, candidate, read_challenge, *, override=None, check=True):
@@ -288,6 +288,25 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         if has_rpc.stdout.strip() not in ("true|false", "t|f"):
             raise AssertionError("RPC_EXECUTE_NOT_RESTRICTED:" + has_rpc.stdout)
         print("PASS_AUDITOR_EXECUTES_ONLY_BOOL_NO_LEDGER_OR_PASSWORD_HASH_READ")
+        # A mistaken schema/function GRANT is not a substitute for
+        # authenticating as the dedicated auditor. The privileged boolean
+        # RPC must reject a different native PostgreSQL session_user.
+        signature = FUNCTION + "(name,text,text,uuid,uuid,uuid,uuid,text)"
+        call(name, "postgres", pg_password,
+             "GRANT USAGE ON SCHEMA gpt02_relock_audit TO unrelated_test;"
+             "GRANT EXECUTE ON FUNCTION " + signature +
+             " TO unrelated_test;")
+        forged_auditor = attest(name, "synthetic_unrelated", candidate,
+                                read_challenge, user="unrelated_test",
+                                check=False)
+        if (forged_auditor.returncode == 0 or
+                "ONE_READ_AUDITOR_CALLER_INVALID" not in forged_auditor.stderr):
+            raise AssertionError("ONE_READ_AUDITOR_WRONG_LOGIN_ACCEPTED")
+        call(name, "postgres", pg_password,
+             "REVOKE EXECUTE ON FUNCTION " + signature +
+             " FROM unrelated_test;"
+             "REVOKE USAGE ON SCHEMA gpt02_relock_audit FROM unrelated_test;")
+        print("PASS_ONE_READ_AUDIT_DEF_USER_PIN_REJECTS_UNRELATED_LOGIN")
 
         # An asserted successful consumption with no committed DB row is
         # not proof, and an issuer-only record is insufficient too.
