@@ -331,3 +331,61 @@ whether the audit can be safely isolated from any application/broker signer,
 and how PostgreSQL pg_authid and backend-termination privileges would be
 restricted and revoked. None of the above authorizes live-DEV role
 creation, migration, signer, dispatch, DELL or PROD activation.
+
+
+## Minimal boolean-only native relock attestor alternative — 15 Nov 2026
+
+PostgreSQL 17 documentation confirms pg_roles is publicly readable and
+always masks rolpassword. Direct pg_authid SELECT is not an appropriate
+privilege to grant to a new narrowly scoped auditor just to test whether
+a scoped reader password is NULL: that catalog holds password hashes for
+all database roles.
+
+A new **DRAFT / NOT APPLY** SQL proposal at
+docs/dev/gpt02-issue159-minimal-catalog-relock-auditor.PROPOSED.sql
+models a safer alternative to distributing a postgres admin DSN.
+The proposal creates its own private gpt02_relock_audit schema,
+a dedicated dev_gpt02_relock_catalog_auditor role initially
+NOLOGIN/NOINHERIT/NOBYPASSRLS/connection-limit 0, and one SQL function
+scoped_reader_fully_locked(name). It RETURNS ONLY boolean. The function,
+owned by a trusted non-superuser postgres migrator with pg_authid SELECT,
+uses SECURITY DEFINER plus a pinned pg_catalog-only search path, no
+dynamic SQL, a strict deterministic reader-role-name whitelist,
+read-only checks of pg_authid/pg_roles/pg_auth_members/pg_stat_activity,
+exact five-table forced RLS presence and the effective private SELECT
+privileges. Function EXECUTE is revoked from PUBLIC and granted ONLY to
+the new auditor; no existing issuer/lineage/service roles are granted it.
+The function is an observation, NOT a credential-issuance authority.
+
+SECURITY DEFINER is an explicit design tradeoff and MUST receive
+independent privilege/security review. The earlier issuer reader forbids
+privileged functions and remains untouched; do not grant this RPC to that
+reader. The future auditor login/credential is NOT created or installed
+by this PR. Do NOT apply the proposal in CST-DEV or PROD.
+
+Disposable PG16 evidence:
+scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py
+provisions a completely isolated networkless PostgreSQL instance,
+a non-superuser postgres migrator, and a synthetic temporary auditor LOGIN
+inside that disposable database ONLY. It proves the auditor cannot
+directly read pg_authid hashes, select private lineage, alter roles,
+or execute arbitrary privileged routines. Function returns false when
+a signed scoped reader still holds SELECT, has a password, or has an active
+session; after revocation, NOLOGIN/password NULL/connlimit0 and termination,
+returns true. Only scoped task-role names may be queried. Exit code 0 PASS,
+container automatically deleted.
+
+The uninstalled source-only one-shot broker contract now calls
+attest_boolean_relock() using a proposed separately encrypted low-privilege
+auditor connection instead of requiring a broad admin connection. The
+broker source regression explicitly forbids fallback to
+open_trusted_admin_connection/attest_native_relock. Offline unit tests
+30/30 PASS. The old broad catalog readback source is retained only for
+backward regression, NOT selected by the new one-shot broker.
+
+Remaining gates: review SEC DEFINER function, determine exact approved
+isolated auditor credential custody (the existing attestor/issuer/lineage
+secrets MUST NOT be reused), implement privileged one-use role issuer and
+independent watchdog with durable atomic ledger, and perform a separately
+authorized one-shot live DEV test with fresh Super Admin approval. Signer,
+dispatch, DELL, PROD and Final ACK remain NO_GO.
