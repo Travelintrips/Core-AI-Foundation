@@ -121,3 +121,55 @@ pin, watchdog, task approval that is fresh and owner-authorized, and
 NOLOGIN/password NULL/zero-session rollback. The existing shared lineage
 runtime must remain unchanged until a separately reviewed cutover passes.
 No signer/dispatch/DELL/PROD activation.
+
+
+## Actual CST-DEV table-owner custody and migration preflight — 15 Nov 2026
+
+READ-ONLY Supabase project xssrfshdrtdfupgqwfdw inspection found:
+
+- PostgreSQL 17.0.6, role postgres has CREATEROLE and is NOT superuser.
+- All five GPT02 lineage tables and schema gpt02_private are owned by
+  gpt02_store_owner (NOLOGIN), with forced RLS.
+- postgres has gpt02_store_owner ADMIN OPTION but does NOT have SET option.
+  The installed current shared reader remains unchanged.
+- No policy on the five tables is granted to PUBLIC.
+
+The earlier disposable test used PostgreSQL bootstrap superuser and missed
+the table-owner boundary. This is now addressed in the SAME source-only
+renderer scripts/dev/gpt02_issue159_scoped_policy_proposal.py, reusing the
+review-only custody technique in the existing positive permit proposal:
+
+1. Fail closed on unexpected current_user, missing CREATEROLE/ADMIN OPTION,
+   already-active owner SET permission, incorrect schema/table owner,
+   or any missing FORCE RLS.
+2. BEGIN; CREATE the per-task role NOLOGIN/NOINHERIT/NOBYPASSRLS/CONN LIMIT 0.
+3. Temporarily grant gpt02_store_owner TO postgres WITH SET TRUE;
+   SET ROLE gpt02_store_owner; GRANT only column SELECT and schema USAGE,
+   CREATE POLICY for exactly the signed task on five tables.
+4. RESET ROLE; regrant owner membership WITH SET FALSE; assert SET is false;
+   COMMIT. Any error rolls back the new role, temporary elevation, GRANTs
+   and policies together.
+
+Disposable PostgreSQL test now creates a separate non-superuser CREATEROLE
+migrator called postgres and an independent NOLOGIN owner. It proves
+missing ADMIN OPTION denies before DDL, both successful temporary elevation
+and restoration, deliberately injected exception AFTER SET ROLE causes
+transaction-wide rollback (NO new role and NO owner SET), five-table query
+and direct enumeration, column-only SELECT and no unwanted inheritance.
+Result PASS, exit code 0. The existing GitHub Actions job runs this test.
+
+The EXISTING read-only script
+scripts/dev/gpt02_issue159_exact_task_release_gate.READONLY.sql was
+extended with owner-custody inventory. Running ONLY its new read-only SELECT
+directly on CST-DEV gave:
+PASS_OWNER_CUSTODY_PREFLIGHT_NO_LIVE_PERMISSION,
+owned_forced_tables=5, owner_set_now=false, has_admin_option=true,
+expected_schema_owner=true, no_public_policies=true,
+limited_migrator=true, and credential_release=NO_GO_NO_SIGNED_ONE_USE_LIVE_ISSUER.
+
+This means the owner-custody migration is structurally feasible and does not
+require making the reader an administrator. It does NOT authorize applying
+the Draft DDL or enabling LOGIN. Independent security approval, a real
+one-use credential broker, signed persisted Super Admin approval and
+rollback/credential invalidation are still REQUIRED before live DEV changes.
+Do not activate signers, dispatch, DELL or PROD.
