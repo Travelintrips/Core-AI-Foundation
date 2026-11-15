@@ -50,7 +50,7 @@ class NativeConnection:
 class NativeAuditCursor:
     def __init__(self, connection):
         self.connection = connection
-        self.description = [SimpleNamespace(name="fully_locked")]
+        self.description = [SimpleNamespace(name=("consumption_persisted" if connection.kind == "consumption" else "fully_locked"))]
         self.calls = []
 
     def __enter__(self):
@@ -73,8 +73,9 @@ class NativeAuditCursor:
 
 
 class FakeMinimalAuditConnection:
-    def __init__(self, role):
+    def __init__(self, role, *, kind="relock"):
         self.role = role
+        self.kind = kind
         self.info = type("AdminInfo", (), {
             "user": native.AUDITOR_DB_USER,
             "dbname": "postgres",
@@ -116,6 +117,7 @@ class FakeSupervisor:
         self.consumed_scopes = set()
         self.consumption_error = None
         self.consumption_override = None
+        self.claim_auditor_connection = FakeMinimalAuditConnection(role, kind="consumption")
         self.auditor_connection = FakeMinimalAuditConnection(role)
         self.auditor_open_calls = []
         self.open_calls = []
@@ -158,6 +160,10 @@ class FakeSupervisor:
 
     def open_minimal_auditor_connection(self, candidate):
         self.auditor_open_calls.append(candidate)
+        if len(self.auditor_open_calls) == 1:
+            self.events.append("audit_consumption")
+            return self.claim_auditor_connection
+        self.events.append("audit_relock")
         return self.auditor_connection
 
     def relock_and_verify(self, candidate):
@@ -238,13 +244,34 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertEqual(len(self.supervisor.consumption_calls), 1)
         self.assertEqual(len(self.supervisor.open_calls), 1)
         self.assertEqual(len(self.supervisor.relock_calls), 1)
-        self.assertEqual(self.supervisor.events, ["consume", "open", "relock"])
+        self.assertEqual(self.supervisor.events, [
+            "consume", "audit_consumption", "open", "relock", "audit_relock",
+        ])
         self.assertTrue(self.supervisor.connection.closed)
         self.assertTrue(value["oneCanonicalReadReviewed"])
         self.assertTrue(value["preReadConsumptionClaimReviewed"])
+        self.assertTrue(value["preReadConsumptionVerifiedByPostgres"])
         self.assertTrue(value["postReadRelockReported"])
         self.assertTrue(value["postReadRelockVerifiedByNativePostgres"])
-        self.assertEqual(len(self.supervisor.auditor_open_calls), 1)
+        self.assertEqual(len(self.supervisor.auditor_open_calls), 2)
+        self.assertTrue(self.supervisor.claim_auditor_connection.closed)
+        self.assertEqual(self.supervisor.claim_auditor_connection.rollback_calls, 1)
+        self.assertEqual(
+            self.supervisor.claim_auditor_connection.last_cursor.calls,
+            [
+                ("SET TRANSACTION READ ONLY", None),
+                ("SET LOCAL statement_timeout = '1500ms'", None),
+                (native.CONSUMPTION_READBACK_SQL, {
+                    "role": self.candidate["candidateRole"],
+                    "scope_sha": self.candidate["scopeSha256"],
+                    "packet_sha": self.candidate["verifiedPacketSha256"],
+                    "command_id": self.candidate["scope"]["command_id"],
+                    "attempt_id": self.candidate["scope"]["attempt_id"],
+                    "receipt_id": self.candidate["scope"]["receipt_id"],
+                    "fence_id": self.candidate["scope"]["fence_id"],
+                }),
+            ],
+        )
         self.assertTrue(self.supervisor.auditor_connection.closed)
         self.assertEqual(self.supervisor.auditor_connection.rollback_calls, 1)
         self.assertEqual(
@@ -260,6 +287,51 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                     "databaseWritePerformed", "signingPermitted",
                     "authorizationGranted", "dispatchPermitted"):
             self.assertIs(value[key], False)
+
+    def test_claim_reported_success_but_db_has_no_row_prevents_reader(self):
+        for rows in (
+            [(False,)], [(None,)], [(0,)], [("true",)], [],
+            [(True,), (True,)], [()],
+        ):
+            with self.subTest(rows=rows):
+                self.setUp()
+                self.supervisor.claim_auditor_connection.rows_override = rows
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError,
+                    "ONE_READ_DB_COMMITTED_CONSUMPTION_NOT_PROVEN",
+                ):
+                    self.call()
+                self.last_read.assert_not_called()
+                self.assertEqual(len(self.supervisor.consumption_calls), 1)
+                self.assertEqual(len(self.supervisor.open_calls), 0)
+                self.assertEqual(len(self.supervisor.relock_calls), 1)
+                self.assertTrue(self.supervisor.claim_auditor_connection.closed)
+                self.assertTrue(self.supervisor.auditor_connection.closed)
+
+    def test_wrong_native_claim_auditor_identity_does_not_start_reader(self):
+        self.supervisor.claim_auditor_connection.info.user = "service_role"
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "RELOCK_MINIMAL_AUDITOR_DB_IDENTITY_INVALID"
+        ):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.open_calls), 0)
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+
+    def test_native_consumption_readback_db_error_always_relocks(self):
+        self.supervisor.claim_auditor_connection.audit_error = RuntimeError(
+            "synthetic_consumption_ledger_unavailable"
+        )
+        with self.assertRaisesRegex(
+            RuntimeError, "synthetic_consumption_ledger_unavailable"
+        ):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.open_calls), 0)
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+        self.assertEqual(
+            self.supervisor.claim_auditor_connection.rollback_calls, 1
+        )
 
     def test_wrong_database_user_blocks_before_any_query_and_relocks(self):
         self.supervisor.connection.info.user = "service_role"
@@ -467,6 +539,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                   "gpt02_issue159_one_shot_reader_broker.py").read_text()
         self.assertIn("UNINSTALLED_REVIEW_ONLY_NO_CREDENTIAL_OR_DB_DISPATCH", source)
         self.assertIn("attest_boolean_relock", source)
+        self.assertIn("attest_persisted_read_consumption", source)
         self.assertIn("open_minimal_auditor_connection", source)
         self.assertNotIn("attest_native_relock(", source)
         self.assertNotIn("open_trusted_admin_connection", source)
