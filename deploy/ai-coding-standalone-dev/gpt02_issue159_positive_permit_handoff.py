@@ -252,3 +252,74 @@ def inspect_proposed_permit_candidate(
     return verify_readonly_envelope(
         packet, pinned_public_roots, envelope, int(time.time() * 1000),
     )
+
+def inspect_prelineage_reader_scope_candidate(packet: dict[str, Any]) -> dict[str, Any]:
+    """Review a one-task scope *before* querying the lineage ledger.
+
+    Reuse the existing four-signature verifier and pinned, persisted Super
+    Admin approval reader. The proposed DB scope is derived only from signed
+    claims; no task, expected DB role, digest or 'approved' bit can be supplied
+    independently by the caller.
+
+    IMPORTANT: This is SOURCE ONLY, NOT A CREDENTIAL ISSUER. The returned
+    role name is a deterministic candidate, NOT a database identity grant.
+    No role creation, credential generation, PostgreSQL connection or worker
+    dispatch is performed; database-enforced scope remains a separate gate.
+    """
+    # Load pinned PUBLIC roots and the existing private approval reader only
+    # when invoked; never load signer private keys or a new database login.
+    from gpt02_issue159_writer_broker_runtime import (
+        _load_public_roots, _require_persisted_admin_decision,
+        DEFAULT_PUBLIC_ROOTS, DEFAULT_FINGERPRINT_MANIFEST,
+        DEFAULT_APPROVAL_READER_SOCKET,
+    )
+
+    now_ms = int(time.time() * 1000)
+    roots = _load_public_roots(DEFAULT_PUBLIC_ROOTS, DEFAULT_FINGERPRINT_MANIFEST)
+    proof = verify_lifecycle_evidence_packet(packet, roots, now_ms)
+    approval = packet["approval"]["claims"]
+    issuer = packet["issuerEvidence"]["claims"]
+    # The short-lived, four-signed issuer evidence must remain useful after
+    # completing the independent persisted approval readback.
+    if issuer["expiresAt"] - now_ms < 3500:
+        _fail("ISSUER_LEASE_TOO_CLOSE_TO_EXPIRY")
+    _require_persisted_admin_decision(
+        approval, proof["approvalDigest"], DEFAULT_APPROVAL_READER_SOCKET, now_ms,
+    )
+
+    scope = {
+        "company_id": approval["companyId"],
+        "task_id": approval["taskId"],
+        "command_id": approval["commandId"],
+        "attempt_id": approval["attemptId"],
+        "approval_digest": proof["approvalDigest"],
+    }
+    # Bind the proposed identity label to *all* exact scope fields. The
+    # label is inert until an independent owner-reviewed DB role is created.
+    canonical = json.dumps(
+        scope, sort_keys=True, ensure_ascii=False,
+        separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    fingerprint = hashlib.sha256(b"GPT02_SCOPED_READER_V1\\n" + canonical).hexdigest()
+    packet_canonical = json.dumps(
+        packet, sort_keys=True, ensure_ascii=False,
+        separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    return {
+        "environment": "DEV",
+        "stage": "SIGNED_PACKET_PERSISTED_ADMIN_PRELINEAGE_REVIEW_ONLY",
+        "scope": scope,
+        "candidateRole": "dev_gpt02_task_" + str(approval["taskId"]) + "_" + fingerprint[:12],
+        "scopeSha256": fingerprint,
+        "signedPacketSha256": hashlib.sha256(packet_canonical).hexdigest(),
+        "expiresAt": min(approval["expiresAt"], issuer["expiresAt"]),
+        "fourSignaturesVerified": True,
+        "persistedAdminApprovalReadBack": True,
+        "lineageReadbackCompleted": False,
+        "databaseRoleProvisioned": False,
+        "credentialIssuancePermitted": False,
+        "signingPermitted": False,
+        "authorizationGranted": False,
+        "dispatchPermitted": False,
+        "releaseDecision": "NO_GO",
+    }
