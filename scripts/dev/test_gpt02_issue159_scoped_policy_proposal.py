@@ -14,9 +14,11 @@ import subprocess
 import time
 import unittest
 import uuid
+from unittest.mock import patch
 
 from gpt02_issue159_scoped_policy_proposal import (
-    proposed_sql, validate_inert_candidate, TABLE_COLUMNS
+    proposed_sql, validate_inert_candidate, TABLE_COLUMNS,
+    review_sql_from_authenticated_signed_packet
 )
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
 from test_gpt02_issue159_signed_scope_pg import (
@@ -43,6 +45,79 @@ class PolicyProposalSourceTest(unittest.TestCase):
         self.candidate = make_candidate()
         # Existing signed packet fixture uses this synthetic clock.
         self.observed_ms = 1_800_000_000_000
+
+    def test_operational_review_entrypoint_uses_pinned_roots_and_trusted_lineage(self):
+        from test_gpt02_issue159_postlineage_reader_scope import (
+            PostlineageReaderScopeOfflineTest,
+        )
+        import gpt02_issue159_positive_permit_handoff as handoff
+        import gpt02_issue159_writer_broker_runtime as broker
+
+        synthetic = PostlineageReaderScopeOfflineTest()
+        synthetic.setUp()
+        with patch.object(broker, "_load_public_roots",
+                          return_value=synthetic.fixture.roots) as root_reader:
+            # Only the private verifier's pinned socket response is mocked.
+            # Four Ed25519 packet signatures are verified for real below.
+            with patch.object(handoff, "inspect_proposed_permit_candidate",
+                              return_value=synthetic.proof) as verified_reader:
+                with patch.object(handoff.time, "time",
+                                  return_value=self.observed_ms / 1000):
+                    ddl = review_sql_from_authenticated_signed_packet(
+                        synthetic.fixture.packet,
+                    )
+        root_reader.assert_called_once_with(
+            handoff.VERIFIER_PUBLIC_ROOT_DIR,
+            broker.DEFAULT_FINGERPRINT_MANIFEST,
+        )
+        verified_reader.assert_called_once_with(
+            synthetic.fixture.packet,
+            synthetic.fixture.roots,
+        )
+        self.assertRegex(ddl, r"CREATE ROLE dev_gpt02_task_140_[a-f0-9]{12} NOLOGIN")
+        self.assertEqual(ddl.count("CREATE POLICY "), 5)
+        self.assertNotIn("ALTER ROLE", ddl)
+        self.assertNotIn("PASSWORD", ddl)
+        print("PASS_SIGNED_PACKET_TO_PINNED_ROOT_AND_PERSISTED_LINEAGE_REVIEW_SQL")
+
+    def test_operational_review_rejects_tamper_and_substituted_roots(self):
+        from test_gpt02_issue159_postlineage_reader_scope import (
+            PostlineageReaderScopeOfflineTest,
+        )
+        import gpt02_issue159_positive_permit_handoff as handoff
+        import gpt02_issue159_writer_broker_runtime as broker
+
+        synthetic = PostlineageReaderScopeOfflineTest()
+        synthetic.setUp()
+        packet = copy.deepcopy(synthetic.fixture.packet)
+        packet["issuerEvidence"]["claims"]["receiptId"] = (
+            "69999999-9999-4999-8999-999999999999"
+        )
+        with patch.object(broker, "_load_public_roots",
+                          return_value=synthetic.fixture.roots):
+            with patch.object(handoff, "inspect_proposed_permit_candidate",
+                              return_value=synthetic.proof):
+                with patch.object(handoff.time, "time",
+                                  return_value=self.observed_ms / 1000):
+                    with self.assertRaises(BrokerAdmissionError):
+                        review_sql_from_authenticated_signed_packet(packet)
+
+        roots = dict(synthetic.fixture.roots)
+        roots["core"] = roots["hub"]  # fail four independent key custody
+        with patch.object(broker, "_load_public_roots", return_value=roots):
+            with patch.object(handoff, "inspect_proposed_permit_candidate",
+                              return_value=synthetic.proof):
+                with patch.object(handoff.time, "time",
+                                  return_value=self.observed_ms / 1000):
+                    with self.assertRaises(BrokerAdmissionError):
+                        review_sql_from_authenticated_signed_packet(
+                            synthetic.fixture.packet
+                        )
+        with self.assertRaises(TypeError):
+            review_sql_from_authenticated_signed_packet(
+                synthetic.fixture.packet, requested_role="postgres",
+            )
+        print("PASS_FORGED_RECEIPT_OR_PUBLIC_ROOT_CANNOT_GENERATE_REVIEW_SQL")
 
     def test_exact_signed_scope_renders_only_dormant_role_and_five_policies(self):
         ddl = proposed_sql(self.candidate, self.observed_ms)
