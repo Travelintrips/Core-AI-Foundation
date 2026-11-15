@@ -61,6 +61,16 @@ class NativeAuditCursor:
 
     def execute(self, statement, params=None):
         self.calls.append((statement, params))
+        # The first audit connection can be used for postread RELOCK when
+        # a failure occurs BEFORE any consumption audit. Select the column
+        # by the SQL ACTUALLY executed, not by which connection came first.
+        if statement == native.CONSUMPTION_READBACK_SQL:
+            self.description = [SimpleNamespace(name="consumption_persisted")]
+        elif statement == native.BOOLEAN_READBACK_SQL:
+            self.description = [SimpleNamespace(name="fully_locked")]
+        elif statement not in ("SET TRANSACTION READ ONLY",
+                               "SET LOCAL statement_timeout = '1500ms'"):
+            raise AssertionError("UNEXPECTED_NATIVE_AUDITOR_SQL")
         if self.connection.audit_error is not None:
             raise self.connection.audit_error
 
