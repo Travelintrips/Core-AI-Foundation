@@ -62,7 +62,7 @@ class PrelineageScopeCandidateTest(unittest.TestCase):
             self.assertIs(result[key], False)
         self.assertEqual(result["releaseDecision"], "NO_GO")
         roots.assert_called_once_with(
-            writer.DEFAULT_PUBLIC_ROOTS, writer.DEFAULT_FINGERPRINT_MANIFEST
+            handoff.VERIFIER_PUBLIC_ROOT_DIR, writer.DEFAULT_FINGERPRINT_MANIFEST
         )
         args = approval.call_args.args
         self.assertEqual(args[0], self.fixture.approval)
