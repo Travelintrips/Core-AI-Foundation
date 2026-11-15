@@ -292,6 +292,36 @@ GRANT EXECUTE ON FUNCTION
         if final.stdout.strip() != "t":
             raise AssertionError("PUBLIC_PRIVILEGED_FUNCTION_REVOKE_NOT_PROVEN")
         print("PASS_PUBLIC_EXECUTE_SECURITY_DEFINER_BYPASS_DETECTED")
+        # PostgreSQL default owner-privileged views are another path:
+        # the scoped role cannot directly SELECT private tables but can
+        # read them via a public-schema view owned by the fixture admin.
+        admin(name, """
+CREATE VIEW public.issue159_synthetic_owner_view AS
+ SELECT task_id FROM gpt02_private.approvals;
+REVOKE ALL ON public.issue159_synthetic_owner_view FROM PUBLIC;
+GRANT SELECT ON public.issue159_synthetic_owner_view TO """ + role + ";")
+        owner_view_read = admin(name, "SET ROLE " + role + "; "
+            "SELECT count(*) FROM public.issue159_synthetic_owner_view; RESET ROLE;")
+        if [x.strip() for x in owner_view_read.stdout.splitlines()
+                if x.strip() == "2"] != ["2"]:
+            raise AssertionError("SYNTHETIC_OWNER_VIEW_BYPASS_NOT_REPRODUCED")
+        view_result = probe(name, AUDITOR, audit_password, role)
+        if view_result.stdout.strip() != "f":
+            raise AssertionError("PRIVILEGED_OWNER_VIEW_BYPASS_NOT_DETECTED")
+        print("PASS_OWNER_PRIVILEGED_VIEW_BYPASS_DETECTED")
+
+        admin(name, "REVOKE SELECT ON public.issue159_synthetic_owner_view "
+              "FROM " + role + ";")
+        if probe(name, AUDITOR, audit_password, role).stdout.strip() != "t":
+            raise AssertionError("OWNER_VIEW_GRANT_REVOKE_NOT_RECOGNIZED")
+        admin(name, "GRANT SELECT ON public.issue159_synthetic_owner_view TO PUBLIC;")
+        if probe(name, AUDITOR, audit_password, role).stdout.strip() != "f":
+            raise AssertionError("PUBLIC_OWNER_VIEW_EXPOSURE_NOT_DETECTED")
+        admin(name, "REVOKE SELECT ON public.issue159_synthetic_owner_view FROM PUBLIC;")
+        if probe(name, AUDITOR, audit_password, role).stdout.strip() != "t":
+            raise AssertionError("PUBLIC_OWNER_VIEW_REVOKE_NOT_RECOGNIZED")
+        print("PASS_PUBLIC_OWNER_VIEW_GRANT_BYPASS_DETECTED")
+
 
         # Both signed reader and dedicated auditor remain locked after the
         # demo and their temporary passwords are NULL.
