@@ -175,7 +175,11 @@ def main():
             time.sleep(.25)
         else:
             raise RuntimeError("DISPOSABLE_PG16_FINAL_TCP_NOT_READY")
+        # The existing minimal-auditor migration verifies denial of
+        # gpt02_private schema USAGE. Seed that schema only in this fixture.
         admin(name, """
+CREATE SCHEMA gpt02_private;
+REVOKE ALL ON SCHEMA gpt02_private FROM PUBLIC;
 CREATE ROLE postgres LOGIN CREATEROLE NOINHERIT
  PASSWORD 'synthetic_clock_owner_only';
 GRANT CREATE ON DATABASE postgres TO postgres;
