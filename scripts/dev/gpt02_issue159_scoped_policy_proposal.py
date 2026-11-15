@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 import uuid
 
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
@@ -230,6 +231,31 @@ def proposed_sql(candidate: object, observed_ms: int) -> str:
     stmts.append("COMMIT;")
     return "\n".join(stmts) + "\n"
 
+
+
+def review_sql_from_authenticated_signed_packet(packet: object) -> str:
+    """Only review entrypoint: NO caller-supplied roots, role, candidate or clock.
+
+    The ACTIVE verifier's pinned public roots and independent persisted
+    approval/lineage readback are used before deriving scope. This returns
+    SQL text for review only. It cannot issue credentials, connect to
+    PostgreSQL, apply DDL, or grant any runtime authority.
+
+    Tests may call the lower-level proposed_sql(candidate, observed_ms) with
+    synthetically signed inert candidates, but that function is NOT an
+    authentication boundary and must never be used by a live issuer.
+    """
+    from gpt02_issue159_writer_broker_runtime import (
+        _load_public_roots, DEFAULT_FINGERPRINT_MANIFEST,
+    )
+    from gpt02_issue159_positive_permit_handoff import (
+        VERIFIER_PUBLIC_ROOT_DIR, inspect_postlineage_scoped_reader_candidate,
+    )
+    roots = _load_public_roots(
+        VERIFIER_PUBLIC_ROOT_DIR, DEFAULT_FINGERPRINT_MANIFEST,
+    )
+    candidate = inspect_postlineage_scoped_reader_candidate(packet, roots)
+    return proposed_sql(candidate, int(time.time() * 1000))
 
 if __name__ == "__main__":
     raise SystemExit("REVIEW_ONLY_NO_CLI_NO_LIVE_APPLY")
