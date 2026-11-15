@@ -243,6 +243,40 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             raise AssertionError("MINIMAL_AUDITOR_FALSE_NEGATIVE_AFTER_RELOCK")
         print("PASS_BOOLEAN_ONLY_AUDIT_NATIVE_PG16_RELOCK_TRUE_AFTER_CLEANUP")
 
+        # SECURITY REVIEW: A role with NO private table SELECT can still
+        # invoke a separately granted SECURITY DEFINER routine in public
+        # that is owned by a privileged account and reads private rows.
+        # The relock auditor must NOT claim 'fully cleaned' in that case.
+        # This test creates only synthetic tables/functions in the
+        # networkless disposable container, NEVER in live Supabase.
+        admin(name, """
+CREATE FUNCTION public.issue159_synthetic_privileged_read()
+RETURNS bigint LANGUAGE sql SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp AS $
+ SELECT count(*) FROM gpt02_private.approvals;
+$;
+REVOKE ALL ON FUNCTION
+ public.issue159_synthetic_privileged_read() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION
+ public.issue159_synthetic_privileged_read() TO """ + role + ";")
+        leaked = admin(name,
+            "SET ROLE " + role + "; "
+            "SELECT public.issue159_synthetic_privileged_read(); "
+            "RESET ROLE;")
+        if leaked.stdout.strip() != "2":
+            raise AssertionError("SYNTHETIC_PRIVILEGED_FUNCTION_BYPASS_NOT_REPRODUCED")
+        revoked_role_but_definer = probe(name, AUDITOR, audit_password, role)
+        if revoked_role_but_definer.stdout.strip() != "f":
+            raise AssertionError("DEF_CHECK_MISSED_ACCESSIBLE_SECURITY_DEFINER")
+        print("PASS_PRIVILEGED_ROUTINE_BYPASS_DETECTED_WITH_PRIVATE_SELECT_REVOKED")
+
+        admin(name, "REVOKE EXECUTE ON FUNCTION "
+              "public.issue159_synthetic_privileged_read() FROM " + role + ";")
+        restored = probe(name, AUDITOR, audit_password, role)
+        if restored.stdout.strip() != "t":
+            raise AssertionError("CLEAN_AUDIT_DID_NOT_RECOVER_AFTER_RPC_REVOKE")
+        print("PASS_PRIVILEGED_ROUTINE_EXECUTE_REVOCATION_RESTORES_CLEAN_ATTESTATION")
+
         # Both signed reader and dedicated auditor remain locked after the
         # demo and their temporary passwords are NULL.
         admin(name, "ALTER ROLE " + AUDITOR +
