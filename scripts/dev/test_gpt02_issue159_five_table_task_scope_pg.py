@@ -169,8 +169,14 @@ def main():
         run(["docker","run","--rm","-d","--network","none","--name",name,
              "-e","POSTGRES_PASSWORD=fixture_only","postgres:16-alpine"])
         for _ in range(100):
-            if run(["docker","exec",name,"psql","-X","-U","postgres","-d","postgres",
-                "-Atc","SELECT 1"],check=False).returncode==0:break
+            # The official image's bootstrap server accepts Unix-socket SQL
+            # before stopping for its final launch; only the final server
+            # accepts TCP on 127.0.0.1. This avoids the intermittent
+            # Docker/Actions startup race without arbitrary sleep delays.
+            if run(["docker","exec","-e","PGPASSWORD=fixture_only",name,
+                    "psql","-X","-w","-h","127.0.0.1","-U","postgres",
+                    "-d","postgres","-Atc","SELECT 1"],
+                   check=False).returncode==0:break
             time.sleep(.25)
         else: raise RuntimeError("PG_SQL_NOT_READY")
         r=run(["docker","exec","-i",name,"psql","-X","-v","ON_ERROR_STOP=1",
