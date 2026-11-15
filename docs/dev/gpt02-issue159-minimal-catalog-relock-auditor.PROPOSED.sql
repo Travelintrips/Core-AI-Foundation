@@ -72,6 +72,26 @@ BEGIN
    AND NOT pg_catalog.has_schema_privilege(
       r.rolname, 'gpt02_private', 'USAGE'
    )
+   -- A role with revoked direct table SELECT might STILL read the private
+   -- ledger through a callable, user-defined SECURITY DEFINER function in
+   -- a different schema (including a PUBLIC-executable function). Requiring
+   -- no such effective EXECUTE is conservative and fail-closed. The issuer
+   -- and current lineage roles remain unchanged; do not relax this merely
+   -- to make a probe return TRUE.
+   AND NOT EXISTS (
+       SELECT 1 FROM pg_catalog.pg_proc p
+       JOIN pg_catalog.pg_namespace fn ON fn.oid = p.pronamespace
+       WHERE p.prosecdef
+         AND fn.nspname NOT IN (
+           'pg_catalog','information_schema','pg_toast'
+         )
+         AND pg_catalog.has_schema_privilege(
+           r.rolname, fn.oid, 'USAGE'
+         )
+         AND pg_catalog.has_function_privilege(
+           r.rolname, p.oid, 'EXECUTE'
+         )
+   )
    AND (
        SELECT COUNT(*) FROM pg_catalog.pg_class c
        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
