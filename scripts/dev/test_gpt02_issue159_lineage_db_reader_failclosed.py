@@ -12,6 +12,8 @@ import unittest
 
 from gpt02_issue159_lineage_db_reader import _clean_lookup, read_lineage_once
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
+from gpt02_issue159_lineage_readback_contract import ROW_FIELDS, TRUSTED_LINEAGE_SQL
+from types import SimpleNamespace
 
 
 def valid():
@@ -90,6 +92,22 @@ class LineageReaderOffline(unittest.TestCase):
             "FROM gpt02_private.approvals" in sql and params == valid()
             for sql, params in db.c.calls
         ))
+
+    def test_only_one_bounded_canonical_select_per_read_operation(self):
+        db = DB()
+        db.c.description = [SimpleNamespace(name=name) for name in ROW_FIELDS]
+        result = read_lineage_once(db, valid())
+        self.assertEqual(result, [])
+        self.assertEqual(db.rollbacks, 1)
+        self.assertEqual(len(db.c.calls), 3)
+        self.assertEqual(db.c.calls[0][0], "SET TRANSACTION READ ONLY")
+        self.assertEqual(db.c.calls[1][0],
+                         "SET LOCAL statement_timeout = '1500ms'")
+        self.assertEqual(db.c.calls[2], (TRUSTED_LINEAGE_SQL, valid()))
+        self.assertEqual(sum(
+            "FROM gpt02_private.approvals" in sql
+            for sql, _ in db.c.calls
+        ), 1)
 
     def test_rollback_on_database_error(self):
         db = DB(fail=True)
