@@ -82,12 +82,26 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
         raw = unit.read_text(encoding="utf-8")
         if len(raw) > 16384:
             return _fail("AUDITOR_UNIT_OVERSIZED")
-        lines = {
+        effective_lines = [
             line.strip() for line in raw.splitlines()
             if line.strip() and not line.lstrip().startswith(("#", ";"))
-        }
+        ]
+        lines = set(effective_lines)
         if not REQUIRED_LINES.issubset(lines):
             return _fail("AUDITOR_UNIT_CUSTODY_CONFIGURATION_INVALID")
+        # A later systemd directive wins. Do not mistake an earlier pinned
+        # User/APP_ENV for the effective value when a second one overrides it.
+        for prefix in ("User=", "Environment=APP_ENV="):
+            matches = [line for line in effective_lines if line.startswith(prefix)]
+            expected = ("User=gpt02-issue159-relock-catalog-auditor"
+                        if prefix == "User="
+                        else "Environment=APP_ENV=development")
+            if matches != [expected]:
+                return _fail("AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
+        # A .service.d drop-in can override file settings. No such override
+        # is approved by this metadata-only source preflight.
+        if os.path.lexists(str(unit) + ".d"):
+            return _fail("AUDITOR_UNIT_DROPINS_UNREVIEWED")
         # Reject any extra credential bind, even if the correct bind exists.
         binds = [line for line in lines
                  if line.startswith(("LoadCredential=", "LoadCredentialEncrypted="))]
