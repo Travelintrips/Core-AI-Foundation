@@ -289,5 +289,76 @@ def attest_boolean_relock(connection: Any, candidate: Any) -> dict[str, Any]:
         "releaseDecision": "NO_GO",
     }
 
+
+# One-read ledger proof is distinct from the existing post-read RELOCK
+# proof. Both use the SAME dedicated minimal auditor (never the postgres
+# password or the attestor/issuer/lineage credentials). The SQL function is
+# only a NOT-APPLIED independent-review Draft; no live database call exists.
+CONSUMPTION_READBACK_SQL = (
+    "SELECT gpt02_relock_audit.reader_consumption_persisted("
+    "%(role)s::name,%(scope_sha)s,%(packet_sha)s,"
+    "%(command_id)s::uuid,%(attempt_id)s::uuid,"
+    "%(receipt_id)s::uuid,%(fence_id)s::uuid"
+    ") AS consumption_persisted"
+)
+
+
+def attest_persisted_read_consumption(
+    connection: Any, candidate: Any,
+) -> dict[str, Any]:
+    """Review-only native committed-claim check before one original read.
+
+    Do not trust a supervisor's self-reported consumption receipt: a
+    separately authenticated auditor reads the genuine PRIVATE DB ledger
+    through one pinned, bounded, READ ONLY, boolean-only RPC. It compares
+    the exact candidate role, all signed row identities and packet digest.
+    Any FALSE/NULL/missing/extra/stale query is NO_GO. Even TRUE is NOT
+    permission to issue credentials or dispatch; an independent live
+    owner and custody review remains mandatory.
+    """
+    role, sha = _target(candidate)
+    _require_pinned_minimal_auditor(connection)
+    scope = candidate["scope"]
+    packet_sha = candidate["verifiedPacketSha256"]
+    payload = {
+        "role": role,
+        "scope_sha": sha,
+        "packet_sha": packet_sha,
+        "command_id": scope["command_id"],
+        "attempt_id": scope["attempt_id"],
+        "receipt_id": scope["receipt_id"],
+        "fence_id": scope["fence_id"],
+    }
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SET TRANSACTION READ ONLY")
+            cursor.execute("SET LOCAL statement_timeout = '1500ms'")
+            cursor.execute(CONSUMPTION_READBACK_SQL, payload)
+            rows = cursor.fetchmany(2)
+            cols = tuple(col.name for col in cursor.description)
+    finally:
+        connection.rollback()
+    if (
+        cols != ("consumption_persisted",)
+        or len(rows) != 1
+        or len(rows[0]) != 1
+        or rows[0][0] is not True
+    ):
+        _fail("ONE_READ_DB_COMMITTED_CONSUMPTION_NOT_PROVEN")
+    return {
+        "environment": "DEV",
+        "stage": "NATIVE_ONE_READ_CONSUMPTION_DB_REVIEW_ONLY",
+        "role": role,
+        "scopeSha256": sha,
+        "verifiedPacketSha256": packet_sha,
+        "consumptionPersistedInDatabase": True,
+        "databaseWritePerformed": False,
+        "credentialIssuancePermitted": False,
+        "authorizationGranted": False,
+        "signingPermitted": False,
+        "dispatchPermitted": False,
+        "releaseDecision": "NO_GO",
+    }
+
 if __name__ == "__main__":
     raise SystemExit("SOURCE_ONLY_NO_CONNECTION_NO_ROLE_CHANGE_NO_RELEASE")
