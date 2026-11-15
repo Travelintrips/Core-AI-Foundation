@@ -78,6 +78,8 @@ def main():
         or "PASSWORD " in commands
         or "GRANT SELECT ON pg_catalog.pg_authid" in commands
         or "GRANT EXECUTE" not in commands
+        or "pg_catalog.has_function_privilege(" not in commands
+        or "pg_catalog.has_schema_privilege(" not in commands
     ):
         raise AssertionError("MINIMAL_AUDITOR_PROPOSAL_SECURITY_CONTRACT_BROKEN")
 
@@ -276,6 +278,20 @@ GRANT EXECUTE ON FUNCTION
         if restored.stdout.strip() != "t":
             raise AssertionError("CLEAN_AUDIT_DID_NOT_RECOVER_AFTER_RPC_REVOKE")
         print("PASS_PRIVILEGED_ROUTINE_EXECUTE_REVOCATION_RESTORES_CLEAN_ATTESTATION")
+
+        # A SECURITY DEFINER function with default/public EXECUTE is another
+        # indirect path. The auditor must account for PUBLIC role grants too.
+        admin(name, "GRANT EXECUTE ON FUNCTION "
+              "public.issue159_synthetic_privileged_read() TO PUBLIC;")
+        public_executable = probe(name, AUDITOR, audit_password, role)
+        if public_executable.stdout.strip() != "f":
+            raise AssertionError("PUBLIC_SECURITY_DEFINER_BYPASS_NOT_DETECTED")
+        admin(name, "REVOKE EXECUTE ON FUNCTION "
+              "public.issue159_synthetic_privileged_read() FROM PUBLIC;")
+        final = probe(name, AUDITOR, audit_password, role)
+        if final.stdout.strip() != "t":
+            raise AssertionError("PUBLIC_PRIVILEGED_FUNCTION_REVOKE_NOT_PROVEN")
+        print("PASS_PUBLIC_EXECUTE_SECURITY_DEFINER_BYPASS_DETECTED")
 
         # Both signed reader and dedicated auditor remain locked after the
         # demo and their temporary passwords are NULL.
