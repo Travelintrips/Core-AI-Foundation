@@ -340,6 +340,28 @@ GRANT SELECT ON public.issue159_synthetic_invoker_view TO """ + role + ";")
         if probe(name, AUDITOR, audit_password, role).stdout.strip() != "t":
             raise AssertionError("SAFE_SECURITY_INVOKER_VIEW_FALSE_POSITIVE")
         print("PASS_SECURITY_INVOKER_VIEW_DOES_NOT_GRANT_INDIRECT_READ")
+        # Materialized views store copies of protected rows. Even when the
+        # reader lost all private table SELECT, an explicitly granted copy
+        # must prevent full cleanup from being attested.
+        admin(name, """
+CREATE MATERIALIZED VIEW public.issue159_synthetic_materialized_copy AS
+ SELECT task_id FROM gpt02_private.approvals WITH DATA;
+REVOKE ALL ON public.issue159_synthetic_materialized_copy FROM PUBLIC;
+GRANT SELECT ON public.issue159_synthetic_materialized_copy TO """ + role + ";")
+        copy_read = admin(name, "SET ROLE " + role + "; "
+            "SELECT count(*) FROM public.issue159_synthetic_materialized_copy; "
+            "RESET ROLE;")
+        if [x.strip() for x in copy_read.stdout.splitlines()
+                if x.strip() == "2"] != ["2"]:
+            raise AssertionError("SYNTHETIC_MATERIALIZED_COPY_READ_NOT_REPRODUCED")
+        if probe(name, AUDITOR, audit_password, role).stdout.strip() != "f":
+            raise AssertionError("MATERIALIZED_PRIVATE_DATA_COPY_NOT_DETECTED")
+        admin(name, "REVOKE SELECT ON "
+              "public.issue159_synthetic_materialized_copy FROM " + role + ";")
+        if probe(name, AUDITOR, audit_password, role).stdout.strip() != "t":
+            raise AssertionError("MATERIALIZED_COPY_REVOKE_NOT_PROVEN")
+        print("PASS_MATERIALIZED_VIEW_INDIRECT_DATA_READ_DETECTED")
+
 
 
 
