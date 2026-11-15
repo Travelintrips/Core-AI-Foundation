@@ -264,14 +264,14 @@ END $owner$;
         # Fault AFTER temporary SET ROLE owner but BEFORE any GRANT or POLICY.
         # On error the transaction and owner-role membership must roll back;
         # no login or dangling per-task role may remain.
-        marker = "SET ROLE gpt02_store_owner;\\n"
+        marker = "SET ROLE gpt02_store_owner;\n"
         if proposal.count(marker) != 1:
             raise AssertionError("OWNER_SET_ROLE_SEQUENCE_NOT_UNIQUE")
         faulted = proposal.replace(
             marker,
             marker +
             "DO $fault$ BEGIN RAISE EXCEPTION "
-            "'SYNTHETIC_FAULT_AFTER_TEMP_OWNER_SET'; END $fault$;\\n",
+            "'SYNTHETIC_FAULT_AFTER_TEMP_OWNER_SET'; END $fault$;\n",
             1,
         )
         broken = migrator_sql(name, faulted, check=False)
