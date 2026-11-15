@@ -673,33 +673,33 @@ were changed. Final live issuance and Final ACK remain NO_GO.
 
 Issue159's source-only signed issuance review preview is now followed by
 an **additive, still UNAPPLIED** PostgreSQL database-clock proposal:
-\`docs/dev/gpt02-issue159-reader-issuance-server-clock.PROPOSED.sql\`.
+`docs/dev/gpt02-issue159-reader-issuance-server-clock.PROPOSED.sql`.
 It depends on the existing private one-read ledger proposal and REQUIRES
 both ledger tables to be empty when installed. It creates no new LOGIN,
 owner writer, signer, dispatch path, credential, service or DELL command.
 
 The proposal adds a SECURITY INVOKER BEFORE INSERT trigger to the existing
-\`gpt02_relock_audit.reader_issuances\` table. PostgreSQL writes \`issued_at\`
-from its own \`clock_timestamp()\`, replacing any caller-supplied value.
+`gpt02_relock_audit.reader_issuances` table. PostgreSQL writes `issued_at`
+from its own `clock_timestamp()`, replacing any caller-supplied value.
 The trigger refuses an expiry no more than 3.5 seconds ahead, more than
 15 seconds ahead, or NULL. A validated CHECK constraint also requires
-\`expires_at\` to be strictly between \`issued_at+3.5s\` and \`issued_at+15s\`.
+`expires_at` to be strictly between `issued_at+3.5s` and `issued_at+15s`.
 It has no new EXECUTE or table-DML grants to the auditor or consumer.
 This is server-clock **TTL enforcement**, NOT proof of a signed approval.
 
 The independent networkless PostgreSQL16 test
-\`scripts/dev/test_gpt02_issue159_issuance_server_clock_pg.py\` reuses the
+`scripts/dev/test_gpt02_issue159_issuance_server_clock_pg.py` reuses the
 previous pinned four-root signed-packet verifier and inert preview with a
 SYNTHETIC authenticated persisted-approval readback. It constructs a
 fresh signed fixture only **after** database readiness, uses a
 non-superuser owner to apply proposed SQL in the disposable DB,
-asserts rejection of forged \`issued_at\` / 60-second / expired / too-short /
+asserts rejection of forged `issued_at` / 60-second / expired / too-short /
 NULL expiry, injects a precommit rollback, commits exactly one private
 issuance, rejects a second INSERT for the same scope, and invokes the
 existing low-privilege consume/audit boolean RPC with a fresh challenge.
 Test-only auditor/consumer LOGINs return to NOLOGIN/PASSWORD NULL.
-Final exact checkout at \`c9b2cc7f899fcf34d2d17421527193b7e08b03ee\`
-exited 0 with the expected PASS markers on VPS \`srv1792369\`;
+Final exact checkout at `c9b2cc7f899fcf34d2d17421527193b7e08b03ee`
+exited 0 with the expected PASS markers on VPS `srv1792369`;
 the test fixture is networkless and automatically removed.
 
 **Unresolved critical trust boundary:** the DATABASE cannot independently
