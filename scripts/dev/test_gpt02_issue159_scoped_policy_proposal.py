@@ -18,7 +18,9 @@ from unittest.mock import patch
 
 from gpt02_issue159_scoped_policy_proposal import (
     proposed_sql, validate_inert_candidate, TABLE_COLUMNS,
-    review_sql_from_authenticated_signed_packet
+    review_sql_from_authenticated_signed_packet,
+    review_issuance_bindings_from_authenticated_signed_packet,
+    MAX_REVIEW_LEDGER_LIFETIME_MS
 )
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
 from test_gpt02_issue159_signed_scope_pg import (
@@ -92,6 +94,108 @@ class PolicyProposalSourceTest(unittest.TestCase):
         self.assertIn("SCOPED_POLICY_OWNER_PRIVILEGE_NOT_RESTORED", ddl)
         self.assertNotIn("PASSWORD", ddl)
         print("PASS_SIGNED_PACKET_TO_PINNED_ROOT_AND_PERSISTED_LINEAGE_REVIEW_SQL")
+
+    def test_review_only_issuance_values_are_pinned_to_persisted_signed_scope(self):
+        from test_gpt02_issue159_postlineage_reader_scope import (
+            PostlineageReaderScopeOfflineTest,
+        )
+        import gpt02_issue159_positive_permit_handoff as handoff
+        import gpt02_issue159_writer_broker_runtime as broker
+        import gpt02_issue159_scoped_policy_proposal as proposal
+
+        fixture = PostlineageReaderScopeOfflineTest()
+        fixture.setUp()
+        with patch.object(broker, "_load_public_roots",
+                          return_value=fixture.fixture.roots) as roots:
+            with patch.object(handoff, "inspect_proposed_permit_candidate",
+                              return_value=fixture.proof) as persisted:
+                with patch.object(proposal.time, "time",
+                                  return_value=self.observed_ms / 1000):
+                    reviewed = review_issuance_bindings_from_authenticated_signed_packet(
+                        fixture.fixture.packet,
+                    )
+        roots.assert_called_once_with(
+            handoff.VERIFIER_PUBLIC_ROOT_DIR,
+            broker.DEFAULT_FINGERPRINT_MANIFEST,
+        )
+        persisted.assert_called_once_with(
+            fixture.fixture.packet, fixture.fixture.roots,
+        )
+        expected = fixture.check()
+        params = reviewed["issuanceParameters"]
+        self.assertEqual(set(params), {
+            "scope_sha", "packet_sha", "role_name", "task_id",
+            "company_id", "command_id", "attempt_id",
+            "receipt_id", "fence_id", "expires_at_ms",
+        })
+        self.assertEqual(params["scope_sha"], expected["scopeSha256"])
+        self.assertEqual(params["packet_sha"], expected["verifiedPacketSha256"])
+        self.assertEqual(params["role_name"], expected["candidateRole"])
+        self.assertEqual(params["task_id"], expected["scope"]["task_id"])
+        self.assertEqual(params["company_id"], expected["scope"]["company_id"])
+        for key in ("command_id", "attempt_id", "receipt_id", "fence_id"):
+            self.assertEqual(params[key], expected["scope"][key])
+        self.assertEqual(params["expires_at_ms"], reviewed["proposedLedgerExpiresAt"])
+        self.assertLessEqual(
+            params["expires_at_ms"], reviewed["signedLeaseExpiresAt"],
+        )
+        self.assertLessEqual(
+            params["expires_at_ms"] - self.observed_ms,
+            MAX_REVIEW_LEDGER_LIFETIME_MS,
+        )
+        self.assertGreaterEqual(
+            params["expires_at_ms"] - self.observed_ms, 3500,
+        )
+        self.assertEqual(reviewed["releaseDecision"], "NO_GO")
+        self.assertIs(reviewed["ownerIssuanceCommitted"], False)
+        for flag in (
+            "databaseWritePerformed", "databaseRoleProvisioned",
+            "credentialIssuancePermitted", "signingPermitted",
+            "authorizationGranted", "dispatchPermitted",
+        ):
+            self.assertIs(reviewed[flag], False)
+        print("PASS_SIGNED_PERSISTED_APPROVAL_TO_BOUNDED_INERT_ISSUANCE_VALUES")
+
+    def test_review_only_issuance_rejects_tampering_expiry_or_untrusted_roots(self):
+        from test_gpt02_issue159_postlineage_reader_scope import (
+            PostlineageReaderScopeOfflineTest,
+        )
+        import gpt02_issue159_positive_permit_handoff as handoff
+        import gpt02_issue159_writer_broker_runtime as broker
+        import gpt02_issue159_scoped_policy_proposal as proposal
+
+        f = PostlineageReaderScopeOfflineTest()
+        f.setUp()
+        changed = copy.deepcopy(f.fixture.packet)
+        changed["issuerEvidence"]["claims"]["receiptId"] = (
+            "69999999-9999-4999-8999-999999999999"
+        )
+        roots = dict(f.fixture.roots)
+        roots["core"] = roots["hub"]
+        with patch.object(handoff, "inspect_proposed_permit_candidate",
+                          return_value=f.proof):
+            for packet, keys, at in (
+                (changed, f.fixture.roots, self.observed_ms),
+                (f.fixture.packet, roots, self.observed_ms),
+                (f.fixture.packet, f.fixture.roots,
+                 min(f.fixture.packet[x]["claims"]["expiresAt"] for x in
+                     ("approval", "hubLink", "issuerEvidence"))),
+            ):
+                with self.subTest(packet=packet is changed,
+                                  roots=keys is roots, clock=at):
+                    with patch.object(broker, "_load_public_roots",
+                                      return_value=keys):
+                        with patch.object(proposal.time, "time",
+                                          return_value=at / 1000):
+                            with self.assertRaises(BrokerAdmissionError):
+                                review_issuance_bindings_from_authenticated_signed_packet(
+                                    packet,
+                                )
+        with self.assertRaises(TypeError):
+            review_issuance_bindings_from_authenticated_signed_packet(
+                f.fixture.packet, requested_expiry=self.observed_ms+999999,
+            )
+        print("PASS_INERT_ISSUANCE_DENIES_TAMPERED_PACKET_ROOTS_AND_EXPIRED_LEASE")
 
     def test_operational_review_rejects_tamper_and_substituted_roots(self):
         from test_gpt02_issue159_postlineage_reader_scope import (
