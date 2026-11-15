@@ -287,3 +287,45 @@ The independently reviewed future scoped reader must have both its LOGIN
 disabled/password NULL and its own exact-task SELECT/USAGE fully revoked
 before a native post-read cleanup attestation can PASS. Existing issuer
 and shared lineage roles are intentionally left unchanged.
+
+
+## Independent relock-admin credential custody preflight — 15 Nov 2026
+
+VPS service metadata inspection found an **existing** encrypted
+/etc/credstore.encrypted/gpt02-issue159-attestor-dsn (root:root mode 0600).
+It is attached to the STATIC / INACTIVE
+gpt02-issue159-attestor-record-once.service, not an independently scoped
+catalog auditor. We did NOT open or decrypt the file. Independent read-only
+CST-DEV catalog inspection found dev_gpt02_attestor_evidence is NOLOGIN,
+connection limit 0, and cannot SELECT pg_catalog.pg_authid. This does NOT
+prove the DSN's own login identity, and that credential MUST NOT be borrowed
+or treated as permission to inspect/revoke reader role credentials.
+
+New source-only metadata preflight:
+scripts/dev/gpt02_issue159_relock_admin_custody.READONLY.py.
+
+The preflight reads ONLY the file metadata of a dedicated review-proposed
+gpt02-issue159-relock-catalog-auditor.service and its encrypted
+gpt02-issue159-relock-catalog-dsn, plus the service unit TEXT itself.
+It does NOT read/decrypt the credential contents or open a DB connection.
+It requires a root-owned, non-writable/safe unit file, root-owned encrypted
+credential 0600, exclusive pinned LoadCredentialEncrypted alias, a distinct
+non-root service user, APP_ENV=development, NoNewPrivileges, ProtectSystem
+and PrivateTmp. Any cross-role reuse of attestor/lineage/issuer/worker
+credential names is denied. The preflight is NOT an installation plan:
+even with all metadata correct it ALWAYS returns
+credentialIssuancePermitted=false and releaseDecision=NO_GO.
+
+Results: 7/7 offline metadata/cross-role/symlink tests PASS on authorized
+VPS after fixing a test-only mock binding issue. The actual VPS read-only
+preflight returned DEDICATED_RELOCK_AUDITOR_NOT_PROVISIONED,
+unitMetadataReady=false, encryptedCredentialMetadataReady=false,
+credentialContentsRead=false and exit code 3 (expected NO_GO).
+No unit/credential was installed, changed, or accessed for contents.
+
+Before any new audit credential is provisioned, require independent
+security review of whether a privileged catalog audit identity is needed,
+whether the audit can be safely isolated from any application/broker signer,
+and how PostgreSQL pg_authid and backend-termination privileges would be
+restricted and revoked. None of the above authorizes live-DEV role
+creation, migration, signer, dispatch, DELL or PROD activation.
