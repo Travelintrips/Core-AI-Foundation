@@ -33,6 +33,8 @@ on:
       - "scripts/dev/test_gpt02_issue159_signed_scope_pg.py"
       - "scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py"
       - "scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py"
+      - "scripts/dev/test_gpt02_issue159_independent_relock_watchdog_pg.py"
+      - "scripts/dev/test_gpt02_issue159_lineage_db_reader_failclosed.py"
       - "scripts/dev/test_gpt02_issue159_live_approval_readiness.py"
       - "scripts/dev/gpt02_issue159_live_approval_readiness.READONLY.py"
       - "scripts/dev/test_gpt02_issue159_lineage_db_identity_pin.py"
@@ -103,6 +105,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py
+          python3 scripts/dev/test_gpt02_issue159_independent_relock_watchdog_pg.py
           python3 scripts/dev/test_gpt02_issue159_positive_release_broker.py -q
           python3 scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py -q
           python3 scripts/dev/test_gpt02_issue159_exact_bridge_stage.py -q
@@ -111,6 +114,7 @@ jobs:
           python3 -m unittest -q \
             scripts.dev.test_gpt02_issue159_live_approval_readiness \
             scripts.dev.test_gpt02_issue159_lineage_db_identity_pin \
+            scripts.dev.test_gpt02_issue159_lineage_db_reader_failclosed \
             scripts.dev.test_gpt02_issue159_approval_intent_reader \
             scripts.dev.test_gpt02_issue159_approval_reader_runtime \
             scripts.dev.test_gpt02_issue159_reader_authority_boundary \
