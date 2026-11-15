@@ -261,6 +261,31 @@ END $owner$;
             raise AssertionError("PREEXISTING_STORE_OWNER_SET_PRIVILEGE")
         print("PASS_MIGRATOR_NO_SUPERUSER_OWNER_CUSTODY_PREFLIGHT")
 
+        # Fault AFTER temporary SET ROLE owner but BEFORE any GRANT or POLICY.
+        # On error the transaction and owner-role membership must roll back;
+        # no login or dangling per-task role may remain.
+        marker = "SET ROLE gpt02_store_owner;\\n"
+        if proposal.count(marker) != 1:
+            raise AssertionError("OWNER_SET_ROLE_SEQUENCE_NOT_UNIQUE")
+        faulted = proposal.replace(
+            marker,
+            marker +
+            "DO $fault$ BEGIN RAISE EXCEPTION "
+            "'SYNTHETIC_FAULT_AFTER_TEMP_OWNER_SET'; END $fault$;\\n",
+            1,
+        )
+        broken = migrator_sql(name, faulted, check=False)
+        if (broken.returncode == 0
+                or "SYNTHETIC_FAULT_AFTER_TEMP_OWNER_SET"
+                not in broken.stderr):
+            raise AssertionError("TEMP_OWNER_SET_FAULT_NOT_OBSERVED")
+        rollback_state = sql(name,
+            "SELECT NOT pg_has_role('postgres','gpt02_store_owner','SET'); "
+            "SELECT count(*) FROM pg_roles WHERE rolname=" + quote(role))
+        if rollback_state.stdout.splitlines()[-2:] != ["t", "0"]:
+            raise AssertionError("FAILED_TRANSACTION_LEFT_OWNER_GRANT_OR_ROLE")
+        print("PASS_TEMP_OWNER_SET_AND_ROLE_CREATION_ROLLBACK_ON_FAILURE")
+
         # This test executes proposal as non-superuser role postgres, not
         # root_admin. The temporary SET TRUE, SET ROLE owner and SET FALSE
         # must happen within one transaction and restore the original lock.
