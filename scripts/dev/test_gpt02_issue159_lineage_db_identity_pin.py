@@ -52,7 +52,7 @@ class LineageIdentityPinOfflineTest(unittest.TestCase):
         c = SyntheticConnection(EXPECTED_LOGIN)
         with patch.object(runtime, "read_lineage_once", return_value=[]):
             result = runtime.read_verified_lineage(
-                {"synthetic": True}, connect=lambda: c
+                {"company_id": "default", "task_id": 170, "command_id": "11111111-1111-4111-8111-111111111111", "attempt_id": "22222222-2222-4222-8222-222222222222", "approval_digest": "a" * 64}, connect=lambda: c
             )
         self.assertTrue(c.entered)
         self.assertFalse(result["matched"])
@@ -67,7 +67,7 @@ class LineageIdentityPinOfflineTest(unittest.TestCase):
         c = SyntheticConnection(scoped_user)
         with patch.object(runtime, "read_lineage_once") as query:
             with self.assertRaisesRegex(RuntimeError, "LINEAGE_DB_IDENTITY_MISMATCH"):
-                runtime.read_verified_lineage({"synthetic": True}, connect=lambda: c)
+                runtime.read_verified_lineage({"company_id": "default", "task_id": 170, "command_id": "11111111-1111-4111-8111-111111111111", "attempt_id": "22222222-2222-4222-8222-222222222222", "approval_digest": "a" * 64}, connect=lambda: c)
             query.assert_not_called()
         self.assertTrue(c.entered)
 
@@ -76,7 +76,7 @@ class LineageIdentityPinOfflineTest(unittest.TestCase):
         c = SyntheticConnection("service_role")
         with patch.object(runtime, "read_lineage_once") as query:
             with self.assertRaisesRegex(RuntimeError, "LINEAGE_DB_IDENTITY_MISMATCH"):
-                runtime.read_verified_lineage({"synthetic": True}, connect=lambda: c)
+                runtime.read_verified_lineage({"company_id": "default", "task_id": 170, "command_id": "11111111-1111-4111-8111-111111111111", "attempt_id": "22222222-2222-4222-8222-222222222222", "approval_digest": "a" * 64}, connect=lambda: c)
             query.assert_not_called()
 
 
