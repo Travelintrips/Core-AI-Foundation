@@ -7,6 +7,10 @@ tasks from the same company. Does not issue DB credentials or dispatch.
 import subprocess
 import time
 import uuid
+from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'deploy/ai-coding-standalone-dev'))
+from gpt02_issue159_lineage_readback_contract import TRUSTED_LINEAGE_SQL
 
 SQL = r"""
 CREATE SCHEMA gpt02_private;
@@ -83,6 +87,10 @@ INSERT INTO gpt02_private.post_consumption_fences VALUES
  '00000000-0000-0000-0000-000000000572',
  '00000000-0000-0000-0000-000000000272',
  'openclaw-dell-chatgpt-wake-dev',1,now()+interval '10 minutes',false,false);
+ALTER TABLE gpt02_private.approvals ADD COLUMN expires_at timestamptz DEFAULT now()+interval '5 minutes';
+ALTER TABLE gpt02_private.operator_links ADD COLUMN expires_at timestamptz DEFAULT now()+interval '5 minutes';
+ALTER TABLE gpt02_private.receipts ADD COLUMN consumed_at timestamptz DEFAULT now()-interval '1 minute';
+ALTER TABLE gpt02_private.post_consumption_fences ADD COLUMN lease_started_at timestamptz DEFAULT now()-interval '1 minute';
 CREATE POLICY task_scope ON gpt02_private.approvals FOR SELECT TO task170_reader
  USING (task_id=170 AND company_id='default'
  AND command_id='00000000-0000-0000-0000-000000000170'
@@ -95,7 +103,8 @@ CREATE POLICY task_scope ON gpt02_private.operator_links FOR SELECT TO task170_r
  AND link_id='00000000-0000-0000-0000-000000000370');
 CREATE POLICY task_scope ON gpt02_private.receipts FOR SELECT TO task170_reader
  USING (command_id='00000000-0000-0000-0000-000000000170'
- AND id='00000000-0000-0000-0000-000000000670');
+ AND id='00000000-0000-0000-0000-000000000670'
+ AND nonce='n170' AND digest='d170');
 CREATE POLICY task_scope ON gpt02_private.core_identity_receipts FOR SELECT TO task170_reader
  USING (command_id='00000000-0000-0000-0000-000000000170'
  AND receipt_id='00000000-0000-0000-0000-000000000670'
@@ -172,6 +181,29 @@ def main():
         ):
             if marker not in r.stderr: raise AssertionError("MISSING_"+marker)
             print(marker)
+        # Use the existing production lineage SQL itself, rather than a simplified join.
+        # Test-only literal substitution of immutable fixture constants; no live data.
+        for target_task,target_digest,expected in ((170,'d170',1),(172,'d172',0),(170,'wrong_digest',0)):
+            params={
+                'company_id':'default',
+                'task_id':str(target_task),
+                'command_id':f'00000000-0000-0000-0000-{target_task:012d}',
+                'attempt_id':f'00000000-0000-0000-0000-{target_task+100:012d}',
+                'approval_digest':target_digest,
+            }
+            query=TRUSTED_LINEAGE_SQL
+            for key,value in params.items():
+                replacement=value if key=='task_id' else "'"+value+"'"
+                query=query.replace('%('+key+')s',replacement)
+            if '%(' in query:
+                raise AssertionError('UNBOUND_SQL_PARAMETERS')
+            wrapped='SET ROLE task170_reader; SELECT count(*) FROM ('+query.strip().rstrip(';')+') AS scoped; RESET ROLE;'
+            out=run(["docker","exec","-i",name,"psql","-X","-v","ON_ERROR_STOP=1",
+                     "-U","postgres","-d","postgres","-At"],input=wrapped)
+            counts=[line.strip() for line in out.stdout.splitlines() if line.strip() in ('0','1')]
+            if counts != [str(expected)]:
+                raise AssertionError(f'CANONICAL_SQL_WRONG_CARDINALITY:{target_task}:{target_digest}:{counts}')
+        print("PASS_ACTUAL_CANONICAL_LINEAGE_SQL_VALID_WRONG_TASK_WRONG_DIGEST")
         print("PASS_SYNTHETIC_ONLY_NOT_LIVE_RELEASE")
     finally:
         run(["docker","rm","-f",name],check=False)
