@@ -714,3 +714,45 @@ A 15-second DB TTL does not stop reuse of a leaked password during those
 mandatory. Approval revocation and DB-clock check at issuance must be
 independently reviewed before any live DEV apply. This is NOT authority
 to merge/enable signer or dispatch; LIVE ISSUANCE and Final ACK stay NO_GO.
+
+## Persisted approval recheck and non-atomic expiry gap — 16 Nov 2026
+
+The operational approval evidence path reuses the EXISTING four-signature
+verifier, its `verify-approved-packet` readback and the private SQLite
+approval-intent reader. A successful signed packet alone is NOT enough:
+the verifier must requery the persisted Super Admin approval on each call.
+
+An exact-head, source-only regression on the authorized VPS
+(`073e58bfb145ea7e1336088d94150d79e8197a5f`) has added three real
+temporary SQLite + private Unix-socket tests to the existing
+`scripts/dev/test_gpt02_issue159_writer_broker_runtime.py`: an unchanged
+validly signed packet is REJECTED after its persisted approval expires,
+after the mapped Super Admin becomes disabled between two requests,
+and after deletion of the persisted approval row. All 3/3 tests PASS,
+exit code 0. These are synthetic stores and ephemeral keys; no live
+Super Admin approval was created or modified.
+
+A direct READ-ONLY inventory of the actual DEV approval store on
+`srv1792369` returned `approvalStoreReadable=true`,
+`unexpiredApprovalIntents=0`, `pendingClaimsFilePresent=false`,
+`reason=NO_UNEXPIRED_PERSISTED_APPROVAL`, and `releaseDecision=NO_GO`.
+The inventory script deliberately exits 3 for NO_GO. This is a current
+operational blocker, not a request to mint a temporary approval.
+
+**Open security boundary:** the SQLite approval readback currently
+proves its expiry only at the time of the verifier request; the
+separately proposed PostgreSQL issuance INSERT is not atomic with that
+SQLite lookup. The readback response does not yet provide an independently
+bound persisted-approval `expiresAt` for constraining the proposed
+PostgreSQL ledger TTL. The signed-packet lease and 15-second DB-clock
+maximum are necessary but do NOT close this cross-database
+time-of-check/time-of-use and post-approval revocation window.
+
+Before any live issuance, independently review a verified, fresh approval
+expiry/readback binding, revocation semantics, a restricted and
+credential-protected owner writer that rechecks immediately before
+INSERT, the exact DB-clock expiry limit, and guaranteed reader relock
+plus independent watchdog. Until then the approved packet remains only
+NO_GO review evidence. This PR stays Draft; no CST-DEV roles, credentials,
+ledger tables or service configuration are activated and PROD/DELL dispatch
+remains unchanged.
