@@ -165,6 +165,33 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             raise AssertionError("BASE_MINIMAL_AUDITOR_PROPOSAL_FAILED")
         if call(name, "postgres", pg_password, draft).returncode != 0:
             raise AssertionError("DURABLE_CONSUMPTION_DRAFT_FAILED")
+
+        # Negative migrations: a ledger table that still EXISTS but has
+        # drifted security cannot be accepted by the new SECURITY DEFINER
+        # consumption entry point. The failed BEGIN must roll back cleanly.
+        consumer_source = CONSUMER_SQL.read_text(encoding="utf-8")
+        table = "gpt02_relock_audit.reader_consumptions"
+        scenarios = (
+            ("FORCE_RLS_MISSING",
+             "ALTER TABLE " + table + " NO FORCE ROW LEVEL SECURITY",
+             "ALTER TABLE " + table + " FORCE ROW LEVEL SECURITY"),
+            ("IMMUTABLE_TRIGGER_DISABLED",
+             "ALTER TABLE " + table + " DISABLE TRIGGER immutable_rows",
+             "ALTER TABLE " + table + " ENABLE TRIGGER immutable_rows"),
+            ("OWNER_POLICY_MISSING",
+             "DROP POLICY owner_only ON " + table,
+             "CREATE POLICY owner_only ON " + table +
+             " FOR ALL TO postgres USING (true) WITH CHECK (true)"),
+        )
+        for label, break_sql, restore_sql in scenarios:
+            call(name, "postgres", pg_password, break_sql)
+            denied = call(name, "postgres", pg_password, consumer_source,
+                          check=False)
+            if (denied.returncode == 0
+                    or "ONE_READ_CONSUMER_PREFLIGHT_DENIED" not in denied.stderr):
+                raise AssertionError("CONSUMER_MIGRATION_DRIFT_NOT_DENIED:" + label)
+            call(name, "postgres", pg_password, restore_sql)
+        print("PASS_CONSUMER_MIGRATION_REJECTS_RLS_TRIGGER_POLICY_DRIFT")
         if call(name, "postgres", pg_password,
                 CONSUMER_SQL.read_text(encoding="utf-8")).returncode != 0:
             raise AssertionError("CONSUMER_ONLY_RPC_MIGRATION_FAILED")
