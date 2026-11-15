@@ -29,6 +29,8 @@ from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
 
 PROJECT = "xssrfshdrtdfupgqwfdw"
 POOLER_USER_SUFFIX = "." + PROJECT
+POOLER_HOST = "aws-1-ap-southeast-2.pooler.supabase.com"
+POOLER_PORT = "5432"
 MIN_BUDGET_MS = 2500
 
 
@@ -110,9 +112,24 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
                     info is None
                     or getattr(info, "user", None) != expected_user
                     or getattr(info, "dbname", None) != "postgres"
+                    or getattr(info, "host", None) != POOLER_HOST
+                    or str(getattr(info, "port", "")) != POOLER_PORT
                     or getattr(conn, "autocommit", None) is not False
                 ):
                     _fail("ONE_SHOT_NATIVE_READER_IDENTITY_OR_TXN_INVALID")
+                # libpq's verify-full validates the negotiated server
+                # certificate and hostname at connect-time. Check the
+                # effective parameters, not a caller-supplied 'tlsVerified'
+                # boolean. No secrets or connection strings are returned.
+                get_params = getattr(info, "get_parameters", None)
+                params = get_params() if callable(get_params) else None
+                if (
+                    not isinstance(params, Mapping)
+                    or params.get("sslmode") != "verify-full"
+                    or not isinstance(params.get("sslrootcert"), str)
+                    or not params["sslrootcert"]
+                ):
+                    _fail("ONE_SHOT_TLS_VERIFY_FULL_REQUIRED")
                 rows = read_lineage_once(conn, lookup)
                 if int(time.time() * 1000) >= candidate["expiresAt"]:
                     _fail("ONE_SHOT_SIGNED_LEASE_EXPIRED_DURING_READ")
