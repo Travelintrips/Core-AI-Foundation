@@ -66,8 +66,10 @@ class NativeAuditCursor:
         # by the SQL ACTUALLY executed, not by which connection came first.
         if statement == native.CONSUMPTION_READBACK_SQL:
             self.description = [SimpleNamespace(name="consumption_persisted")]
+            self.connection.events.append("audit_consumption")
         elif statement == native.BOOLEAN_READBACK_SQL:
             self.description = [SimpleNamespace(name="fully_locked")]
+            self.connection.events.append("audit_relock")
         elif statement not in ("SET TRANSACTION READ ONLY",
                                "SET LOCAL statement_timeout = '1500ms'"):
             raise AssertionError("UNEXPECTED_NATIVE_AUDITOR_SQL")
@@ -129,6 +131,8 @@ class FakeSupervisor:
         self.consumption_override = None
         self.claim_auditor_connection = FakeMinimalAuditConnection(role, kind="consumption")
         self.auditor_connection = FakeMinimalAuditConnection(role)
+        self.claim_auditor_connection.events = self.events
+        self.auditor_connection.events = self.events
         self.auditor_open_calls = []
         self.open_calls = []
         self.relock_calls = []
@@ -171,9 +175,7 @@ class FakeSupervisor:
     def open_minimal_auditor_connection(self, candidate):
         self.auditor_open_calls.append(candidate)
         if len(self.auditor_open_calls) == 1:
-            self.events.append("audit_consumption")
             return self.claim_auditor_connection
-        self.events.append("audit_relock")
         return self.auditor_connection
 
     def relock_and_verify(self, candidate):
@@ -494,7 +496,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.last_read.assert_not_called()
         self.assertEqual(len(self.supervisor.open_calls), 0)
         self.assertEqual(len(self.supervisor.relock_calls), 1)
-        self.assertEqual(self.supervisor.events, ["consume", "relock"])
+        self.assertEqual(self.supervisor.events, ["consume", "relock", "audit_relock"])
 
     def test_forged_consumption_fields_are_denied_before_open(self):
         for key, changed in (
