@@ -212,3 +212,54 @@ pg_stat_activity through its owner identity, crash watchdog, and rate-bounded
 one-query execution. Existing shared lineage reader's fixed role identity
 must not be weakened. None of these operational components is installed
 or enabled by this Draft.
+
+
+## Native PostgreSQL post-read relock attestation — 15 Nov 2026
+
+The earlier one-shot broker only checked a supervisor-supplied cleanup
+response shape; that could be forged and is **not** native DB evidence.
+The one-shot review contract now requires a SECOND, separately authenticated
+CST-DEV PostgreSQL admin connection after the supervisor's relock operation.
+New source-only module:
+deploy/ai-coding-standalone-dev/gpt02_issue159_native_relock_attestation.py.
+
+The attestor pins the admin pooler user postgres.xssrfshdrtdfupgqwfdw,
+database postgres, Supabase CST-DEV pooler host/port, libpq verify-full TLS
+and configured sslrootcert, with autocommit=false. It derives the exact
+scope-bound task role from the signed candidate; an expired candidate
+remains valid ONLY to check cleanup, not to issue fresh credentials.
+Its one bounded read-only SQL query checks pg_roles, pg_authid,
+pg_auth_members, pg_stat_activity and effective private schema/five-table
+privileges. The selected pg_authid value is ONLY the boolean
+rolpassword IS NULL, NEVER password/hash data. Required positive evidence:
+the exact expected DB session_user/current_user='postgres', the exact role,
+NOLOGIN, connlimit=0, password NULL, NOINHERIT, NO privileged role flags,
+no role membership, no active sessions, no schema USAGE, and no table/column
+SELECT across the five lineage tables. Any missing, ambiguous, inaccessible
+or inconsistent result fails closed. It returns no authorization.
+
+Two independently executed tests:
+- Offline synthetic test suite includes wrong admin pooler identity, missing
+  verify-full TLS, false supervisor cleanup, still-present password, active
+  session, remaining grants, missing role, mismatched SQL result, and denied
+  catalog query. Source-level broker+lineage tests: 31/31 PASS.
+- scripts/dev/test_gpt02_issue159_native_relock_catalog_pg.py uses a
+  networkless postgres:16-alpine container, seeds real five-table policies,
+  and runs the exact SQL AS A NON-SUPERUSER PostgreSQL login with explicit
+  read-only pg_authid SELECT. The SQL detects leftover reader SELECT grants
+  and an active reader/password before cleanup; after revocation, NOLOGIN,
+  connlimit 0, password NULL and backend termination, all required catalog
+  booleans become TRUE and fresh login fails. The container is deleted.
+
+CST-DEV READ-ONLY permission inspection confirms its postgres role can
+SELECT pg_catalog.pg_authid, pg_roles and pg_stat_activity (and has
+pg_read_all_stats). No credential or password values were retrieved.
+
+**Still not operational:** The trusted admin connection factory, the
+privileged issuer/relocker, crash watchdog and signed one-use ledger are
+not installed/connected to this Draft module. A supervisor can still be
+faked in offline tests; in production it must be privately authenticated
+and have its own credential and role custody. The service must also
+re-check release conditions, zero sessions after relock, and fail closed
+on any readback error. Do NOT apply SQL or activate real credentials,
+signer, dispatch, DELL or PROD. Final ACK remains NO_GO.
