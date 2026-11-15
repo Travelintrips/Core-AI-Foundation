@@ -164,10 +164,8 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             "has_function_privilege('unrelated_test',"
             + quote(FUNCTION + "(name,text,text,uuid,uuid,uuid,uuid)")
             + ",'EXECUTE')::text")
-        if has_rpc.stdout.strip() != "true,false":
-            # psql -At prints t,f on PG16
-            if has_rpc.stdout.strip() != "t|f":
-                raise AssertionError("RPC_EXECUTE_NOT_RESTRICTED:" + has_rpc.stdout)
+        if has_rpc.stdout.strip() not in ("true|false", "t|f"):
+            raise AssertionError("RPC_EXECUTE_NOT_RESTRICTED:" + has_rpc.stdout)
         print("PASS_AUDITOR_EXECUTES_ONLY_BOOL_NO_LEDGER_OR_PASSWORD_HASH_READ")
 
         # An asserted successful consumption with no committed DB row is
