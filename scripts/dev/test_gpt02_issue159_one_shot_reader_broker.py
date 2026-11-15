@@ -50,7 +50,7 @@ class NativeConnection:
 class NativeAuditCursor:
     def __init__(self, connection):
         self.connection = connection
-        self.description = [SimpleNamespace(name=name) for name in native.COLUMNS]
+        self.description = [SimpleNamespace(name="fully_locked")]
         self.calls = []
 
     def __enter__(self):
@@ -69,17 +69,14 @@ class NativeAuditCursor:
             raise AssertionError("NATIVE_AUDIT_MUST_BE_BOUNDED")
         if self.connection.rows_override is not None:
             return self.connection.rows_override
-        return [
-            ("postgres", "postgres", self.connection.role)
-            + (True,) * (len(native.COLUMNS) - 3)
-        ]
+        return [(True,)]
 
 
-class FakeAdminConnection:
+class FakeMinimalAuditConnection:
     def __init__(self, role):
         self.role = role
         self.info = type("AdminInfo", (), {
-            "user": native.ADMIN_DB_USER,
+            "user": native.AUDITOR_DB_USER,
             "dbname": "postgres",
             "host": native.HOST,
             "port": 5432,
@@ -114,8 +111,8 @@ class FakeAdminConnection:
 class FakeSupervisor:
     def __init__(self, role, scope_sha):
         self.connection = NativeConnection(role)
-        self.admin_connection = FakeAdminConnection(role)
-        self.admin_open_calls = []
+        self.auditor_connection = FakeMinimalAuditConnection(role)
+        self.auditor_open_calls = []
         self.open_calls = []
         self.relock_calls = []
         self.scope_sha = scope_sha
@@ -128,9 +125,9 @@ class FakeSupervisor:
             raise self.open_failure
         return self.connection
 
-    def open_trusted_admin_connection(self, candidate):
-        self.admin_open_calls.append(candidate)
-        return self.admin_connection
+    def open_minimal_auditor_connection(self, candidate):
+        self.auditor_open_calls.append(candidate)
+        return self.auditor_connection
 
     def relock_and_verify(self, candidate):
         self.relock_calls.append(candidate)
@@ -212,15 +209,15 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertTrue(value["oneCanonicalReadReviewed"])
         self.assertTrue(value["postReadRelockReported"])
         self.assertTrue(value["postReadRelockVerifiedByNativePostgres"])
-        self.assertEqual(len(self.supervisor.admin_open_calls), 1)
-        self.assertTrue(self.supervisor.admin_connection.closed)
-        self.assertEqual(self.supervisor.admin_connection.rollback_calls, 1)
+        self.assertEqual(len(self.supervisor.auditor_open_calls), 1)
+        self.assertTrue(self.supervisor.auditor_connection.closed)
+        self.assertEqual(self.supervisor.auditor_connection.rollback_calls, 1)
         self.assertEqual(
-            self.supervisor.admin_connection.last_cursor.calls,
+            self.supervisor.auditor_connection.last_cursor.calls,
             [
                 ("SET TRANSACTION READ ONLY", None),
                 ("SET LOCAL statement_timeout = '1500ms'", None),
-                (native.READBACK_SQL, {"role": self.candidate["candidateRole"]}),
+                (native.BOOLEAN_READBACK_SQL, {"role": self.candidate["candidateRole"]}),
             ],
         )
         self.assertEqual(value["releaseDecision"], "NO_GO")
@@ -304,47 +301,27 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                                     "ONE_SHOT_POSTREAD_RELOCK_NOT_PROVEN"):
             self.call()
 
-    def test_native_relock_detects_remaining_password_active_session_or_grant(self):
-        fields = ("no_login", "connection_limit_zero", "password_null",
-                  "no_role_memberships", "zero_active_sessions",
-                  "schema_usage_revoked", "five_table_read_revoked")
-        for name in fields:
-            with self.subTest(name=name):
-                self.setUp()
-                row = (
-                    "postgres", "postgres", self.candidate["candidateRole"]
-                ) + tuple(
-                    False if col == name else True for col in native.COLUMNS[3:]
-                )
-                self.supervisor.admin_connection.rows_override = [row]
-                with self.assertRaisesRegex(
-                    BrokerAdmissionError, "RELOCK_NATIVE_ROLE_OR_CREDENTIAL_NOT_LOCKED"
-                ):
-                    self.call()
-                self.assertEqual(len(self.supervisor.relock_calls), 1)
-                self.assertTrue(self.supervisor.admin_connection.closed)
-
-    def test_native_audit_wrong_session_user_or_missing_role_denied(self):
+    def test_boolean_audit_denies_false_missing_or_malformed_native_result(self):
         for rows in (
-            [],
-            [("service_role", "postgres", self.candidate["candidateRole"])
-             + (True,) * (len(native.COLUMNS) - 3)],
-            [("postgres", "postgres", "dev_gpt02_task_999_mismatch")
-             + (True,) * (len(native.COLUMNS) - 3)],
+            [(False,)], [(None,)], [(0,)], [],
+            [(True,), (True,)], [("true",)], [(True, False)], [()],
         ):
             with self.subTest(rows=rows):
                 self.setUp()
-                self.supervisor.admin_connection.rows_override = rows
-                with self.assertRaises(BrokerAdmissionError):
+                self.supervisor.auditor_connection.rows_override = rows
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError, "RELOCK_MINIMAL_CATALOG_BOOL_NOT_PROVEN"
+                ):
                     self.call()
                 self.assertEqual(len(self.supervisor.relock_calls), 1)
+                self.assertTrue(self.supervisor.auditor_connection.closed)
 
-    def test_native_admin_identity_and_tls_cannot_be_substituted(self):
+    def test_minimal_auditor_identity_and_tls_cannot_be_substituted(self):
         cases = ("user", "host", "port", "tls")
         for key in cases:
             with self.subTest(key=key):
                 self.setUp()
-                conn = self.supervisor.admin_connection
+                conn = self.supervisor.auditor_connection
                 if key == "user":
                     conn.info.user = "service_role"
                 elif key == "host":
@@ -361,14 +338,14 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                 self.assertTrue(conn.closed)
 
     def test_native_catalog_error_fails_closed_even_after_reported_relock(self):
-        self.supervisor.admin_connection.audit_error = RuntimeError(
-            "synthetic_pg_authid_permission_denied"
+        self.supervisor.auditor_connection.audit_error = RuntimeError(
+            "synthetic_minimal_audit_function_unavailable"
         )
-        with self.assertRaisesRegex(RuntimeError, "synthetic_pg_authid"):
+        with self.assertRaisesRegex(RuntimeError, "synthetic_minimal_audit"):
             self.call()
         self.assertEqual(len(self.supervisor.relock_calls), 1)
-        self.assertTrue(self.supervisor.admin_connection.closed)
-        self.assertEqual(self.supervisor.admin_connection.rollback_calls, 1)
+        self.assertTrue(self.supervisor.auditor_connection.closed)
+        self.assertEqual(self.supervisor.auditor_connection.rollback_calls, 1)
 
     def test_insufficient_lease_denied_before_connection(self):
         with self.assertRaisesRegex(BrokerAdmissionError,
