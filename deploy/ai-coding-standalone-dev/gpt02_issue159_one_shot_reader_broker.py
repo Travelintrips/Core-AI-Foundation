@@ -56,6 +56,35 @@ def _verified_cleanup(cleanup: Any, candidate: dict) -> bool:
     )
 
 
+def _review_consumption_binding(consumption: Any, candidate: dict) -> bool:
+    """Inert receipt-shape check; NOT native proof of a committed DB write.
+
+    Only a separately authenticated, independently reviewed supervisor may
+    atomically consume a one-use reader claim in PostgreSQL. The supervisor
+    implementation does NOT exist; these fields cannot mint credentials or
+    authorize dispatch. Returning a self-reported receipt is insufficient
+    without independent ledger and custody review before live activation.
+    """
+    if not isinstance(consumption, dict) or set(consumption) != {
+        "scopeSha256", "verifiedPacketSha256", "role",
+        "commandId", "attemptId", "receiptId", "fenceId",
+        "consumedExactlyOnce", "releaseDecision",
+    }:
+        return False
+    scope = candidate["scope"]
+    return (
+        consumption["scopeSha256"] == candidate["scopeSha256"]
+        and consumption["verifiedPacketSha256"] == candidate["verifiedPacketSha256"]
+        and consumption["role"] == candidate["candidateRole"]
+        and consumption["commandId"] == scope["command_id"]
+        and consumption["attemptId"] == scope["attempt_id"]
+        and consumption["receiptId"] == scope["receipt_id"]
+        and consumption["fenceId"] == scope["fence_id"]
+        and consumption["consumedExactlyOnce"] is True
+        and consumption["releaseDecision"] == "NO_GO"
+    )
+
+
 def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
     """Source-only one-query transaction + mandatory cleanup REVIEW contract.
 
@@ -96,6 +125,8 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
         "attempt_id": scope["attempt_id"],
         "approval_digest": scope["approval_digest"],
     }
+    if not callable(getattr(supervisor, "consume_scope_once", None)):
+        _fail("ONE_SHOT_DURABLE_CONSUMPTION_SUPERVISOR_MISSING")
     if not callable(getattr(supervisor, "open_one_scoped_connection", None)):
         _fail("ONE_SHOT_SUPERVISOR_MISSING")
     if not callable(getattr(supervisor, "relock_and_verify", None)):
@@ -105,10 +136,16 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
 
     result = None
     error = None
-    # Every connection-open attempt enters mandatory relock, including
-    # exception paths. A cleanup failure ALWAYS fails closed.
+    # The consumption claim must COMMIT before even attempting the reader
+    # connection. Otherwise a replayed approval could reopen the same role.
+    # A failed consumption, replay or partial external commit still enters
+    # mandatory relock; it MUST NEVER proceed to SELECT.
+    # This is a SOURCE-ONLY trust contract, not a deployed ledger writer.
     try:
         try:
+            consumed = supervisor.consume_scope_once(candidate)
+            if not _review_consumption_binding(consumed, candidate):
+                _fail("ONE_SHOT_CONSUMPTION_BINDING_NOT_PROVEN")
             with supervisor.open_one_scoped_connection(candidate) as conn:
                 info = getattr(conn, "info", None)
                 if (
@@ -172,6 +209,7 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
         "environment": "DEV",
         "stage": "SIGNED_SCOPED_READER_CLEANUP_REVIEW_ONLY",
         "oneCanonicalReadReviewed": True,
+        "preReadConsumptionClaimReviewed": True,
         "postReadRelockReported": True,
         "postReadRelockVerifiedByNativePostgres": True,
         "databaseRoleProvisioned": False,
