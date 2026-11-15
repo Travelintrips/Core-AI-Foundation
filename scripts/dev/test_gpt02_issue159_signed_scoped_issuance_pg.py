@@ -212,10 +212,10 @@ ALTER TABLE gpt02_private.reader_read_consumptions
 REVOKE ALL ON gpt02_private.reader_read_consumptions FROM PUBLIC;
 """)
         consume_once = (
-            "BEGIN;\\n"
+            "BEGIN;\n"
             "SELECT pg_advisory_xact_lock(hashtextextended("
-            + quote(candidate["scopeSha256"]) + ",0));\\n"
-            "DO $one_read$ DECLARE inserted_count int; BEGIN\\n"
+            + quote(candidate["scopeSha256"]) + ",0));\n"
+            "DO $one_read$ DECLARE inserted_count int; BEGIN\n"
             "INSERT INTO gpt02_private.reader_read_consumptions"
             " (scope_sha,packet_sha,command_id,attempt_id)"
             " SELECT i.scope_sha,i.packet_sha,i.command_id,i.attempt_id"
@@ -224,12 +224,12 @@ REVOKE ALL ON gpt02_private.reader_read_consumptions FROM PUBLIC;
             + " AND i.packet_sha=" + quote(candidate["verifiedPacketSha256"])
             + " AND i.command_id=" + quote(scope["command_id"]) + "::uuid"
             + " AND i.attempt_id=" + quote(scope["attempt_id"]) + "::uuid"
-            + " AND i.expires_at > clock_timestamp() + interval '1 second';\\n"
-            "GET DIAGNOSTICS inserted_count = ROW_COUNT;\\n"
+            + " AND i.expires_at > clock_timestamp() + interval '1 second';\n"
+            "GET DIAGNOSTICS inserted_count = ROW_COUNT;\n"
             "IF inserted_count<>1 THEN"
             " RAISE EXCEPTION 'ONE_READ_ISSUANCE_NOT_FRESH_OR_BOUND';"
-            " END IF;\\nEND $one_read$;\\n"
-            "SELECT pg_sleep(0.15);\\nCOMMIT;\\n"
+            " END IF;\nEND $one_read$;\n"
+            "SELECT pg_sleep(0.15);\nCOMMIT;\n"
         )
         read_claims = []
         for _ in range(2):
