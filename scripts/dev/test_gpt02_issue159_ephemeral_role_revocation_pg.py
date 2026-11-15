@@ -47,7 +47,7 @@ DO $a$ BEGIN
   WHEN insufficient_privilege THEN
     RAISE NOTICE 'PASS_READ_REVOKED_DENIED';
  END;
- IF has_any_column_privilege(current_user,'gpt02_private.approvals','SELECT')
+ IF has_any_column_privilege(current_user,(SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='gpt02_private' AND c.relname='approvals'),'SELECT')
  OR has_schema_privilege(current_user,'gpt02_private','USAGE')
  OR pg_has_role(current_user,'pg_read_all_data','USAGE') THEN
   RAISE EXCEPTION 'RESIDUAL_READER_PRIVILEGE';
