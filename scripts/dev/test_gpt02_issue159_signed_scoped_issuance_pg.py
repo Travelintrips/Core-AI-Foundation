@@ -190,6 +190,104 @@ REVOKE ALL ON gpt02_private.reader_issuance_audit FROM PUBLIC;
             raise AssertionError("SAME_COMMAND_SECOND_SCOPE_ISSUED")
         print("PASS_SAME_COMMAND_WRONG_SCOPE_ISSUANCE_DENIED")
 
+        # A separate immutable CONSUMPTION fence is mandatory BEFORE a
+        # broker attempts even one canonical SELECT. Issuance uniqueness
+        # alone is insufficient because an issued LOGIN can be replayed.
+        # This is a disposable DB model, NOT an operational issuance API.
+        admin(name, """
+CREATE TABLE gpt02_private.reader_read_consumptions (
+ scope_sha text PRIMARY KEY
+   REFERENCES gpt02_private.reader_issuance_audit(scope_sha),
+ packet_sha text NOT NULL UNIQUE,
+ command_id uuid NOT NULL UNIQUE,
+ attempt_id uuid NOT NULL UNIQUE,
+ consumed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ consumption_state text NOT NULL DEFAULT 'CLAIMED_FOR_SINGLE_READ'
+   CHECK (consumption_state = 'CLAIMED_FOR_SINGLE_READ')
+);
+ALTER TABLE gpt02_private.reader_read_consumptions
+ ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gpt02_private.reader_read_consumptions
+ FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON gpt02_private.reader_read_consumptions FROM PUBLIC;
+""")
+        consume_once = (
+            "BEGIN;\\n"
+            "SELECT pg_advisory_xact_lock(hashtextextended("
+            + quote(candidate["scopeSha256"]) + ",0));\\n"
+            "DO $one_read$ DECLARE inserted_count int; BEGIN\\n"
+            "INSERT INTO gpt02_private.reader_read_consumptions"
+            " (scope_sha,packet_sha,command_id,attempt_id)"
+            " SELECT i.scope_sha,i.packet_sha,i.command_id,i.attempt_id"
+            " FROM gpt02_private.reader_issuance_audit i"
+            " WHERE i.scope_sha=" + quote(candidate["scopeSha256"])
+            + " AND i.packet_sha=" + quote(candidate["verifiedPacketSha256"])
+            + " AND i.command_id=" + quote(scope["command_id"]) + "::uuid"
+            + " AND i.attempt_id=" + quote(scope["attempt_id"]) + "::uuid"
+            + " AND i.expires_at > clock_timestamp() + interval '1 second';\\n"
+            "GET DIAGNOSTICS inserted_count = ROW_COUNT;\\n"
+            "IF inserted_count<>1 THEN"
+            " RAISE EXCEPTION 'ONE_READ_ISSUANCE_NOT_FRESH_OR_BOUND';"
+            " END IF;\\nEND $one_read$;\\n"
+            "SELECT pg_sleep(0.15);\\nCOMMIT;\\n"
+        )
+        read_claims = []
+        for _ in range(2):
+            read_claims.append(subprocess.Popen(
+                ["docker", "exec", "-i", name, "psql", "-X", "-v",
+                 "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-At"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True,
+            ))
+        for proc in read_claims:
+            proc.communicate(consume_once, timeout=15)
+        if sorted(p.returncode for p in read_claims) != [0, 3]:
+            raise AssertionError("ATOMIC_CONSUMPTION_DID_NOT_REJECT_DUPLICATE")
+        assert_count(
+            name,
+            "SELECT count(*) FROM gpt02_private.reader_read_consumptions", 1,
+        )
+        print("PASS_ATOMIC_ONE_READ_CONSUMPTION_TWO_CONCURRENT_CLAIMS")
+
+        # Same command with altered scope/attempt is NOT another read.
+        wrong_claim = admin(
+            name,
+            "INSERT INTO gpt02_private.reader_read_consumptions"
+            " (scope_sha,packet_sha,command_id,attempt_id) VALUES ("
+            + quote("f"*64) + "," + quote("e"*64) + ","
+            + quote(scope["command_id"]) + "::uuid,"
+            + quote("88888888-8888-4888-8888-888888888888")
+            + "::uuid)", check=False,
+        )
+        if wrong_claim.returncode == 0:
+            raise AssertionError("WRONG_SCOPE_SECOND_READ_CLAIM_ACCEPTED")
+        print("PASS_WRONG_SCOPE_OR_COMMAND_CANNOT_CLAIM_SECOND_READ")
+
+        # Failure AFTER a committed claim (before a successful read) must
+        # NOT restore the read budget. The eventual broker must relock even
+        # on this uncertain outcome and a watchdog handles broker crashes.
+        failed_read = run(login_cmd(
+            name, role, password,
+            "BEGIN READ ONLY; SELECT * FROM gpt02_private.nonexistent;"
+        ), check=False)
+        if failed_read.returncode == 0:
+            raise AssertionError("SYNTHETIC_READ_FAILURE_NOT_OBSERVED")
+        replay = admin(name, consume_once, check=False)
+        if replay.returncode == 0:
+            raise AssertionError("CONSUMED_CLAIM_REPLAY_AFTER_QUERY_FAILURE")
+        assert_count(
+            name,
+            "SELECT count(*) FROM gpt02_private.reader_read_consumptions", 1,
+        )
+        print("PASS_FAILED_READ_CONSUMES_BUDGET_REPLAY_DENIED")
+        # The scoped role cannot see either issuance or consumption audit.
+        if run(login_cmd(
+            name, role, password,
+            "SELECT count(*) FROM gpt02_private.reader_read_consumptions",
+        ), check=False).returncode == 0:
+            raise AssertionError("ROLE_READ_CONSUMPTION_LEDGER")
+        print("PASS_SCOPED_LOGIN_CANNOT_READ_OR_WRITE_CONSUMPTION_LEDGER")
+
         # Verify native DB identity and one-connection read-only SELECT,
         # not merely SET ROLE under an administrator session.
         read = run(login_cmd(name, role, password, (
