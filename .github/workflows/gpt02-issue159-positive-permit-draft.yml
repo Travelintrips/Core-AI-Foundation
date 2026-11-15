@@ -13,6 +13,8 @@ on:
       - "deploy/ai-coding-standalone-dev/gpt02-issue159-operational-signer@.service"
       - "scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_one_shot_reader_broker.py"
+      - "scripts/dev/test_gpt02_issue159_one_shot_reader_broker.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_release_broker.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_bridge_handoff_preflight.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_exact_bridge_stage.py"
@@ -105,6 +107,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_positive_permit_handoff.py -q
           python3 scripts/dev/test_gpt02_issue159_prelineage_reader_scope.py -q
           python3 scripts/dev/test_gpt02_issue159_postlineage_reader_scope.py -q
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_one_shot_reader_broker
           python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py
