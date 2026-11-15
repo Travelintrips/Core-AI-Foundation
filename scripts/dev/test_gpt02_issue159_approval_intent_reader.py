@@ -151,7 +151,7 @@ class ApprovalIntentReaderTest(unittest.TestCase):
     def test_expired_or_future_observation_fails_closed(self):
         path = self.db()
         self.seed(path, recorded=1000, expires=2000)
-        for observed in (999, 2001):
+        for observed in (999, 2000, 2001):
             out = reader.read_approval_intent(path, LOOKUP, observed, operational=False)
             self.assertEqual(out["reason"], "APPROVAL_INTENT_EXPIRED_OR_INVALID")
 
