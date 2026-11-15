@@ -32,6 +32,8 @@ from gpt02_issue159_writer_broker_contract import (
 VERIFIER_SOCKET = "/run/gpt02-issue159-verifier/verify.sock"
 VERIFIER_USER = "gpt02-issue159-verifier"
 VERIFIER_GROUP = "gpt02-issue159-signers"
+# Matches the pinned public-root directory in the ACTIVE verifier systemd unit.
+VERIFIER_PUBLIC_ROOT_DIR = "/etc/gpt02-dev/verifier-public"
 MAX_RESPONSE = 32768
 # Verifier performs two independent bounded trusted readbacks (4s each).
 # Keep this request bounded, but do not time out before those readers can finish.
@@ -270,12 +272,12 @@ def inspect_prelineage_reader_scope_candidate(packet: dict[str, Any]) -> dict[st
     # when invoked; never load signer private keys or a new database login.
     from gpt02_issue159_writer_broker_runtime import (
         _load_public_roots, _require_persisted_admin_decision,
-        DEFAULT_PUBLIC_ROOTS, DEFAULT_FINGERPRINT_MANIFEST,
+        DEFAULT_FINGERPRINT_MANIFEST,
         DEFAULT_APPROVAL_READER_SOCKET,
     )
 
     now_ms = int(time.time() * 1000)
-    roots = _load_public_roots(DEFAULT_PUBLIC_ROOTS, DEFAULT_FINGERPRINT_MANIFEST)
+    roots = _load_public_roots(VERIFIER_PUBLIC_ROOT_DIR, DEFAULT_FINGERPRINT_MANIFEST)
     proof = verify_lifecycle_evidence_packet(packet, roots, now_ms)
     approval = packet["approval"]["claims"]
     issuer = packet["issuerEvidence"]["claims"]
