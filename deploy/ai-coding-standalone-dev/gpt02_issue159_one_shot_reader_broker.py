@@ -14,13 +14,14 @@ not an authorization. Never expose this module through a web/API route.
 from __future__ import annotations
 
 from collections.abc import Mapping
+import re
 import secrets
 import time
 from typing import Any
 
 from gpt02_issue159_lineage_db_reader import read_lineage_once
 from gpt02_issue159_native_relock_attestation import (
-    attest_boolean_relock, attest_persisted_read_consumption,
+    _target, attest_boolean_relock, attest_persisted_read_consumption,
 )
 from gpt02_issue159_lineage_readback_contract import validate_trusted_lineage_row
 from gpt02_issue159_positive_permit_handoff import (
@@ -89,6 +90,110 @@ def _review_consumption_binding(
         and consumption["readChallenge"] == read_challenge
         and consumption["releaseDecision"] == "NO_GO"
     )
+
+
+# The approved-in-principle native claim-consumer API is SOURCE ONLY.
+# An external owner-reviewed private supervisor must inject the correct
+# dedicated TLS-authenticated PostgreSQL connection; this module never
+# locates or decrypts a credential, starts a service, or enables LOGIN.
+READER_CONSUMER_USER = "dev_gpt02_reader_claim_consumer." + PROJECT
+CONSUME_ONCE_SQL = (
+    "SELECT gpt02_relock_audit.consume_reader_once("
+    "%(role)s::name,%(scope_sha)s,%(packet_sha)s,"
+    "%(command_id)s::uuid,%(attempt_id)s::uuid,"
+    "%(receipt_id)s::uuid,%(fence_id)s::uuid,"
+    "%(read_challenge)s) AS claimed_once"
+)
+
+
+def consume_once_via_pinned_connection(
+    connection: Any, candidate: dict, read_challenge: str,
+) -> dict[str, Any]:
+    """One atomic, bounded SECURITY DEFINER RPC, not a credential issuer.
+
+    This is a reusable SOURCE-ONLY adapter for an externally owned
+    supervisor's consume_scope_once(candidate,challenge) interface.
+    A successful PostgreSQL commit must THEN be independently verified
+    by the existing low-privilege auditor before opening any reader.
+    An uncertain commit, duplicate, missing/false result or TLS mismatch
+    raises and cannot produce positive authorization.
+    """
+    role, scope_sha = _target(candidate)
+    if not isinstance(read_challenge, str) or re.fullmatch(
+        r"[a-f0-9]{64}", read_challenge,
+    ) is None:
+        _fail("ONE_READ_CHALLENGE_FORMAT_INVALID")
+    if (
+        type(candidate.get("expiresAt")) is not int
+        or candidate["expiresAt"] - int(time.time()*1000) < MIN_BUDGET_MS
+    ):
+        _fail("ONE_SHOT_SIGNED_LEASE_INSUFFICIENT")
+    info = getattr(connection, "info", None)
+    if (
+        info is None
+        or getattr(info, "user", None) != READER_CONSUMER_USER
+        or getattr(info, "dbname", None) != "postgres"
+        or getattr(info, "host", None) != POOLER_HOST
+        or str(getattr(info, "port", "")) != POOLER_PORT
+        or getattr(connection, "autocommit", None) is not False
+    ):
+        _fail("ONE_READ_CONSUMER_NATIVE_DB_IDENTITY_INVALID")
+    parameters = getattr(info, "get_parameters", None)
+    params = parameters() if callable(parameters) else None
+    if (
+        not isinstance(params, Mapping)
+        or params.get("sslmode") != "verify-full"
+        or not isinstance(params.get("sslrootcert"), str)
+        or not params["sslrootcert"]
+    ):
+        _fail("ONE_READ_CONSUMER_TLS_VERIFY_FULL_REQUIRED")
+    scope = candidate["scope"]
+    query_args = {
+        "role": role,
+        "scope_sha": scope_sha,
+        "packet_sha": candidate["verifiedPacketSha256"],
+        "command_id": scope["command_id"],
+        "attempt_id": scope["attempt_id"],
+        "receipt_id": scope["receipt_id"],
+        "fence_id": scope["fence_id"],
+        "read_challenge": read_challenge,
+    }
+    # Only one SQL function can write, and it requires the owner-issued
+    # exact scope. The consumer login is barred from direct table access.
+    # Never return TRUE before a definite commit succeeded.
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SET TRANSACTION READ WRITE")
+            cursor.execute("SET LOCAL statement_timeout = '1500ms'")
+            cursor.execute(CONSUME_ONCE_SQL, query_args)
+            rows = cursor.fetchmany(2)
+            cols = tuple(col.name for col in cursor.description)
+        if (
+            cols != ("claimed_once",)
+            or len(rows) != 1
+            or len(rows[0]) != 1
+            or rows[0][0] is not True
+        ):
+            _fail("ONE_READ_CONSUMER_DB_NOT_ATOMICALLY_CLAIMED")
+        connection.commit()
+    except Exception:
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+        raise
+    return {
+        "scopeSha256": scope_sha,
+        "verifiedPacketSha256": candidate["verifiedPacketSha256"],
+        "role": role,
+        "commandId": scope["command_id"],
+        "attemptId": scope["attempt_id"],
+        "receiptId": scope["receipt_id"],
+        "fenceId": scope["fence_id"],
+        "readChallenge": read_challenge,
+        "consumedExactlyOnce": True,
+        "releaseDecision": "NO_GO",
+    }
 
 
 def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
