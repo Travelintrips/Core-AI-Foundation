@@ -316,8 +316,10 @@ credential names is denied. The preflight is NOT an installation plan:
 even with all metadata correct it ALWAYS returns
 credentialIssuancePermitted=false and releaseDecision=NO_GO.
 
-Results: 7/7 offline metadata/cross-role/symlink tests PASS on authorized
-VPS after fixing a test-only mock binding issue. The actual VPS read-only
+Results: 9/9 offline metadata/cross-role/symlink/override tests PASS on
+authorized VPS. The preflight also rejects duplicate effective User or
+APP_ENV directives and unreviewed systemd drop-in overrides. The actual VPS
+read-only
 preflight returned DEDICATED_RELOCK_AUDITOR_NOT_PROVISIONED,
 unitMetadataReady=false, encryptedCredentialMetadataReady=false,
 credentialContentsRead=false and exit code 3 (expected NO_GO).
