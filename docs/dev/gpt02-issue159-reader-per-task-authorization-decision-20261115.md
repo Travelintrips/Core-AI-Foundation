@@ -78,3 +78,46 @@ then revoke and terminate the backend. Independent cleanup/watchdog,
 credential custody, exact signed approval persistence, true one-use
 issuance/consumption, and production-compatible role lifecycle remain
 unimplemented; do not activate the source-only candidate. RELEASE NO_GO.
+
+
+## Schema-grounded exact-task RLS proposal — 15 Nov 2026
+
+A direct READ-ONLY inventory of CST-DEV pg_catalog and information_schema
+confirmed that all five lineage tables use FORCE RLS, and all existing
+policies target named roles (not PUBLIC). The active
+dev_gpt02_lineage_login has LOGIN=true, INHERIT=true and CONNECTION LIMIT -1:
+it remains unsuitable for per-task credential use, and its inherited
+column-level grants must not be repurposed.
+
+New SOURCE-ONLY file:
+scripts/dev/gpt02_issue159_scoped_policy_proposal.py.
+
+It produces deterministic *review-only* PostgreSQL 16 DDL from the
+four-signature/post-lineage NO_GO candidate. The generated role starts
+NOLOGIN/NOINHERIT/NOBYPASSRLS/CONNECTION LIMIT 0 with no password, and each
+of five forced-RLS tables receives a dedicated role-specific policy bound to
+the exact task/company/command/attempt/approval digest, approved link,
+receipt, fence, lease and an immutable absolute expiry. Column-level SELECT
+GRANTs cover only original canonical lineage query and policy columns.
+The renderer rejects role overrides, changed task/tenant, bad hash binding,
+malformed UUID, expired candidate and non-NO_GO candidate. Its executable
+entrypoint deliberately refuses all CLI/live apply; the function RETURNS
+SQL only and never connects to Supabase or issues credentials.
+
+Disposable fixture test:
+scripts/dev/test_gpt02_issue159_scoped_policy_proposal.py.
+
+The fixture adds missing real-schema column names to the existing synthetic
+five-table PostgreSQL seed. It validates rendered SQL and native canonical
+query using column SELECT privileges, denies other task and ungranted
+columns/write, verifies NOLOGIN and no inherited membership, and refuses
+repeat CREATE ROLE/POLICY. This does not prove a real-live role would have
+the correct owner/GRANT privileges, nor does it authorize live application.
+
+Required before a live-DEV trial: independent security review of credential
+issuer, store owner/CREATEROLE custody, native one-shot broker integration,
+durable exact-scope issuance and cleanup ledger, real SSL verify-full role
+pin, watchdog, task approval that is fresh and owner-authorized, and
+NOLOGIN/password NULL/zero-session rollback. The existing shared lineage
+runtime must remain unchanged until a separately reviewed cutover passes.
+No signer/dispatch/DELL/PROD activation.
