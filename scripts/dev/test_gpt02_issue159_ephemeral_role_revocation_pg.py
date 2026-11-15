@@ -74,6 +74,14 @@ def main():
                      "-Atc","SELECT 1"],check=False).returncode==0: break
             time.sleep(.25)
         else: raise RuntimeError("PG_START_NOT_READY")
+        # Official Postgres entrypoint briefly starts and stops its bootstrap
+        # server; only run tests after the final server is ready.
+        time.sleep(2)
+        for _ in range(60):
+            if call(["docker","exec",name,"psql","-X","-U","postgres","-d","postgres",
+                     "-Atc","SELECT 1"],check=False).returncode==0: break
+            time.sleep(.25)
+        else: raise RuntimeError("FINAL_PG_SERVER_NOT_READY")
         r=call(["docker","exec","-i",name,"psql","-X","-v","ON_ERROR_STOP=1",
                 "-U","postgres","-d","postgres","-At"],stdin=SQL)
         for m in ("PASS_READ_ONLY_ONE_TASK","PASS_READ_REVOKED_DENIED",
