@@ -337,8 +337,10 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             for _ in range(2)
         ]
         outcomes = [proc.communicate(timeout=15) for proc in procs]
-        if any(p.returncode != 0 for p in procs):
-            raise AssertionError("CONSUMER_NATIVE_CALLS_FAILED")
+        if any(proc.returncode != 0 for proc in procs):
+            raise AssertionError("CONSUMER_NATIVE_CALLS_FAILED:" +
+                repr([(proc.returncode, output[-160:], error[-420:])
+                      for proc, (output, error) in zip(procs, outcomes)]))
         results = sorted(out[0].strip() for out in outcomes)
         if results != ["f", "t"]:
             raise AssertionError("CONCURRENT_CONSUMPTION_NOT_EXACTLY_ONCE:" + repr(results))
