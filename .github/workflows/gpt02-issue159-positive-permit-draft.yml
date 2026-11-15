@@ -31,6 +31,7 @@ on:
       - "scripts/dev/test_gpt02_issue159_prelineage_reader_scope.py"
       - "scripts/dev/test_gpt02_issue159_postlineage_reader_scope.py"
       - "scripts/dev/test_gpt02_issue159_signed_scope_pg.py"
+      - "scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py"
       - "scripts/dev/test_gpt02_issue159_live_approval_readiness.py"
       - "scripts/dev/gpt02_issue159_live_approval_readiness.READONLY.py"
       - "scripts/dev/test_gpt02_issue159_lineage_db_identity_pin.py"
@@ -99,6 +100,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_prelineage_reader_scope.py -q
           python3 scripts/dev/test_gpt02_issue159_postlineage_reader_scope.py -q
           python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
+          python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
           python3 scripts/dev/test_gpt02_issue159_positive_release_broker.py -q
           python3 scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py -q
           python3 scripts/dev/test_gpt02_issue159_exact_bridge_stage.py -q
