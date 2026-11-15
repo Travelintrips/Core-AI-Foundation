@@ -301,6 +301,57 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertFalse(out["ok"])
         self.assertFalse(out["dispatchPermitted"])
 
+
+    def test_signed_packet_cannot_reuse_expired_persisted_approval(self):
+        """An unchanged four-signature packet is not proof of fresh approval."""
+        self._start_approval_reader()
+        self._start()
+        first, accepted = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(first, 200, accepted)
+        self.assertFalse(accepted["authorizationGranted"])
+        with sqlite3.connect(self.root / "approval-intents.db") as db:
+            db.execute(
+                "UPDATE gpt02_issue159_approval_intents SET expires_at_ms=?",
+                (self.now - 1,),
+            )
+        second, denied = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(second, 403, denied)
+        self.assertFalse(denied["ok"])
+        self.assertEqual(
+            denied["reason"], "PERSISTED_ADMIN_APPROVAL_NOT_FOUND",
+        )
+        self.assertFalse(denied["dispatchPermitted"])
+        self.assertEqual(denied["releaseDecision"], "NO_GO")
+        print("PASS_SIGNED_PACKET_REUSE_AFTER_STORED_APPROVAL_EXPIRY_DENIED")
+
+    def test_approval_revocation_between_two_verifier_requests_denies(self):
+        """The reader must hit SQLite again, not cache a previous approval."""
+        self._start_approval_reader()
+        self._start()
+        first, accepted = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(first, 200, accepted)
+        with sqlite3.connect(self.root / "approval-intents.db") as db:
+            db.execute("UPDATE admin_identities SET enabled=0")
+        second, denied = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(second, 403, denied)
+        self.assertFalse(denied["ok"])
+        self.assertFalse(denied["authorizationGranted"])
+        self.assertEqual(denied["releaseDecision"], "NO_GO")
+        print("PASS_REVOKED_SUPER_ADMIN_AFTER_FIRST_READBACK_DENIED")
+
+    def test_deleted_persisted_approval_cannot_be_replayed(self):
+        self._start_approval_reader()
+        self._start()
+        first, accepted = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(first, 200, accepted)
+        with sqlite3.connect(self.root / "approval-intents.db") as db:
+            db.execute("DELETE FROM gpt02_issue159_approval_intents")
+        second, denied = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(second, 403, denied)
+        self.assertFalse(denied["ok"])
+        self.assertEqual(denied["releaseDecision"], "NO_GO")
+        print("PASS_DELETED_PERSISTED_APPROVAL_REPLAY_DENIED")
+
     def test_approved_route_rejects_revoked_admin_mapping(self):
         self._start_approval_reader(mapping_enabled=0)
         self._start()
