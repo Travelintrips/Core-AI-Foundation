@@ -92,6 +92,35 @@ BEGIN
            r.rolname, p.oid, 'EXECUTE'
          )
    )
+   -- A default/owner-privileged VIEW may expose GPT02 rows despite
+   -- zero direct base-table grants (and despite FORCE RLS). Materialized
+   -- views may copy those rows too. A security_invoker=true view checks
+   -- the reader's own base-table privileges and is not this bypass.
+   AND NOT EXISTS (
+       SELECT 1 FROM pg_catalog.pg_class v
+       JOIN pg_catalog.pg_namespace vn ON vn.oid = v.relnamespace
+       WHERE v.relkind IN ('v','m')
+         AND vn.nspname NOT IN (
+           'pg_catalog','information_schema','pg_toast'
+         )
+         AND (
+           v.relkind = 'm'
+           OR NOT COALESCE(
+               'security_invoker=true' = ANY(v.reloptions), FALSE
+           )
+         )
+         AND pg_catalog.has_schema_privilege(
+           r.rolname, vn.oid, 'USAGE'
+         )
+         AND (
+           pg_catalog.has_table_privilege(
+             r.rolname, v.oid, 'SELECT'
+           )
+           OR pg_catalog.has_any_column_privilege(
+             r.rolname, v.oid, 'SELECT'
+           )
+         )
+   )
    AND (
        SELECT COUNT(*) FROM pg_catalog.pg_class c
        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
