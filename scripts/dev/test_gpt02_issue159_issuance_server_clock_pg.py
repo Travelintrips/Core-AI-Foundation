@@ -161,16 +161,20 @@ def main():
             "--name", name, "-e", "POSTGRES_USER=root_admin",
             "-e", "POSTGRES_PASSWORD=fixture_only", "postgres:16-alpine",
         )
+        # pg_isready may briefly pass during the image's initdb temporary
+        # server just before it shuts down. Require actual FINAL TCP SQL.
         for _ in range(120):
             r = run(
-                "docker", "exec", name, "pg_isready", "-U", "root_admin",
+                "docker", "exec", "-e", "PGPASSWORD=fixture_only", name,
+                "psql", "-X", "-w", "-h", "127.0.0.1",
+                "-U", "root_admin", "-d", "postgres", "-Atc", "SELECT 1",
                 check=False,
             )
-            if r.returncode == 0:
+            if r.returncode == 0 and r.stdout.strip() == "1":
                 break
-            time.sleep(.15)
+            time.sleep(.25)
         else:
-            raise RuntimeError("DISPOSABLE_PG16_NOT_READY")
+            raise RuntimeError("DISPOSABLE_PG16_FINAL_TCP_NOT_READY")
         admin(name, """
 CREATE ROLE postgres LOGIN CREATEROLE NOINHERIT
  PASSWORD 'synthetic_clock_owner_only';
