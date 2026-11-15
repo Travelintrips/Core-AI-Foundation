@@ -12,6 +12,8 @@ on:
       - "deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service"
       - "deploy/ai-coding-standalone-dev/gpt02-issue159-operational-signer@.service"
       - "scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py"
+      - "scripts/dev/gpt02_issue159_relock_admin_custody.READONLY.py"
+      - "scripts/dev/test_gpt02_issue159_relock_admin_custody.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_one_shot_reader_broker.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_native_relock_attestation.py"
@@ -163,6 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py -q
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_relock_admin_custody
           test ! -f scripts/dev/gpt02_issue159_issuer_reader_install_credential_live.py
           echo "PASS_CUSTODY_STARTUP_GUARDS_NO_CREDENTIAL_ACTIVATION"
 
