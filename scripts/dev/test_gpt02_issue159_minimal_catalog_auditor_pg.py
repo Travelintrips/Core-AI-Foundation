@@ -65,15 +65,19 @@ def probe(name, role, password, target, *, check=True):
 
 def main():
     proposal = PROPOSAL.read_text(encoding="utf-8")
+    commands = "\n".join(
+        line for line in proposal.splitlines()
+        if not line.lstrip().startswith("--")
+    )
     if (
-        "SECURITY DEFINER" not in proposal
-        or "SET search_path = pg_catalog, pg_temp" not in proposal
-        or "REVOKE ALL ON FUNCTION" not in proposal
-        or "NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0" not in proposal
-        or "ALTER ROLE" in proposal
-        or "PASSWORD " in proposal
-        or "GRANT SELECT ON pg_catalog.pg_authid" in proposal
-        or "GRANT EXECUTE" not in proposal
+        "SECURITY DEFINER" not in commands
+        or "SET search_path = pg_catalog, pg_temp" not in commands
+        or "REVOKE ALL ON FUNCTION" not in commands
+        or "NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0" not in commands
+        or "ALTER ROLE" in commands
+        or "PASSWORD " in commands
+        or "GRANT SELECT ON pg_catalog.pg_authid" in commands
+        or "GRANT EXECUTE" not in commands
     ):
         raise AssertionError("MINIMAL_AUDITOR_PROPOSAL_SECURITY_CONTRACT_BROKEN")
 
