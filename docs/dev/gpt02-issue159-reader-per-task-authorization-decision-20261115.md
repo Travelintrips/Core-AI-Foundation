@@ -447,3 +447,52 @@ The minimum viable live role remains unavailable until the entire privileged
 issuer/cleanup/watchdog model, role provenance, timestamp validity,
 credential custody, and external owner-approved task are independently
 reviewed. Never treat a synthetic TRUE as deployment authorization.
+
+
+## One-read consumption fence before any connection — 16 Nov 2026
+
+The prior review-only broker derived the correct scoped reader role but
+immediately attempted a reader connection after the signed/persisted
+verifier readback. This left an application-level replay gap: repeated
+attempts during the short signed lease could enter the read function again,
+even if the separate credential-ISSUANCE ledger was unique.
+
+The EXISTING uninstalled broker source now REQUIRES a
+supervisor.consume_scope_once(candidate) call BEFORE
+open_one_scoped_connection. The response shape must bind all of:
+scopeSha256, verifiedPacketSha256, role, commandId, attemptId,
+receiptId, fenceId, consumedExactlyOnce=true and releaseDecision=NO_GO.
+Any failed, replayed, missing, mismatched or ambiguous consumption blocks
+the query and goes through the cleanup/relock path. These are review-only
+interface checks; the supervisor is still unimplemented and its own
+receipt is NOT independent proof of a native PostgreSQL ledger commit.
+
+Offline broker regression added concurrency/replay/fail-close tests using
+the existing signed fixtures and an in-memory synthetic supervisor:
+35/35 unittests PASS. In the EXISTING
+scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py test,
+a second immutable 'reader_read_consumptions' table was added to the
+networkless disposable PG16 fixture. A unique tuple derived from the
+already-issued packet/scope/command/attempt is inserted atomically in a
+transaction under a scoped advisory lock; simultaneous duplicate
+consumption attempts yield one success, one duplicate rejection.
+A failed query AFTER consuming does NOT restore the read budget; replay
+remains denied. The reader LOGIN has no read/write access to either
+issuance or consumption ledger. Exact committed test passed, exit code 0.
+
+CRITICAL LIMITATION DEMONSTRATED: A holder of the temporarily enabled
+reader PASSWORD can still open a new connection and read the same
+approved row again before the role is actually locked. The test
+intentionally reproduces this risk and labels it
+EXPECTED_RISK_DIRECT_PASSWORD_CAN_REQUERY_BEFORE_RELOCK_NO_GO.
+A consumption ledger limits the TRUSTED BROKER, not a compromised
+unrevoked PostgreSQL credential.
+
+Operational release needs the real, privately authenticated issuer/
+consumer, independently verifiable database consumption before any read,
+short fixed RLS TTL, one-query connection custody, immediate revoke and
+terminate, crash watchdog and auditable cleanup. Existing post-read
+native boolean audit only proves relock at one instant, not an
+anti-replay issuance grant. No live credentials/roles/services were
+created or changed. Draft NO_GO for live issuance, signer, dispatch,
+DELL, PROD and Final ACK.
