@@ -211,11 +211,43 @@ def proposed_sql(candidate: object, observed_ms: int) -> str:
             f"AND {period}"
         ),
     }
+    # The ACTUAL CST-DEV tables belong to gpt02_store_owner, while
+    # postgres has CREATEROLE but pg_has_role(...,'SET') is FALSE.
+    # Reuse the same transactional owner-custody pattern already proposed
+    # in gpt02-issue159-positive-dispatch-permit.PROPOSED.sql. Do not weaken
+    # either the operating reader or the permanent owner membership.
     stmts = [
         "-- SOURCE-ONLY PROPOSAL. NEVER APPLY TO LIVE DEV OR PROD.",
         "-- No LOGIN/password, signer, dispatch, privileged routine or worker.",
+        "-- This requires an independently approved, dedicated migrator.",
         "BEGIN;",
+        "DO $preflight$ DECLARE tbl text; BEGIN",
+        " IF current_user <> 'postgres' OR",
+        " NOT (SELECT rolcreaterole FROM pg_roles WHERE rolname='postgres')",
+        " THEN RAISE EXCEPTION 'SCOPED_POLICY_MIGRATOR_IDENTITY_REQUIRED'; END IF;",
+        " IF pg_has_role('postgres','gpt02_store_owner','SET')",
+        " OR NOT EXISTS (SELECT 1 FROM pg_auth_members m",
+        " WHERE m.roleid='gpt02_store_owner'::regrole",
+        " AND m.member='postgres'::regrole AND m.admin_option)",
+        " THEN RAISE EXCEPTION 'SCOPED_POLICY_OWNER_CUSTODY_BASELINE_INVALID'; END IF;",
+        " IF NOT EXISTS (SELECT 1 FROM pg_namespace n",
+        " WHERE n.nspname='gpt02_private'",
+        " AND n.nspowner='gpt02_store_owner'::regrole)",
+        " THEN RAISE EXCEPTION 'SCOPED_POLICY_SCHEMA_OWNER_DRIFT'; END IF;",
+        " FOREACH tbl IN ARRAY ARRAY['approvals','operator_links','receipts',",
+        " 'core_identity_receipts','post_consumption_fences'] LOOP",
+        " IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n",
+        " ON n.oid=c.relnamespace",
+        " WHERE n.nspname='gpt02_private' AND c.relname=tbl",
+        " AND c.relowner='gpt02_store_owner'::regrole",
+        " AND c.relrowsecurity AND c.relforcerowsecurity)",
+        " THEN RAISE EXCEPTION 'SCOPED_POLICY_TABLE_OWNER_OR_RLS_DRIFT:%',tbl;",
+        " END IF;",
+        " END LOOP;",
+        "END $preflight$;",
         f"CREATE ROLE {role} NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0;",
+        "GRANT gpt02_store_owner TO postgres WITH SET TRUE;",
+        "SET ROLE gpt02_store_owner;",
         f"GRANT USAGE ON SCHEMA gpt02_private TO {role};",
     ]
     for table, cols in TABLE_COLUMNS.items():
@@ -228,7 +260,17 @@ def proposed_sql(candidate: object, observed_ms: int) -> str:
             f"ON gpt02_private.{table} FOR SELECT TO {role} "
             f"USING ({predicates[table]});"
         )
-    stmts.append("COMMIT;")
+    stmts.extend([
+        "RESET ROLE;",
+        "GRANT gpt02_store_owner TO postgres WITH SET FALSE;",
+        "DO $postflight$ BEGIN",
+        " IF current_user <> 'postgres' OR",
+        " pg_has_role('postgres','gpt02_store_owner','SET')",
+        " THEN RAISE EXCEPTION 'SCOPED_POLICY_OWNER_PRIVILEGE_NOT_RESTORED';",
+        " END IF;",
+        "END $postflight$;",
+        "COMMIT;",
+    ])
     return "\n".join(stmts) + "\n"
 
 
