@@ -18,7 +18,7 @@ import time
 from typing import Any
 
 from gpt02_issue159_lineage_db_reader import read_lineage_once
-from gpt02_issue159_native_relock_attestation import attest_native_relock
+from gpt02_issue159_native_relock_attestation import attest_boolean_relock
 from gpt02_issue159_lineage_readback_contract import validate_trusted_lineage_row
 from gpt02_issue159_positive_permit_handoff import (
     VERIFIER_PUBLIC_ROOT_DIR, inspect_postlineage_scoped_reader_candidate,
@@ -100,7 +100,7 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
         _fail("ONE_SHOT_SUPERVISOR_MISSING")
     if not callable(getattr(supervisor, "relock_and_verify", None)):
         _fail("ONE_SHOT_RELOCK_NOT_AVAILABLE")
-    if not callable(getattr(supervisor, "open_trusted_admin_connection", None)):
+    if not callable(getattr(supervisor, "open_minimal_auditor_connection", None)):
         _fail("ONE_SHOT_NATIVE_ADMIN_READBACK_NOT_AVAILABLE")
 
     result = None
@@ -148,12 +148,13 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
         cleanup = supervisor.relock_and_verify(candidate)
         if not _verified_cleanup(cleanup, candidate):
             _fail("ONE_SHOT_POSTREAD_RELOCK_NOT_PROVEN")
-        # A cleanup report alone is untrusted. Query PostgreSQL's own
-        # pg_authid/pg_roles/pg_stat_activity and effective grants using a
-        # SEPARATELY authenticated, pinned TLS admin connection. This is
-        # an observation of a relocked role, not a grant or release.
-        with supervisor.open_trusted_admin_connection(candidate) as admin_conn:
-            native = attest_native_relock(admin_conn, candidate)
+        # A cleanup report alone is untrusted. A *separate* low-privilege
+        # auditor connection may execute only the restricted DB-owned
+        # boolean function; it cannot SELECT pg_authid or lineage tables.
+        # In the isolated DB function, postgres inspects the native catalogs
+        # and returns only whether the exact scoped role is fully relocked.
+        with supervisor.open_minimal_auditor_connection(candidate) as audit_conn:
+            native = attest_boolean_relock(audit_conn, candidate)
         if (
             native.get("nativeCatalogReadBack") is not True
             or native.get("role") != candidate["candidateRole"]
