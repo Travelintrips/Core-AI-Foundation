@@ -78,5 +78,3 @@ def read_lineage_once(connection: Any, lookup: Any) -> list[dict[str, Any]]:
     if len(rows) > 1 or len(names) != len(ROW_FIELDS) or set(names) != ROW_FIELDS:
         raise BrokerAdmissionError("LINEAGE_READBACK_CARDINALITY_INVALID")
     return [normalize_row(dict(zip(names, row))) for row in rows]
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
