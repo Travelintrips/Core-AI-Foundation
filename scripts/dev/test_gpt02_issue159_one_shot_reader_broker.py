@@ -592,5 +592,178 @@ class ScopedReaderBrokerTest(unittest.TestCase):
             self.assertNotIn(forbidden, source)
 
 
+class _ClaimCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self.description = [SimpleNamespace(name="claimed_once")]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, sql, params=None):
+        self.conn.calls.append((sql, params))
+        if self.conn.query_error is not None:
+            raise self.conn.query_error
+
+    def fetchmany(self, n):
+        if n != 2:
+            raise AssertionError("CLAIM_MUST_USE_BOUNDED_CARDINALITY")
+        return self.conn.rows
+
+
+class _ClaimConnection:
+    def __init__(self):
+        self.info = SimpleNamespace(
+            user=broker.READER_CONSUMER_USER,
+            dbname="postgres", host=broker.POOLER_HOST, port=5432,
+            get_parameters=lambda: {
+                "sslmode": "verify-full", "sslrootcert": "/synthetic/ca.pem",
+            },
+        )
+        self.autocommit = False
+        self.rows = [(True,)]
+        self.calls = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.query_error = None
+        self.commit_error = None
+
+    def cursor(self):
+        return _ClaimCursor(self)
+
+    def commit(self):
+        self.commits += 1
+        if self.commit_error is not None:
+            raise self.commit_error
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+class NativeClaimConsumerAdapterTest(unittest.TestCase):
+    """No real DB or credentials: native writer adapter source contract."""
+
+    def setUp(self):
+        fixture = PostlineageReaderScopeOfflineTest()
+        fixture.setUp()
+        self.candidate = fixture.check()
+        self.now = fixture.fixture.now
+        self.db = _ClaimConnection()
+        self.challenge = "a" * 64
+
+    def consume(self, *, challenge=None):
+        with patch.object(broker.time, "time", return_value=self.now/1000):
+            return broker.consume_once_via_pinned_connection(
+                self.db, self.candidate,
+                self.challenge if challenge is None else challenge,
+            )
+
+    def test_only_one_bounded_rpc_commits_before_returning_claim(self):
+        result = self.consume()
+        scope = self.candidate["scope"]
+        self.assertEqual(self.db.commits, 1)
+        self.assertEqual(self.db.rollbacks, 0)
+        self.assertEqual(self.db.calls, [
+            ("SET TRANSACTION READ WRITE", None),
+            ("SET LOCAL statement_timeout = '1500ms'", None),
+            (broker.CONSUME_ONCE_SQL, {
+                "role": self.candidate["candidateRole"],
+                "scope_sha": self.candidate["scopeSha256"],
+                "packet_sha": self.candidate["verifiedPacketSha256"],
+                "command_id": scope["command_id"],
+                "attempt_id": scope["attempt_id"],
+                "receipt_id": scope["receipt_id"],
+                "fence_id": scope["fence_id"],
+                "read_challenge": self.challenge,
+            }),
+        ])
+        self.assertTrue(broker._review_consumption_binding(
+            result, self.candidate, self.challenge,
+        ))
+        self.assertEqual(result["releaseDecision"], "NO_GO")
+
+    def test_false_null_duplicates_and_malformed_db_result_never_commit(self):
+        for rows in (
+            [(False,)], [(None,)], [], [(True,), (True,)],
+            [("t",)], [(1,)], [()], [(True, False)],
+        ):
+            with self.subTest(rows=rows):
+                self.setUp()
+                self.db.rows = rows
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError,
+                    "ONE_READ_CONSUMER_DB_NOT_ATOMICALLY_CLAIMED",
+                ):
+                    self.consume()
+                self.assertEqual(self.db.commits, 0)
+                self.assertEqual(self.db.rollbacks, 1)
+
+    def test_unknown_commit_fails_closed_without_returning_approval(self):
+        self.db.commit_error = RuntimeError("synthetic_commit_unknown")
+        with self.assertRaisesRegex(RuntimeError, "synthetic_commit_unknown"):
+            self.consume()
+        self.assertEqual(self.db.commits, 1)
+        self.assertEqual(self.db.rollbacks, 1)
+
+    def test_query_failure_rolls_back(self):
+        self.db.query_error = RuntimeError("synthetic_database_query_failed")
+        with self.assertRaisesRegex(RuntimeError, "synthetic_database_query_failed"):
+            self.consume()
+        self.assertEqual(self.db.commits, 0)
+        self.assertEqual(self.db.rollbacks, 1)
+
+    def test_incorrect_identity_host_port_db_or_autocommit_denied(self):
+        for field, value in (
+            ("user", "postgres." + broker.PROJECT),
+            ("user", "service_role"),
+            ("host", "localhost"), ("port", 5433), ("dbname", "other"),
+            ("autocommit", True),
+        ):
+            with self.subTest(field=field, value=value):
+                self.setUp()
+                target = self.db if field == "autocommit" else self.db.info
+                setattr(target, field, value)
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError, "ONE_READ_CONSUMER_NATIVE_DB_IDENTITY_INVALID"
+                ):
+                    self.consume()
+                self.assertEqual(self.db.calls, [])
+                self.assertEqual(self.db.commits, 0)
+
+    def test_tls_downgrade_and_missing_ca_denied(self):
+        for parameters in (
+            {"sslmode": "require", "sslrootcert": "/synthetic/ca.pem"},
+            {"sslmode": "verify-full", "sslrootcert": ""},
+            {"sslmode": "verify-full"},
+        ):
+            with self.subTest(parameters=parameters):
+                self.setUp()
+                self.db.info.get_parameters = lambda p=parameters: p
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError, "ONE_READ_CONSUMER_TLS_VERIFY_FULL_REQUIRED"
+                ):
+                    self.consume()
+                self.assertEqual(self.db.calls, [])
+
+    def test_invalid_challenge_and_expired_candidate_denied(self):
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "ONE_READ_CHALLENGE_FORMAT_INVALID"
+        ):
+            self.consume(challenge="caller-supplied-invalid")
+        self.assertEqual(self.db.commits, 0)
+        with patch.object(broker.time, "time",
+                          return_value=(self.candidate["expiresAt"]-2000)/1000):
+            with self.assertRaisesRegex(
+                BrokerAdmissionError, "ONE_SHOT_SIGNED_LEASE_INSUFFICIENT"
+            ):
+                broker.consume_once_via_pinned_connection(
+                    self.db, self.candidate, self.challenge,
+                )
+        self.assertEqual(self.db.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
