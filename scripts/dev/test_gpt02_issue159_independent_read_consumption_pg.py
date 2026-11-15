@@ -222,7 +222,7 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
               + quote(candidate["scopeSha256"]) + ",0));"
             "INSERT INTO " + consumed + "(scope_sha,read_challenge) SELECT i.scope_sha,"
               + quote(read_challenge)
-            " FROM " + issued + " i WHERE i.scope_sha="
+            + " FROM " + issued + " i WHERE i.scope_sha="
               + quote(candidate["scopeSha256"])
             + " AND i.packet_sha=" + quote(candidate["verifiedPacketSha256"])
             + " AND i.command_id=" + quote(scope["command_id"]) + "::uuid"
