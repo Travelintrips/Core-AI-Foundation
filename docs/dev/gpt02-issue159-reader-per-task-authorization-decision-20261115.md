@@ -31,3 +31,22 @@ A second possible candidate is a privately authenticated server-owned read broke
 Existing source tests: PASS. Existing socket custody tests: PASS. Scoped synthetic capability test: PASS for its synthetic model but incompatible with the current issuer role guard. **Actual database-enforced one-task security: NOT PROVEN.** E2E Final ACK: NO_GO.
 
 No change to active DEV roles, RLS, service, credentials, signer, dispatch or PROD was made when authoring this decision.
+
+## Disposable signed-scope issuance and relock evidence — 15 Nov 2026
+
+Synthetic test source: scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py.
+
+- Reuses four-root synthetic signed packet, mock persisted readback, and exact five-table RLS. A disposable network-isolated PostgreSQL 16 database models a privileged issuance actor. No live accounts, roles, credentials or records are touched.
+- One atomic transaction records a scope/packet/command-unique issuance ledger and enables a generated synthetic LOGIN with CONNECTION LIMIT 1. Simultaneous replay requests produce only one committed issuance. A different scope cannot reuse the same command.
+- Native one-task PostgreSQL login proves original canonical SQL works, other task and writes fail, and the credential cannot read the issuance ledger. After use, SELECT/USAGE are revoked, the role becomes NOLOGIN with CONNECTION LIMIT 0 and password NULL, an active backend is terminated, zero sessions remain, and new LOGIN fails.
+- These results prove synthetic mechanism feasibility, NOT live authentication, real credential custody, approval-to-issuance authority or release.
+
+### Blocking conditions for any operational activation
+
+1. One connection is NOT one read. A compromised password may be reused sequentially before revocation, and an active session may issue repeated SELECTs. A pinned one-shot broker must execute a single approved read, close it, then force backend termination. The database must independently fence issuance and consumption.
+2. The source candidate has credentialIssuancePermitted=false and releaseDecision=NO_GO. Neither a hash nor a caller-supplied proof authorizes role creation. Require fresh, persisted, independently verified Super Admin approval, four independent signed roots, exact five-table lineage, and approved one-use issuance transaction.
+3. The active lineage reader pins the existing shared database identity in both DSN and connection user checks. Never swap a per-task password into that unit or weaken the identity guard. A separately reviewed compatible path must preserve the active service until cutover PASS.
+4. Scoped credentials must not inherit dev_gpt02_lineage_login's broad column SELECT or RLS task-threshold / unconditional policies. Test direct SQL enumeration from the credential, not just the application's bound query.
+5. Lease expiry, revocation, crash after granting, concurrent issuance, partial rollback and stale active sessions must all fail closed to NOLOGIN, password NULL and zero sessions. Signer, dispatch, DELL and PROD remain untouched.
+
+Outcome: SYNTHETIC ISSUANCE PASS; LIVE CREDENTIAL ISSUANCE NO_GO; FINAL ACK NO_GO.
