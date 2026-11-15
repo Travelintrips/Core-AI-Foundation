@@ -153,6 +153,20 @@ ALTER TABLE gpt02_private.operator_links
         if role_state.stdout.strip() != "t":
             raise AssertionError("POLICY_ROLE_NOT_DORMANT")
         print("PASS_NEW_SCOPED_ROLE_NOLOGIN_CONN_LIMIT_ZERO")
+        no_members = sql(name,
+            "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r "
+            "ON r.oid=m.member WHERE r.rolname=" + quote(role))
+        if no_members.stdout.strip() != "0":
+            raise AssertionError("SCOPED_ROLE_INHERITED_BROAD_READ_PRIVILEGE")
+        all_table_read = sql(name,
+            "SELECT has_table_privilege(" + quote(role) +
+            ",'gpt02_private.approvals','SELECT')")
+        any_column_read = sql(name,
+            "SELECT has_any_column_privilege(" + quote(role) +
+            ",'gpt02_private.approvals','SELECT')")
+        if all_table_read.stdout.strip() != "f" or any_column_read.stdout.strip() != "t":
+            raise AssertionError("SCOPED_ROLE_NOT_COLUMN_ONLY_SELECT")
+        print("PASS_NO_BROAD_ROLE_INHERITANCE_OR_TABLE_LEVEL_SELECT")
 
         # Under SELECT-column grants (NOT table SELECT) every required
         # canonical query field and RLS predicate must still work.
