@@ -118,6 +118,28 @@ class CustodyMetaTest(unittest.TestCase):
                     "AUDITOR_UNIT_CUSTODY_CONFIGURATION_INVALID",
                 )
 
+    def test_duplicate_user_or_environment_directive_denied(self):
+        for extra in (
+            "User=root",
+            "Environment=APP_ENV=production",
+        ):
+            with self.subTest(extra=extra):
+                self.unit.write_text(
+                    self.valid_lines + extra + "\n",
+                    encoding="utf-8",
+                )
+                result = self.check()
+                self.assert_denied(result)
+                self.assertEqual(result["reason"],
+                                 "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
+
+    def test_systemd_dropin_directory_denied(self):
+        dropin = self.unit.parent / (self.unit.name + ".d")
+        dropin.mkdir()
+        result = self.check()
+        self.assert_denied(result)
+        self.assertEqual(result["reason"], "AUDITOR_UNIT_DROPINS_UNREVIEWED")
+
     def test_weak_file_modes_owners_and_empty_credential_denied(self):
         for args in (
             {"unit_mode": 0o666},
