@@ -38,7 +38,19 @@ BEGIN
       WHERE n.nspname='gpt02_relock_audit'
         AND c.relname IN ('reader_issuances','reader_consumptions')
         AND p.polname='owner_only' AND p.polcmd='*'
+        AND p.polpermissive
         AND p.polroles=ARRAY['postgres'::regrole::oid]
+        AND pg_get_expr(p.polqual,p.polrelid) = 'true'
+        AND pg_get_expr(p.polwithcheck,p.polrelid) = 'true'
+    ) <> 2
+    -- Any extra RLS policy (including TO PUBLIC) may silently widen access
+    -- when coupled to a later table grant. Require exactly one per table.
+    OR (
+      SELECT count(*) FROM pg_policy p
+      JOIN pg_class c ON c.oid=p.polrelid
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='gpt02_relock_audit'
+        AND c.relname IN ('reader_issuances','reader_consumptions')
     ) <> 2
     OR EXISTS (
       SELECT 1 FROM pg_class c
@@ -50,6 +62,15 @@ BEGIN
           WHERE t.tgrelid=c.oid AND NOT t.tgisinternal
             AND t.tgname IN ('immutable_rows','immutable_truncate')
             AND t.tgenabled IN ('O','A')
+            AND t.tgfoid = (
+              'gpt02_relock_audit.reject_reader_ledger_mutation()'
+            )::regprocedure
+            -- 27 = BEFORE UPDATE OR DELETE FOR EACH ROW.
+            -- 34 = BEFORE TRUNCATE FOR EACH STATEMENT.
+            AND (
+              (t.tgname='immutable_rows' AND t.tgtype=27)
+              OR (t.tgname='immutable_truncate' AND t.tgtype=34)
+            )
         ) <> 2
     )
     OR to_regprocedure(
