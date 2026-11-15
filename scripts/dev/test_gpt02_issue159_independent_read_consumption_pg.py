@@ -182,6 +182,26 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
              "DROP POLICY owner_only ON " + table,
              "CREATE POLICY owner_only ON " + table +
              " FOR ALL TO postgres USING (true) WITH CHECK (true)"),
+            ("EXTRA_PUBLIC_SELECT_POLICY",
+             "CREATE POLICY issue159_extra_public ON " + table +
+             " FOR SELECT TO PUBLIC USING (true)",
+             "DROP POLICY issue159_extra_public ON " + table),
+            ("OWNER_POLICY_EXPRESSION_CHANGED",
+             "ALTER POLICY owner_only ON " + table + " USING (false)",
+             "ALTER POLICY owner_only ON " + table + " USING (true)"),
+            ("IMMUTABLE_TRIGGER_WRONG_FUNCTION",
+             "CREATE FUNCTION gpt02_relock_audit.issue159_synthetic_noop() "
+             "RETURNS trigger LANGUAGE plpgsql AS "
+             "$BEGIN RETURN NEW; END$;"
+             "DROP TRIGGER immutable_rows ON " + table + ";"
+             "CREATE TRIGGER immutable_rows BEFORE UPDATE OR DELETE ON " +
+             table + " FOR EACH ROW EXECUTE FUNCTION "
+             "gpt02_relock_audit.issue159_synthetic_noop()",
+             "DROP TRIGGER immutable_rows ON " + table + ";"
+             "CREATE TRIGGER immutable_rows BEFORE UPDATE OR DELETE ON " +
+             table + " FOR EACH ROW EXECUTE FUNCTION "
+             "gpt02_relock_audit.reject_reader_ledger_mutation();"
+             "DROP FUNCTION gpt02_relock_audit.issue159_synthetic_noop()"),
         )
         for label, break_sql, restore_sql in scenarios:
             call(name, "postgres", pg_password, break_sql)
