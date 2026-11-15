@@ -146,5 +146,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
