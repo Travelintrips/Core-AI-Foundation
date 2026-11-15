@@ -111,6 +111,11 @@ class FakeMinimalAuditConnection:
 class FakeSupervisor:
     def __init__(self, role, scope_sha):
         self.connection = NativeConnection(role)
+        self.events = []
+        self.consumption_calls = []
+        self.consumed_scopes = set()
+        self.consumption_error = None
+        self.consumption_override = None
         self.auditor_connection = FakeMinimalAuditConnection(role)
         self.auditor_open_calls = []
         self.open_calls = []
@@ -119,7 +124,33 @@ class FakeSupervisor:
         self.relock_ok = True
         self.open_failure = None
 
+    def consume_scope_once(self, candidate):
+        self.events.append("consume")
+        self.consumption_calls.append(candidate)
+        if self.consumption_error is not None:
+            raise self.consumption_error
+        scope_sha = candidate["scopeSha256"]
+        if scope_sha in self.consumed_scopes:
+            raise BrokerAdmissionError("SYNTHETIC_ALREADY_CONSUMED")
+        self.consumed_scopes.add(scope_sha)
+        scope = candidate["scope"]
+        receipt = {
+            "scopeSha256": scope_sha,
+            "verifiedPacketSha256": candidate["verifiedPacketSha256"],
+            "role": candidate["candidateRole"],
+            "commandId": scope["command_id"],
+            "attemptId": scope["attempt_id"],
+            "receiptId": scope["receipt_id"],
+            "fenceId": scope["fence_id"],
+            "consumedExactlyOnce": True,
+            "releaseDecision": "NO_GO",
+        }
+        if self.consumption_override is not None:
+            receipt.update(self.consumption_override)
+        return receipt
+
     def open_one_scoped_connection(self, candidate):
+        self.events.append("open")
         self.open_calls.append(candidate)
         if self.open_failure is not None:
             raise self.open_failure
@@ -130,6 +161,7 @@ class FakeSupervisor:
         return self.auditor_connection
 
     def relock_and_verify(self, candidate):
+        self.events.append("relock")
         self.relock_calls.append(candidate)
         return {
             "role": candidate["candidateRole"],
@@ -203,10 +235,13 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                 "approval_digest": self.candidate["scope"]["approval_digest"],
             }
         )
+        self.assertEqual(len(self.supervisor.consumption_calls), 1)
         self.assertEqual(len(self.supervisor.open_calls), 1)
         self.assertEqual(len(self.supervisor.relock_calls), 1)
+        self.assertEqual(self.supervisor.events, ["consume", "open", "relock"])
         self.assertTrue(self.supervisor.connection.closed)
         self.assertTrue(value["oneCanonicalReadReviewed"])
+        self.assertTrue(value["preReadConsumptionClaimReviewed"])
         self.assertTrue(value["postReadRelockReported"])
         self.assertTrue(value["postReadRelockVerifiedByNativePostgres"])
         self.assertEqual(len(self.supervisor.auditor_open_calls), 1)
@@ -295,7 +330,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         with self.assertRaisesRegex(BrokerAdmissionError,
                                     "ONE_SHOT_POSTREAD_RELOCK_NOT_PROVEN"):
             self.call()
-        self.supervisor.relock_ok = True
+        self.setUp()  # fresh disposable approval-scope fixture after first use
         self.supervisor.scope_sha = "f" * 64
         with self.assertRaisesRegex(BrokerAdmissionError,
                                     "ONE_SHOT_POSTREAD_RELOCK_NOT_PROVEN"):
@@ -346,6 +381,70 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertEqual(len(self.supervisor.relock_calls), 1)
         self.assertTrue(self.supervisor.auditor_connection.closed)
         self.assertEqual(self.supervisor.auditor_connection.rollback_calls, 1)
+
+    def test_duplicate_packet_replay_is_denied_before_second_query(self):
+        self.call()
+        self.assertEqual(len(self.supervisor.consumption_calls), 1)
+        self.assertEqual(len(self.supervisor.open_calls), 1)
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+        with self.assertRaisesRegex(BrokerAdmissionError, "SYNTHETIC_ALREADY_CONSUMED"):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.consumption_calls), 2)
+        self.assertEqual(len(self.supervisor.open_calls), 1)
+        self.assertEqual(len(self.supervisor.relock_calls), 2)
+
+    def test_query_failure_after_consumption_cannot_replay(self):
+        with self.assertRaisesRegex(RuntimeError, "synthetic_reader_timeout"):
+            self.call(reader=Mock(side_effect=RuntimeError("synthetic_reader_timeout")))
+        self.assertEqual(len(self.supervisor.consumption_calls), 1)
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+        with self.assertRaisesRegex(BrokerAdmissionError, "SYNTHETIC_ALREADY_CONSUMED"):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.open_calls), 1)
+        self.assertEqual(len(self.supervisor.relock_calls), 2)
+
+    def test_atomic_claim_error_always_relocks_but_never_queries(self):
+        self.supervisor.consumption_error = RuntimeError("synthetic_claim_commit_unknown")
+        with self.assertRaisesRegex(RuntimeError, "synthetic_claim_commit_unknown"):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.open_calls), 0)
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+        self.assertEqual(self.supervisor.events, ["consume", "relock"])
+
+    def test_forged_consumption_fields_are_denied_before_open(self):
+        for key, changed in (
+            ("scopeSha256", "f" * 64),
+            ("verifiedPacketSha256", "f" * 64),
+            ("role", "postgres"),
+            ("commandId", "11111111-1111-4111-8111-111111111111"),
+            ("attemptId", "22222222-2222-4222-8222-222222222222"),
+            ("receiptId", "33333333-3333-4333-8333-333333333333"),
+            ("fenceId", "44444444-4444-4444-8444-444444444444"),
+            ("consumedExactlyOnce", False),
+            ("releaseDecision", "GO"),
+        ):
+            with self.subTest(key=key):
+                self.setUp()
+                self.supervisor.consumption_override = {key: changed}
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError, "ONE_SHOT_CONSUMPTION_BINDING_NOT_PROVEN"
+                ):
+                    self.call()
+                self.last_read.assert_not_called()
+                self.assertEqual(len(self.supervisor.open_calls), 0)
+                self.assertEqual(len(self.supervisor.relock_calls), 1)
+
+    def test_consumption_dependency_is_required_before_open(self):
+        self.supervisor.consume_scope_once = None
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "ONE_SHOT_DURABLE_CONSUMPTION_SUPERVISOR_MISSING"
+        ):
+            self.call()
+        self.assertEqual(len(self.supervisor.open_calls), 0)
+        self.assertEqual(len(self.supervisor.relock_calls), 0)
 
     def test_insufficient_lease_denied_before_connection(self):
         with self.assertRaisesRegex(BrokerAdmissionError,
