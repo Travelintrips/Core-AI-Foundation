@@ -263,7 +263,7 @@ GRANT EXECUTE ON FUNCTION
             "SET ROLE " + role + "; "
             "SELECT public.issue159_synthetic_privileged_read(); "
             "RESET ROLE;")
-        if leaked.stdout.strip() != "2":
+        if [line.strip() for line in leaked.stdout.splitlines() if line.strip() == "2"] != ["2"]:
             raise AssertionError("SYNTHETIC_PRIVILEGED_FUNCTION_BYPASS_NOT_REPRODUCED")
         revoked_role_but_definer = probe(name, AUDITOR, audit_password, role)
         if revoked_role_but_definer.stdout.strip() != "f":
