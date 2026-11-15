@@ -22,6 +22,11 @@ on:
       - "scripts/dev/prepare_gpt02_issue159_approval_request.py"
       - "scripts/dev/test_gpt02_issue159_approval_request_prepare.py"
       - "scripts/dev/test_gpt02_issue159_positive_permit_pg.py"
+      - "scripts/dev/test_gpt02_issue159_five_table_task_scope_pg.py"
+      - "scripts/dev/test_gpt02_issue159_ephemeral_role_revocation_pg.py"
+      - "scripts/dev/test_gpt02_issue159_disposable_login_relock_pg.py"
+      - "scripts/dev/test_gpt02_issue159_relock_active_session_pg.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_readback_contract.py"
       - "scripts/dev/test_gpt02_issue159_positive_permit_handoff.py"
       - "scripts/dev/test_gpt02_issue159_live_approval_readiness.py"
       - "scripts/dev/gpt02_issue159_live_approval_readiness.READONLY.py"
@@ -58,6 +63,14 @@ jobs:
         uses: actions/checkout@v4
       - name: Disposable PostgreSQL 16 one-use ledger regressions
         run: python3 scripts/dev/test_gpt02_issue159_positive_permit_pg.py
+      - name: Five-table exact-task reader isolation and one-use relock (disposable only)
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test_gpt02_issue159_five_table_task_scope_pg.py
+          python3 scripts/dev/test_gpt02_issue159_ephemeral_role_revocation_pg.py
+          python3 scripts/dev/test_gpt02_issue159_disposable_login_relock_pg.py
+          python3 scripts/dev/test_gpt02_issue159_relock_active_session_pg.py
+          echo "PASS_SCOPED_SQL_REVOKE_ACTIVE_SESSION_RELOCK_DISPOSABLE_ONLY"
       - name: Assert no runtime deployment path
         run: |
           test ! -f scripts/dev/gpt02_issue159_positive_permit_apply_live.py
