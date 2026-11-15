@@ -325,3 +325,106 @@ def inspect_prelineage_reader_scope_candidate(packet: dict[str, Any]) -> dict[st
         "dispatchPermitted": False,
         "releaseDecision": "NO_GO",
     }
+
+def inspect_postlineage_scoped_reader_candidate(
+    packet: dict[str, Any], pinned_public_roots: dict[str, str],
+) -> dict[str, Any]:
+    """Derive an INERT exact-row reader candidate after trusted lineage proof.
+
+    Reuse the existing pinned-verifier socket and its persisted Super Admin
+    and five-table lineage readbacks. We independently bind the verified
+    packet SHA to the signed IDs and never accept independent caller-supplied
+    task, command, receipt, fence, role or credential strings.
+
+    No DB connection, role DDL, credential material, grant or dispatch.
+    A future implementation MUST separately authorize and atomically consume
+    one-use issuance, check all five RLS policies and terminate sessions.
+    """
+    proof = inspect_proposed_permit_candidate(packet, pinned_public_roots)
+    if not isinstance(proof, dict) or proof.get("releaseDecision") != "NO_GO":
+        _fail("POSTLINEAGE_VERIFIER_PROOF_INVALID")
+    if (
+        proof.get("stage") != "FOUR_SIGNATURE_PERSISTED_LINEAGE_REVIEWED"
+        or proof.get("verifiedByExistingReader") is not True
+        or proof.get("positivePermitCreated") is not False
+        or proof.get("databaseWritePerformed") is not False
+        or any(proof.get(k) is not False for k in (
+            "signingPermitted", "authorizationGranted", "dispatchPermitted"
+        ))
+    ):
+        _fail("POSTLINEAGE_NO_AUTHORITY_PROOF_REQUIRED")
+
+    approval = packet["approval"]["claims"]
+    link = packet["hubLink"]["claims"]
+    issuer = packet["issuerEvidence"]["claims"]
+    # verify_lifecycle_evidence_packet validates exact canonical claim shapes,
+    # signatures, distinct root custody and all these cross-link fields in
+    # the existing authenticated handoff, not in a caller-provided JSON flag.
+    if (
+        proof.get("hubTaskId") != approval["taskId"]
+        or proof.get("commandId") != approval["commandId"]
+        or proof.get("attemptId") != approval["attemptId"]
+        or proof.get("fenceId") != issuer["fenceId"]
+        or proof.get("approvalDigest") != issuer["approvalDigest"]
+        or link["linkId"] != issuer["linkId"]
+        or link["hubExecutionId"] != issuer["hubExecutionId"]
+        or link["coreTaskId"] != issuer["coreTaskId"]
+    ):
+        _fail("POSTLINEAGE_SIGNED_SCOPE_MISMATCH")
+
+    packet_bytes = json.dumps(
+        packet, sort_keys=True, ensure_ascii=False,
+        separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    if proof.get("verifiedPacketSha256") != hashlib.sha256(packet_bytes).hexdigest():
+        _fail("POSTLINEAGE_SIGNED_PACKET_HASH_MISMATCH")
+
+    now_ms = int(time.time() * 1000)
+    # Prevent a stale previously authenticated handoff being reused after
+    # the issuer lease or the Super Admin approval has expired.
+    expires_at = min(approval["expiresAt"], link["expiresAt"], issuer["expiresAt"])
+    if expires_at - now_ms < 3500:
+        _fail("POSTLINEAGE_LEASE_TOO_CLOSE_TO_EXPIRY")
+
+    scope = {
+        "company_id": approval["companyId"],
+        "task_id": approval["taskId"],
+        "command_id": approval["commandId"],
+        "attempt_id": approval["attemptId"],
+        "approval_digest": proof["approvalDigest"],
+        "approval_nonce": approval["nonce"],
+        "link_id": link["linkId"],
+        "link_digest": proof["hubLinkDigest"],
+        "hub_execution_id": link["hubExecutionId"],
+        "core_task_id": link["coreTaskId"],
+        "receipt_id": issuer["receiptId"],
+        "fence_id": issuer["fenceId"],
+        "lease_epoch": issuer["leaseEpoch"],
+        "worker_id": issuer["workerId"],
+    }
+    payload = json.dumps(
+        scope, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    digest = hashlib.sha256(
+        b"GPT02_POSTLINEAGE_SCOPED_READER_V1\\n" + payload
+        + proof["verifiedPacketSha256"].encode("ascii")
+    ).hexdigest()
+    return {
+        "environment": "DEV",
+        "stage": "FOUR_SIGNATURE_PERSISTED_LINEAGE_SCOPED_READER_REVIEW_ONLY",
+        "scope": scope,
+        "scopeSha256": digest,
+        "candidateRole": f"dev_gpt02_task_{approval['taskId']}_{digest[:12]}",
+        "expiresAt": expires_at,
+        "verifiedPacketSha256": proof["verifiedPacketSha256"],
+        "persistedAdminApprovalReadBack": True,
+        "persistedLineageMatched": True,
+        "databaseRoleProvisioned": False,
+        "credentialIssuancePermitted": False,
+        "databaseWritePerformed": False,
+        "signingPermitted": False,
+        "authorizationGranted": False,
+        "dispatchPermitted": False,
+        "releaseDecision": "NO_GO",
+    }
