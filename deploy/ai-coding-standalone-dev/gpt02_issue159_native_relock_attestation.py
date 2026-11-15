@@ -298,13 +298,14 @@ CONSUMPTION_READBACK_SQL = (
     "SELECT gpt02_relock_audit.reader_consumption_persisted("
     "%(role)s::name,%(scope_sha)s,%(packet_sha)s,"
     "%(command_id)s::uuid,%(attempt_id)s::uuid,"
-    "%(receipt_id)s::uuid,%(fence_id)s::uuid"
+    "%(receipt_id)s::uuid,%(fence_id)s::uuid,"
+    "%(read_challenge)s"
     ") AS consumption_persisted"
 )
 
 
 def attest_persisted_read_consumption(
-    connection: Any, candidate: Any,
+    connection: Any, candidate: Any, read_challenge: str,
 ) -> dict[str, Any]:
     """Review-only native committed-claim check before one original read.
 
@@ -317,6 +318,11 @@ def attest_persisted_read_consumption(
     owner and custody review remains mandatory.
     """
     role, sha = _target(candidate)
+    if (
+        not isinstance(read_challenge, str)
+        or SHA.fullmatch(read_challenge) is None
+    ):
+        _fail("ONE_READ_CHALLENGE_FORMAT_INVALID")
     _require_pinned_minimal_auditor(connection)
     scope = candidate["scope"]
     packet_sha = candidate["verifiedPacketSha256"]
@@ -328,6 +334,7 @@ def attest_persisted_read_consumption(
         "attempt_id": scope["attempt_id"],
         "receipt_id": scope["receipt_id"],
         "fence_id": scope["fence_id"],
+        "read_challenge": read_challenge,
     }
     try:
         with connection.cursor() as cursor:
@@ -351,6 +358,7 @@ def attest_persisted_read_consumption(
         "role": role,
         "scopeSha256": sha,
         "verifiedPacketSha256": packet_sha,
+        "readChallenge": read_challenge,
         "consumptionPersistedInDatabase": True,
         "databaseWritePerformed": False,
         "credentialIssuancePermitted": False,
