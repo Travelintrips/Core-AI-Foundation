@@ -496,3 +496,74 @@ native boolean audit only proves relock at one instant, not an
 anti-replay issuance grant. No live credentials/roles/services were
 created or changed. Draft NO_GO for live issuance, signer, dispatch,
 DELL, PROD and Final ACK.
+
+
+## Fresh-challenge native persisted-consumption readback — 16 Nov 2026
+
+Previous tests proved one immutable issuance row and exactly one committed
+consumption row (including concurrency and rollback). They did NOT
+independently prove that the supervisor's consumption receipt was COMMITTED
+before the reader was opened. Worse, an auditor that merely checks whether
+an OLD matching consumption row exists could return TRUE on a second
+request during the short issuer lease, even if a supervisor lied about
+consuming it again.
+
+Incremental SOURCE-ONLY files in Draft PR #1754:
+
+- docs/dev/gpt02-issue159-one-read-consumption-attestation.PROPOSED.sql
+  extends the existing *proposed* private gpt02_relock_audit namespace with
+  immutable, privately owned issuance+consumption ledgers. Exact signed
+  packet/scope/role/task/command/attempt/receipt/fence values are bound
+  by unique constraints. The one-read consumption must include a NEW
+  64-character high-entropy read_challenge; there can be only ONE
+  consumption per signed scope. The minimal auditor gets EXECUTE on ONE
+  additional SECURITY DEFINER boolean function, never SELECT on ledger
+  tables. That function returns TRUE only for a COMMITTED, fresh, exact
+  issuer+consumption row and exact challenge before signed expiry.
+  SECURITY DEFINER and owner-bound issuance must receive INDEPENDENT
+  security review. The SQL is NOT applied and creates no live login.
+- deploy/ai-coding-standalone-dev/gpt02_issue159_native_relock_attestation.py
+  adds attest_persisted_read_consumption(), using the existing pinned
+  low-privilege auditor identity and a bounded READ-ONLY parametrized SQL
+  call, not a privileged postgres admin credential.
+- The EXISTING uninstalled one-shot review broker generates a fresh
+  cryptographically random 256-bit challenge for EACH invocation,
+  passes it to consume_scope_once(candidate,challenge), validates its
+  self-reported echo, and queries the independent native auditor with
+  that same challenge BEFORE attempting a reader connection.
+  A prior successful consumption cannot validate a fresh second
+  challenge because the ledger's scope PRIMARY KEY is already used.
+  Missing/false/malformed audit or DB exception enters mandatory relock;
+  the broker still never issues credentials/signs/dispatches.
+- scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py
+  runs the original signed task fixture and both proposed migrations in a
+  networkless disposable PG16, as a non-superuser migrator. Tests a
+  dedicated low-privilege audit login without direct ledger/task/pg_authid
+  access; issuance-only or uncommitted consumption is FALSE; two
+  simultaneous consumption attempts produce exactly one COMMIT;
+  wrong task/command/attempt/receipt/fence/packet/challenge is FALSE;
+  previously committed consumption is FALSE for a fresh challenge;
+  ledger UPDATE/DELETE/TRUNCATE are blocked.
+  Native test PASS, exit0 and container removed.
+- scripts/dev/test_gpt02_issue159_one_shot_reader_broker.py asserts exact
+  consume -> native persisted readback -> bounded lineage read -> relock ->
+  native relock audit order; forged supervisor claims, old/fake audit
+  results, bad TLS or connection identity, query timeout, unknown commit,
+  and missing auditor all fail closed. 40/40 offline unittests PASS.
+- The existing GitHub Actions positive-permit Draft workflow runs both
+  new and prior tests. No separate deploy workflow was introduced.
+
+CRITICAL LIMITATIONS: the proposed ledger has no real owner-reviewed
+privileged broker/writer; native readback is evidence of a committed row,
+NOT proof that the signer approved this NEW operation unless the existing
+pinned verifier and Super Admin readback are genuine. A database owner could
+still ALTER its own DDL; immutable triggers cannot replace owner custody,
+independent change audit or backups. The one-time challenge does not stop
+a compromised unrevoked PostgreSQL password from bypassing the broker
+until relock; fixed short RLS TTL, credential custody, backend termination
+and independent crash watchdog are still mandatory. The audited boolean is
+a point-in-time check, not a permanently enforceable release token.
+
+No CST-DEV/PROD database schema, real role, role password, service or
+signer/dispatch/DELL path has been modified. The PR remains Draft and
+LIVE_CREDENTIAL_ISSUANCE=NO_GO, FINAL_ACK=NO_GO.
