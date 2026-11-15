@@ -263,3 +263,27 @@ and have its own credential and role custody. The service must also
 re-check release conditions, zero sessions after relock, and fail closed
 on any readback error. Do NOT apply SQL or activate real credentials,
 signer, dispatch, DELL or PROD. Final ACK remains NO_GO.
+
+
+### PostgreSQL 17 CST-DEV negative-control readback
+
+The EXACT source READBACK_SQL from native_relock_attestation.py was executed
+as a read-only SELECT on the live CST-DEV PostgreSQL 17 database against the
+*existing locked* gpt02_issuer_evidence_reader role. This is a compatibility
+and negative-control check ONLY, not a role mutation or one-shot issuance.
+
+The readback returned native session_user=current_user='postgres'.
+Existing issuer: no_login=true, connection_limit_zero=true,
+password_null=true, no_inherit=true, no_privileged_role=true,
+no_role_memberships=true, zero_active_sessions=true.
+Crucially, schema_usage_revoked=false and five_table_read_revoked=false.
+This is EXPECTED: the existing NOLOGIN issuer retains narrow SELECT/schema
+grants and was not issued/revoked by this one-shot scoped-reader proposal.
+Consequently the new full-relock attestation would correctly DENY a
+purported cleanup PASS for that role. Do not revoke the issuer grants or
+mistake that negative control for an active credential problem.
+
+The independently reviewed future scoped reader must have both its LOGIN
+disabled/password NULL and its own exact-task SELECT/USAGE fully revoked
+before a native post-read cleanup attestation can PASS. Existing issuer
+and shared lineage roles are intentionally left unchanged.
