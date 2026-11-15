@@ -126,6 +126,7 @@ class FakeSupervisor:
         self.connection = NativeConnection(role)
         self.events = []
         self.consumption_calls = []
+        self.read_challenges = []
         self.consumed_scopes = set()
         self.consumption_error = None
         self.consumption_override = None
@@ -140,9 +141,10 @@ class FakeSupervisor:
         self.relock_ok = True
         self.open_failure = None
 
-    def consume_scope_once(self, candidate):
+    def consume_scope_once(self, candidate, read_challenge):
         self.events.append("consume")
         self.consumption_calls.append(candidate)
+        self.read_challenges.append(read_challenge)
         if self.consumption_error is not None:
             raise self.consumption_error
         scope_sha = candidate["scopeSha256"]
@@ -159,6 +161,7 @@ class FakeSupervisor:
             "receiptId": scope["receipt_id"],
             "fenceId": scope["fence_id"],
             "consumedExactlyOnce": True,
+            "readChallenge": read_challenge,
             "releaseDecision": "NO_GO",
         }
         if self.consumption_override is not None:
@@ -214,6 +217,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         read_rows = kwargs.pop("rows", [self.row])
         user_time = kwargs.pop("at_ms", self.now)
         reader = kwargs.pop("reader", None)
+        read_challenge = kwargs.pop("challenge", "a" * 64)
         if kwargs:
             raise AssertionError("UNKNOWN_TEST_OPTIONS")
         if reader is None:
@@ -226,7 +230,9 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                 with patch.object(broker, "read_lineage_once",
                                   reader) as bounded_read:
                     with patch.object(broker.time, "time",
-                                      return_value=user_time / 1000):
+                                      return_value=user_time / 1000), \
+                         patch.object(broker.secrets, "token_hex",
+                                      return_value=read_challenge):
                         try:
                             result = broker.review_one_shot_reader_readback(
                                 packet, self.supervisor
@@ -263,6 +269,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertTrue(value["oneCanonicalReadReviewed"])
         self.assertTrue(value["preReadConsumptionClaimReviewed"])
         self.assertTrue(value["preReadConsumptionVerifiedByPostgres"])
+        self.assertEqual(self.supervisor.read_challenges, ["a" * 64])
         self.assertTrue(value["postReadRelockReported"])
         self.assertTrue(value["postReadRelockVerifiedByNativePostgres"])
         self.assertEqual(len(self.supervisor.auditor_open_calls), 2)
@@ -281,6 +288,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                     "attempt_id": self.candidate["scope"]["attempt_id"],
                     "receipt_id": self.candidate["scope"]["receipt_id"],
                     "fence_id": self.candidate["scope"]["fence_id"],
+                    "read_challenge": "a" * 64,
                 }),
             ],
         )
@@ -478,6 +486,29 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertEqual(len(self.supervisor.open_calls), 1)
         self.assertEqual(len(self.supervisor.relock_calls), 2)
 
+    def test_new_invocation_never_reuses_previous_read_challenge(self):
+        self.call(challenge="a" * 64)
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "SYNTHETIC_ALREADY_CONSUMED"
+        ):
+            self.call(challenge="b" * 64)
+        self.last_read.assert_not_called()
+        self.assertEqual(self.supervisor.read_challenges, [
+            "a" * 64, "b" * 64,
+        ])
+        self.assertEqual(len(self.supervisor.open_calls), 1)
+        self.assertEqual(len(self.supervisor.relock_calls), 2)
+
+    def test_malformed_fresh_challenge_fails_before_any_read(self):
+        self.supervisor.read_challenges.clear()
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "ONE_READ_CHALLENGE_FORMAT_INVALID"
+        ):
+            self.call(challenge="invalid")
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.open_calls), 0)
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+
     def test_query_failure_after_consumption_cannot_replay(self):
         with self.assertRaisesRegex(RuntimeError, "synthetic_reader_timeout"):
             self.call(reader=Mock(side_effect=RuntimeError("synthetic_reader_timeout")))
@@ -508,6 +539,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
             ("receiptId", "33333333-3333-4333-8333-333333333333"),
             ("fenceId", "44444444-4444-4444-8444-444444444444"),
             ("consumedExactlyOnce", False),
+            ("readChallenge", "f" * 64),
             ("releaseDecision", "GO"),
         ):
             with self.subTest(key=key):
