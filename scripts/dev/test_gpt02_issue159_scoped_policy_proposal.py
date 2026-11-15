@@ -201,7 +201,7 @@ def disposable_live_schema_layout_test():
             ready = run(
                 "docker", "exec", "-e", "PGPASSWORD=fixture_only",
                 name, "psql", "-X", "-w", "-h", "127.0.0.1",
-                "-U", "postgres", "-d", "postgres", "-Atc", "SELECT 1",
+                "-U", "root_admin", "-d", "postgres", "-Atc", "SELECT 1",
                 check=False,
             )
             if ready.returncode == 0:
