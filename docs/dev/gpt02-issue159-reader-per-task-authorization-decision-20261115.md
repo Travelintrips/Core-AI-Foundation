@@ -50,3 +50,31 @@ Synthetic test source: scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg
 5. Lease expiry, revocation, crash after granting, concurrent issuance, partial rollback and stale active sessions must all fail closed to NOLOGIN, password NULL and zero sessions. Signer, dispatch, DELL and PROD remain untouched.
 
 Outcome: SYNTHETIC ISSUANCE PASS; LIVE CREDENTIAL ISSUANCE NO_GO; FINAL ACK NO_GO.
+
+
+## Database-enforced expiry if one-shot broker crashes — 15 Nov 2026
+
+Source: scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py.
+
+The source-only test combines the already-verified synthetic signed-scope
+candidate with exact five-table RLS predicates and a **fixed absolute
+expiration instant** (never a client-controlled session GUC). That instant is
+the EARLIER of the synthetic signed lease expiry and a short operational
+window. Native PostgreSQL LOGIN can read the single approved task before
+that instant. With the role deliberately left LOGIN-enabled (simulated broker
+crash), **new** SELECTs on each of five lineage tables and on the canonical
+joined lineage query return zero rows after expiry. An attempted session
+task/expiry GUC override does not bypass those fixed policies. Cleanup then
+revokes SELECT/USAGE, sets NOLOGIN/CONNECTION LIMIT 0/PASSWORD NULL, and
+denies another LOGIN. All changes occur in a network-isolated disposable
+PG16 container, never in CST-DEV or PROD.
+
+This is a second line of defense, NOT one-read authorization. A SELECT
+statement that started before TTL expiry may still run until its separate
+statement timeout, and an unexpired credential can still be reused for
+sequential connections. The operational broker must own the credential,
+perform a single bounded original lineage SELECT under a pinned identity,
+then revoke and terminate the backend. Independent cleanup/watchdog,
+credential custody, exact signed approval persistence, true one-use
+issuance/consumption, and production-compatible role lifecycle remain
+unimplemented; do not activate the source-only candidate. RELEASE NO_GO.
