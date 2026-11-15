@@ -628,3 +628,43 @@ prevent direct password reuse before the scoped reader is relocked;
 a short fixed RLS TTL, private credential, backend termination,
 fail-closed native relock and crash watchdog remain mandatory. All
 source work remains PR Draft, LIVE_ISSUANCE=NO_GO and FINAL_ACK=NO_GO.
+
+## Verified approval-to-ledger issuance review — 16 Nov 2026
+
+The source-only `scripts/dev/gpt02_issue159_scoped_policy_proposal.py`
+now includes `review_issuance_bindings_from_authenticated_signed_packet(packet)`.
+It calls the **existing** pinned four-root verifier / persisted Super Admin
+approval and exact-lineage readers through
+`inspect_postlineage_scoped_reader_candidate`; it does not trust a caller's
+role, clock, packet hash, expiry, approval flag or signature roots. The
+resulting fixed field set matches the nine signed identifiers in the
+`reader_issuances` proposal plus an absolute, proposed expiry derived from
+the signed packet. The preview expiry is the earlier of the signed
+approval/link/issuer lease and 15 seconds after the trusted local review
+clock; it must have at least 3.5 seconds remaining.
+
+This is strictly a **review-only binding proposal**. It returns
+`ownerIssuanceCommitted=false`, `databaseWritePerformed=false`,
+`credentialIssuancePermitted=false` and `releaseDecision=NO_GO`.
+It contains no INSERT, transaction writer, DSN, credential, new service,
+signer activation or dispatch. It cannot replace the independent
+authenticated PostgreSQL writer or validate a committed ledger row.
+
+An eventual owner-reviewed service must still enforce the signed expiry
+**inside the same database transaction as INSERT**, including a DB-clock
+lifetime limit and exactly-once uniqueness; reject changed, expired or
+revoked approval/lineage; use an independently protected least-privilege
+credential; and prove the committed row via the existing independent
+auditor before allowing one bounded reader transaction. The 15-second
+source review bound is **not a database constraint today**. A privileged
+owner can still bypass or alter source-only checks; a SECURITY DEFINER
+and ownership review is mandatory before any live SQL apply.
+
+The existing isolated regression suite tests the signed task/command/
+attempt/receipt/fence/role/packet binding, the 15-second or shorter expiry,
+denial for modified signed claims, substituted public roots and expired
+leases, and perpetual NO_GO flags. On the exact Draft head
+`449c5bc441b818c61fb81f7e440a930dd2f1e738`, the source suite
+passed 8/8 tests (exit code 0) on a temporary checkout of authorized
+VPS `srv1792369`. No CST-DEV/PROD roles, RLS, service or credentials
+were changed. Final live issuance and Final ACK remain NO_GO.
