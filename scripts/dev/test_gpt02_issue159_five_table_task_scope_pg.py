@@ -89,6 +89,8 @@ INSERT INTO gpt02_private.post_consumption_fences VALUES
  'openclaw-dell-chatgpt-wake-dev',1,now()+interval '10 minutes',false,false);
 ALTER TABLE gpt02_private.approvals ADD COLUMN expires_at timestamptz DEFAULT now()+interval '5 minutes';
 ALTER TABLE gpt02_private.operator_links ADD COLUMN expires_at timestamptz DEFAULT now()+interval '5 minutes';
+ALTER TABLE gpt02_private.operator_links ADD COLUMN link_digest text;
+UPDATE gpt02_private.operator_links SET link_digest=CASE WHEN hub_task_id=170 THEN 'link170' ELSE 'link172' END;
 ALTER TABLE gpt02_private.receipts ADD COLUMN consumed_at timestamptz DEFAULT now()-interval '1 minute';
 ALTER TABLE gpt02_private.post_consumption_fences ADD COLUMN lease_started_at timestamptz DEFAULT now()-interval '1 minute';
 CREATE POLICY task_scope ON gpt02_private.approvals FOR SELECT TO task170_reader
