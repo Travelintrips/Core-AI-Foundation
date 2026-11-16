@@ -25,6 +25,9 @@ MODEL_SQL = (ROOT / "docs/dev" /
              "gpt02-issue159-canonical-approval-fence.PROPOSED.sql")
 AUTHORITY = "gpt02_relock_audit.reader_approval_fences"
 CONSUMPTIONS = "gpt02_relock_audit.reader_consumptions"
+GUARD_SQL = ROOT / "docs/dev/gpt02-issue159-canonical-reader-guard.PROPOSED.sql"
+GUARD_USER = "dev_gpt02_reader_admission_guard"
+GUARD_FN = "gpt02_relock_audit.canonical_reader_current_guard"
 
 
 def assert_true(label: str, value: bool):
@@ -125,7 +128,7 @@ GRANT SELECT ON pg_catalog.pg_authid TO postgres;
 GRANT pg_read_all_stats TO postgres;
 CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
 """)
-        for src in (AUDIT_SQL, LEDGER_SQL, CLOCK_SQL, CONSUMER_SQL, MODEL_SQL):
+        for src in (AUDIT_SQL, LEDGER_SQL, CLOCK_SQL, CONSUMER_SQL, MODEL_SQL, GUARD_SQL):
             owner(name, src.read_text(encoding="utf-8"))
         count = owner(
             name, "SELECT count(*) FROM pg_trigger t WHERE "
@@ -277,6 +280,8 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             " LOGIN CONNECTION LIMIT 1 PASSWORD " + quote(pw) + ";"
             "ALTER ROLE dev_gpt02_relock_catalog_auditor "
             "LOGIN CONNECTION LIMIT 1 PASSWORD " + quote(pw) + ";"
+            "ALTER ROLE " + GUARD_USER +
+            " LOGIN CONNECTION LIMIT 1 PASSWORD " + quote(pw) + ";"
         )
         challenge = secrets.token_hex(32)
         claim = login(
@@ -294,14 +299,31 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             )
         assert_true("ACTIVE_AUDITOR_READBACK_UNAVAILABLE",
                     audit().stdout.strip() == "t")
+        guard_query = claim_sql(after_claim, challenge).replace(
+            CONSUME_FN, GUARD_FN, 1,
+        )
+        guard_before = login(name, GUARD_USER, pw, guard_query)
+        assert_true("ACTIVE_CANONICAL_GUARD_FALSE",
+                    guard_before.stdout.strip() == "t")
+        denied_owner_guard = owner(name, guard_query, check=False)
+        assert_true("WRONG_NATIVE_GUARD_CALLER_ACCEPTED",
+                    denied_owner_guard.returncode != 0 and
+                    "CANONICAL_FINAL_READER_GUARD_CALLER_INVALID"
+                    in denied_owner_guard.stderr)
         owner(name, revoke_sql(after_claim))
         assert_true("POSTREVOKE_OLD_AUDITOR_NOT_STALE",
                     audit().stdout.strip() == "t")
+        guard_after = login(name, GUARD_USER, pw, guard_query)
+        assert_true("POSTREVOKE_CURRENT_GUARD_WAS_STALE",
+                    guard_after.stdout.strip() == "f")
+        print("PASS_CANONICAL_GUARD_CURRENT_APPROVAL_DENIES_STALE_AUDIT")
         admin(
             name, "ALTER ROLE " + CONSUMER +
             " NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
             "ALTER ROLE dev_gpt02_relock_catalog_auditor "
             "NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
+            "ALTER ROLE " + GUARD_USER +
+            " NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
         )
         print("PASS_CANONICAL_ACTIVE_APPROVAL_ALLOWS_SINGLE_CONSUMPTION")
         print("EXPECTED_GAP_COMMITTED_CLAIM_AUDIT_STALE_AFTER_REVOKE_NO_GO")
