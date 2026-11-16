@@ -516,7 +516,11 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
                 active = True
                 break
             if reader.poll() is not None:
-                break
+                out, err = reader.communicate(timeout=2)
+                raise AssertionError(
+                    "REAL_FIVE_TABLE_READER_EXITED_BEFORE_OBSERVATION:"
+                    + repr((reader.returncode, out[-500:], err[-1800:]))
+                )
             time.sleep(.025)
         assert_true("REAL_FIVE_TABLE_READER_QUERY_NOT_ACTIVE", active)
         competing_revoke = owner(
