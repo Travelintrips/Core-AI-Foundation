@@ -349,10 +349,17 @@ class PolicyProposalSourceTest(unittest.TestCase):
                 # Revocation after the first successful review must be
                 # observed via a FRESH Unix-socket SQLite lookup.
                 with sqlite3.connect(path) as db:
+                    # Restore valid TTL before revoking identity so this
+                    # test cannot pass merely because TTL was too short.
                     db.execute(
-                        "UPDATE admin_identities SET enabled=0",
+                        "UPDATE gpt02_issue159_approval_intents "
+                        "SET expires_at_ms=?", (short_expiry,),
                     )
-                with self.assertRaises(BrokerAdmissionError):
+                    db.execute("UPDATE admin_identities SET enabled=0")
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError,
+                    "PERSISTED_ADMIN_APPROVAL_NOT_FOUND",
+                ):
                     review_issuance_bindings_from_authenticated_signed_packet(
                         packet,
                     )
