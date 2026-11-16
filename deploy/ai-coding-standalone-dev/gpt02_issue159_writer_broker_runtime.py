@@ -168,7 +168,11 @@ def _require_persisted_admin_decision(
         raise RuntimeError("APPROVAL_SOCKET_NOT_PRIVATE")
     # The canonical production reader socket must be root-owned. Test-only
     # socket paths use disposable private directories and never grant authority.
-    if reader_socket_path == DEFAULT_APPROVAL_READER_SOCKET:
+    # The live socket's custody is pinned to its immutable absolute path,
+    # not a test-overridable default. Disposable private Unix sockets are
+    # exercised by ordinary, non-root CI users; the production path ALWAYS
+    # requires root ownership and a non-world-accessible parent.
+    if reader_socket_path == "/run/gpt02-approval-reader/approval.sock":
         parent = os.lstat(str(Path(reader_socket_path).parent))
         if (st.st_uid != 0 or parent.st_uid != 0
                 or not stat.S_ISDIR(parent.st_mode)
