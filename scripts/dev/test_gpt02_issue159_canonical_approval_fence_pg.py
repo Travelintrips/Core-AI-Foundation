@@ -104,6 +104,7 @@ def main():
     name = "issue159-canonical-fence-" + uuid.uuid4().hex[:9]
     pw = secrets.token_urlsafe(32)
     hold = None
+    orphan = None
     try:
         run(
             "docker", "run", "--rm", "-d", "--network", "none",
@@ -556,7 +557,60 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         assert_true("DIRECT_READER_PASSWORD_REPLAY_RISK_NOT_DEMONSTRATED",
                     replay.stdout.strip() == "1")
         print("EXPECTED_GAP_DIRECT_PASSWORD_REQUERY_BEFORE_RELOCK_NO_GO")
-        # Test-only exclusive supervisor cleanup. No service is enabled.
+
+        # Simulate a guard being gone while a leaked scoped-reader LOGIN
+        # retains access after approval revocation. The prior genuine
+        # five-table SELECT has ended; this independent native connection
+        # deliberately starts another query that must be killed by cleanup.
+        orphan = subprocess.Popen(
+            ["docker", "exec", "-e", "PGPASSWORD=" + reader_pw,
+             "-e", "PGAPPNAME=issue159-orphaned-reader", name,
+             "psql", "-X", "-w", "-h", "127.0.0.1",
+             "-U", reader_role, "-d", "postgres", "-v", "ON_ERROR_STOP=1",
+             "-Atc", "SELECT (SELECT count(*) FROM (" + original_query +
+                     ") AS lineage) AS n, pg_sleep(14)"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        orphan_active = False
+        for _ in range(60):
+            running = admin(
+                name, "SELECT count(*) FROM pg_stat_activity "
+                "WHERE usename=" + quote(reader_role) +
+                " AND state='active' "
+                "AND application_name='issue159-orphaned-reader'",
+            ).stdout.strip()
+            if running == "1" and orphan.poll() is None:
+                orphan_active = True
+                break
+            if orphan.poll() is not None:
+                orphan_out, orphan_err = orphan.communicate(timeout=2)
+                raise AssertionError(
+                    "ORPHANED_READER_EXITED_BEFORE_WATCHDOG:"
+                    + repr((orphan.returncode, orphan_out[-300:],
+                            orphan_err[-600:]))
+                )
+            time.sleep(.04)
+        assert_true("POSTREVOKE_ORPHAN_READER_NOT_ACTIVE", orphan_active)
+        print("EXPECTED_GAP_ORPHANED_READER_ACTIVE_AFTER_REVOKE_NO_GO")
+
+        # Independent synthetic owner watchdog MUST terminate active
+        # sessions BEFORE REVOKE DDL; a running SELECT can hold a table
+        # AccessShareLock and otherwise stall a REVOKE statement.
+        killed = admin(
+            name, "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE usename=" + quote(reader_role) +
+            " AND pid<>pg_backend_pid()",
+        )
+        assert_true("INDEPENDENT_WATCHDOG_DID_NOT_TERMINATE_BACKEND",
+                    "t" in killed.stdout.splitlines())
+        orphan_out, orphan_err = orphan.communicate(timeout=8)
+        assert_true("ORPHANED_READER_SURVIVED_TERMINATION",
+                    orphan.returncode != 0)
+        orphan = None
+        print("PASS_INDEPENDENT_OWNER_TERMINATES_ORPHANED_READER_AFTER_REVOKE")
+
+        # Test-only explicit native relock; this owner call is NOT an
+        # installed watchdog service or operational credential workflow.
         admin(name,
             "REVOKE SELECT ON " +
             ", ".join("gpt02_private." + t for t in (
@@ -578,6 +632,10 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         assert_true("NEW_LOGIN_AFTER_RELOCK_WAS_ALLOWED",
                     login(name, reader_role, reader_pw, "SELECT 1",
                           check=False).returncode != 0)
+        assert_true("READER_BACKEND_STILL_ACTIVE_AFTER_RELOCK",
+                    admin(name, "SELECT count(*) FROM pg_stat_activity "
+                          "WHERE usename=" + quote(reader_role)
+                          ).stdout.strip() == "0")
         print("PASS_DISPOSABLE_FIVE_TABLE_READER_RELOCKED_NO_REUSE")
 
         admin(
@@ -593,9 +651,10 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         print("CANONICAL_POSTGRES_ONLY_MODEL_NOT_LIVE_SQLITE_MIGRATION")
         print("FINAL_READER_ADMISSION_AND_CRASH_FENCE_STILL_NO_GO")
     finally:
-        if hold is not None and hold.poll() is None:
-            hold.kill()
-            hold.communicate(timeout=5)
+        for proc in (hold, orphan):
+            if proc is not None and proc.poll() is None:
+                proc.kill()
+                proc.communicate(timeout=5)
         run("docker", "rm", "-f", name, check=False)
 
 
