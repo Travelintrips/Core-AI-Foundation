@@ -815,3 +815,58 @@ the SQLite approval expiry. A trusted owner-reviewed issuer still needs
 a revocation-consistent protocol, a real persisted Super Admin approval,
 dedicated credentials and an independent watchdog. Do NOT interpret this
 source-only clamp as permission to enable operational issuance.
+
+## Cross-store approval revocation TOCTOU — actual negative control, 16 Nov 2026
+
+This section documents a **verified gap**, not a successful security
+authorization or an operational fix. A SOURCE-ONLY test was added to the
+existing `scripts/dev/test_gpt02_issue159_issuance_server_clock_pg.py`,
+reusing the previously approved synthetic signed packet and non-superuser
+owner/PG16 fixture. After a verified *real* SQLite approval readback, the
+test disables the matching Super Admin in its temporary SQLite store.
+The canonical SQLite reader correctly returns
+`persistedTrustedReadProven=false`. The test then uses the separate
+PostgreSQL owner connection to attempt the previously reviewed issuance
+INSERT. Because the private PostgreSQL ledger has no synchronously
+maintained SQLite revocation fence, the INSERT **still succeeds** while
+the transaction is open. The negative test immediately performs
+`ROLLBACK`, checks that the ledger contains zero rows, and prints
+`EXPECTED_GAP_SQLITE_REVOKED_BUT_PG_INSERT_ACCEPTS_NO_GO`. This marker
+indicates a vulnerability reproduced **in an isolated fixture**, not
+that a live reader permission was granted or any live database was
+exposed. No operational account, credential or approval is used.
+
+To make the risk visible to future caller integrations, the inert
+`review_issuance_bindings_from_authenticated_signed_packet` result now
+contains `crossStoreAtomicityProven=false` and
+`revocationAtIssuanceProven=false` in addition to
+`ownerIssuanceCommitted=false` and `releaseDecision=NO_GO`.
+Existing reviewer tests assert these flags explicitly. The current
+SQL-only 15-second TTL, signatures, challenge ledger, native relock,
+fresh readback and retry denial are necessary but **not sufficient**.
+
+An independent release/security review must select and implement an
+authoritative, **linearizable revocation/issuance boundary** before
+any live change. Acceptable designs could centralize active approval,
+revocation state and one-use issuance in one strongly consistent
+PostgreSQL transaction (with role/identity proof verified externally)
+or introduce a fully reviewed cross-store coordinator whose revocation
+and issuance operations cannot interleave without durable fencing.
+A read-only SQLite probe followed by PostgreSQL INSERT, a best-effort
+mirror, or a short TTL alone is NOT such a boundary.
+
+Mandatory fail-closed acceptance scenarios before removing NO_GO:
+- Revocation committed before issuance: issuance denied, no PG row.
+- Revocation races between final evidence check and PG COMMIT: either
+  issuance is serialized behind the authority or later consumption is
+  durably fenced and refused, including after crashes/retries.
+- Revocation committed after issuance but before one-reader consumption:
+  consumer cannot open a scoped reader even when issuance was once valid.
+- No owner or consumer secret escapes, no accidental extra reader query,
+  no signer/worker/DELL path, and all existing no-dispatch CI remains PASS.
+
+**Current disposition:** no cross-store authority/coordinator exists.
+The test is intentionally rollback-only. This PR must remain Draft,
+LIVE ISSUANCE=NO_GO, SIGNERS/DISPATCH OFF, FINAL ACK=NO_GO; do not
+activate any DEV/PROD role or modify operational approval state.
+
