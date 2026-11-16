@@ -60,10 +60,10 @@ def authority_insert(params: dict) -> str:
 
 def synthetic_scope(letter: str, task: int) -> dict:
     """Database-only negative control — deliberately NOT a signed claim."""
-    assert letter in ("b", "c", "d")
+    assert letter in ("b", "c", "d", "e")
     return {
         "scope_sha": letter * 64,
-        "packet_sha": {"b": "e", "c": "f", "d": "a"}[letter] * 64,
+        "packet_sha": {"b": "e", "c": "f", "d": "a", "e": "0"}[letter] * 64,
         "role_name": f"dev_gpt02_task_{task}_{letter * 12}",
         "task_id": task,
         "company_id": "default",
@@ -317,6 +317,88 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         assert_true("POSTREVOKE_CURRENT_GUARD_WAS_STALE",
                     guard_after.stdout.strip() == "f")
         print("PASS_CANONICAL_GUARD_CURRENT_APPROVAL_DENIES_STALE_AUDIT")
+
+        # A canonical revoker must NOT COMMIT in the middle of one bounded
+        # guarded read. This is a proxy SELECT pg_sleep, not a real task row.
+        # The guard SQL function takes FOR SHARE; caller holds that lock in
+        # its explicit transaction until the bounded operation completes.
+        held_read = synthetic_scope("e", 174)
+        owner(name, authority_insert(held_read))
+        owner(name, insert_sql(
+            held_read, "clock_timestamp()+interval '14 seconds'",
+        ))
+        held_challenge = secrets.token_hex(32)
+        valid_claim = login(
+            name, CONSUMER, pw, claim_sql(held_read, held_challenge),
+        )
+        assert_true("BOUNDED_GUARD_FIXTURE_CLAIM_REJECTED",
+                    valid_claim.stdout.strip() == "t")
+        held_query = claim_sql(held_read, held_challenge).replace(
+            CONSUME_FN, GUARD_FN, 1,
+        )
+        hold_sql = (
+            "BEGIN;"
+            "SET LOCAL statement_timeout='3500ms';"
+            "SET LOCAL idle_in_transaction_session_timeout='4500ms';"
+            + held_query +
+            ";SELECT pg_sleep(2.3);ROLLBACK;"
+        )
+        hold = subprocess.Popen(
+            ["docker", "exec", "-e", "PGPASSWORD=" + pw, name,
+             "psql", "-X", "-w", "-h", "127.0.0.1",
+             "-U", GUARD_USER, "-d", "postgres",
+             "-v", "ON_ERROR_STOP=1", "-Atc", hold_sql],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        guard_lock_observed = False
+        for _ in range(60):
+            locks = owner(name,
+                "SELECT count(*) FROM pg_locks l "
+                "JOIN pg_stat_activity a ON a.pid=l.pid "
+                "WHERE a.usename=" + quote(GUARD_USER) +
+                " AND l.relation=" + quote(AUTHORITY) + "::regclass"
+                " AND l.mode='RowShareLock' AND l.granted"
+            ).stdout.strip()
+            if locks == "1":
+                guard_lock_observed = True
+                break
+            if hold.poll() is not None:
+                break
+            time.sleep(.05)
+        assert_true("BOUNDED_READER_ROW_SHARE_LOCK_MISSING",
+                    guard_lock_observed and hold.poll() is None)
+        # A short competing revocation UPDATE must time out instead of
+        # committing behind the explicit guard's still-open transaction.
+        competing_revoke = owner(
+            name, "SET statement_timeout='550ms';" +
+            revoke_sql(held_read), check=False,
+        )
+        assert_true("REVOCATION_COMMITTED_DURING_GUARDED_READ",
+                    competing_revoke.returncode != 0 and
+                    "canceling statement due to statement timeout"
+                    in competing_revoke.stderr)
+        assert_true("CANONICAL_REVOKE_MOVED_WHILE_GUARD_HELD",
+                    owner(name, "SELECT revoked_at IS NULL FROM " +
+                          AUTHORITY + " WHERE scope_sha=" +
+                          quote(held_read["scope_sha"])).stdout.strip()
+                    == "t")
+        out, err = hold.communicate(timeout=12)
+        assert_true("GUARDED_BOUNDED_READ_DID_NOT_COMPLETE",
+                    hold.returncode == 0 and
+                    any(line.strip()=="t" for line in out.splitlines()) and
+                    not err)
+        hold = None
+        print("PASS_GUARDED_TRANSACTION_BLOCKS_REVOKE_UNTIL_BOUND_READ_DONE")
+        assert_true("CANONICAL_ISSUANCE_EXPIRED_BEFORE_REVOKE_PROOF",
+                    owner(name, "SELECT expires_at>clock_timestamp() "
+                               "FROM " + ISSUANCES + " WHERE scope_sha=" +
+                               quote(held_read["scope_sha"])).stdout.strip()
+                    == "t")
+        owner(name, revoke_sql(held_read))
+        assert_true("POSTREVOKE_BOUND_GUARD_STILL_TRUE",
+                    login(name, GUARD_USER, pw, held_query).stdout.strip()
+                    == "f")
+        print("PASS_GUARD_RECHECK_DENIES_AFTER_BOUNDED_READ_REVOKED")
         admin(
             name, "ALTER ROLE " + CONSUMER +
             " NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
