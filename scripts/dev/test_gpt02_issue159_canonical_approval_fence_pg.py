@@ -464,9 +464,9 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         # remains live while the original scoped reader query executes.
         guard_txn = (
             "BEGIN;"
-            "SET LOCAL statement_timeout='5100ms';"
-            "SET LOCAL idle_in_transaction_session_timeout='5600ms';"
-            + guard_real + ";SELECT pg_sleep(3.1);ROLLBACK;"
+            "SET LOCAL statement_timeout='9500ms';"
+            "SET LOCAL idle_in_transaction_session_timeout='10500ms';"
+            + guard_real + ";SELECT pg_sleep(7);ROLLBACK;"
         )
         hold = subprocess.Popen(
             ["docker", "exec", "-e", "PGPASSWORD=" + pw, name,
@@ -495,22 +495,22 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         original_query = five_table_bound_query(sscope)
         one_read = (
             "SELECT (SELECT count(*) FROM (" + original_query +
-            ") AS lineage) AS n, pg_sleep(1.35)"
+            ") AS lineage) AS n, pg_sleep(4.0)"
         )
         reader = subprocess.Popen(
             ["docker", "exec", "-e", "PGPASSWORD=" + reader_pw,
              name, "psql", "-X", "-w", "-h", "127.0.0.1",
              "-U", reader_role, "-d", "postgres",
              "-v", "ON_ERROR_STOP=1", "-Atc",
-             "SET statement_timeout='2400ms';" + one_read],
+             "SET statement_timeout='6000ms';" + one_read],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         active = False
-        for _ in range(55):
-            n = owner(
+        for _ in range(85):
+            n = admin(
                 name, "SELECT count(*) FROM pg_stat_activity "
                 "WHERE usename=" + quote(reader_role) +
-                " AND state='active' AND query LIKE '%pg_sleep(1.35)%'"
+                " AND state='active' AND query LIKE '%pg_sleep(4.0)%'"
             ).stdout.strip()
             if n == "1" and reader.poll() is None:
                 active = True
@@ -521,7 +521,7 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
                     "REAL_FIVE_TABLE_READER_EXITED_BEFORE_OBSERVATION:"
                     + repr((reader.returncode, out[-500:], err[-1800:]))
                 )
-            time.sleep(.025)
+            time.sleep(.03)
         assert_true("REAL_FIVE_TABLE_READER_QUERY_NOT_ACTIVE", active)
         competing_revoke = owner(
             name, "SET statement_timeout='500ms';" + revoke_sql(exact),
