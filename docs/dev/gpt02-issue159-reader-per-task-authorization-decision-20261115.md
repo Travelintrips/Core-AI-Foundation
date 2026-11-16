@@ -939,3 +939,77 @@ Do not use the real `postgres`, shared lineage or attestor credential
 as a shortcut. PR remains DRAFT, LIVE ISSUANCE=NO_GO,
 SIGNER/DISPATCH=OFF, FINAL ACK=NO_GO and PROD unchanged.
 
+## Canonical final reader guard — 16 Nov 2026
+
+This is a **NOT-APPLIED, SOURCE-ONLY security proposal**. It extends the
+existing canonical PostgreSQL approval/revocation model, which itself
+is only a disposable alternative to the still-active SQLite approval
+source. It does NOT authorize any live source-of-truth cutover, reader
+password, new service, signer, dispatch, or Final ACK.
+
+An additive `docs/dev/gpt02-issue159-canonical-reader-guard.PROPOSED.sql`
+defines dormant role `dev_gpt02_reader_admission_guard` (NOLOGIN,
+NOINHERIT, NOBYPASSRLS, CONNECTION LIMIT 0) with only a narrow EXECUTE
+grant on `canonical_reader_current_guard`, plus no direct table SELECT.
+The SECURITY DEFINER boolean function verifies native `session_user`,
+the exact scoped role/packet/command/attempt/receipt/fence and fresh
+challenge, a genuinely committed one-read consumption ledger row, and
+an **unrevoked, unexpired canonical PostgreSQL approval**. Critically,
+it takes `FOR SHARE OF f` on the canonical approval row.
+
+A TRUE result is useful **only while the caller holds an explicit
+READ WRITE PostgreSQL transaction open** across the ONE bounded reader
+query; in autocommit mode the row lock is released immediately and
+the result has NO admission authority. A separate, reviewed supervisor
+must keep that exact guard transaction open until the reader query and
+session terminate; limit statement and idle-in-transaction timeouts;
+and handle crash cleanup and relock. The source proposal has no
+supervisor, reader-connection adapter, credential issuer or callback.
+
+Native, networkless PostgreSQL16 tests were added to the existing
+`scripts/dev/test_gpt02_issue159_canonical_approval_fence_pg.py`,
+using a test-only temporary LOGIN for the guard. They prove:
+
+- A correctly consumed claim with current approval returns TRUE via
+  the new native guard; the same committed historical consumption returns
+  FALSE through the new guard after approval revocation, even while the
+  **unmodified historical auditor still returns TRUE**. The original
+  auditor is not redefined or silently weakened.
+- A wrong native PostgreSQL `session_user` cannot execute the guard.
+- A guard `BEGIN ... canonical_reader_current_guard(...) ... pg_sleep ...
+  ROLLBACK` holds a native `FOR SHARE` lock during the simulated,
+  bounded operation. A competing revocation UPDATE times out rather than
+  committing while the lock is held; after guard rollback, revocation
+  commits, and a new guard read returns FALSE.
+- Guard role returns to NOLOGIN/PASSWORD NULL in the isolated fixture;
+  neither the auditor nor consumer receives EXECUTE on the new guard.
+- Existing one-time consumption, TTL, row-level RLS and immutable
+  issuance ledger tests remain intact.
+
+**Scope limitation of the positive concurrency test:** `pg_sleep` is
+only a bounded-read *proxy*. This test does not run an actual scoped
+five-table reader SELECT while retaining a trusted guard transaction,
+and does not demonstrate crash/timeout termination of an already-running
+read. It also cannot guarantee immediate revocation during a query:
+the revoke correctly WAITs for the row lock to release. Any release
+policy must make that timing and rollback expectation explicit.
+
+**Mandatory remaining NO_GO conditions:** migration of real approvals
+away from the active SQLite source must be independently designed
+with proof against split-brain/replay and a rollback plan. The
+SECURITY DEFINER guard itself requires independent source, ownership,
+ACL and transaction-lifetime review. A trusted supervisor must prove
+one guard for one reader SQL, exclusive credential custody, no leaked
+password, active reader session termination and watchdog on crash,
+stale guard/replay denial, and final E2E signed attestation. None of
+these are made operational by this Draft.
+
+Direct isolated PG16 run at commit
+`2371030308f7dc515c235d0fb0fd11a5ab9164e1` on `srv1792369`
+completed exit code 0 with markers
+`PASS_CANONICAL_GUARD_CURRENT_APPROVAL_DENIES_STALE_AUDIT`,
+`PASS_GUARDED_TRANSACTION_BLOCKS_REVOKE_UNTIL_BOUND_READ_DONE`,
+and `PASS_GUARD_RECHECK_DENIES_AFTER_BOUNDED_READ_REVOKED`.
+This is regression evidence, NOT release approval. PR remains Draft;
+LIVE ISSUANCE, signer/dispatch and Final ACK stay NO_GO.
+
