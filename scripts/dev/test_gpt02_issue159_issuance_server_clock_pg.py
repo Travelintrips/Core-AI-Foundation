@@ -82,15 +82,19 @@ def prepare_packet():
 
     def review(signed_packet, *, roots=f.roots):
         with patch.object(broker, "_load_public_roots", return_value=roots):
-            # Synthetic authenticated persisted-reader result only. A live
-            # approval readback is NEVER asserted to have occurred.
+            # Both signed verifier and fresh persisted approval readback
+            # remain synthetic in this disposable database fixture.
             with patch.object(
                 handoff, "inspect_proposed_permit_candidate",
                 return_value=proof,
             ):
-                return proposal.review_issuance_bindings_from_authenticated_signed_packet(
-                    signed_packet
-                )
+                with patch.object(
+                    broker, "_require_persisted_admin_decision",
+                    return_value=now + 11000,
+                ):
+                    return proposal.review_issuance_bindings_from_authenticated_signed_packet(
+                        signed_packet
+                    )
 
     forged = copy.deepcopy(packet)
     forged["issuerEvidence"]["claims"]["receiptId"] = (
