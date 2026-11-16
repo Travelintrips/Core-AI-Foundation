@@ -45,6 +45,7 @@ on:
       - "docs/dev/gpt02-issue159-reader-issuance-server-clock.PROPOSED.sql"
       - "scripts/dev/test_gpt02_issue159_issuance_server_clock_pg.py"
       - "docs/dev/gpt02-issue159-canonical-approval-fence.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-canonical-reader-guard.PROPOSED.sql"
       - "scripts/dev/test_gpt02_issue159_canonical_approval_fence_pg.py"
       - "scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py"
       - "scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py"
