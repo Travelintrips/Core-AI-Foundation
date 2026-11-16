@@ -870,3 +870,72 @@ The test is intentionally rollback-only. This PR must remain Draft,
 LIVE ISSUANCE=NO_GO, SIGNERS/DISPATCH OFF, FINAL ACK=NO_GO; do not
 activate any DEV/PROD role or modify operational approval state.
 
+## Canonical PostgreSQL fence serialization model — 16 Nov 2026
+
+This section documents a **source-only proposal and disposable PG16 model**,
+not a production architecture decision, permission to migrate live SQLite
+approval state, or an operational credential issuer.
+
+An additive, NOT-APPLIED SQL proposal lives in
+`docs/dev/gpt02-issue159-canonical-approval-fence.PROPOSED.sql`.
+It depends on the pre-existing private issuance/consumption ledgers,
+server-clock TTL trigger and bounded consumer RPC. The proposal creates a
+new private PostgreSQL `reader_approval_fences` canonical-authority model
+with FORCE RLS and owner-only access. One-way revocation rejects
+reactivation, rebinding and deletion. The issuance and consumption INSERT
+triggers take a PostgreSQL `FOR SHARE` row lock on the same authority
+entry, checking exact scope/packet/role/task/company/command/attempt/
+receipt/fence, active revocation status and expiry. A concurrent UPDATE
+revocation obtains a conflicting row lock and is serialized against
+issuance/consumption. No new LOGIN, worker, signer, dispatch, private key,
+credential factory or live service is created.
+
+The corresponding disposable test
+`scripts/dev/test_gpt02_issue159_canonical_approval_fence_pg.py`
+runs only on a network-isolated PG16 fixture with a non-superuser owner.
+It verifies:
+
+- A committed revocation BEFORE issuance denies a new ledger row.
+- A native PostgreSQL revocation that holds a row lock while a separate
+  issuer tries INSERT serializes correctly: the waiting issuer fails
+  after revocation commits, leaving no issuance.
+- A signed synthetic candidate can be issued to the private ledger,
+  then revocation BEFORE one-read consumption prevents that claim.
+- An active canonical approval permits exactly one normal private
+  consumption, with no direct consumer access to the authority ledger.
+- Reactivation, role/task rebinding and delete attempts fail closed.
+- The existing **unmodified boolean persisted-consumption auditor can
+  still report TRUE for an already committed claim AFTER canonical
+  approval is revoked**. The expected negative-control marker is
+  `EXPECTED_GAP_COMMITTED_CLAIM_AUDIT_STALE_AFTER_REVOKE_NO_GO`.
+
+These tests were executed on authorized VPS `srv1792369` from a
+separate checkout (tested head `95984c4c39ed18c8f26e8801f642c8bae8a01869`):
+all assertions completed with exit code 0, including the explicitly
+EXPECTED GAP. The tests do NOT access the live CST-DEV approval store,
+issue live reader passwords, or authorize a Final ACK.
+
+**Why this does not resolve the live blocker:** current operational
+approval decisions still originate in a separate SQLite database.
+Populating a proposed PostgreSQL canonical table as an asynchronous
+copy would create split-brain approval/revocation authority and would
+NOT close the confirmed cross-store race. Only a reviewed, controlled
+authority migration/cutover (or equivalently strong cross-store fencing
+protocol) could make the new table authoritative. The present
+PostgreSQL consumed-ledger auditor also remains stale after later
+revocation, so last-mile reader admission cannot rely on its historical
+TRUE alone. Any final reader must prove the approval is current and
+hold an appropriate fence until the one bounded read completes; active
+session termination, RLS read-time revocation, crash/watchdog cleanup
+and post-consumption revocation must be tested. This is not an
+automatic promise of instantaneous termination of already-running SQL.
+
+Before any live DEV apply, require external independent security review
+of all SECURITY DEFINER routines and owner DDL, approval provenance,
+explicit source-of-truth/cutover and rollback, durable revocation sequence,
+a least-privilege reader/consumer/fence credential custody plan,
+independent watchdog, exact task/attempt, and full Final ACK E2E.
+Do not use the real `postgres`, shared lineage or attestor credential
+as a shortcut. PR remains DRAFT, LIVE ISSUANCE=NO_GO,
+SIGNER/DISPATCH=OFF, FINAL ACK=NO_GO and PROD unchanged.
+
