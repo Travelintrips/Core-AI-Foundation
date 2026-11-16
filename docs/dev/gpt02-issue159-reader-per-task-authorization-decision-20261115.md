@@ -756,3 +756,62 @@ plus independent watchdog. Until then the approved packet remains only
 NO_GO review evidence. This PR stays Draft; no CST-DEV roles, credentials,
 ledger tables or service configuration are activated and PROD/DELL dispatch
 remains unchanged.
+
+## Fresh persisted SQLite expiry carried into inert ledger preview — 16 Nov 2026
+
+The existing read-only `gpt02_issue159_approval_intent_reader.py` now
+returns `decision.expiresAt` from the same uniquely matched SQLite approval
+row used for the Super Admin, task, command, attempt and claim-digest
+evidence. The existing private writer/verifier reader validates that the
+expiry is a strict integer, later than the observation, later than recorded
+time, and at most 300 seconds after it. It returns the expiry as **read-only
+evidence**; it does not grant signing or issuance authority.
+
+The SOURCE-ONLY `review_issuance_bindings_from_authenticated_signed_packet`
+now performs an additional **fresh** persisted-approval socket lookup AFTER
+its pinned four-signature and lineage candidate verification, then caps
+the proposed one-read expiry at the earliest of:
+
+- The signed approval/link/issuer lease.
+- The expiry stored in the matching, currently-enabled Super Admin's
+  SQLite approval row.
+- The review-time +15-second ceiling.
+
+The reviewer rejects missing, malformed, stale, implausible or insufficient
+remaining approval time instead of silently extending the expiry. Caller
+override of keys, clock, approval digest, role or expiry is still unavailable.
+The result remains `ownerIssuanceCommitted=false`,
+`credentialIssuancePermitted=false`, `databaseWritePerformed=false` and
+`releaseDecision=NO_GO`.
+
+Evidence in the existing Draft test suite:
+
+- Native SQLite reader test checks that returned `expiresAt` matches the
+  actual approval row, with no new write surface.
+- Private Unix socket readback test rejects an omitted or forged 600-second
+  expiry even if other claimed approval flags are true.
+- Source-only test clamps the inert issuance TTL to a stricter stored expiry
+  and rejects missing, expired, too-short or implausibly future readbacks.
+- An E2E synthetic SQLite + actual private Unix socket test reuses a fresh
+  ephemeral four-signed packet, returns a shorter persisted expiry, verifies
+  the resulting TTL is no later than that expiry, and confirms a later
+  revocation is observed by the next readback.
+- The earlier disposable PostgreSQL-16 TTL/rollback/one-use proof is retained;
+  its signed approval reader is explicitly simulated and marked as such.
+
+Direct tests passed on an exact fresh checkout of commit
+`c25d765f2daeaec5f2f2087060d3abe500c5980d` on
+`srv1792369`: 10/10 source tests PASS, exit code 0; the previous exact
+checkout also passed 17/17 narrower source tests and the networkless PG16
+issuance/consumption suite. No live approval, ledger, database role,
+credential, signer, dispatch, DELL or PROD was changed.
+
+**Critical NO_GO boundary remains:** SQLite and PostgreSQL do NOT share an
+atomic transaction. A later approval revocation after the fresh socket
+readback but before PostgreSQL INSERT cannot be ruled out by this preview
+or the DB-clock 15-second constraint. The PostgreSQL ledger currently
+enforces its own TTL, NOT the independently authenticated origin of
+the SQLite approval expiry. A trusted owner-reviewed issuer still needs
+a revocation-consistent protocol, a real persisted Super Admin approval,
+dedicated credentials and an independent watchdog. Do NOT interpret this
+source-only clamp as permission to enable operational issuance.
