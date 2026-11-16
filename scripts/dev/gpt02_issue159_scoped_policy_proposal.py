@@ -375,6 +375,9 @@ def review_issuance_bindings_from_authenticated_signed_packet(packet: object) ->
         },
         "databaseWritePerformed": False,
         "ownerIssuanceCommitted": False,
+        # Fresh SQLite readback != a linearizable cross-store authority.
+        "crossStoreAtomicityProven": False,
+        "revocationAtIssuanceProven": False,
         "databaseRoleProvisioned": False,
         "credentialIssuancePermitted": False,
         "signingPermitted": False,
