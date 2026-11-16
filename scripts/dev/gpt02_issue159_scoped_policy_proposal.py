@@ -316,7 +316,8 @@ def review_issuance_bindings_from_authenticated_signed_packet(packet: object) ->
     No caller can pass a role, packet digest, approval, clock, or public roots.
     """
     from gpt02_issue159_writer_broker_runtime import (
-        _load_public_roots, DEFAULT_FINGERPRINT_MANIFEST,
+        _load_public_roots, _require_persisted_admin_decision,
+        DEFAULT_FINGERPRINT_MANIFEST, DEFAULT_APPROVAL_READER_SOCKET,
     )
     from gpt02_issue159_positive_permit_handoff import (
         VERIFIER_PUBLIC_ROOT_DIR, inspect_postlineage_scoped_reader_candidate,
@@ -329,19 +330,36 @@ def review_issuance_bindings_from_authenticated_signed_packet(packet: object) ->
     scope, role, signed_expiry = validate_inert_candidate(
         candidate, observed_ms,
     )
-    # This cap is an extra review constraint, NOT a server-enforced bound.
-    # The final database writer must enforce signed expiry and this cap
-    # atomically against DB clock before any future issuance is allowed.
-    proposed_expiry = min(
-        signed_expiry, observed_ms + MAX_REVIEW_LEDGER_LIFETIME_MS,
+    # An earlier verifier's positive readback can become stale. Recheck the
+    # actual persisted Super Admin intent through the private, pinned reader
+    # immediately before deriving review values; NEVER trust a supplied TTL.
+    # This is still a non-atomic SQLite-to-PostgreSQL review, NOT issuance.
+    persisted_expiry = _require_persisted_admin_decision(
+        packet["approval"]["claims"], scope["approval_digest"],
+        DEFAULT_APPROVAL_READER_SOCKET, observed_ms,
     )
-    if proposed_expiry - observed_ms < 3500:
+    fresh_ms = int(time.time() * 1000)
+    if (
+        type(persisted_expiry) is not int
+        or persisted_expiry <= fresh_ms
+        or persisted_expiry - fresh_ms > 300_000
+    ):
+        deny("REVIEW_PERSISTED_APPROVAL_EXPIRY_INVALID")
+    # An extra conservative cap, NOT an operational authorization. The
+    # eventual DB writer must independently check real approval/revocation
+    # at issuance and the signed lease using a trustworthy clock.
+    proposed_expiry = min(
+        signed_expiry, persisted_expiry,
+        fresh_ms + MAX_REVIEW_LEDGER_LIFETIME_MS,
+    )
+    if proposed_expiry - fresh_ms < 3500:
         deny("REVIEW_ISSUANCE_LEASE_TOO_CLOSE_TO_EXPIRY")
     return {
         "environment": "DEV",
         "stage": "SIGNED_PERSISTED_APPROVAL_LEDGER_ISSUANCE_REVIEW_ONLY",
         "sourceVerified": True,
         "signedLeaseExpiresAt": signed_expiry,
+        "persistedApprovalExpiresAt": persisted_expiry,
         "proposedLedgerExpiresAt": proposed_expiry,
         "issuanceParameters": {
             "scope_sha": candidate["scopeSha256"],
