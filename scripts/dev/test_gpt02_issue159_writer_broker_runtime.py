@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from gpt02_issue159_writer_broker_contract import (
-    APPROVAL_FIELDS, LINK_FIELDS, ISSUER_FIELDS,
+    APPROVAL_FIELDS, LINK_FIELDS, ISSUER_FIELDS, BrokerAdmissionError,
 )
 from gpt02_issue159_writer_broker_runtime import ROOT_FILES
 from gpt02_issue159_approval_reader_runtime import (
@@ -292,6 +292,49 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         second,out2=self._post(self.packet,"/verify-approved-packet")
         self.assertEqual(second,200,out2)
         self.assertFalse(out2["dispatchPermitted"])
+
+    def test_trusted_sqlite_expiry_binds_readback_and_rejects_forged_ttl(self):
+        from gpt02_issue159_writer_broker_runtime import (
+            _require_persisted_admin_decision,
+        )
+        self._start_approval_reader()
+        claims = self.packet["approval"]["claims"]
+        digest = hashlib.sha256(json.dumps(
+            {key: claims[key] for key in APPROVAL_FIELDS},
+            separators=(",", ":"),
+        ).encode()).hexdigest()
+        observed = _require_persisted_admin_decision(
+            claims, digest, str(self.approval_socket_path), self.now,
+        )
+        self.assertEqual(observed, self.now + 120000)
+        # Simulate an unexpectedly overlong *reader response*, not a
+        # database write: the broker's own expiry/provenance check denies.
+        def forged_reader(path, lookup, now, operational):
+            proof = read_approval_intent(path, lookup, now,
+                                         operational=operational)
+            proof["decision"]["expiresAt"] = self.now + 600000
+            return proof
+        ApprovalHandler.approval_reader_fn = forged_reader
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "PERSISTED_ADMIN_APPROVAL_READBACK_MISMATCH",
+        ):
+            _require_persisted_admin_decision(
+                claims, digest, str(self.approval_socket_path), self.now,
+            )
+        # Missing expiry also fails closed even when other flags say PASS.
+        def omitted_reader(path, lookup, now, operational):
+            proof = read_approval_intent(path, lookup, now,
+                                         operational=operational)
+            proof["decision"].pop("expiresAt", None)
+            return proof
+        ApprovalHandler.approval_reader_fn = omitted_reader
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "PERSISTED_ADMIN_APPROVAL_READBACK_MISMATCH",
+        ):
+            _require_persisted_admin_decision(
+                claims, digest, str(self.approval_socket_path), self.now,
+            )
+        print("PASS_PINNED_SQLITE_APPROVAL_EXPIRY_AND_FORGED_TTL_DENIAL")
 
     def test_approved_route_rejects_wrong_stored_approval_digest(self):
         self._start_approval_reader(stored_digest="f"*64)
