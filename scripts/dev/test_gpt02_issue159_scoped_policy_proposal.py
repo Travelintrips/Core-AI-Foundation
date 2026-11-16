@@ -159,6 +159,8 @@ class PolicyProposalSourceTest(unittest.TestCase):
         )
         self.assertEqual(reviewed["releaseDecision"], "NO_GO")
         self.assertIs(reviewed["ownerIssuanceCommitted"], False)
+        self.assertIs(reviewed["crossStoreAtomicityProven"], False)
+        self.assertIs(reviewed["revocationAtIssuanceProven"], False)
         for flag in (
             "databaseWritePerformed", "databaseRoleProvisioned",
             "credentialIssuancePermitted", "signingPermitted",
