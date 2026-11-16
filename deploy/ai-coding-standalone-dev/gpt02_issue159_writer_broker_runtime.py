@@ -155,7 +155,7 @@ def _read_request(conn: socket.socket) -> tuple[str, bytes]:
 def _require_persisted_admin_decision(
     claims: dict[str, Any], approval_digest: str,
     reader_socket_path: str, server_now_ms: int,
-) -> None:
+) -> int:
     """Confirm a signer-verified approval was also persisted by the DEV admin API.
 
     This is a read-only Unix-socket lookup, not signer/dispatch authorization.
@@ -261,8 +261,16 @@ def _require_persisted_admin_decision(
             or decision.get("authMethod") not in (
                 "supabase_admin_session", "supabase_aal2")
             or type(decision.get("recordedAt")) is not int
-            or decision["recordedAt"] > server_now_ms):
+            or decision["recordedAt"] > server_now_ms
+            or type(decision.get("expiresAt")) is not int
+            or decision["expiresAt"] <= server_now_ms
+            or decision["expiresAt"] <= decision["recordedAt"]
+            or decision["expiresAt"] - decision["recordedAt"] > 300_000):
         raise BrokerAdmissionError("PERSISTED_ADMIN_APPROVAL_READBACK_MISMATCH")
+    # This absolute expiry is read from the trusted, private SQLite approval
+    # reader. It is only evidence for later NO_GO review; returning it never
+    # authorizes any PostgreSQL write, credential, signer or dispatch.
+    return decision["expiresAt"]
 
 
 def _require_persisted_lineage(
