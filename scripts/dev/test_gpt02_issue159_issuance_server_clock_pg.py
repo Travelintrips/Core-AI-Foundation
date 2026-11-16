@@ -14,6 +14,8 @@ import hashlib
 import json
 from pathlib import Path
 import secrets
+import sqlite3
+import tempfile
 import time
 import uuid
 from unittest.mock import patch
@@ -31,6 +33,7 @@ from test_gpt02_issue159_minimal_catalog_auditor_pg import (
     admin, login, run, AUDITOR,
 )
 from test_gpt02_issue159_signed_scope_pg import quote
+from gpt02_issue159_approval_intent_reader import read_approval_intent
 
 ROOT = Path(__file__).resolve().parents[2]
 AUDIT_SQL = ROOT / "docs/dev/gpt02-issue159-minimal-catalog-relock-auditor.PROPOSED.sql"
@@ -125,7 +128,7 @@ def prepare_packet():
     ):
         raise AssertionError("REVIEW_VALUES_MUST_NOT_AUTHORIZE_ISSUANCE")
     print("PASS_SIGNED_PACKET_AND_SIMULATED_APPROVAL_READBACK_BIND_DB_INPUTS")
-    return candidate
+    return candidate, packet
 
 
 def insert_sql(params, expiry_expression, *, fake_issued_at=None):
@@ -153,6 +156,94 @@ def insert_sql(params, expiry_expression, *, fake_issued_at=None):
         "INSERT INTO " + ISSUANCES +
         "(" + columns + ") VALUES (" + ",".join(values) + ")"
     )
+
+
+def reproduce_cross_db_revocation_window(
+    name: str, packet: dict, insert_statement: str,
+) -> None:
+    """EXPECTED GAP test: SQLite revocation cannot rollback PG-only INSERT.
+
+    This intentionally does NOT create an operational release path. A
+    private source-only SQLite approval is rechecked and REVOKED, yet an
+    unrelated, separately privileged PostgreSQL owner INSERT can still
+    succeed. We immediately ROLLBACK; no synthetic ledger row persists.
+    """
+    approval = packet["approval"]["claims"]
+    lookup = {
+        "claimsSha256": packet["issuerEvidence"]["claims"]["approvalDigest"],
+        "taskId": approval["taskId"],
+        "commandId": approval["commandId"],
+        "attemptId": approval["attemptId"],
+        "companyId": approval["companyId"],
+        "superAdminId": approval["superAdminId"],
+    }
+    with tempfile.TemporaryDirectory(prefix="issue159-approval-gap-") as folder:
+        db_path = str(Path(folder) / "approval.sqlite")
+        with sqlite3.connect(db_path) as db:
+            db.executescript("""
+                CREATE TABLE admin_identities(
+                    user_id TEXT PRIMARY KEY, role TEXT NOT NULL,
+                    enabled INTEGER NOT NULL
+                );
+                CREATE TABLE gpt02_issue159_admin_operator_links(
+                    auth_user_id TEXT PRIMARY KEY, hub_operator_id TEXT UNIQUE,
+                    email TEXT, enabled INTEGER NOT NULL
+                );
+                CREATE TABLE gpt02_issue159_approval_intents(
+                    id TEXT PRIMARY KEY, task_id INTEGER,
+                    command_id TEXT, attempt_id TEXT, company_id TEXT,
+                    claims_sha256 TEXT, actor_id TEXT, auth_method TEXT,
+                    role_at_decision TEXT, decision TEXT,
+                    recorded_at_ms INTEGER, expires_at_ms INTEGER
+                );
+            """)
+            db.execute(
+                "INSERT INTO admin_identities VALUES (?,?,?)",
+                ("fixture-authority", "super_admin", 1),
+            )
+            db.execute(
+                "INSERT INTO gpt02_issue159_admin_operator_links "
+                "VALUES (?,?,?,?)",
+                ("fixture-authority", lookup["superAdminId"],
+                 "synthetic@example.invalid", 1),
+            )
+            observed_ms = int(time.time() * 1000)
+            db.execute(
+                "INSERT INTO gpt02_issue159_approval_intents "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("44444444-4444-4444-8444-444444444444",
+                 lookup["taskId"], lookup["commandId"],
+                 lookup["attemptId"], lookup["companyId"],
+                 lookup["claimsSha256"], lookup["superAdminId"],
+                 "supabase_admin_session", "super_admin", "APPROVE",
+                 observed_ms - 1000, observed_ms + 120000),
+            )
+        approved = read_approval_intent(
+            db_path, lookup, int(time.time() * 1000), operational=False,
+        )
+        if approved.get("persistedTrustedReadProven") is not True:
+            raise AssertionError("SYNTHETIC_APPROVAL_BASELINE_FAILED")
+        with sqlite3.connect(db_path) as db:
+            db.execute("UPDATE admin_identities SET enabled=0")
+        revoked = read_approval_intent(
+            db_path, lookup, int(time.time() * 1000), operational=False,
+        )
+        if revoked.get("persistedTrustedReadProven") is not False:
+            raise AssertionError("SYNTHETIC_REVOKE_NOT_OBSERVED")
+        # PostgreSQL has no revocation fence for this SQLite row. Demonstrate
+        # the exact missing trust boundary in an explicit ROLLBACK txn.
+        trial = owner(
+            name, "BEGIN;" + insert_statement +
+            ";SELECT count(*) FROM " + ISSUANCES + ";ROLLBACK;",
+        )
+        if "1" not in trial.stdout.splitlines():
+            raise AssertionError("EXPECTED_CROSS_DB_GAP_NOT_REPRODUCED")
+        remaining = owner(
+            name, "SELECT count(*) FROM " + ISSUANCES,
+        ).stdout.strip()
+        if remaining != "0":
+            raise AssertionError("RACE_FIXTURE_LEFT_PERSISTED_LEDGER_DATA")
+    print("EXPECTED_GAP_SQLITE_REVOKED_BUT_PG_INSERT_ACCEPTS_NO_GO")
 
 
 def main():
@@ -213,10 +304,15 @@ WHERE c.conrelid='gpt02_relock_audit.reader_issuances'::regclass
 
         # The *new* signed packet is prepared after DB startup so its
         # short issuer lease stays fresh through the actual INSERT.
-        reviewed = prepare_packet()
+        reviewed, signed_packet = prepare_packet()
         params = reviewed["issuanceParameters"]
         expiry = "to_timestamp(" + str(params["expires_at_ms"]) + "/1000.0)"
         statement = insert_sql(params, expiry)
+
+        # The test above verifies a positive, signed/approved preview.
+        # Deliberately revoke in a DIFFERENT SQLite store immediately after
+        # a true readback. PostgreSQL still cannot know about that change.
+        reproduce_cross_db_revocation_window(name, signed_packet, statement)
 
         # Explicit caller-set issued_at cannot extend the max TTL.
         forged_time = insert_sql(
