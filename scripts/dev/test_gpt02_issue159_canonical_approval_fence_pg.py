@@ -17,7 +17,7 @@ from test_gpt02_issue159_minimal_catalog_auditor_pg import admin, login, run
 from test_gpt02_issue159_issuance_server_clock_pg import (
     AUDIT_SQL, LEDGER_SQL, CLOCK_SQL, CONSUMER_SQL,
     OWNER_PASSWORD, CONSUMER, ISSUANCES, CONSUME_FN,
-    owner, insert_sql, prepare_packet, ROOT,
+    owner, insert_sql, prepare_packet, ROOT, AUDIT_FN,
 )
 from test_gpt02_issue159_signed_scope_pg import quote
 
@@ -57,10 +57,10 @@ def authority_insert(params: dict) -> str:
 
 def synthetic_scope(letter: str, task: int) -> dict:
     """Database-only negative control — deliberately NOT a signed claim."""
-    assert letter in ("b", "c")
+    assert letter in ("b", "c", "d")
     return {
         "scope_sha": letter * 64,
-        "packet_sha": ("e" if letter == "b" else "f") * 64,
+        "packet_sha": {"b": "e", "c": "f", "d": "a"}[letter] * 64,
         "role_name": f"dev_gpt02_task_{task}_{letter * 12}",
         "task_id": task,
         "company_id": "default",
@@ -262,6 +262,49 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
                     reset.returncode != 0 and altered.returncode != 0
                     and deleted.returncode != 0)
         print("PASS_NO_REACTIVATION_REBIND_OR_DELETE_OF_APPROVAL_FENCE")
+
+        # Positive consumption control while canonical approval is active.
+        # Then revoke and verify that the ORIGINAL boolean-only readback
+        # is still TRUE: its implementation has no canonical fence check.
+        # This is an EXPECTED last-mile gap, NOT successful final admission.
+        after_claim = synthetic_scope("d", 173)
+        owner(name, authority_insert(after_claim))
+        owner(name, insert_sql(
+            after_claim, "clock_timestamp()+interval '9 seconds'",
+        ))
+        admin(
+            name, "ALTER ROLE " + CONSUMER +
+            " LOGIN CONNECTION LIMIT 1 PASSWORD " + quote(pw) + ";"
+            "ALTER ROLE dev_gpt02_relock_catalog_auditor "
+            "LOGIN CONNECTION LIMIT 1 PASSWORD " + quote(pw) + ";"
+        )
+        challenge = secrets.token_hex(32)
+        claim = login(
+            name, CONSUMER, pw,
+            claim_sql(after_claim, challenge),
+        )
+        assert_true("ACTIVE_CANONICAL_CONSUMPTION_BLOCKED",
+                    claim.stdout.strip() == "t")
+        def audit():
+            return login(
+                name, "dev_gpt02_relock_catalog_auditor", pw,
+                claim_sql(after_claim, challenge).replace(
+                    CONSUME_FN, AUDIT_FN, 1,
+                ),
+            )
+        assert_true("ACTIVE_AUDITOR_READBACK_UNAVAILABLE",
+                    audit().stdout.strip() == "t")
+        owner(name, revoke_sql(after_claim))
+        assert_true("POSTREVOKE_OLD_AUDITOR_NOT_STALE",
+                    audit().stdout.strip() == "t")
+        admin(
+            name, "ALTER ROLE " + CONSUMER +
+            " NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
+            "ALTER ROLE dev_gpt02_relock_catalog_auditor "
+            "NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
+        )
+        print("PASS_CANONICAL_ACTIVE_APPROVAL_ALL0WS_SINGLE_CONSUMPTION")
+        print("EXPECTED_GAP_COMMITTED_CLAIM_AUDIT_STALE_AFTER_REVOKE_NO_GO")
         print("CANONICAL_POSTGRES_ONLY_MODEL_NOT_LIVE_SQLITE_MIGRATION")
         print("FINAL_READER_ADMISSION_AND_CRASH_FENCE_STILL_NO_GO")
     finally:
