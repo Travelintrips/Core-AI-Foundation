@@ -105,15 +105,22 @@ class PolicyProposalSourceTest(unittest.TestCase):
 
         fixture = PostlineageReaderScopeOfflineTest()
         fixture.setUp()
-        with patch.object(broker, "_load_public_roots",
-                          return_value=fixture.fixture.roots) as roots:
-            with patch.object(handoff, "inspect_proposed_permit_candidate",
-                              return_value=fixture.proof) as persisted:
-                with patch.object(proposal.time, "time",
-                                  return_value=self.observed_ms / 1000):
-                    reviewed = review_issuance_bindings_from_authenticated_signed_packet(
-                        fixture.fixture.packet,
-                    )
+        with patch.object(broker, "_require_persisted_admin_decision",
+                          return_value=self.observed_ms + 4200) as approval_expiry:
+            with patch.object(broker, "_load_public_roots",
+                              return_value=fixture.fixture.roots) as roots:
+                with patch.object(handoff, "inspect_proposed_permit_candidate",
+                                  return_value=fixture.proof) as persisted:
+                    with patch.object(proposal.time, "time",
+                                      return_value=self.observed_ms / 1000):
+                        reviewed = review_issuance_bindings_from_authenticated_signed_packet(
+                            fixture.fixture.packet,
+                        )
+        approval_expiry.assert_called_once_with(
+            fixture.fixture.packet["approval"]["claims"],
+            fixture.proof["approvalDigest"],
+            broker.DEFAULT_APPROVAL_READER_SOCKET, self.observed_ms,
+        )
         roots.assert_called_once_with(
             handoff.VERIFIER_PUBLIC_ROOT_DIR,
             broker.DEFAULT_FINGERPRINT_MANIFEST,
@@ -139,6 +146,10 @@ class PolicyProposalSourceTest(unittest.TestCase):
         self.assertLessEqual(
             params["expires_at_ms"], reviewed["signedLeaseExpiresAt"],
         )
+        self.assertEqual(
+            reviewed["persistedApprovalExpiresAt"], self.observed_ms + 4200,
+        )
+        self.assertEqual(params["expires_at_ms"], self.observed_ms + 4200)
         self.assertLessEqual(
             params["expires_at_ms"] - self.observed_ms,
             MAX_REVIEW_LEDGER_LIFETIME_MS,
@@ -172,30 +183,69 @@ class PolicyProposalSourceTest(unittest.TestCase):
         )
         roots = dict(f.fixture.roots)
         roots["core"] = roots["hub"]
-        with patch.object(handoff, "inspect_proposed_permit_candidate",
-                          return_value=f.proof):
-            for packet, keys, at in (
-                (changed, f.fixture.roots, self.observed_ms),
-                (f.fixture.packet, roots, self.observed_ms),
-                (f.fixture.packet, f.fixture.roots,
-                 min(f.fixture.packet[x]["claims"]["expiresAt"] for x in
-                     ("approval", "hubLink", "issuerEvidence"))),
-            ):
-                with self.subTest(packet=packet is changed,
-                                  roots=keys is roots, clock=at):
-                    with patch.object(broker, "_load_public_roots",
-                                      return_value=keys):
-                        with patch.object(proposal.time, "time",
-                                          return_value=at / 1000):
-                            with self.assertRaises(BrokerAdmissionError):
-                                review_issuance_bindings_from_authenticated_signed_packet(
-                                    packet,
-                                )
+        with patch.object(broker, "_require_persisted_admin_decision",
+                          return_value=self.observed_ms + 4200):
+            with patch.object(handoff, "inspect_proposed_permit_candidate",
+                              return_value=f.proof):
+                for packet, keys, at in (
+                    (changed, f.fixture.roots, self.observed_ms),
+                    (f.fixture.packet, roots, self.observed_ms),
+                    (f.fixture.packet, f.fixture.roots,
+                     min(f.fixture.packet[x]["claims"]["expiresAt"] for x in
+                         ("approval", "hubLink", "issuerEvidence"))),
+                ):
+                    with self.subTest(packet=packet is changed,
+                                      roots=keys is roots, clock=at):
+                        with patch.object(broker, "_load_public_roots",
+                                          return_value=keys):
+                            with patch.object(proposal.time, "time",
+                                              return_value=at / 1000):
+                                with self.assertRaises(BrokerAdmissionError):
+                                    review_issuance_bindings_from_authenticated_signed_packet(
+                                        packet,
+                                    )
         with self.assertRaises(TypeError):
             review_issuance_bindings_from_authenticated_signed_packet(
                 f.fixture.packet, requested_expiry=self.observed_ms+999999,
             )
         print("PASS_INERT_ISSUANCE_DENIES_TAMPERED_PACKET_ROOTS_AND_EXPIRED_LEASE")
+
+    def test_review_requires_fresh_persisted_approval_expiry(self):
+        from test_gpt02_issue159_postlineage_reader_scope import (
+            PostlineageReaderScopeOfflineTest,
+        )
+        import gpt02_issue159_positive_permit_handoff as handoff
+        import gpt02_issue159_writer_broker_runtime as broker
+        import gpt02_issue159_scoped_policy_proposal as proposal
+
+        fixture = PostlineageReaderScopeOfflineTest()
+        fixture.setUp()
+        for persisted_expiry in (
+            None, True, 123.0, self.observed_ms - 1,
+            self.observed_ms + 3200, self.observed_ms + 300001,
+        ):
+            with self.subTest(expiry=persisted_expiry):
+                with patch.object(
+                    broker, "_require_persisted_admin_decision",
+                    return_value=persisted_expiry,
+                ):
+                    with patch.object(
+                        broker, "_load_public_roots",
+                        return_value=fixture.fixture.roots,
+                    ):
+                        with patch.object(
+                            handoff, "inspect_proposed_permit_candidate",
+                            return_value=fixture.proof,
+                        ):
+                            with patch.object(
+                                proposal.time, "time",
+                                return_value=self.observed_ms / 1000,
+                            ):
+                                with self.assertRaises(BrokerAdmissionError):
+                                    review_issuance_bindings_from_authenticated_signed_packet(
+                                        fixture.fixture.packet,
+                                    )
+        print("PASS_REVIEW_DENIES_MISSING_EXPIRED_OR_FORGED_APPROVAL_EXPIRY")
 
     def test_operational_review_rejects_tamper_and_substituted_roots(self):
         from test_gpt02_issue159_postlineage_reader_scope import (
