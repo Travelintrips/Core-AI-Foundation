@@ -293,6 +293,40 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertEqual(second,200,out2)
         self.assertFalse(out2["dispatchPermitted"])
 
+    def test_production_approval_socket_root_guard_survives_fixture_alias(self):
+        import stat
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import gpt02_issue159_writer_broker_runtime as broker
+
+        live_path = "/run/gpt02-approval-reader/approval.sock"
+        live_parent = "/run/gpt02-approval-reader"
+        def synthetic_non_root_lstat(path):
+            if path == live_path:
+                return SimpleNamespace(
+                    st_mode=stat.S_IFSOCK | 0o660, st_uid=1001,
+                )
+            if path == live_parent:
+                return SimpleNamespace(
+                    st_mode=stat.S_IFDIR | 0o750, st_uid=1001,
+                )
+            raise AssertionError("UNEXPECTED_ROOT_CUSTODY_PATH")
+
+        # Mutating a local test default must NOT disable mandatory ownership
+        # checks on the real, hard-pinned production socket path.
+        with patch.object(broker, "DEFAULT_APPROVAL_READER_SOCKET",
+                          "/tmp/synthetic-approval-only.sock"):
+            with patch.object(broker.os, "lstat",
+                              side_effect=synthetic_non_root_lstat):
+                with self.assertRaisesRegex(
+                    RuntimeError, "APPROVAL_SOCKET_ROOT_CUSTODY_REQUIRED",
+                ):
+                    broker._require_persisted_admin_decision(
+                        self.packet["approval"]["claims"],
+                        "a" * 64, live_path, self.now,
+                    )
+        print("PASS_LIVE_APPROVAL_SOCKET_REMAINS_ROOT_PINNED")
+
     def test_trusted_sqlite_expiry_binds_readback_and_rejects_forged_ttl(self):
         from gpt02_issue159_writer_broker_runtime import (
             _require_persisted_admin_decision,
