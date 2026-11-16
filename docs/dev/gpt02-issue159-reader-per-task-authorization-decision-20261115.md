@@ -1013,3 +1013,65 @@ and `PASS_GUARD_RECHECK_DENIES_AFTER_BOUNDED_READ_REVOKED`.
 This is regression evidence, NOT release approval. PR remains Draft;
 LIVE ISSUANCE, signer/dispatch and Final ACK stay NO_GO.
 
+## Actual five-table guarded reader proof and password-reuse blocker — 16 Nov 2026
+
+The existing Draft `scripts/dev/test_gpt02_issue159_canonical_approval_fence_pg.py`
+has been extended to use the **ORIGINAL five-table lineage SQL** from
+`gpt02_issue159_lineage_readback_contract.TRUSTED_LINEAGE_SQL` and the
+already-tested `FIVE_TABLE_FIXTURE`/signed Task170 scope. The fixture
+contains two same-company tasks and explicit PostgreSQL FORCE RLS
+policies for `approvals`, `operator_links`, `receipts`,
+`core_identity_receipts`, and `post_consumption_fences`. No
+replacement query, changed signed packet, or new source of credentials
+was introduced.
+
+Two separate native PostgreSQL connections are used in a single
+network-isolated disposable PG16 database: an authenticated, transaction
+holding `canonical_reader_current_guard` that locks the exact canonical
+approval `FOR SHARE`, and a separate task-scoped NOINHERIT reader that
+executes **exactly one bounded SELECT containing the original five-table
+JOIN**. The SELECT includes a test-only `pg_sleep(4.0)` expression to
+expose the concurrency window; a separately authenticated revocation
+UPDATE receives a statement timeout rather than committing while the
+guard transaction is held. After the query finishes and the guard
+releases the lock, revocation commits and a new guard returns FALSE.
+A test-only cleanup transaction revokes SELECT/USAGE, sets the task
+role NOLOGIN/CONNECTION LIMIT 0/PASSWORD NULL, terminates its sessions,
+and verifies a new login using the prior password fails.
+
+**CRITICAL EXPECTED SECURITY GAP:** Even though the new canonical guard
+correctly returned FALSE after revocation, a DIRECT second connection
+with the still-live scoped reader password successfully ran the same
+original five-table lineage query BEFORE relock. The regression prints
+`EXPECTED_GAP_DIRECT_PASSWORD_REQUERY_BEFORE_RELOCK_NO_GO`.
+The separate guard transaction alone **does not gate the native task
+reader's SQL**. The test's final successful relock is not proof of
+exclusive credential custody or absence of a reuse window. This is
+a release blocker; do not interpret the synthetic successful guarded
+read or historic audit TRUE as operational permission.
+
+An initial test attempted to find `pg_sleep` in the tail of
+`pg_stat_activity.query`, but PostgreSQL truncates the text of long
+queries. The test now identifies its native reader connection through
+a dedicated test-only `PGAPPNAME`, while retaining the unchanged
+five-table SQL and RLS. Direct run at head
+`0a16b2fc1e7c4d511f24aad52f6d3fe8604aae91` on
+VPS `srv1792369`: PASS with exit code 0, including
+`PASS_ONE_REAL_FIVE_TABLE_LINEAGE_SELECT_UNDER_HELD_GUARD`,
+`PASS_DISPOSABLE_FIVE_TABLE_READER_RELOCKED_NO_REUSE`, and the
+above explicit EXPECTED GAP marker. All fixture containers are
+removed on exit. This is SOURCE-ONLY, not a test using real
+CST-DEV approvals or task rows.
+
+Before any live issuance, a separately reviewed single owner/supervisor
+must prove **one credential, one allowed SELECT, no extra sessions,
+immediate native relock on success/failure/crash, and durable revocation
+for orphaned connections**. A row-locking guard and a voluntary client
+check do not supply these properties by themselves. Verify that a
+compromised direct reader login cannot bypass live revocation under
+the final design (e.g. a reviewed revocation-aware DB RLS fence plus
+independent watchdog), without creating callable privileged backdoors.
+The current SQLite approval source is NOT migrated to the canonical
+PostgreSQL model. NO GO for live reader, signers, DELL dispatch, and
+Final ACK; PR remains Draft.
+
