@@ -247,6 +247,119 @@ class PolicyProposalSourceTest(unittest.TestCase):
                                     )
         print("PASS_REVIEW_DENIES_MISSING_EXPIRED_OR_FORGED_APPROVAL_EXPIRY")
 
+    def test_real_sqlite_expiry_socket_limits_signed_review_preview(self):
+        """Real ephemeral SQLite + Unix socket, only signed verifier mocked."""
+        import hashlib
+        import json
+        import sqlite3
+        import time
+        from cryptography.hazmat.primitives import serialization
+        from gpt02_issue159_writer_broker_contract import (
+            verify_lifecycle_evidence_packet,
+        )
+        from test_gpt02_issue159_writer_broker_runtime import (
+            WriterBrokerRuntimeTest,
+        )
+        import gpt02_issue159_positive_permit_handoff as handoff
+        import gpt02_issue159_writer_broker_runtime as broker
+
+        fixture = WriterBrokerRuntimeTest()
+        fixture.setUp()
+        try:
+            fixture._start_approval_reader()
+            packet = fixture.packet
+            roots = {
+                key: value.public_key().public_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PublicFormat.SubjectPublicKeyInfo,
+                ).decode("ascii")
+                for key, value in fixture.keys.items()
+            }
+            verified = verify_lifecycle_evidence_packet(
+                packet, roots, fixture.now,
+            )
+            approval = packet["approval"]["claims"]
+            issuer = packet["issuerEvidence"]["claims"]
+            canonical_packet = json.dumps(
+                packet, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ).encode("utf-8")
+            proof = {
+                "environment": "DEV",
+                "stage": "FOUR_SIGNATURE_PERSISTED_LINEAGE_REVIEWED",
+                "hubTaskId": approval["taskId"],
+                "commandId": approval["commandId"],
+                "attemptId": approval["attemptId"],
+                "fenceId": issuer["fenceId"],
+                "verifiedPacketSha256": hashlib.sha256(
+                    canonical_packet,
+                ).hexdigest(),
+                "approvalDigest": verified["approvalDigest"],
+                "hubLinkDigest": verified["hubLinkDigest"],
+                "coreLinkDigest": verified["coreLinkDigest"],
+                "verifiedByExistingReader": True,
+                "positivePermitCreated": False,
+                "databaseWritePerformed": False,
+                "signingPermitted": False,
+                "authorizationGranted": False,
+                "dispatchPermitted": False,
+                "releaseDecision": "NO_GO",
+            }
+            path = fixture.root / "approval-intents.db"
+            # Persisted expires sooner than the signed issuer lease.
+            short_expiry = fixture.now + 4100
+            with sqlite3.connect(path) as db:
+                db.execute(
+                    "UPDATE gpt02_issue159_approval_intents "
+                    "SET expires_at_ms=?", (short_expiry,),
+                )
+            with patch.object(
+                broker, "_load_public_roots", return_value=roots,
+            ), patch.object(
+                handoff, "inspect_proposed_permit_candidate",
+                return_value=proof,
+            ), patch.object(
+                broker, "DEFAULT_APPROVAL_READER_SOCKET",
+                str(fixture.approval_socket_path),
+            ):
+                reviewed = (
+                    review_issuance_bindings_from_authenticated_signed_packet(
+                        packet,
+                    )
+                )
+                self.assertEqual(
+                    reviewed["persistedApprovalExpiresAt"], short_expiry,
+                )
+                self.assertEqual(
+                    reviewed["issuanceParameters"]["expires_at_ms"],
+                    short_expiry,
+                )
+                self.assertIs(reviewed["databaseWritePerformed"], False)
+                # An earlier, still-valid persisted expiry below the minimum
+                # 3.5-second budget is rejected, not silently extended.
+                with sqlite3.connect(path) as db:
+                    db.execute(
+                        "UPDATE gpt02_issue159_approval_intents "
+                        "SET expires_at_ms=?", (fixture.now + 3000,),
+                    )
+                with self.assertRaises(BrokerAdmissionError):
+                    review_issuance_bindings_from_authenticated_signed_packet(
+                        packet,
+                    )
+                # Revocation after the first successful review must be
+                # observed via a FRESH Unix-socket SQLite lookup.
+                with sqlite3.connect(path) as db:
+                    db.execute(
+                        "UPDATE admin_identities SET enabled=0",
+                    )
+                with self.assertRaises(BrokerAdmissionError):
+                    review_issuance_bindings_from_authenticated_signed_packet(
+                        packet,
+                    )
+            print("PASS_REAL_SQLITE_SOCKET_EXPIRY_CLAMP_AND_REVOKE_NO_GO")
+        finally:
+            fixture.tearDown()
+
     def test_operational_review_rejects_tamper_and_substituted_roots(self):
         from test_gpt02_issue159_postlineage_reader_scope import (
             PostlineageReaderScopeOfflineTest,
