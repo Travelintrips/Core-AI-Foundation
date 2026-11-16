@@ -90,6 +90,8 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         self.assertEqual(out["releaseDecision"], "NO_GO")
         self.assertEqual(out["decision"]["actorId"], LOOKUP["superAdminId"])
         self.assertEqual(out["decision"]["claimsSha256"], LOOKUP["claimsSha256"])
+        self.assertEqual(out["decision"]["recordedAt"], 1000)
+        self.assertEqual(out["decision"]["expiresAt"], 2000)
 
     def test_single_authenticated_admin_session_is_trusted_without_aal2(self):
         path = self.db()
