@@ -1075,3 +1075,45 @@ The current SQLite approval source is NOT migrated to the canonical
 PostgreSQL model. NO GO for live reader, signers, DELL dispatch, and
 Final ACK; PR remains Draft.
 
+## Orphaned canonical-guard reader cleanup (disposable only) — 16 Nov 2026
+
+The existing network-isolated PostgreSQL 16 canonical-fence test now also
+reproduces what happens when a valid five-table reader password is still
+usable AFTER canonical approval revocation and the separate admission
+guard has ended. This is intentionally recorded as
+`EXPECTED_GAP_ORPHANED_READER_ACTIVE_AFTER_REVOKE_NO_GO`, not as
+successful enforcement. A fresh native reader query using the ORIGINAL
+signed Task170 five-table lineage SQL is held active in the same throwaway
+database, with a dedicated `application_name` solely for fixture
+observation. No second live task is created and no real records are read.
+
+An independent privileged owner connection in the **test only** calls
+`pg_terminate_backend` on the exact scoped role's running backend, waits
+for the SQL process to be interrupted, and only THEN revokes five-table
+SELECT privileges and schema USAGE and sets the role to
+`NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL`. The order is important:
+starting with table-privilege REVOKE could itself wait for the orphan's
+active SELECT `AccessShareLock`, delaying emergency termination.
+Subsequent tests require zero remaining sessions and failure to log in
+with the old synthetic password. Success marker:
+`PASS_INDEPENDENT_OWNER_TERMINATES_ORPHANED_READER_AFTER_REVOKE`,
+followed by `PASS_DISPOSABLE_FIVE_TABLE_READER_RELOCKED_NO_REUSE`.
+
+Native execution on an exact temporary checkout at
+`92b2bc279654b368ea7fe4f96b685f76e80e83a8` on VPS
+`srv1792369` passed with exit code 0. The existing five-table
+under-held-guard, native concurrency, 15-second issuance and one-use
+claim positive controls remain in place; all containers/temporary
+credentials are destroyed by the disposable fixture.
+
+**This is NOT an operational watchdog:** the cleanup is invoked by the
+test harness, not a separately managed monitor with verified owner-only
+custody, crash handling, revocation notifications or health alerts.
+The running query can still be started with a leaked password after
+approval revocation, and a malicious reader may query again before relock.
+A real live design must prevent unguarded SELECT structurally, use
+exclusive connection/credential custody, enforce independent watchdog
+deadlines and prove same-task active-backend termination under broker
+failure. Source-of-truth migration from existing SQLite approvals,
+independent SECURITY DEFINER review, live credential custody,
+signing/dispatch and Final ACK still remain NO_GO.
