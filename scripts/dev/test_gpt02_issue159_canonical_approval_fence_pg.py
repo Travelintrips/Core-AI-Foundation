@@ -499,6 +499,7 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         )
         reader = subprocess.Popen(
             ["docker", "exec", "-e", "PGPASSWORD=" + reader_pw,
+             "-e", "PGAPPNAME=issue159-real-five-table-reader",
              name, "psql", "-X", "-w", "-h", "127.0.0.1",
              "-U", reader_role, "-d", "postgres",
              "-v", "ON_ERROR_STOP=1", "-Atc",
@@ -510,7 +511,8 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
             n = admin(
                 name, "SELECT count(*) FROM pg_stat_activity "
                 "WHERE usename=" + quote(reader_role) +
-                " AND state='active' AND query LIKE '%pg_sleep(4.0)%'"
+                " AND state='active'"
+                " AND application_name='issue159-real-five-table-reader'"
             ).stdout.strip()
             if n == "1" and reader.poll() is None:
                 active = True
