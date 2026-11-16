@@ -19,7 +19,11 @@ from test_gpt02_issue159_issuance_server_clock_pg import (
     OWNER_PASSWORD, CONSUMER, ISSUANCES, CONSUME_FN,
     owner, insert_sql, prepare_packet, ROOT, AUDIT_FN,
 )
-from test_gpt02_issue159_signed_scope_pg import quote
+from test_gpt02_issue159_signed_scope_pg import (
+    quote, make_candidate as make_five_table_candidate,
+    bound_query as five_table_bound_query,
+    FIVE_TABLE_FIXTURE,
+)
 
 MODEL_SQL = (ROOT / "docs/dev" /
              "gpt02-issue159-canonical-approval-fence.PROPOSED.sql")
@@ -399,6 +403,177 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
                     login(name, GUARD_USER, pw, held_query).stdout.strip()
                     == "f")
         print("PASS_GUARD_RECHECK_DENIES_AFTER_BOUNDED_READ_REVOKED")
+
+        # NATIVE FIVE-TABLE test. The separate canonical guard and scoped
+        # RLS reader use their OWN authenticated PostgreSQL connections.
+        # Reuse the existing ephemeral four-signature Task170 candidate,
+        # the actual five-table RLS fixture, and original lineage JOIN.
+        signed = make_five_table_candidate()
+        sscope = signed["scope"]
+        reader_role = signed["candidateRole"]
+        assert_true("FIVE_TABLE_SIGNED_FIXTURE_NOT_INERT",
+                    signed["releaseDecision"] == "NO_GO"
+                    and signed["credentialIssuancePermitted"] is False
+                    and sscope["task_id"] == 170)
+        fixture = FIVE_TABLE_FIXTURE
+        assert_true("FIVE_TABLE_SCHEMA_FIXTURE_DRIFT",
+                    fixture.count("CREATE SCHEMA gpt02_private;") == 1)
+        fixture = fixture.replace("CREATE SCHEMA gpt02_private;", "")
+        fixture = fixture.replace("task170_reader", reader_role)
+        for old, new in (
+            ("'n170'", quote(sscope["approval_nonce"])),
+            ("'d170'", quote(sscope["approval_digest"])),
+            ("'link170'", quote(sscope["link_digest"])),
+        ):
+            assert_true("SIGNED_SCOPE_FIVE_TABLE_SEED_DRIFT", old in fixture)
+            fixture = fixture.replace(old, new)
+        seeded = admin(name, fixture)
+        assert_true("FIVE_TABLE_RLS_BOOTSTRAP_FAILED",
+                    "PASS_FIVE_TABLE_DIRECT_ENUMERATION_SCOPED"
+                    in seeded.stderr)
+        reader_pw = secrets.token_urlsafe(32)
+        admin(
+            name, "ALTER ROLE " + reader_role +
+            " LOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 1 PASSWORD " +
+            quote(reader_pw) + ";"
+        )
+        exact = {
+            "scope_sha": signed["scopeSha256"],
+            "packet_sha": signed["verifiedPacketSha256"],
+            "role_name": reader_role,
+            "task_id": sscope["task_id"],
+            "company_id": sscope["company_id"],
+            "command_id": sscope["command_id"],
+            "attempt_id": sscope["attempt_id"],
+            "receipt_id": sscope["receipt_id"],
+            "fence_id": sscope["fence_id"],
+        }
+        owner(name, authority_insert(exact))
+        owner(name, insert_sql(
+            exact, "clock_timestamp()+interval '14 seconds'",
+        ))
+        real_challenge = secrets.token_hex(32)
+        assert_true("FIVE_TABLE_CLAIM_NOT_COMMITTED",
+                    login(name, CONSUMER, pw,
+                          claim_sql(exact, real_challenge)).stdout.strip()
+                    == "t")
+        guard_real = claim_sql(exact, real_challenge).replace(
+            CONSUME_FN, GUARD_FN, 1,
+        )
+        # Explicit, bounded, independent guard transaction. Its row lock
+        # remains live while the original scoped reader query executes.
+        guard_txn = (
+            "BEGIN;"
+            "SET LOCAL statement_timeout='5100ms';"
+            "SET LOCAL idle_in_transaction_session_timeout='5600ms';"
+            + guard_real + ";SELECT pg_sleep(3.1);ROLLBACK;"
+        )
+        hold = subprocess.Popen(
+            ["docker", "exec", "-e", "PGPASSWORD=" + pw, name,
+             "psql", "-X", "-w", "-h", "127.0.0.1",
+             "-U", GUARD_USER, "-d", "postgres",
+             "-v", "ON_ERROR_STOP=1", "-Atc", guard_txn],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        lock_found = False
+        for _ in range(75):
+            locks = owner(name,
+                "SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a "
+                "ON a.pid=l.pid WHERE a.usename=" + quote(GUARD_USER) +
+                " AND l.relation=" + quote(AUTHORITY) + "::regclass"
+                " AND l.mode='RowShareLock' AND l.granted"
+            ).stdout.strip()
+            if locks == "1" and hold.poll() is None:
+                lock_found = True
+                break
+            if hold.poll() is not None:
+                break
+            time.sleep(.04)
+        assert_true("REAL_FIVE_TABLE_GUARD_LOCK_NOT_HELD", lock_found)
+        # One SELECT of the ORIGINAL five-table lineage JOIN. pg_sleep
+        # runs in the SAME SELECT to make the revocation race observable.
+        original_query = five_table_bound_query(sscope)
+        one_read = (
+            "SELECT (SELECT count(*) FROM (" + original_query +
+            ") AS lineage) AS n, pg_sleep(1.35)"
+        )
+        reader = subprocess.Popen(
+            ["docker", "exec", "-e", "PGPASSWORD=" + reader_pw,
+             name, "psql", "-X", "-w", "-h", "127.0.0.1",
+             "-U", reader_role, "-d", "postgres",
+             "-v", "ON_ERROR_STOP=1", "-Atc",
+             "SET statement_timeout='2400ms';" + one_read],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        active = False
+        for _ in range(55):
+            n = owner(
+                name, "SELECT count(*) FROM pg_stat_activity "
+                "WHERE usename=" + quote(reader_role) +
+                " AND state='active' AND query LIKE '%pg_sleep(1.35)%'"
+            ).stdout.strip()
+            if n == "1" and reader.poll() is None:
+                active = True
+                break
+            if reader.poll() is not None:
+                break
+            time.sleep(.025)
+        assert_true("REAL_FIVE_TABLE_READER_QUERY_NOT_ACTIVE", active)
+        competing_revoke = owner(
+            name, "SET statement_timeout='500ms';" + revoke_sql(exact),
+            check=False,
+        )
+        assert_true("REVOKE_COMMITTED_MID_REAL_FIVE_TABLE_QUERY",
+                    competing_revoke.returncode != 0
+                    and "statement timeout" in competing_revoke.stderr.lower())
+        out, err = reader.communicate(timeout=8)
+        assert_true("REAL_FIVE_TABLE_LINEAGE_QUERY_FAILED",
+                    reader.returncode == 0 and not err
+                    and any(l.startswith("1|") for l in out.splitlines()))
+        gout, gerr = hold.communicate(timeout=9)
+        assert_true("REAL_FIVE_TABLE_GUARD_TXN_FAILED",
+                    hold.returncode == 0 and not gerr
+                    and any(l.strip()=="t" for l in gout.splitlines()))
+        hold = None
+        print("PASS_ONE_REAL_FIVE_TABLE_LINEAGE_SELECT_UNDER_HELD_GUARD")
+        owner(name, revoke_sql(exact))
+        assert_true("POSTREVOKE_FIVE_TABLE_GUARD_ACCEPTED_STALE_CLAIM",
+                    login(name, GUARD_USER, pw, guard_real).stdout.strip()
+                    == "f")
+        # EXPECTED REMAINING CRITICAL GAP: guard and reader use different
+        # sessions. A leaked reader password can bypass the guard before
+        # relock; this test intentionally demonstrates that limitation.
+        replay = login(
+            name, reader_role, reader_pw,
+            "SELECT count(*) FROM (" + original_query + ") AS lineage",
+        )
+        assert_true("DIRECT_READER_PASSWORD_REPLAY_RISK_NOT_DEMONSTRATED",
+                    replay.stdout.strip() == "1")
+        print("EXPECTED_GAP_DIRECT_PASSWORD_REQUERY_BEFORE_RELOCK_NO_GO")
+        # Test-only exclusive supervisor cleanup. No service is enabled.
+        admin(name,
+            "REVOKE SELECT ON " +
+            ", ".join("gpt02_private." + t for t in (
+                "approvals", "operator_links", "receipts",
+                "core_identity_receipts", "post_consumption_fences",
+            )) + " FROM " + reader_role + ";"
+            "REVOKE USAGE ON SCHEMA gpt02_private FROM " + reader_role + ";"
+            "ALTER ROLE " + reader_role +
+            " NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE usename=" + quote(reader_role) +
+            " AND pid<>pg_backend_pid();"
+        )
+        assert_true("SIGNED_FIVE_TABLE_ROLE_NOT_RELOCKED",
+                    admin(name, "SELECT NOT rolcanlogin AND rolconnlimit=0 "
+                          "AND rolpassword IS NULL FROM pg_authid "
+                          "WHERE rolname=" + quote(reader_role)
+                          ).stdout.strip() == "t")
+        assert_true("NEW_LOGIN_AFTER_RELOCK_WAS_ALLOWED",
+                    login(name, reader_role, reader_pw, "SELECT 1",
+                          check=False).returncode != 0)
+        print("PASS_DISPOSABLE_FIVE_TABLE_READER_RELOCKED_NO_REUSE")
+
         admin(
             name, "ALTER ROLE " + CONSUMER +
             " NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;"
