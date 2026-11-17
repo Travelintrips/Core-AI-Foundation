@@ -44,6 +44,28 @@ ISSUER_READER_BUNDLE = Path(
 )
 
 
+# These are *presence-only* paths, not authority checks. An installed file
+# never means its process, credential custody, PG approval fence or one-read
+# release capability is trusted.
+ONE_SHOT_BROKER_SOURCE = Path(LIVE_RUNTIME) / "gpt02_issue159_one_shot_reader_broker.py"
+RELOCK_WATCHDOG_UNIT = Path("/etc/systemd/system/gpt02-issue159-relock-catalog-auditor.service")
+RELOCK_WATCHDOG_CREDENTIAL = Path("/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn")
+
+
+def _root_owned_regular_metadata(path: Path, *, encrypted_credential=False) -> bool:
+    """Only lstat/size/mode/owner, NEVER read a credential or follow a symlink."""
+    try:
+        item = path.lstat()
+    except OSError:
+        return False
+    if not stat.S_ISREG(item.st_mode) or item.st_uid != 0 or item.st_gid != 0:
+        return False
+    mode = stat.S_IMODE(item.st_mode)
+    if encrypted_credential:
+        return mode == 0o600 and item.st_size > 0
+    return (mode & 0o022) == 0 and (mode & 0o444) != 0
+
+
 def current_approval_evidence():
     """Read the exact persisted single-Super-Admin intent; expired approvals do not count."""
     try:
@@ -467,6 +489,20 @@ def assess(approval, custody, runtime):
     if not public_trust:
         blockers.append("OPERATIONAL_PUBLIC_TRUST_NOT_INSTALLED")
 
+    # Release/reader credentials are separate from signer custody. Source
+    # presence is not proof of an installed, independently supervised broker.
+    if runtime.get("oneShotBrokerSourceInstalled") is not True:
+        blockers.append("ONE_SHOT_READER_BROKER_SOURCE_NOT_INSTALLED")
+    if not (runtime.get("relockWatchdogUnitMetadataPresent") is True
+            and runtime.get("relockEncryptedCredentialMetadataPresent") is True):
+        blockers.append("INDEPENDENT_RELOCK_CUSTODY_NOT_PROVISIONED")
+    if runtime.get("oneShotReaderSupervisorOperational") is not True:
+        blockers.append("ONE_SHOT_READER_SUPERVISOR_NOT_OPERATIONAL")
+    if runtime.get("independentRelockWatchdogOperational") is not True:
+        blockers.append("INDEPENDENT_RELOCK_WATCHDOG_NOT_OPERATIONAL")
+    if runtime.get("canonicalCurrentApprovalGuardVerified") is not True:
+        blockers.append("CANONICAL_CURRENT_APPROVAL_GUARD_NOT_VERIFIED")
+
     return {
         "environment": "DEV",
         "approvalStoreSchemaReady": approval_schema_ready,
@@ -487,6 +523,12 @@ def assess(approval, custody, runtime):
         "issuerReaderBundleVerified": runtime.get("issuerReaderBundleVerified") is True,
         "authorizerAdaptersInstalled": authorizer_sources,
         "fourSignerAuthorizersOperational": signer_authorizers,
+        "oneShotBrokerSourceInstalled": runtime.get("oneShotBrokerSourceInstalled") is True,
+        "relockWatchdogUnitMetadataPresent": runtime.get("relockWatchdogUnitMetadataPresent") is True,
+        "relockEncryptedCredentialMetadataPresent": runtime.get("relockEncryptedCredentialMetadataPresent") is True,
+        "oneShotReaderSupervisorOperational": runtime.get("oneShotReaderSupervisorOperational") is True,
+        "independentRelockWatchdogOperational": runtime.get("independentRelockWatchdogOperational") is True,
+        "canonicalCurrentApprovalGuardVerified": runtime.get("canonicalCurrentApprovalGuardVerified") is True,
         "blockers": blockers,
         "privateCredentialBytesRead": False,
         "signingPermitted": False,
@@ -531,6 +573,17 @@ def live_runtime_metadata():
         "issuerReaderBundleVerified": issuer_bundle_verified,
         "authorizerAdaptersInstalled": authorizer_adapters_installed(issuer_bundle_verified),
         "approvalIntentTrustedReadCurrent": current_approval_evidence(),
+        "oneShotBrokerSourceInstalled": _root_owned_regular_metadata(ONE_SHOT_BROKER_SOURCE),
+        "relockWatchdogUnitMetadataPresent": _root_owned_regular_metadata(RELOCK_WATCHDOG_UNIT),
+        "relockEncryptedCredentialMetadataPresent": _root_owned_regular_metadata(
+            RELOCK_WATCHDOG_CREDENTIAL, encrypted_credential=True,
+        ),
+        # An independently authenticated, active one-shot supervisor,
+        # watchdog and PG approval lock have NOT been proved by file metadata.
+        # Keep these false until separate operational readers can attest them.
+        "oneShotReaderSupervisorOperational": False,
+        "independentRelockWatchdogOperational": False,
+        "canonicalCurrentApprovalGuardVerified": False,
     }
 
 
