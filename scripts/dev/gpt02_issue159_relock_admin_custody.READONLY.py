@@ -21,12 +21,18 @@ import stat
 
 EXPECTED_UNIT = Path("/etc/systemd/system/gpt02-issue159-relock-catalog-auditor.service")
 EXPECTED_CREDENTIAL = Path("/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn")
+EXPECTED_EXEC = (
+    "ExecStart=/usr/bin/node "
+    "/opt/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs"
+)
 EXPECTED_BIND = (
     "LoadCredentialEncrypted=relock-catalog-dsn:"
     "/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn"
 )
 REQUIRED_LINES = frozenset((
-    "User=gpt02-issue159-relock-catalog-auditor",
+    "User=gpt02-relock-auditor",
+    "DynamicUser=yes",
+    EXPECTED_EXEC,
     "NoNewPrivileges=yes",
     "ProtectSystem=strict",
     "PrivateTmp=yes",
@@ -127,7 +133,8 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
         # cannot authorize metadata when a later directive removes the sandbox.
         # Check the ordered source, not its de-duplicated set.
         singleton_lines = (
-            "User=gpt02-issue159-relock-catalog-auditor",
+            "User=gpt02-relock-auditor",
+            "DynamicUser=yes",
             "Environment=APP_ENV=development",
             "NoNewPrivileges=yes",
             "ProtectSystem=strict",
@@ -139,6 +146,11 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
             matches = [line for line in service_lines if line.startswith(prefix)]
             if matches != [expected]:
                 return _fail("AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
+        # The supervisor executor is a single, pinned absolute command.
+        # No shell, extra arguments, disabled reset, or second ExecStart.
+        if ([line for line in service_lines if line.startswith("ExecStart=")]
+                != [EXPECTED_EXEC]):
+            return _fail("AUDITOR_UNIT_UNREVIEWED_EXEC_OR_MOUNT_DENIED")
         # No secondary environment, pre/post commands, or mount namespace
         # overrides are reviewed for this independent credential boundary.
         # The privileged supervisor executable does not exist yet: even
@@ -148,6 +160,8 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
                                  "PassEnvironment=", "UnsetEnvironment="))
                     and line != "Environment=APP_ENV=development"):
                 return _fail("AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED")
+            if line == EXPECTED_EXEC:
+                continue
             if line.startswith((
                 "ExecStart=", "ExecStartPre=", "ExecStartPost=", "ExecCondition=",
                 "ExecReload=", "ExecStop=", "ExecStopPost=",

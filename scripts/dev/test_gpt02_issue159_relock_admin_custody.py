@@ -68,7 +68,7 @@ class CustodyMetaTest(unittest.TestCase):
         # Meta-only preflight must not believe a directive placed into
         # [Unit] or [Install] applies to [Service] sandbox custody.
         for missing in (
-            "User=gpt02-issue159-relock-catalog-auditor",
+            "User=gpt02-relock-auditor",
             "ProtectSystem=strict",
             "NoNewPrivileges=yes",
             "PrivateTmp=yes",
@@ -158,7 +158,7 @@ class CustodyMetaTest(unittest.TestCase):
 
     def test_wrong_identity_or_missing_sandbox_denied(self):
         for line in (
-            "User=gpt02-issue159-relock-catalog-auditor",
+            "User=gpt02-relock-auditor",
             "ProtectSystem=strict",
             "NoNewPrivileges=yes",
             MOD.EXPECTED_BIND,
@@ -189,6 +189,31 @@ class CustodyMetaTest(unittest.TestCase):
                 self.assert_denied(result)
                 self.assertEqual(result["reason"],
                                  "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
+
+    def test_exact_supervisor_exec_and_dynamic_user_are_mandatory(self):
+        for injected in (
+            "ExecStart=/bin/sh",
+            "ExecStart=/usr/bin/node /tmp/other-supervisor.mjs",
+            "ExecStart=",
+            "DynamicUser=no",
+        ):
+            with self.subTest(injected=injected):
+                original = self.valid_lines
+                if injected.startswith("ExecStart="):
+                    lines = original.replace(MOD.EXPECTED_EXEC, injected)
+                else:
+                    lines = original.replace("DynamicUser=yes", injected)
+                self.unit.write_text(lines, encoding="utf-8")
+                result = self.check()
+                self.assert_denied(result)
+                self.assertIs(result["unitMetadataReady"], False)
+        for missing in (MOD.EXPECTED_EXEC, "DynamicUser=yes"):
+            with self.subTest(missing=missing):
+                self.unit.write_text(
+                    self.valid_lines.replace(missing + "\n", ""),
+                    encoding="utf-8",
+                )
+                self.assert_denied(self.check())
 
     def test_sandbox_override_and_unreviewed_commands_fail_closed(self):
         # These additions used to make metadataReady=True because the

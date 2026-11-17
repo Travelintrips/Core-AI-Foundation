@@ -14,6 +14,11 @@ on:
       - "scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py"
       - "scripts/dev/gpt02_issue159_relock_admin_custody.READONLY.py"
       - "scripts/dev/test_gpt02_issue159_relock_admin_custody.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer"
+      - "scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs"
+      - "docs/dev/gpt02-issue159-independent-relock-supervisor.PROPOSED.md"
       - "docs/dev/gpt02-issue159-minimal-catalog-relock-auditor.PROPOSED.sql"
       - "scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
@@ -180,6 +185,9 @@ jobs:
           set -euo pipefail
           python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py -q
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_relock_admin_custody
+          node --test scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs
+          node --check deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer
           test ! -f scripts/dev/gpt02_issue159_issuer_reader_install_credential_live.py
           echo "PASS_CUSTODY_STARTUP_GUARDS_NO_CREDENTIAL_ACTIVATION"
 
