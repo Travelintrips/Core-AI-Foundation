@@ -43,7 +43,7 @@ def login(name, role, password, query):
             "-U", role, "-d", "postgres", "-Atc", query]
 
 
-def main():
+def main(*, simulate_crash=False):
     candidate = make_candidate()
     if (candidate["credentialIssuancePermitted"] is not False or
             candidate["databaseRoleProvisioned"] is not False or
@@ -157,7 +157,8 @@ def main():
         # reader is killed. A post-terminate login cannot race a still-
         # uncommitted ALTER ROLE. A crash after phase A remains recoverable
         # because cleaned_at is committed ONLY in phase B.
-        cleanup = (
+        phase_a = (
+            "SET application_name='issue159-relock-phase-a';\n"
             "SELECT pg_sleep(5);\n"
             "BEGIN;\n"
             "DO $relock$\n"
@@ -174,10 +175,8 @@ def main():
             " END LOOP;\n"
             "END $relock$;\n"
             "COMMIT;\n"
-            # The fixture intentionally delays phase B so a separate,
-            # unauthenticated parent test can assert durable NOLOGIN and
-            # prove the existing active reader has not yet terminated.
-            "SELECT pg_sleep(3);\n"
+        )
+        phase_b = (
             "BEGIN;\n"
             "DO $cleanup$\n"
             "DECLARE rec record; victim record;\n"
@@ -208,10 +207,18 @@ def main():
             "END $cleanup$;\n"
             "COMMIT;\n"
         )
+        # The first admin process is intentionally stopped after durable
+        # phase A in the crash branch. A SECOND process must finish phase B
+        # from the same uncleaned issuance ledger without reopening login.
+        watchdog_query = (
+            phase_a +
+            ("SELECT pg_sleep(20);\n" if simulate_crash
+             else "SELECT pg_sleep(3);\n" + phase_b)
+        )
         watchdog = subprocess.Popen(
             ["docker", "exec", "-i", db_name, "psql", "-X",
              "-v", "ON_ERROR_STOP=1", "-U", "postgres",
-             "-d", "postgres", "-Atc", cleanup],
+             "-d", "postgres", "-Atc", watchdog_query],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True,
         )
@@ -245,9 +252,54 @@ def main():
             "LATE_LOGIN_STILL_ACCEPTED_AFTER_COMMITTED_NOLOGIN")
         print("PASS_DURABLE_NOLOGIN_BEFORE_READER_TERMINATION_NO_LATE_LOGIN")
         print("PASS_PENDING_CLEANUP_RETRYABLE_AFTER_PHASE_A_COMMIT")
+        if simulate_crash:
+            # Terminate the *admin watchdog* connection, NOT the reader.
+            # It has committed NOLOGIN but has not started phase B.
+            before = psql(db_name,
+                "SELECT count(*) FROM pg_stat_activity WHERE "
+                "application_name='issue159-relock-phase-a' AND state='active'")
+            assert before.stdout.strip() == "1", (
+                "NO_ACTIVE_PHASE_A_WATCHDOG_FOR_CRASH_INJECTION")
+            stopped = psql(db_name,
+                "SELECT pg_terminate_backend(pid,3000) "
+                "FROM pg_stat_activity WHERE "
+                "application_name='issue159-relock-phase-a' "
+                "AND pid<>pg_backend_pid()")
+            assert stopped.stdout.strip() == "t", (
+                "PHASE_A_WATCHDOG_CRASH_NOT_CONFIRMED")
+            out, err = watchdog.communicate(timeout=8)
+            assert watchdog.returncode != 0, (
+                "WATCHDOG_SURVIVED_INJECTED_CRASH")
+            watchdog = None
+            original_still_active = psql(db_name,
+                "SELECT count(*) FROM pg_stat_activity WHERE usename=" +
+                quote(role))
+            assert original_still_active.stdout.strip() == "1", (
+                "CRASH_TEST_READER_ENDED_BEFORE_RESTART")
+            assert call(login(db_name, role, disposable_password,
+                               "SELECT 1"), check=False).returncode != 0, (
+                "CRASH_AFTER_PHASE_A_REOPENED_OLD_PASSWORD")
+            uncleaned = psql(db_name,
+                "SELECT count(*) FROM gpt02_private.reader_issuance_watchdog "
+                "WHERE role_name=" + quote(role) +
+                " AND cleaned_at IS NULL")
+            assert uncleaned.stdout.strip() == "1", (
+                "CRASH_INCORRECTLY_MARKED_CLEAN")
+            print("PASS_FORCED_WATCHDOG_CRASH_LEAVES_DURABLE_LOCK_AND_PENDING_LEDGER")
+            # No reuse of the first process or session: a new independent
+            # administrator connection starts from phase B only.
+            watchdog = subprocess.Popen(
+                ["docker", "exec", "-i", db_name, "psql", "-X",
+                 "-v", "ON_ERROR_STOP=1", "-U", "postgres",
+                 "-d", "postgres", "-Atc", phase_b],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True,
+            )
         out, err = watchdog.communicate(timeout=18)
         if watchdog.returncode:
             raise RuntimeError("DISPOSABLE_WATCHDOG_FAILED:" + err[-1300:])
+        if simulate_crash:
+            print("PASS_FRESH_WATCHDOG_PROCESS_RECOVERS_AFTER_PHASE_A_CRASH")
         held.communicate(timeout=8)
         if held.returncode == 0:
             raise AssertionError("ACTIVE_READER_SURVIVED_INDEPENDENT_WATCHDOG")
@@ -271,6 +323,23 @@ def main():
                       "SELECT 1"), check=False).returncode == 0:
             raise AssertionError("NEW_LOGIN_AFTER_WATCHDOG_NOT_BLOCKED")
         print("PASS_RELOCK_PASSWORD_NULL_ZERO_SESSIONS_CLEANUP_DURABLE")
+        # A second restart after completed cleanup is a no-op, not another
+        # issuance or a fresh clean timestamp. The scoped login remains off.
+        first_cleaned_at = psql(db_name,
+            "SELECT cleaned_at::text FROM "
+            "gpt02_private.reader_issuance_watchdog WHERE role_name=" +
+            quote(role)).stdout.strip()
+        repeat = psql(db_name, phase_b)
+        last_cleaned_at = psql(db_name,
+            "SELECT cleaned_at::text FROM "
+            "gpt02_private.reader_issuance_watchdog WHERE role_name=" +
+            quote(role)).stdout.strip()
+        assert first_cleaned_at and last_cleaned_at == first_cleaned_at, (
+            "REPEATED_CLEANUP_REWROTE_DURABLE_LEDGER")
+        assert call(login(db_name, role, disposable_password,
+                           "SELECT 1"), check=False).returncode != 0, (
+            "REPEAT_CLEANUP_REOPENED_OLD_READER")
+        print("PASS_RESTART_AFTER_COMPLETED_CLEANUP_IS_IDEMPOTENT")
         print("DISPOSABLE_ONLY_NO_LIVE_ISSUER_CREDENTIAL_OR_DISPATCH")
     finally:
         for proc in (watchdog, held):
@@ -282,3 +351,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    main(simulate_crash=True)
