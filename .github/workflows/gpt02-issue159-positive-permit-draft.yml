@@ -187,7 +187,16 @@ jobs:
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_relock_admin_custody
           node --test scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs
           node --check deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
-          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer
+          # On hosted CI, Node lives outside /usr/bin. Verify an isolated
+          # copy with the CI interpreter while keeping the reviewed VPS
+          # ExecStart pinned to /usr/bin/node in the real unit.
+          grep -Fq 'ExecStart=/usr/bin/node /opt/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs' deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service
+          test -x "$(command -v node)"
+          temp_units="$(mktemp -d)"
+          sed "s|^ExecStart=/usr/bin/node |ExecStart=$(command -v node) |" deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service > "$temp_units/gpt02-issue159-relock-catalog-auditor.service"
+          cp deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer "$temp_units/"
+          systemd-analyze verify "$temp_units/gpt02-issue159-relock-catalog-auditor.service" "$temp_units/gpt02-issue159-relock-catalog-auditor.timer"
+          rm -r "$temp_units"
           test ! -f scripts/dev/gpt02_issue159_issuer_reader_install_credential_live.py
           echo "PASS_CUSTODY_STARTUP_GUARDS_NO_CREDENTIAL_ACTIVATION"
 
