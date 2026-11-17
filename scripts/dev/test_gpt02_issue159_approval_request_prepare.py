@@ -183,7 +183,7 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
         def fixture_lstat(path):
             st = original_lstat(path)
             if os.fspath(path) == self.db:
-                return SimpleNamespace(st_mode=st.st_mode, st_uid=0, st_gid=0)
+                return types.SimpleNamespace(st_mode=st.st_mode, st_uid=0, st_gid=0)
             return st
 
         def missing_presign(identity):
