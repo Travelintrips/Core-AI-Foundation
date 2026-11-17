@@ -142,6 +142,13 @@ class AutoChainSequenceTest(unittest.TestCase):
                 cmd="systemctl start",timeout=25,
             ))
 
+    def test_missing_systemctl_fails_closed(self):
+        with self.assertRaisesRegex(chain.AutoChainError,
+                                    "UNIT_SYSTEMD_UNAVAILABLE"):
+            self._run_unit_with(start_exception=FileNotFoundError(
+                "fixture-systemctl-not-present"
+            ))
+
     def test_successful_synthetic_order_reports_no_dispatch(self):
         result = chain.run_after_approval(201)
         self.assertEqual(self.sequence, [
