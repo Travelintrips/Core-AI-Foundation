@@ -88,6 +88,8 @@ def issue159_chain_readiness_gate(record):
   return False
  if not issue159_approved_packet_slot_clear():
   return False
+ if not issue159_operator_link_slot_clear():
+  return False
  if not issue159_precommit_presign_matches(record):
   return False
  return True
@@ -147,6 +149,26 @@ def issue159_precommit_presign_matches(record):
  except Exception:
   # Missing file, bad security, reader outage and scope drift all deny.
   return False
+
+ISSUE159_OPERATOR_LINK_OUTPUT=Path('/opt/ai-coding-standalone-dev/gpt02_issue159_hub_core_link_claims.json')
+
+def issue159_operator_link_slot_clear():
+ """Reject a prior verified Hub/Core link or temporary peer before approval.
+
+ This is only a read-only occupancy check. The auto-chain itself must still
+ publish exclusively to prevent concurrent replacement after this check.
+ """
+ target=Path(ISSUE159_OPERATOR_LINK_OUTPUT)
+ tmp=target.with_name('.'+target.name+'.auto.tmp')
+ for path in (target,tmp):
+  try:
+   os.lstat(path)
+  except FileNotFoundError:
+   continue
+  except OSError:
+   return False
+  return False
+ return True
 
 def issue159_approved_packet_slot_clear():
  """Fail closed if an earlier approved packet or its temp file exists.
@@ -235,6 +257,9 @@ def load_issue159_pending_claims(actor_id):
            'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   if not issue159_approved_packet_slot_clear():
    return {'environment':'DEV','pending':False,'reason':'APPROVED_PACKET_OUTPUT_OCCUPIED',
+           'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  if not issue159_operator_link_slot_clear():
+   return {'environment':'DEV','pending':False,'reason':'VERIFIED_OPERATOR_LINK_OCCUPIED',
            'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   return {
    'environment':'DEV','pending':True,'taskId':claims['taskId'],
