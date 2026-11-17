@@ -121,6 +121,81 @@ class FakeMinimalAuditConnection:
 
 
 
+class NativeCanonicalGuardCursor:
+    def __init__(self, connection):
+        self.connection = connection
+        self.description = [SimpleNamespace(name="approval_current")]
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, statement, params=None):
+        self.calls.append((statement, params))
+        if statement == broker.CANONICAL_CURRENT_GUARD_SQL:
+            self.connection.events.append("guard_current")
+            self.connection.guard_checked = True
+        elif statement not in (
+            "SET TRANSACTION READ WRITE",
+            "SET LOCAL statement_timeout = '1500ms'",
+            "SET LOCAL lock_timeout = '1500ms'",
+        ):
+            raise AssertionError("UNREVIEWED_CANONICAL_GUARD_SQL")
+        if self.connection.error is not None:
+            raise self.connection.error
+
+    def fetchmany(self, size):
+        assert size == 2, "CURRENT_APPROVAL_READBACK_NOT_BOUNDED"
+        return (self.connection.rows_override if self.connection.rows_override is not None
+                else [(True,)])
+
+
+class FakeCanonicalGuardConnection:
+    def __init__(self, events):
+        self.events = events
+        self.info = type("GuardInfo", (), {
+            "user": broker.GUARD_DB_USER,
+            "dbname": "postgres",
+            "host": broker.POOLER_HOST,
+            "port": 5432,
+            "get_parameters": lambda _self: {
+                "sslmode": "verify-full",
+                "sslrootcert": "/synthetic/ca.pem",
+            },
+        })()
+        self.autocommit = False
+        self.active = False
+        self.closed = False
+        self.guard_checked = False
+        self.rows_override = None
+        self.error = None
+        self.last_cursor = None
+        self.rollback_calls = 0
+
+    def __enter__(self):
+        self.active = True
+        return self
+
+    def __exit__(self, *args):
+        self.active = False
+        self.closed = True
+        self.events.append("guard_close")
+        return False
+
+    def cursor(self):
+        self.last_cursor = NativeCanonicalGuardCursor(self)
+        return self.last_cursor
+
+    def rollback(self):
+        self.rollback_calls += 1
+        self.events.append("guard_rollback")
+
+
+
+
 class FakeSupervisor:
     def __init__(self, role, scope_sha):
         self.connection = NativeConnection(role)
@@ -134,6 +209,8 @@ class FakeSupervisor:
         self.auditor_connection = FakeMinimalAuditConnection(role)
         self.claim_auditor_connection.events = self.events
         self.auditor_connection.events = self.events
+        self.guard_connection = FakeCanonicalGuardConnection(self.events)
+        self.guard_open_calls = []
         self.auditor_open_calls = []
         self.open_calls = []
         self.relock_calls = []
@@ -168,7 +245,15 @@ class FakeSupervisor:
             receipt.update(self.consumption_override)
         return receipt
 
+    def open_canonical_guard_connection(self, candidate):
+        self.events.append("guard_open")
+        self.guard_open_calls.append(candidate)
+        return self.guard_connection
+
     def open_one_scoped_connection(self, candidate):
+        if (not self.guard_connection.active
+                or not self.guard_connection.guard_checked):
+            raise AssertionError("CANONICAL_APPROVAL_ROW_LOCK_MUST_BE_HELD")
         self.events.append("open")
         self.open_calls.append(candidate)
         if self.open_failure is not None:
@@ -263,8 +348,31 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertEqual(len(self.supervisor.open_calls), 1)
         self.assertEqual(len(self.supervisor.relock_calls), 1)
         self.assertEqual(self.supervisor.events, [
-            "consume", "audit_consumption", "open", "relock", "audit_relock",
+            "consume", "audit_consumption",
+            "guard_open", "guard_current", "open",
+            "guard_rollback", "guard_close", "relock", "audit_relock",
         ])
+        self.assertEqual(len(self.supervisor.guard_open_calls), 1)
+        self.assertTrue(self.supervisor.guard_connection.closed)
+        self.assertEqual(self.supervisor.guard_connection.rollback_calls, 1)
+        self.assertEqual(
+            self.supervisor.guard_connection.last_cursor.calls,
+            [
+                ("SET TRANSACTION READ WRITE", None),
+                ("SET LOCAL statement_timeout = '1500ms'", None),
+                ("SET LOCAL lock_timeout = '1500ms'", None),
+                (broker.CANONICAL_CURRENT_GUARD_SQL, {
+                    "role": self.candidate["candidateRole"],
+                    "scope_sha": self.candidate["scopeSha256"],
+                    "packet_sha": self.candidate["verifiedPacketSha256"],
+                    "command_id": self.candidate["scope"]["command_id"],
+                    "attempt_id": self.candidate["scope"]["attempt_id"],
+                    "receipt_id": self.candidate["scope"]["receipt_id"],
+                    "fence_id": self.candidate["scope"]["fence_id"],
+                    "read_challenge": "a" * 64,
+                }),
+            ],
+        )
         self.assertTrue(self.supervisor.connection.closed)
         self.assertTrue(value["oneCanonicalReadReviewed"])
         self.assertTrue(value["preReadConsumptionClaimReviewed"])
@@ -307,6 +415,92 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                     "databaseWritePerformed", "signingPermitted",
                     "authorizationGranted", "dispatchPermitted"):
             self.assertIs(value[key], False)
+
+    def test_missing_canonical_guard_dependency_is_fail_closed(self):
+        self.supervisor.open_canonical_guard_connection = None
+        with self.assertRaisesRegex(
+            BrokerAdmissionError,
+            "ONE_SHOT_CURRENT_APPROVAL_GUARD_SUPERVISOR_MISSING",
+        ):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.consumption_calls), 0)
+
+    def test_revoked_or_stale_canonical_approval_never_opens_reader(self):
+        for rows in ([(False,)], [(None,)], [(0,)], [("true",)],
+                     [], [(True,), (True,)], [()]):
+            with self.subTest(rows=rows):
+                self.setUp()
+                self.supervisor.guard_connection.rows_override = rows
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError,
+                    "ONE_SHOT_CANONICAL_APPROVAL_REVOKED_OR_STALE",
+                ):
+                    self.call()
+                self.last_read.assert_not_called()
+                self.assertEqual(len(self.supervisor.open_calls), 0)
+                self.assertEqual(len(self.supervisor.relock_calls), 1)
+                self.assertTrue(self.supervisor.guard_connection.closed)
+
+    def test_canonical_guard_wrong_native_role_or_tls_denies(self):
+        for field, value in (
+            ("user", "dev_gpt02_relock_catalog_auditor"),
+            ("dbname", "another"),
+            ("host", "localhost"),
+            ("port", 6543),
+            ("autocommit", True),
+        ):
+            with self.subTest(field=field):
+                self.setUp()
+                target = (self.supervisor.guard_connection if field=="autocommit"
+                          else self.supervisor.guard_connection.info)
+                setattr(target, field, value)
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError,
+                    "ONE_SHOT_CANONICAL_GUARD_NATIVE_IDENTITY_INVALID",
+                ):
+                    self.call()
+                self.last_read.assert_not_called()
+                self.assertEqual(len(self.supervisor.relock_calls), 1)
+        self.setUp()
+        self.supervisor.guard_connection.info.get_parameters = lambda: {
+            "sslmode": "require", "sslrootcert": "/synthetic/ca.pem",
+        }
+        with self.assertRaisesRegex(
+            BrokerAdmissionError,
+            "ONE_SHOT_CANONICAL_GUARD_TLS_VERIFY_FULL_REQUIRED",
+        ):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+
+    def test_canonical_guard_sql_error_denies_and_relocks(self):
+        self.supervisor.guard_connection.error = RuntimeError(
+            "synthetic_native_current_guard_unavailable"
+        )
+        with self.assertRaisesRegex(
+            RuntimeError, "synthetic_native_current_guard_unavailable",
+        ):
+            self.call()
+        self.last_read.assert_not_called()
+        self.assertEqual(len(self.supervisor.open_calls), 0)
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+
+    def test_native_reader_is_bound_to_live_guard_transaction(self):
+        observed = []
+        def assert_locked(*args):
+            c = self.supervisor.guard_connection
+            self.assertTrue(c.active)
+            self.assertFalse(c.closed)
+            self.assertTrue(c.guard_checked)
+            self.assertEqual(c.rollback_calls, 0)
+            observed.append(True)
+            return [self.row]
+        out = self.call(reader=Mock(side_effect=assert_locked))
+        self.assertEqual(observed, [True])
+        self.assertTrue(self.supervisor.guard_connection.closed)
+        self.assertEqual(self.supervisor.guard_connection.rollback_calls, 1)
+        self.assertEqual(out["releaseDecision"], "NO_GO")
 
     def test_claim_reported_success_but_db_has_no_row_prevents_reader(self):
         for rows in (
