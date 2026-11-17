@@ -171,6 +171,51 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
                     )
                 self.assertFalse(os.path.exists(self.output))
 
+    def test_task171_operational_request_denies_missing_trusted_presign_before_publish(self):
+        # Exercise the REAL prepare() ordering against a disposable SQLite
+        # fixture, with only the pinned runtime path/uid simulated. The reader
+        # must reject before any pending approval file can be published.
+        with sqlite3.connect(self.db) as con:
+            con.execute("""CREATE TABLE gpt02_issue159_approval_intents(
+                task_id INTEGER, command_id TEXT, attempt_id TEXT)""")
+
+        original_lstat = os.lstat
+        def fixture_lstat(path):
+            st = original_lstat(path)
+            if os.fspath(path) == self.db:
+                return SimpleNamespace(st_mode=st.st_mode, st_uid=0, st_gid=0)
+            return st
+
+        def missing_presign(identity):
+            self.assertEqual(identity["hubTaskId"], 171)
+            self.assertEqual(identity["companyId"], "default")
+            raise RuntimeError("NO_VERIFIED_HUB_CORE_PREPARATION")
+
+        simulated_trusted_reader = types.SimpleNamespace(
+            _socket_fact_reader=missing_presign,
+            _verify_pre_sign_facts=lambda *args: None,
+        )
+        with patch.object(prepare_module, "LIVE_DB", self.db), \
+             patch.object(prepare_module, "LIVE_OUTPUT", self.output), \
+             patch.object(prepare_module.os, "geteuid", return_value=0), \
+             patch.object(prepare_module.os, "lstat", side_effect=fixture_lstat), \
+             patch.dict(sys.modules, {
+                 "gpt02_issue159_approval_request_refresh": simulated_trusted_reader,
+             }):
+            with self.assertRaisesRegex(
+                RuntimeError, "ISSUE159_FRESH_TRUSTED_PRESIGN_REQUIRED"
+            ):
+                prepare_module.prepare(
+                    self.db, self.output, 171, COMMAND, ATTEMPT,
+                    now_ms=1_800_000_000_000, operational=True,
+                )
+        self.assertFalse(os.path.lexists(self.output))
+        with sqlite3.connect(self.db) as con:
+            self.assertEqual(
+                con.execute("SELECT count(*) FROM gpt02_issue159_approval_intents").fetchone()[0],
+                0,
+            )
+
     def test_operational_preparer_rechecks_trusted_hub_core_lineage(self):
         now = 1_800_000_000_000
         claims = {
