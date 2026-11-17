@@ -89,21 +89,42 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
         lines = set(effective_lines)
         if not REQUIRED_LINES.issubset(lines):
             return _fail("AUDITOR_UNIT_CUSTODY_CONFIGURATION_INVALID")
-        # A later systemd directive wins. Do not mistake an earlier pinned
-        # User/APP_ENV for the effective value when a second one overrides it.
-        for prefix in ("User=", "Environment=APP_ENV="):
+        # systemd uses the effective LAST assignment. A prior strict line
+        # cannot authorize metadata when a later directive removes the sandbox.
+        # Check the ordered source, not its de-duplicated set.
+        singleton_lines = (
+            "User=gpt02-issue159-relock-catalog-auditor",
+            "Environment=APP_ENV=development",
+            "NoNewPrivileges=yes",
+            "ProtectSystem=strict",
+            "PrivateTmp=yes",
+        )
+        for expected in singleton_lines:
+            prefix = ("Environment=APP_ENV=" if expected.startswith("Environment=")
+                      else expected.split("=", 1)[0] + "=")
             matches = [line for line in effective_lines if line.startswith(prefix)]
-            expected = ("User=gpt02-issue159-relock-catalog-auditor"
-                        if prefix == "User="
-                        else "Environment=APP_ENV=development")
             if matches != [expected]:
                 return _fail("AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
+        # No secondary environment, pre/post commands, or mount namespace
+        # overrides are reviewed for this independent credential boundary.
+        for line in effective_lines:
+            if (line.startswith(("Environment=", "EnvironmentFile=",
+                                 "PassEnvironment=", "UnsetEnvironment="))
+                    and line != "Environment=APP_ENV=development"):
+                return _fail("AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED")
+            if line.startswith((
+                "ExecStartPre=", "ExecStartPost=", "ExecCondition=",
+                "ExecReload=", "ExecStop=", "ExecStopPost=",
+                "BindPaths=", "RootDirectory=", "RootImage=",
+                "NetworkNamespacePath=",
+            )):
+                return _fail("AUDITOR_UNIT_UNREVIEWED_EXEC_OR_MOUNT_DENIED")
         # A .service.d drop-in can override file settings. No such override
         # is approved by this metadata-only source preflight.
         if os.path.lexists(str(unit) + ".d"):
             return _fail("AUDITOR_UNIT_DROPINS_UNREVIEWED")
         # Reject any extra credential bind, even if the correct bind exists.
-        binds = [line for line in lines
+        binds = [line for line in effective_lines
                  if line.startswith(("LoadCredential=", "LoadCredentialEncrypted="))]
         if binds != [EXPECTED_BIND]:
             return _fail("AUDITOR_CREDENTIAL_ALIAS_NOT_EXCLUSIVE")
