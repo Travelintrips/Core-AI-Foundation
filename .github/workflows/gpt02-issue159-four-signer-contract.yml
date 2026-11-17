@@ -41,6 +41,7 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_hub_core_signer_guard.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_issuer_signer_guard.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_auto_chain.py'
+      - 'scripts/dev/test_gpt02_issue159_auto_chain_link.py'
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
       - 'scripts/dev/gpt02_issue159_historical_archive_audit_readonly.py'
       - 'scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py'
@@ -140,6 +141,8 @@ jobs:
           # Ephemeral keys only. Test-designated pure signer backend; never
           # start systemd, load hosted credentials or contact PROD.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once.py
+          # Test no-clobber Hub/Core link output with isolated filesystem fixtures.
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_auto_chain_link.py
           # Public-key only, root-private archive fixture, NO live /opt data.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py
           # Recover only an existing, fresh, exact SQLite intent after a packet
