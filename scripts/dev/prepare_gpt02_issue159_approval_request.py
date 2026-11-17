@@ -73,7 +73,9 @@ def _require_operational_pre_sign(claims: dict, now_ms: int) -> None:
             "attemptId": claims["attemptId"],
         }
         facts = _socket_fact_reader(query)
-        preparation_expiry_ms = _verify_pre_sign_facts(facts, claims, now_ms)
+        # The trusted read may take seconds; validate its observation against
+        # the clock AFTER socket I/O, retaining the strict five-second window.
+        preparation_expiry_ms = _verify_pre_sign_facts(facts, claims, int(time.time() * 1000))
         if preparation_expiry_ms < claims["expiresAt"] + 1000:
             raise RuntimeError("ISSUE159_APPROVAL_BEYOND_PREPARATION_EXPIRY")
     except Exception as exc:
