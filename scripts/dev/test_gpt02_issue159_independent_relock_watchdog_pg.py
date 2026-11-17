@@ -112,7 +112,11 @@ def main():
         # Start a reader query that outlives the TTL. It models the
         # broker having crashed and not performing its own cleanup.
         held = subprocess.Popen(
-            login(db_name, role, disposable_password, "SELECT pg_sleep(18)"),
+            login(
+                db_name, role, disposable_password,
+                "SELECT pg_sleep(18) FROM (" +
+                bound_query(candidate["scope"]) + ") AS locked_lineage",
+            ),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         for _ in range(80):
@@ -127,6 +131,22 @@ def main():
         else:
             raise AssertionError("HELD_READER_SESSION_NOT_ACTIVE")
         print("PASS_SIMULATED_BROKER_CRASH_WITH_ACTIVE_READER")
+        locked = psql(
+            db_name,
+            "SELECT count(DISTINCT c.relname) FROM pg_locks l "
+            "JOIN pg_class c ON c.oid=l.relation "
+            "JOIN pg_namespace n ON n.oid=c.relnamespace "
+            "JOIN pg_stat_activity a ON a.pid=l.pid "
+            "WHERE a.usename=" + quote(role) +
+            " AND l.mode='AccessShareLock' AND l.granted "
+            "AND n.nspname='gpt02_private' "
+            "AND c.relname IN (" +
+            ",".join(quote(table) for table in TABLES) + ")"
+        )
+        if locked.stdout.strip() != str(len(TABLES)):
+            raise AssertionError("REAL_FIVE_TABLE_READER_LOCKS_NOT_PROVEN")
+        print("PASS_ACTIVE_READER_HOLDS_ALL_FIVE_TABLE_SHARE_LOCKS")
+
 
         # Independent process + DB connection: does not call the broker
         # and is still able to run if the broker is gone.
@@ -137,7 +157,7 @@ def main():
             "SELECT pg_sleep(5);\n"
             "BEGIN;\n"
             "DO $cleanup$\n"
-            "DECLARE rec record;\n"
+            "DECLARE rec record; victim record;\n"
             "BEGIN\n"
             " FOR rec IN SELECT role_name FROM "
             "gpt02_private.reader_issuance_watchdog "
@@ -145,6 +165,14 @@ def main():
             "FOR UPDATE LOOP\n"
             " IF rec.role_name <> " + quote(role) +
             " THEN RAISE EXCEPTION 'UNEXPECTED_WATCHDOG_ROLE'; END IF;\n"
+            # Do not acquire new DDL locks while the failed reader is
+            # holding the five protected tables open in a query.
+            " FOR victim IN SELECT pid FROM pg_stat_activity "
+            "WHERE usename=rec.role_name AND pid<>pg_backend_pid() LOOP\n"
+            " IF pg_terminate_backend(victim.pid,3000) IS NOT TRUE "
+            "THEN RAISE EXCEPTION 'WATCHDOG_BACKEND_TERMINATION_UNCONFIRMED'; "
+            "END IF;\n"
+            " END LOOP;\n"
             " EXECUTE format('REVOKE SELECT ON " +
             ", ".join("gpt02_private." + t for t in TABLES) +
             " FROM %I', rec.role_name);\n"
@@ -152,8 +180,6 @@ def main():
             "FROM %I', rec.role_name);\n"
             " EXECUTE format('ALTER ROLE %I NOLOGIN CONNECTION LIMIT 0 "
             "PASSWORD NULL', rec.role_name);\n"
-            " PERFORM pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE usename=rec.role_name AND pid<>pg_backend_pid();\n"
             " UPDATE gpt02_private.reader_issuance_watchdog "
             "SET cleaned_at=clock_timestamp() WHERE role_name=rec.role_name;\n"
             " END LOOP;\n"
