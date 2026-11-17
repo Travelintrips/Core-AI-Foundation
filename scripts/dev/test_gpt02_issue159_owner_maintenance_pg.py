@@ -16,6 +16,14 @@ def psql(db,user,pw,query,check=True):
         "-v","ON_ERROR_STOP=1","-h","127.0.0.1","-U",user,"-d","postgres","-At"],query,check)
 def one(db,user,pw,query):return psql(db,user,pw,query).stdout.strip()
 def main():
+    # The alternative installer may change only the admission guard,
+    # never the owner-owned SECURITY DEFINER helper body or exact grants.
+    canonical=(ROOT/"docs/dev/gpt02-issue159-store-owner-relock-helper.PROPOSED.sql").read_text()
+    alternate=HELPER.read_text()
+    marker="CREATE FUNCTION gpt02_private.revoke_expired_scoped_reader_grants"
+    assert marker in canonical and marker in alternate
+    assert canonical.split(marker,1)[1] == alternate.split(marker,1)[1], "OWNER_HELPER_BODY_DRIFT"
+    print("PASS_STORE_OWNER_HELPER_BODY_PARITY",flush=True)
     db="issue159-owner-maint-"+uuid.uuid4().hex[:10]
     rootpw=secrets.token_urlsafe(24); pgpw=secrets.token_urlsafe(24)
     mpw=secrets.token_urlsafe(24)
