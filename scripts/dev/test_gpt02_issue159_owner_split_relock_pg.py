@@ -103,6 +103,28 @@ WHERE roleid='{ROLE}'::regrole AND member='postgres'::regrole
             "'SELECT WITH GRANT OPTION')")=="f"
         print("PASS_POSTGRES_CANNOT_REVOKE_FOREIGN_OWNER_TABLE_GRANTS",flush=True)
 
+        # A limited postgres actor must neither mint the owner helper nor
+        # install phase functions before the genuine owner-signed helper.
+        # Both failures must roll back without leaving a partially created
+        # privilege-bearing schema or a callable SECURITY DEFINER routine.
+        wrong_owner=psql(name,"postgres",pg_pw,HELPER.read_text(),check=False)
+        assert wrong_owner.returncode!=0 and (
+            "GPT02_OWNER_SESSION_REQUIRED" in wrong_owner.stderr
+        ), "POSTGRES_INCORRECTLY_INSTALLED_OWNER_HELPER"
+        assert one(name,"postgres",pg_pw,
+          "SELECT to_regprocedure("
+          "'gpt02_private.revoke_expired_scoped_reader_grants(name)')")=="", (
+            "UNAUTHORIZED_OWNER_HELPER_LEFT_BEHIND")
+        print("PASS_LIMITED_POSTGRES_CANNOT_INSTALL_STORE_OWNER_HELPER",flush=True)
+        missing_helper=psql(name,"postgres",pg_pw,MAIN.read_text(),check=False)
+        assert missing_helper.returncode!=0 and (
+            "OWNER_BOUND_REVOKE_HELPER_REQUIRED" in missing_helper.stderr
+        ), "UNSIGNED_OWNER_SPLIT_PHASE_FUNCTIONS_INSTALLED"
+        assert one(name,"postgres",pg_pw,
+          "SELECT to_regnamespace('gpt02_relock_audit')")=="", (
+            "FAILED_PHASE_INSTALL_LEFT_PRIVILEGED_SCHEMA_BEHIND")
+        print("PASS_OWNER_HELPER_REQUIRED_BEFORE_PHASE_FUNCTIONS",flush=True)
+
         # The non-superuser owner-signed helper is installed separately
         # from the independent postgres-held catalog relock functions.
         psql(name,"gpt02_store_owner",owner_pw,HELPER.read_text())
