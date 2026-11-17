@@ -148,6 +148,9 @@ class HistoricalArchiveSafetyTest(unittest.TestCase):
     def test_wrong_key_denied(self):
         p = self.public / "approval-public.pem"
         wrong = Ed25519PrivateKey.generate().public_key()
+        # Fixture public keys are 0440. CI runners are non-root; temporarily
+        # restore synthetic owner write permission, then reinstate 0440.
+        p.chmod(0o600)
         p.write_bytes(wrong.public_bytes(
             serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
         ))
