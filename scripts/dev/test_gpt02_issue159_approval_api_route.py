@@ -76,6 +76,15 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         api.TOKEN = STATIC_TOKEN
         api.ISSUE159_APPROVAL_INTENT_ENABLED = False
         api.admin_identity = lambda token, connection: None
+        # Every test uses an isolated signature-output namespace, never the
+        # running VPS/systemd RuntimeDirectory.
+        self.signer_fixture = tempfile.TemporaryDirectory(
+            prefix="issue159-signer-output-fixture-"
+        )
+        api.ISSUE159_SIGNER_OUTPUTS = tuple(
+            Path(self.signer_fixture.name) / (role + "-signature.json")
+            for role in ("approval", "hub", "core", "issuer")
+        )
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), api.Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -91,6 +100,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             os.unlink(self.packet)
         if os.path.exists(self.pending):
             os.unlink(self.pending)
+        self.signer_fixture.cleanup()
 
     def request(self, token=None, claims=None):
         data = json.dumps({"claims": CLAIMS if claims is None else claims}).encode()
@@ -164,6 +174,80 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["authorizationGranted"])
         self.assertFalse(body["dispatchPermitted"])
         self.assertEqual(body["releaseDecision"], "NO_GO")
+
+    def test_signer_collision_blocks_pending_and_new_approval_before_write(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        Path(self.pending).write_text(json.dumps({"claims": CLAIMS}))
+        os.chmod(self.pending, 0o600)
+        with tempfile.TemporaryDirectory(prefix="issue159-signer-collision-") as td:
+            targets = tuple(
+                Path(td) / (role + "-signature.json")
+                for role in ("approval", "hub", "core", "issuer")
+            )
+            with patch.object(api, "ISSUE159_SIGNER_OUTPUTS", targets):
+                self.assertTrue(api.issue159_signer_output_preflight_clear())
+                for target in targets:
+                    for path in (target, target.with_name(
+                        "." + target.name + ".tmp"
+                    )):
+                        with self.subTest(file=path.name, role=target.stem):
+                            original = b"opaque-preserved-prior-task-evidence"
+                            path.write_bytes(original)
+                            status, body = self.pending_request()
+                            self.assertEqual(status, 200)
+                            self.assertFalse(body["pending"])
+                            self.assertEqual(
+                                body["reason"], "SIGNATURE_OUTPUT_OCCUPIED"
+                            )
+                            status, body = self.request(AAL2_TOKEN)
+                            self.assertEqual(status, 409)
+                            self.assertEqual(
+                                body["error"], "signature_output_occupied"
+                            )
+                            self.assertIs(body["dispatchPermitted"], False)
+                            self.assertEqual(body["releaseDecision"], "NO_GO")
+                            self.assertEqual(self.count(), 0)
+                            self.assertEqual(path.read_bytes(), original)
+                            path.unlink()
+                # A symlink MUST count as occupied: never follow its target.
+                external = Path(td) / "unrelated-evidence"
+                external.write_text("do-not-touch")
+                targets[0].symlink_to(external)
+                self.assertFalse(api.issue159_signer_output_preflight_clear())
+                status, body = self.request(AAL2_TOKEN)
+                self.assertEqual((status, body["error"]),
+                                 (409, "signature_output_occupied"))
+                self.assertEqual(external.read_text(), "do-not-touch")
+                self.assertEqual(self.count(), 0)
+                targets[0].unlink()
+                # Once no prior output is in the isolated path, an ORIGINAL
+                # authorized single approval remains permitted (NO DISPATCH).
+                status, body = self.request(AAL2_TOKEN)
+                self.assertEqual(status, 201, body)
+                self.assertEqual(self.count(), 1)
+                self.assertEqual(body["releaseDecision"], "NO_GO")
+
+    def test_output_collision_never_leaks_to_unauthorized_caller(self):
+        api.admin_identity = lambda token, connection: None
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        with tempfile.TemporaryDirectory(prefix="issue159-untrusted-") as td:
+            target = Path(td) / "approval-signature.json"
+            target.write_text("opaque")
+            with patch.object(api, "ISSUE159_SIGNER_OUTPUTS", (target,)):
+                status, body = self.request()
+                self.assertEqual((status, body["error"]),
+                                 (401, "unauthorized"))
+                status, body = self.request(AAL2_TOKEN)
+                self.assertEqual(status, 403)
+                self.assertNotEqual(
+                    body.get("error"), "signature_output_occupied"
+                )
+                self.assertEqual(self.count(), 0)
+                self.assertEqual(target.read_text(), "opaque")
 
     def test_pending_route_rejects_wrong_actor_expired_and_insecure_file(self):
         api.admin_identity = lambda token, connection: {

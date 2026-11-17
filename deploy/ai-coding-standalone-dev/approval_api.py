@@ -61,6 +61,34 @@ def issue159_operator_identity(identity,connection):
          'enabled':True,'authMethod':'supabase_admin_session'}
 def issue159_identity_verifier(token,connection):
  return issue159_operator_identity(admin_identity(token,connection),connection)
+# Read-only preflight. These are the exact retained RuntimeDirectory outputs
+# of the four existing one-shot signer roles. A previous task's signature
+# must NEVER be deleted/overwritten to make room for a new approval.
+ISSUE159_SIGNER_OUTPUTS = tuple(
+ Path("/run/gpt02-issue159-sign-once-"+role) / (role+"-signature.json")
+ for role in ("approval", "hub", "core", "issuer")
+)
+
+
+def issue159_signer_output_preflight_clear():
+ """Fail closed if any preserved signed output or its temporary peer exists.
+
+ This is NOT a signature archival/rotation or authority check. It only
+ prevents knowingly recording a *new* irrevocable one-time approval while
+ the next signer output path is already occupied.
+ """
+ for target in ISSUE159_SIGNER_OUTPUTS:
+  for file in (target, target.with_name("."+target.name+".tmp")):
+   try:
+    os.lstat(file)
+   except FileNotFoundError:
+    continue
+   except OSError:
+    return False
+   return False
+ return True
+
+
 def load_issue159_pending_claims(actor_id):
  try:
   st=os.lstat(ISSUE159_PENDING_CLAIMS)
@@ -98,6 +126,9 @@ def load_issue159_pending_claims(actor_id):
   observed=int(time.time()*1000)
   if observed<claims['issuedAt'] or observed>=claims['expiresAt']:
    return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  if not issue159_signer_output_preflight_clear():
+   return {'environment':'DEV','pending':False,'reason':'SIGNATURE_OUTPUT_OCCUPIED',
+           'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   return {
    'environment':'DEV','pending':True,'taskId':claims['taskId'],
    'commandId':claims['commandId'],'expiresAt':claims['expiresAt'],
@@ -208,6 +239,18 @@ class Handler(BaseHTTPRequestHandler):
     if n<0 or n>8192:return self.send(400,{'error':'invalid_size'})
     raw=self.rfile.read(n)
     data=json.loads(raw.decode('utf-8'))
+    # Reuse the SAME authenticated Super Admin/HUB-operator mapping as
+    # the protected GET route. Never leak output occupancy to anonymous
+    # requests, invalid roles, or requests without a valid claims body.
+    if ISSUE159_APPROVAL_INTENT_ENABLED and isinstance(data,dict) and set(data)=={'claims'}:
+     auth=self.headers.get('Authorization','')
+     if auth.startswith('Bearer '):
+      with conn() as auth_conn:
+       identity=issue159_operator_identity(admin_identity(auth[7:],auth_conn),auth_conn)
+      if identity and not issue159_signer_output_preflight_clear():
+       return self.send(409,{'error':'signature_output_occupied',
+        'signingPermitted':False,'authorizationGranted':False,
+        'dispatchPermitted':False,'releaseDecision':'NO_GO'})
     with conn() as c:
      status,body=handle_issue159_approval_intent(
       self.headers.get('Authorization',''),raw,c,issue159_identity_verifier,
