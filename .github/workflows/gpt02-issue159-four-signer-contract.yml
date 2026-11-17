@@ -49,6 +49,8 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer'
       - 'scripts/dev/test_gpt02_issue159_relock_catalog_supervisor_offline.mjs'
+      - 'docs/dev/gpt02_issue159_fixed_writer_relock.REVIEW_ONLY.sql'
+      - 'scripts/dev/test_gpt02_issue159_fixed_writer_relock_pg17_REVIEW_ONLY.py'
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
       - 'scripts/dev/gpt02_issue159_historical_archive_audit_readonly.py'
       - 'scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py'
@@ -174,6 +176,11 @@ jobs:
           sed "s#^ExecStart=/usr/bin/node #ExecStart=${node_binary} #" "$relock_service" > "$verify_dir/gpt02-issue159-relock-catalog-auditor.service"
           cp "$relock_timer" "$verify_dir/gpt02-issue159-relock-catalog-auditor.timer"
           systemd-analyze verify "$verify_dir/gpt02-issue159-relock-catalog-auditor.service" "$verify_dir/gpt02-issue159-relock-catalog-auditor.timer"
+          # Disposable PostgreSQL 17 only: exercise fixed-role relock,
+          # transaction rollback, all three live sessions, and repeat windows.
+          # No Supabase credentials, no PROD, no signing or dispatch.
+          python3 -m py_compile scripts/dev/test_gpt02_issue159_fixed_writer_relock_pg17_REVIEW_ONLY.py
+          python3 scripts/dev/test_gpt02_issue159_fixed_writer_relock_pg17_REVIEW_ONLY.py
           # Public-key only, root-private archive fixture, NO live /opt data.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py
           # Recover only an existing, fresh, exact SQLite intent after a packet
