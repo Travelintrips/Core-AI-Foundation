@@ -43,7 +43,9 @@ def login(name, role, password, query):
             "-U", role, "-d", "postgres", "-Atc", query]
 
 
-def main(*, simulate_crash=False):
+def main(*, simulate_crash=False, simulate_phase_b_rollback=False):
+    assert not (simulate_crash and simulate_phase_b_rollback)
+
     candidate = make_candidate()
     if (candidate["credentialIssuancePermitted"] is not False or
             candidate["databaseRoleProvisioned"] is not False or
@@ -207,6 +209,13 @@ def main(*, simulate_crash=False):
             "END $cleanup$;\n"
             "COMMIT;\n"
         )
+        # Only the disposable fixture deliberately aborts phase B before
+        # COMMIT. A separate independent admin connection must recover it.
+        phase_b_recovery = phase_b
+        if simulate_phase_b_rollback:
+            boundary = "COMMIT;" + chr(10)
+            assert phase_b.endswith(boundary)
+            phase_b = phase_b[:-len(boundary)] + "SELECT 1 / 0;" + chr(10)
         # The first admin process is intentionally stopped after durable
         # phase A in the crash branch. A SECOND process must finish phase B
         # from the same uncleaned issuance ledger without reopening login.
@@ -296,7 +305,34 @@ def main(*, simulate_crash=False):
                 stderr=subprocess.PIPE, text=True,
             )
         out, err = watchdog.communicate(timeout=18)
-        if watchdog.returncode:
+        if simulate_phase_b_rollback:
+            assert watchdog.returncode != 0 and "division by zero" in err.lower(), (
+                "PHASE_B_FAULT_INJECTION_DID_NOT_ROLL_BACK")
+            still_locked = psql(db_name,
+                "SELECT NOT rolcanlogin AND rolconnlimit=0 "
+                "AND rolpassword IS NULL FROM pg_authid WHERE rolname=" +
+                quote(role)).stdout.strip()
+            assert still_locked == "t", "PHASE_B_ROLLBACK_REENABLED_LOGIN"
+            pending = psql(db_name,
+                "SELECT count(*) FROM gpt02_private.reader_issuance_watchdog "
+                "WHERE role_name=" + quote(role) +
+                " AND cleaned_at IS NULL").stdout.strip()
+            assert pending == "1", "PHASE_B_UNCOMMITTED_LEDGER_LEAK"
+            still_granted = psql(db_name,
+                "SELECT has_table_privilege(" + quote(role) +
+                ", 'gpt02_private.approvals', 'SELECT')").stdout.strip()
+            assert still_granted == "t", "PHASE_B_REVOKE_ROLLBACK_NOT_PROVEN"
+            assert call(login(db_name, role, disposable_password,
+                               "SELECT 1"), check=False).returncode != 0, (
+                "PHASE_B_ROLLBACK_ACCEPTED_OLD_PASSWORD")
+            print("PASS_PHASE_B_TRANSACTION_ABORT_PRESERVES_NOLOGIN_AND_UNCLEANED_LEDGER")
+            print("PASS_PHASE_B_ABORT_ROLLS_BACK_REVOCATIONS_WITHOUT_REOPENING_ROLE")
+            psql(db_name, phase_b_recovery)
+            # The completed cleanup must be replayed with the ORIGINAL
+            # successful phase B, not the injected exception fixture.
+            phase_b = phase_b_recovery
+            print("PASS_FRESH_ADMIN_CONNECTION_RECOVERS_PHASE_B_AND_ATTESTS_CLEANUP")
+        elif watchdog.returncode:
             raise RuntimeError("DISPOSABLE_WATCHDOG_FAILED:" + err[-1300:])
         if simulate_crash:
             print("PASS_FRESH_WATCHDOG_PROCESS_RECOVERS_AFTER_PHASE_A_CRASH")
@@ -352,3 +388,4 @@ def main(*, simulate_crash=False):
 if __name__ == "__main__":
     main()
     main(simulate_crash=True)
+    main(simulate_phase_b_rollback=True)
