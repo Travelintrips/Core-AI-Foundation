@@ -75,6 +75,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         api.ISSUE159_PENDING_CLAIMS = self.pending
         api.TOKEN = STATIC_TOKEN
         api.ISSUE159_APPROVAL_INTENT_ENABLED = False
+        api.issue159_chain_readiness_gate = lambda record: True
         api.admin_identity = lambda token, connection: None
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), api.Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -291,6 +292,21 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(body, {"error": "active_super_admin_required"})
         self.assertEqual(self.count(), 0)
+
+    def test_authenticated_approval_rejected_before_write_when_chain_unready(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.issue159_chain_readiness_gate = lambda record: False
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 409)
+        self.assertEqual(body["error"], "issue159_auto_chain_not_ready")
+        self.assertFalse(body["signingPermitted"])
+        self.assertFalse(body["dispatchPermitted"])
+        self.assertEqual(self.count(), 0)
+        self.assertFalse(os.path.exists(self.packet))
 
     def test_feature_disabled_is_404_and_never_writes(self):
         status, body = self.request(AAL2_TOKEN)
