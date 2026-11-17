@@ -31,7 +31,7 @@ def _unit(name:str):
              '-p','Result','-p','ExecMainStatus','-p','ActiveState',
              '--no-pager'],
             capture_output=True,text=True,timeout=5)
-    except subprocess.SubprocessError as exc:
+    except (subprocess.SubprocessError, OSError) as exc:
         raise AutoChainError('UNIT_SYSTEMD_UNAVAILABLE_'+code) from exc
     if q.returncode!=0:
         raise AutoChainError('UNIT_RESULT_UNAVAILABLE_'+code)
