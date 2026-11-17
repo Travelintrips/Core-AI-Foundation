@@ -33,6 +33,7 @@ spec.loader.exec_module(api)
 # Capture the real source guard before per-test HTTP fixtures replace the
 # service-calling dependency with inert fail-closed test callbacks.
 SOURCE_CHAIN_GATE = api.issue159_chain_readiness_gate
+SOURCE_PRECOMMIT_PRESIGN = api.issue159_precommit_presign_matches
 
 BASE_NOW_MS = int(time.time() * 1000)
 
@@ -82,6 +83,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         # Tests exercise the API only. Never run any real systemd signer,
         # attestor or issuer from an HTTP fixture.
         api.issue159_chain_readiness_gate = lambda record: True
+        api.issue159_precommit_presign_matches = lambda record: True
         api.run_after_approval = lambda task_id: {
             "environment": "DEV", "taskId": task_id,
             "autoChainCompleted": False,
@@ -204,6 +206,88 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
                 self.assertFalse(SOURCE_CHAIN_GATE(fixture_record))
                 self.assertEqual(output.read_text(), "fixture-preserved-issuer-signature")
                 output.unlink()
+
+    def test_precommit_presign_rechecks_exact_pending_task_and_trusted_reader(self):
+        # Source checker runs in memory against a private synthetic file.
+        now = int(time.time() * 1000)
+        claims = {**CLAIMS, "issuedAt": now - 1000, "expiresAt": now + 240000}
+        record = {
+            "task_id": claims["taskId"], "command_id": claims["commandId"],
+            "attempt_id": claims["attemptId"], "company_id": "default",
+            "actor_id": claims["superAdminId"], "decision": "APPROVE",
+            "role_at_decision": "super_admin",
+            "recorded_at_ms": now,
+            "expires_at_ms": claims["expiresAt"],
+            "claims_sha256": api.validate_approval_claims(claims)["claimsSha256"],
+        }
+        Path(self.pending).write_text(json.dumps({"claims": claims}))
+        os.chmod(self.pending, 0o600)
+        real_lstat = os.lstat
+        def only_private_fixture(path):
+            result = real_lstat(path)
+            if os.fspath(path) == self.pending:
+                return SimpleNamespace(
+                    st_mode=result.st_mode, st_uid=0, st_gid=0,
+                    st_nlink=result.st_nlink, st_size=result.st_size,
+                )
+            return result
+        facts = {"issuer": "test-fixture-only"}
+        with patch.object(api, "ISSUE159_PENDING_CLAIMS", self.pending), (
+            patch.object(api.os, "lstat", side_effect=only_private_fixture)
+        ), patch.object(api, "_socket_fact_reader", return_value=facts) as reader, (
+            patch.object(api, "_verify_pre_sign_facts", return_value=now + 500000)
+        ) as verifier:
+            self.assertTrue(SOURCE_PRECOMMIT_PRESIGN(record))
+            reader.assert_called_once_with({
+                "companyId": "default",
+                "hubTaskId": claims["taskId"],
+                "commandCandidateId": claims["commandId"],
+                "attemptId": claims["attemptId"],
+            })
+            self.assertEqual(verifier.call_args.args[0], facts)
+            self.assertEqual(verifier.call_args.args[1], claims)
+            self.assertFalse(SOURCE_PRECOMMIT_PRESIGN({
+                **record, "claims_sha256": "0" * 64,
+            }))
+            self.assertFalse(SOURCE_PRECOMMIT_PRESIGN({
+                **record, "actor_id": "wrong-admin",
+            }))
+            self.assertFalse(SOURCE_PRECOMMIT_PRESIGN({
+                **record, "command_id": "22222222-2222-4222-8222-222222222222",
+            }))
+            verifier.side_effect = RuntimeError("REVOKED_SUPERADMIN_AUDIT")
+            self.assertFalse(SOURCE_PRECOMMIT_PRESIGN(record))
+        self.assertEqual(self.count(), 0)
+
+    def test_precommit_presign_denies_missing_and_late_request_without_write(self):
+        now = int(time.time() * 1000)
+        claims = {**CLAIMS, "issuedAt": now - 500,
+                  "expiresAt": now + 50000}
+        record = {
+            "task_id": claims["taskId"], "command_id": claims["commandId"],
+            "attempt_id": claims["attemptId"], "company_id": "default",
+            "actor_id": claims["superAdminId"], "decision": "APPROVE",
+            "role_at_decision": "super_admin", "recorded_at_ms": now,
+            "expires_at_ms": claims["expiresAt"],
+            "claims_sha256": api.validate_approval_claims(claims)["claimsSha256"],
+        }
+        with patch.object(api, "ISSUE159_PENDING_CLAIMS", self.pending):
+            self.assertFalse(SOURCE_PRECOMMIT_PRESIGN(record))
+            Path(self.pending).write_text(json.dumps({"claims": claims}))
+            os.chmod(self.pending, 0o600)
+            real_lstat = os.lstat
+            def private_stat(path):
+                st = real_lstat(path)
+                if os.fspath(path) == self.pending:
+                    return SimpleNamespace(st_mode=st.st_mode, st_uid=0,
+                         st_gid=0, st_nlink=st.st_nlink, st_size=st.st_size)
+                return st
+            with patch.object(api.os, "lstat", side_effect=private_stat), (
+                patch.object(api, "_socket_fact_reader")
+            ) as reader:
+                self.assertFalse(SOURCE_PRECOMMIT_PRESIGN(record))
+                reader.assert_not_called()
+        self.assertEqual(self.count(), 0)
 
     def test_existing_live_readiness_gate_denies_before_approval_write(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
