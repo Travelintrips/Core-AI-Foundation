@@ -413,6 +413,35 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(self.count(), 0)
         Path(self.packet).unlink()
 
+    def test_committed_sqlite_intent_survives_packet_publish_io_failure(self):
+        """A publish error must never imply the one-use approval can be repeated."""
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        with patch.object(api, "persist_issue159_approved_packet",
+                side_effect=OSError("synthetic-io-failure")), (
+             patch.object(api, "run_after_approval")
+        ) as auto_chain:
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 503)
+        self.assertEqual(body["error"],
+                         "issue159_approved_packet_recovery_required")
+        self.assertTrue(body["intentRecorded"])
+        self.assertFalse(body["approvalCanBeReplayed"])
+        self.assertFalse(body["signingPermitted"])
+        self.assertFalse(body["dispatchPermitted"])
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+        self.assertFalse(Path(self.packet).exists())
+        auto_chain.assert_not_called()
+        # A repeated approval request is still a replay, never a second row.
+        again, replay_body = self.request(AAL2_TOKEN)
+        self.assertEqual(again, 409)
+        self.assertEqual(replay_body["error"], "approval_intent_conflict")
+        self.assertEqual(self.count(), 1)
+
     def test_existing_live_readiness_gate_denies_before_approval_write(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
         api.admin_identity = lambda token, connection: {
