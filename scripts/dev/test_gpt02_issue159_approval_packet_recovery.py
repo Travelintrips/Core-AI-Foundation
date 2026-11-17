@@ -251,6 +251,29 @@ class ApprovedPacketRepairSafetyTest(unittest.TestCase):
         with self.assertRaisesRegex(recovery.PacketRecoveryDenied, "SOURCE_PRIVATE_FILE_MISSING"):
             self.recover()
 
+    def test_symlink_pending_claims_is_denied_without_following(self):
+        historical = self.root / "historical-claims.json"
+        historical.write_bytes(self.pending.read_bytes())
+        historical.chmod(0o600)
+        self.pending.unlink()
+        self.pending.symlink_to(historical)
+        with self.assertRaisesRegex(
+                recovery.PacketRecoveryDenied, "SOURCE_PRIVATE_FILE_UNREADABLE"):
+            self.recover()
+        self.assertFalse(self.approved.exists())
+        self.assertTrue(historical.exists())
+        self.assertEqual(self.approval_count(), 1)
+
+    def test_symlink_sqlite_database_is_denied_without_following(self):
+        original = self.root / "original-sqlite.db"
+        self.db.rename(original)
+        self.db.symlink_to(original)
+        with self.assertRaisesRegex(
+                recovery.PacketRecoveryDenied, "SOURCE_PRIVATE_FILE_UNREADABLE"):
+            self.recover()
+        self.assertFalse(self.approved.exists())
+        self.assertTrue(original.exists())
+
     def test_insecure_pending_permissions_denied(self):
         self.pending.chmod(0o644)
         with self.assertRaisesRegex(recovery.PacketRecoveryDenied, "SOURCE_PRIVATE_CUSTODY_INVALID"):
