@@ -6,7 +6,7 @@ from pathlib import Path
 from admin_identity import admin_identity
 from gpt02_issue159_approval_http import handle_issue159_approval_intent
 from gpt02_issue159_approval_intent_contract import ApprovalIntentContractError, validate_approval_claims
-from gpt02_issue159_approval_request_refresh import refresh_pending, RefreshDenied
+from gpt02_issue159_approval_request_refresh import refresh_pending, RefreshDenied, _socket_fact_reader, _verify_pre_sign_facts
 from gpt02_issue159_auto_chain import run_after_approval, AutoChainError
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
@@ -73,7 +73,66 @@ def issue159_chain_readiness_gate(record):
   return False
  if not issue159_signer_output_preflight_clear():
   return False
+ if not issue159_precommit_presign_matches(record):
+  return False
  return True
+
+def issue159_precommit_presign_matches(record):
+ """Recheck the exact pending claims and independent Hub/Core facts before
+ one irrevocable Super Admin approval is recorded. No grant or DB write.
+ A stale/mutated PIC, company, command, or attempt fails closed.
+ """
+ try:
+  if not isinstance(record,dict):
+   return False
+  path=Path(ISSUE159_PENDING_CLAIMS)
+  st=os.lstat(path)
+  if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)
+      or st.st_uid!=0 or st.st_gid!=0 or st.st_nlink!=1
+      or stat.S_IMODE(st.st_mode)!=0o600 or not 0<st.st_size<=8192):
+   return False
+  payload=json.loads(path.read_text(encoding='utf-8'))
+  if (type(payload) is not dict or set(payload)!={'claims'}
+      or type(payload.get('claims')) is not dict):
+   return False
+  claims=payload['claims']
+  verified=validate_approval_claims(claims)
+  bindings=(
+   (record.get('claims_sha256'),verified['claimsSha256']),
+   (record.get('task_id'),claims['taskId']),
+   (record.get('command_id'),claims['commandId']),
+   (record.get('attempt_id'),claims['attemptId']),
+   (record.get('company_id'),claims['companyId']),
+   (record.get('actor_id'),claims['superAdminId']),
+   (record.get('expires_at_ms'),claims['expiresAt']),
+   (record.get('decision'),'APPROVE'),
+   (record.get('role_at_decision'),'super_admin'),
+  )
+  if any(a!=b for a,b in bindings):
+   return False
+  now_ms=int(time.time()*1000)
+  # The four-stage one-shot chain needs a usable window; an approval with
+  # less than two minutes remaining is denied BEFORE consuming its nonce.
+  if (now_ms<claims['issuedAt'] or
+      claims['expiresAt']-now_ms<120_000 or
+      record.get('recorded_at_ms')>now_ms):
+   return False
+  query={
+   'companyId':claims['companyId'],'hubTaskId':claims['taskId'],
+   'commandCandidateId':claims['commandId'],
+   'attemptId':claims['attemptId'],
+  }
+  facts=_socket_fact_reader(query)
+  observed=int(time.time()*1000)
+  preparation_expiry=_verify_pre_sign_facts(facts,claims,observed)
+  return (
+   preparation_expiry>=claims['expiresAt']+1000
+   and claims['expiresAt']-observed>=120_000
+  )
+ except Exception:
+  # Missing file, bad security, reader outage and scope drift all deny.
+  return False
+
 # Read-only preflight. These are the exact retained RuntimeDirectory outputs
 # of the four existing one-shot signer roles. A previous task's signature
 # must NEVER be deleted/overwritten to make room for a new approval.
