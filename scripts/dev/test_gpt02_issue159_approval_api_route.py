@@ -102,6 +102,9 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             Path(self.signer_fixture.name) / (role + "-signature.json")
             for role in ("approval", "hub", "core", "issuer")
         )
+        api.ISSUE159_OPERATOR_LINK_OUTPUT = (
+            Path(self.signer_fixture.name) / "gpt02_issue159_hub_core_link_claims.json"
+        )
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), api.Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -441,6 +444,49 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(again, 409)
         self.assertEqual(replay_body["error"], "approval_intent_conflict")
         self.assertEqual(self.count(), 1)
+
+    def test_prior_verified_link_prevents_one_use_approval_and_is_preserved(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        api.issue159_chain_readiness_gate = SOURCE_CHAIN_GATE
+        link = Path(api.ISSUE159_OPERATOR_LINK_OUTPUT)
+        temp = link.with_name("." + link.name + ".auto.tmp")
+        with patch.dict(os.environ, {
+            "GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY": "true",
+        }), patch.object(Path, "is_socket", return_value=True):
+            for path in (link, temp):
+                with self.subTest(path=path.name):
+                    prior = b"immutable-previous-task-link-evidence"
+                    path.write_bytes(prior)
+                    self.assertFalse(api.issue159_operator_link_slot_clear())
+                    status, body = self.request(AAL2_TOKEN)
+                    self.assertEqual(status, 409)
+                    self.assertEqual(body["error"], "issue159_auto_chain_not_ready")
+                    self.assertFalse(body["dispatchPermitted"])
+                    self.assertEqual(body["releaseDecision"], "NO_GO")
+                    self.assertEqual(self.count(), 0)
+                    self.assertEqual(path.read_bytes(), prior)
+                    path.unlink()
+            self.assertTrue(api.issue159_operator_link_slot_clear())
+
+    def test_pending_ui_hides_button_when_verified_link_is_occupied(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        Path(self.pending).write_text(json.dumps({"claims": CLAIMS}))
+        os.chmod(self.pending, 0o600)
+        target = Path(api.ISSUE159_OPERATOR_LINK_OUTPUT)
+        target.write_bytes(b"immutable-verifier-link-previous-task")
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertFalse(body["pending"])
+        self.assertEqual(body["reason"], "VERIFIED_OPERATOR_LINK_OCCUPIED")
+        self.assertEqual(self.count(), 0)
+        self.assertEqual(target.read_bytes(), b"immutable-verifier-link-previous-task")
 
     def test_existing_live_readiness_gate_denies_before_approval_write(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
