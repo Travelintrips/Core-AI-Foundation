@@ -43,6 +43,8 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_auto_chain.py'
       - 'scripts/dev/test_gpt02_issue159_auto_chain_link.py'
       - 'scripts/dev/test_gpt02_issue159_auto_chain_sequence.py'
+      - 'scripts/dev/gpt02_issue159_writer_slot_handoff_probe.py'
+      - 'scripts/dev/test_gpt02_issue159_writer_slot_handoff_probe.py'
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
       - 'scripts/dev/gpt02_issue159_historical_archive_audit_readonly.py'
       - 'scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py'
@@ -146,6 +148,10 @@ jobs:
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_auto_chain_link.py
           # Verify fail-closed ordering without starting systemd or signing.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_auto_chain_sequence.py
+          # Strictly offline tests: AST-load only the pure slot guard. Never
+          # import/run the top-level credential-backed DEV probe in CI.
+          python3 -m py_compile scripts/dev/gpt02_issue159_writer_slot_handoff_probe.py
+          python3 scripts/dev/test_gpt02_issue159_writer_slot_handoff_probe.py
           # Public-key only, root-private archive fixture, NO live /opt data.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py
           # Recover only an existing, fresh, exact SQLite intent after a packet
