@@ -7,7 +7,8 @@ All Docker containers are network isolated and deleted in finally.
 import os,secrets,subprocess,time,uuid
 from pathlib import Path
 
-SQL = Path("/tmp/gpt02_issue159_fixed_writer_relock.PROPOSED.sql")
+ROOT = Path(__file__).resolve().parents[2]
+SQL = ROOT / "docs/dev/gpt02_issue159_fixed_writer_relock.REVIEW_ONLY.sql"
 IMAGE = "mirror.gcr.io/library/postgres:17-alpine"
 AUDITOR = "dev_gpt02_relock_catalog_auditor"
 ROLES = (
@@ -57,7 +58,7 @@ def main():
 
         # One independent auditor with NOLOGIN and three existing inert roles.
         psql(name,"fixture_root",root_pw,"""
-CREATE ROLE postgres LOGIN CREATEROLE NOINHERIT PASSWORD '"""+postgres_pw+"""';
+CREATE ROLE postgres LOGIN CREATEROLE INHERIT PASSWORD '"""+postgres_pw+"""';
 GRANT CREATE ON DATABASE postgres TO postgres;
 GRANT SELECT ON pg_catalog.pg_authid TO postgres;
 GRANT pg_signal_backend TO postgres;
