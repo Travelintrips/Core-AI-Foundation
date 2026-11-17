@@ -310,6 +310,32 @@ CREATE ROLE unrelated_test LOGIN PASSWORD 'synthetic_unrelated';
         guard_before = login(name, GUARD_USER, pw, guard_query)
         assert_true("ACTIVE_CANONICAL_GUARD_FALSE",
                     guard_before.stdout.strip() == "t")
+        # A historically committed claim must not be admitted with a
+        # DIFFERENT challenge or altered packet/command/fence. These
+        # remain negative checks on the same native low-privilege guard.
+        for variant, altered in (
+            ("fresh_challenge", {"challenge": secrets.token_hex(32)}),
+            ("packet", {"packet_sha": "b" * 64}),
+            ("command", {"command_id":
+              "11111111-1111-4111-8111-111111111111"}),
+            ("fence", {"fence_id":
+              "22222222-2222-4222-8222-222222222222"}),
+        ):
+            with_changes = dict(after_claim)
+            with_changes.update({
+                k: v for k, v in altered.items() if k != "challenge"
+            })
+            check_challenge = altered.get("challenge", challenge)
+            failed_guard = login(
+                name, GUARD_USER, pw,
+                claim_sql(with_changes, check_challenge).replace(
+                    CONSUME_FN, GUARD_FN, 1,
+                ),
+            )
+            assert_true("CANONICAL_GUARD_ACCEPTED_WRONG_" +
+                        variant.upper(),
+                        failed_guard.stdout.strip() == "f")
+        print("PASS_CANONICAL_GUARD_DENIES_FRESH_CHALLENGE_PACKET_COMMAND_FENCE")
         denied_owner_guard = owner(name, guard_query, check=False)
         assert_true("WRONG_NATIVE_GUARD_CALLER_ACCEPTED",
                     denied_owner_guard.returncode != 0 and
