@@ -5,6 +5,7 @@ No Supabase connections, no existing VPS DB passwords, no PROD, no signing.
 All Docker containers are network isolated and deleted in finally.
 """
 import os,secrets,subprocess,time,uuid
+from datetime import datetime,timezone,timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +46,7 @@ def main():
     auditor_pw=secrets.token_urlsafe(28)
     roles_pw={role:secrets.token_urlsafe(28) for role in ROLES}
     role_names=",".join("'"+r+"'" for r in ROLES)
-    delayed=None
+    delayed=[]
     try:
         command(["docker","run","--rm","-d","--network","none","--name",name,
                  "-e","POSTGRES_USER=fixture_root",
@@ -130,24 +131,33 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
               roles_pw[role]+"';"
             )
         psql(name,"postgres",postgres_pw,"BEGIN;"+"".join(registrations)+"COMMIT;")
+        # Only one not-yet-cleaned row per fixed role is permitted.
+        duplicate=psql(name,"postgres",postgres_pw,
+          "INSERT INTO gpt02_relock_audit.writer_issuance_watchdog "
+          "(role_name,task_id,scope_sha256,expires_at) VALUES "
+          "('dev_gpt02_attestor_evidence',202,'"+("c"*64)+
+          "',clock_timestamp()+interval '4 seconds')",check=False)
+        assert duplicate.returncode!=0
         assert one(name,AUDITOR,auditor_pw,
           "SELECT gpt02_relock_audit.relock_expired_phase_a()")=="0"
         assert one(name,AUDITOR,auditor_pw,
           "SELECT gpt02_relock_audit.relock_expired_phase_b()")=="0"
-        # Keep one real reader session open to prove phase B terminates it.
-        delayed=subprocess.Popen(
-            ["docker","exec","-e","PGPASSWORD="+roles_pw[ROLES[2]],name,
-             "psql","-X","-w","-h","127.0.0.1","-U",ROLES[2],
-             "-d","postgres","-c","SELECT pg_sleep(40)"],
-            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-        for _ in range(30):
-            activity=one(name,"postgres",postgres_pw,
-                "SELECT count(*) FROM pg_stat_activity WHERE usename='"+
-                ROLES[2]+"'")
-            if int(activity)>=1:break
-            time.sleep(.15)
-        else:raise AssertionError("TEST_READER_SESSION_NOT_CONNECTED")
-        print("PASS_READER_SESSION_OPEN_BEFORE_EXPIRE",flush=True)
+        # Keep all three real role sessions open; the independent auditor must
+        # lock them even if the main coordinator is no longer running.
+        for role in ROLES:
+            proc=subprocess.Popen(
+                ["docker","exec","-e","PGPASSWORD="+roles_pw[role],name,
+                 "psql","-X","-w","-h","127.0.0.1","-U",role,
+                 "-d","postgres","-c","SELECT pg_sleep(40)"],
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            delayed.append(proc)
+            for _ in range(30):
+                activity=one(name,"postgres",postgres_pw,
+                    "SELECT count(*) FROM pg_stat_activity WHERE usename='"+role+"'")
+                if int(activity)>=1:break
+                time.sleep(.15)
+            else:raise AssertionError("TEST_ROLE_SESSION_NOT_CONNECTED:"+role)
+        print("PASS_ALL_THREE_ROLE_SESSIONS_OPEN_BEFORE_EXPIRE",flush=True)
 
         time.sleep(7.5)
         b=psql(name,AUDITOR,auditor_pw,
@@ -192,12 +202,60 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
         for role in ROLES:
             assert one(name,"postgres",postgres_pw,
               "SELECT count(*) FROM pg_stat_activity WHERE usename='"+role+"'")=="0"
-        print("PASS_PHASE_B_TERMINATES_SESSIONS_AND_IS_IDEMPOTENT",flush=True)
+        print("PASS_PHASE_B_TERMINATES_ALL_SESSIONS_AND_IS_IDEMPOTENT",flush=True)
+
+        # A second task can use the same fixed roles after the prior rows
+        # are cleaned; the history is retained and only one open row is allowed.
+        second_pw={role:secrets.token_urlsafe(28) for role in ROLES}
+        second_expiry=(datetime.now(timezone.utc)+timedelta(seconds=4)).isoformat()
+        second=[]
+        for index,role in enumerate(ROLES):
+            second.append(
+              "INSERT INTO gpt02_relock_audit.writer_issuance_watchdog "
+              "(role_name,task_id,scope_sha256,expires_at) VALUES ('"+
+              role+"',202,'"+("%064x"%(index+101))+
+              "',TIMESTAMPTZ '"+second_expiry+"');"
+              "ALTER ROLE "+role+" LOGIN CONNECTION LIMIT 1 PASSWORD '"+
+              second_pw[role]+"' VALID UNTIL '"+second_expiry+"';"
+            )
+        psql(name,"postgres",postgres_pw,"BEGIN;"+"".join(second)+"COMMIT;")
+        for role in ROLES:
+            proc=subprocess.Popen(
+                ["docker","exec","-e","PGPASSWORD="+second_pw[role],name,
+                 "psql","-X","-w","-h","127.0.0.1","-U",role,
+                 "-d","postgres","-c","SELECT pg_sleep(40)"],
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            delayed.append(proc)
+            for _ in range(30):
+                activity=one(name,"postgres",postgres_pw,
+                    "SELECT count(*) FROM pg_stat_activity WHERE usename='"+role+"'")
+                if int(activity)>=1:break
+                time.sleep(.15)
+            else:raise AssertionError("SECOND_WINDOW_ROLE_SESSION_NOT_CONNECTED:"+role)
+        time.sleep(4.5)
+        assert one(name,AUDITOR,auditor_pw,
+          "SELECT gpt02_relock_audit.relock_expired_phase_a()")=="3"
+        assert one(name,AUDITOR,auditor_pw,
+          "SELECT gpt02_relock_audit.relock_expired_phase_b()")=="3"
+        assert one(name,"postgres",postgres_pw,
+          "SELECT count(*) FROM gpt02_relock_audit.writer_issuance_watchdog "
+          "WHERE cleaned_at IS NOT NULL")=="6"
+        for role in ROLES:
+            assert yes(name,"postgres",postgres_pw,
+              "SELECT NOT rolcanlogin AND rolconnlimit=0 AND rolpassword IS NULL "
+              "FROM pg_authid WHERE rolname='"+role+"'")
+            assert one(name,"postgres",postgres_pw,
+              "SELECT count(*) FROM pg_stat_activity WHERE usename='"+role+"'")=="0"
+        print("PASS_REPEATED_WINDOW_HISTORY_AND_INDEPENDENT_RELOCK",flush=True)
         print("DISPOSABLE_PG17_ONLY_NO_CST_DEV_OR_PROD_MUTATIONS",flush=True)
     finally:
-        if delayed is not None:
-            try:delayed.terminate();delayed.wait(timeout=4)
-            except Exception:delayed.kill()
+        for proc in delayed:
+            try:
+                if proc.poll() is None:proc.terminate()
+                proc.wait(timeout=4)
+            except Exception:
+                try:proc.kill()
+                except Exception:pass
         command(["docker","rm","-f",name],check=False)
 
 
