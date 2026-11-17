@@ -5,6 +5,7 @@ No live DEV/PROD DB, existing credentials, signer, worker or DELL access.
 Runs a true no-superuser postgres definer + separate existing table owner.
 """
 from pathlib import Path
+import os
 import secrets
 import subprocess
 import time
@@ -17,6 +18,10 @@ ROLE = "dev_gpt02_task_200_abcdef012345"
 AUDITOR = "dev_gpt02_relock_catalog_auditor"
 TABLES = ("approvals","operator_links","receipts",
           "core_identity_receipts","post_consumption_fences")
+# Strictly bounded disposable images: production/DEV connections forbidden.
+IMAGE = os.environ.get("GPT02_RELOCK_TEST_PG_IMAGE", "postgres:16-alpine")
+if IMAGE not in ("postgres:16-alpine", "postgres:17-alpine"):
+    raise SystemExit("UNAPPROVED_DISPOSABLE_POSTGRES_IMAGE")
 
 def call(command, *, stdin=None, check=True, timeout=50):
     r = subprocess.run(command,input=stdin,text=True,
@@ -46,7 +51,7 @@ def main():
     try:
         call(["docker","run","--rm","-d","--network","none",
               "--name",name,"-e","POSTGRES_USER=fixture_root",
-              "-e","POSTGRES_PASSWORD="+root_pw,"postgres:16-alpine"])
+              "-e","POSTGRES_PASSWORD="+root_pw,IMAGE])
         for _ in range(100):
             r=psql(name,"fixture_root",root_pw,"SELECT 1",check=False)
             if r.returncode==0:break
@@ -230,7 +235,8 @@ VALUES ('{ROLE}',200,'{"a"*64}',clock_timestamp()-interval '1 second');
         assert outsider.returncode!=0 and "RELOCK_INDEPENDENT_CALLER_REQUIRED" in outsider.stderr
         assert psql(name,ROLE,scoped_pw,"SELECT 1",check=False).returncode!=0
         print("PASS_NO_PUBLIC_OR_CROSS_ROLE_AUTHORITY_AND_PASSWORD_STAYS_LOCKED",flush=True)
-        print("DISPOSABLE_PG16_ONLY_NO_CST_DEV_OR_PROD_MUTATIONS",flush=True)
+        print("DISPOSABLE_PG_IMAGE="+IMAGE,flush=True)
+        print("DISPOSABLE_PG16_OR_PG17_ONLY_NO_CST_DEV_OR_PROD_MUTATIONS",flush=True)
     finally:
         call(["docker","rm","-f",name],check=False)
 
