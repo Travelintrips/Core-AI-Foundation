@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   validateCredentials,
   validateResult,
@@ -70,4 +72,40 @@ test('no systemd credential context means NO-GO, no connection',async()=>{
     if(beforeCred===undefined)delete process.env.CREDENTIALS_DIRECTORY;
     else process.env.CREDENTIALS_DIRECTORY=beforeCred;
   }
+});
+
+function runNoCredentialCli(overrides) {
+  const supervisor=fileURLToPath(new URL(
+    '../../deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs',
+    import.meta.url
+  ));
+  const child=spawnSync(process.execPath,[supervisor],{
+    encoding:'utf8',timeout:5000,
+    env:{...process.env,APP_ENV:'development',CREDENTIALS_DIRECTORY:'',...overrides}
+  });
+  assert.equal(child.error,undefined);
+  assert.equal(child.status,3,'skipped or denied work must not return success');
+  assert.equal(child.stdout.trim(),'','no success-style report on denial');
+  const lines=child.stderr.trim().split(/\r?\n/).filter(Boolean);
+  assert.equal(lines.length,1,'exactly one structured denial report');
+  const verdict=JSON.parse(lines[0]);
+  assert.equal(verdict.environment,'DEV');
+  assert.equal(verdict.independentSupervisor,true);
+  assert.equal(verdict.authorizationGranted,false);
+  assert.equal(verdict.signingPermitted,false);
+  assert.equal(verdict.dispatchPermitted,false);
+  assert.equal(verdict.releaseDecision,'NO_GO');
+  return verdict.reason;
+}
+
+test('supervisor CLI never reports skipped credential context as success',()=>{
+  assert.equal(runNoCredentialCli({}),
+    'RELOCK_SYSTEMD_CREDENTIALS_REQUIRED');
+});
+
+test('supervisor CLI rejects PROD even when an apparent credential directory is supplied',()=>{
+  assert.equal(runNoCredentialCli({
+    APP_ENV:'production',
+    CREDENTIALS_DIRECTORY:'/run/credentials/synthetic.unit'
+  }),'RELOCK_EXPLICIT_DEV_MODE_REQUIRED');
 });
