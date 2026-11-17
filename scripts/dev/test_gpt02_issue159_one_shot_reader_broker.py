@@ -125,7 +125,9 @@ class NativeCanonicalGuardCursor:
     def __init__(self, connection):
         self.connection = connection
         self.description = [SimpleNamespace(name="approval_current")]
-        self.calls = []
+        # Preserve both SQL calls across separate cursor contexts sharing
+        # the SAME canonical approval-guard connection/transaction.
+        self.calls = connection.calls
 
     def __enter__(self):
         return self
@@ -136,8 +138,14 @@ class NativeCanonicalGuardCursor:
     def execute(self, statement, params=None):
         self.calls.append((statement, params))
         if statement == broker.CANONICAL_CURRENT_GUARD_SQL:
-            self.connection.events.append("guard_current")
+            self.connection.guard_check_count += 1
+            self.connection.events.append(
+                "guard_current" if self.connection.guard_check_count == 1
+                else "guard_recheck"
+            )
             self.connection.guard_checked = True
+            if self.connection.fail_guard_check_at == self.connection.guard_check_count:
+                raise RuntimeError("synthetic_guard_server_query_failed")
         elif statement not in (
             "SET TRANSACTION READ WRITE",
             "SET LOCAL statement_timeout = '1500ms'",
@@ -149,6 +157,10 @@ class NativeCanonicalGuardCursor:
 
     def fetchmany(self, size):
         assert size == 2, "CURRENT_APPROVAL_READBACK_NOT_BOUNDED"
+        if self.connection.guard_readback_sequence is not None:
+            if not self.connection.guard_readback_sequence:
+                raise AssertionError("UNEXPECTED_EXTRA_CURRENT_APPROVAL_READ")
+            return self.connection.guard_readback_sequence.pop(0)
         return (self.connection.rows_override if self.connection.rows_override is not None
                 else [(True,)])
 
@@ -170,7 +182,11 @@ class FakeCanonicalGuardConnection:
         self.active = False
         self.closed = False
         self.guard_checked = False
+        self.guard_check_count = 0
+        self.calls = []
         self.rows_override = None
+        self.guard_readback_sequence = None
+        self.fail_guard_check_at = None
         self.error = None
         self.last_cursor = None
         self.rollback_calls = 0
@@ -349,30 +365,33 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertEqual(len(self.supervisor.relock_calls), 1)
         self.assertEqual(self.supervisor.events, [
             "consume", "audit_consumption",
-            "guard_open", "guard_current", "open",
+            "guard_open", "guard_current", "open", "guard_recheck",
             "guard_rollback", "guard_close", "relock", "audit_relock",
         ])
         self.assertEqual(len(self.supervisor.guard_open_calls), 1)
         self.assertTrue(self.supervisor.guard_connection.closed)
         self.assertEqual(self.supervisor.guard_connection.rollback_calls, 1)
+        bind = {
+            "role": self.candidate["candidateRole"],
+            "scope_sha": self.candidate["scopeSha256"],
+            "packet_sha": self.candidate["verifiedPacketSha256"],
+            "command_id": self.candidate["scope"]["command_id"],
+            "attempt_id": self.candidate["scope"]["attempt_id"],
+            "receipt_id": self.candidate["scope"]["receipt_id"],
+            "fence_id": self.candidate["scope"]["fence_id"],
+            "read_challenge": "a" * 64,
+        }
         self.assertEqual(
             self.supervisor.guard_connection.last_cursor.calls,
             [
                 ("SET TRANSACTION READ WRITE", None),
                 ("SET LOCAL statement_timeout = '1500ms'", None),
                 ("SET LOCAL lock_timeout = '1500ms'", None),
-                (broker.CANONICAL_CURRENT_GUARD_SQL, {
-                    "role": self.candidate["candidateRole"],
-                    "scope_sha": self.candidate["scopeSha256"],
-                    "packet_sha": self.candidate["verifiedPacketSha256"],
-                    "command_id": self.candidate["scope"]["command_id"],
-                    "attempt_id": self.candidate["scope"]["attempt_id"],
-                    "receipt_id": self.candidate["scope"]["receipt_id"],
-                    "fence_id": self.candidate["scope"]["fence_id"],
-                    "read_challenge": "a" * 64,
-                }),
+                (broker.CANONICAL_CURRENT_GUARD_SQL, bind),
+                (broker.CANONICAL_CURRENT_GUARD_SQL, bind),
             ],
         )
+        self.assertEqual(self.supervisor.guard_connection.guard_check_count, 2)
         self.assertTrue(self.supervisor.connection.closed)
         self.assertTrue(value["oneCanonicalReadReviewed"])
         self.assertTrue(value["preReadConsumptionClaimReviewed"])
@@ -501,6 +520,53 @@ class ScopedReaderBrokerTest(unittest.TestCase):
         self.assertTrue(self.supervisor.guard_connection.closed)
         self.assertEqual(self.supervisor.guard_connection.rollback_calls, 1)
         self.assertEqual(out["releaseDecision"], "NO_GO")
+
+    def test_canonical_guard_expired_during_read_cannot_return_rows(self):
+        # A FOR SHARE row lock blocks concurrent revocation commits but does
+        # not freeze PostgreSQL's wall clock. A TRUE pre-read guard may turn
+        # FALSE for the same challenge once approval_expires_at passes.
+        for second_readback in (
+            [(False,)], [(None,)], [(0,)], [("true",)], [],
+            [(True,), (True,)], [()],
+        ):
+            with self.subTest(second_readback=second_readback):
+                self.setUp()
+                guard = self.supervisor.guard_connection
+                guard.guard_readback_sequence = [[(True,)], second_readback]
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError,
+                    "ONE_SHOT_CANONICAL_APPROVAL_REVOKED_OR_STALE",
+                ):
+                    self.call()
+                self.last_read.assert_called_once()
+                self.assertEqual(len(self.supervisor.open_calls), 1)
+                self.assertEqual(guard.guard_check_count, 2)
+                self.assertEqual(len(self.supervisor.relock_calls), 1)
+                self.assertTrue(guard.closed)
+                self.assertTrue(self.supervisor.auditor_connection.closed)
+
+    def test_guard_recheck_database_error_always_relocks(self):
+        self.supervisor.guard_connection.fail_guard_check_at = 2
+        with self.assertRaisesRegex(
+            RuntimeError, "synthetic_guard_server_query_failed",
+        ):
+            self.call()
+        self.last_read.assert_called_once()
+        self.assertEqual(len(self.supervisor.relock_calls), 1)
+        self.assertTrue(self.supervisor.guard_connection.closed)
+        self.assertTrue(self.supervisor.auditor_connection.closed)
+
+    def test_guard_postread_does_not_restart_transaction(self):
+        result = self.call()
+        calls = self.supervisor.guard_connection.calls
+        self.assertEqual(
+            sum(sql == "SET TRANSACTION READ WRITE" for sql, _ in calls), 1,
+        )
+        self.assertEqual(
+            sum(sql == broker.CANONICAL_CURRENT_GUARD_SQL for sql, _ in calls), 2,
+        )
+        self.assertEqual(self.supervisor.guard_connection.rollback_calls, 1)
+        self.assertEqual(result["releaseDecision"], "NO_GO")
 
     def test_claim_reported_success_but_db_has_no_row_prevents_reader(self):
         for rows in (
