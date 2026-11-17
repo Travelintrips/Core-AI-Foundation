@@ -63,6 +63,7 @@ CREATE TABLE gpt02_relock_audit.writer_issuance_watchdog (
   scope_sha256 text NOT NULL UNIQUE
     CHECK (scope_sha256 ~ '^[0-9a-f]{64}$'),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  previous_valid_until timestamptz,
   expires_at timestamptz NOT NULL,
   cleaned_at timestamptz,
   PRIMARY KEY (role_name,task_id),
@@ -89,7 +90,8 @@ BEGIN
   THEN RAISE EXCEPTION 'RELOCK_INDEPENDENT_CALLER_REQUIRED' USING ERRCODE='42501'; END IF;
 
   FOR item IN
-    SELECT role_name,task_id FROM gpt02_relock_audit.writer_issuance_watchdog
+    SELECT role_name,task_id,previous_valid_until
+      FROM gpt02_relock_audit.writer_issuance_watchdog
     WHERE expires_at <= clock_timestamp() AND cleaned_at IS NULL
     ORDER BY role_name FOR UPDATE
   LOOP
@@ -114,9 +116,11 @@ BEGIN
         AND m.member='postgres'::regrole AND m.admin_option
     ) THEN RAISE EXCEPTION 'RELOCK_TARGET_ADMIN_OPTION_MISSING'; END IF;
 
+    -- NULL in rolvaliduntil means no expiry; restore that semantic as
+    -- VALID UNTIL 'infinity' rather than leaving the just-expired window TTL.
     EXECUTE format(
-      'ALTER ROLE %I NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL',
-      item.role_name
+      'ALTER ROLE %I NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL VALID UNTIL %L',
+      item.role_name,COALESCE(item.previous_valid_until,'infinity'::timestamptz)
     );
     n:=n+1;
   END LOOP;
