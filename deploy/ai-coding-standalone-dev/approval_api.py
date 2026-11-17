@@ -39,11 +39,24 @@ def persist_issue159_approved_packet(claims,result):
   'releaseDecision':'NO_GO',
  }
  target=Path(ISSUE159_APPROVED_PACKET)
+ # The approval decision is one-use: never overwrite retained evidence
+ # from any prior task, including a symlink or a stranded temp file.
+ if not issue159_approved_packet_slot_clear():
+  raise FileExistsError('APPROVED_PACKET_OUTPUT_OCCUPIED')
  target.parent.mkdir(parents=True,exist_ok=True)
  tmp=target.with_name('.'+target.name+'.tmp')
- tmp.write_text(json.dumps(packet,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
- os.chmod(tmp,0o600)
- os.replace(tmp,target)
+ payload=(json.dumps(packet,sort_keys=True,separators=(',',':'))+'\n').encode('utf-8')
+ fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600)
+ try:
+  with os.fdopen(fd,'wb') as stream:
+   stream.write(payload)
+   stream.flush()
+   os.fsync(stream.fileno())
+  # Exclusive hard-link publication is fail-closed if another request
+  # has already claimed the canonical output target.
+  os.link(tmp,target)
+ finally:
+  tmp.unlink(missing_ok=True)
  return packet
 def issue159_operator_identity(identity,connection):
  if (not identity or identity.get('role')!='super_admin'
@@ -72,6 +85,8 @@ def issue159_chain_readiness_gate(record):
  if not Path('/run/gpt02-issuer-reader/reader.sock').is_socket():
   return False
  if not issue159_signer_output_preflight_clear():
+  return False
+ if not issue159_approved_packet_slot_clear():
   return False
  if not issue159_precommit_presign_matches(record):
   return False
@@ -132,6 +147,23 @@ def issue159_precommit_presign_matches(record):
  except Exception:
   # Missing file, bad security, reader outage and scope drift all deny.
   return False
+
+def issue159_approved_packet_slot_clear():
+ """Fail closed if an earlier approved packet or its temp file exists.
+
+ The output is an immutable one-use artifact, not a mutable latest pointer.
+ Never follow symlinks or overwrite a previous task's approved claims.
+ """
+ target=Path(ISSUE159_APPROVED_PACKET)
+ for path in (target,target.with_name('.'+target.name+'.tmp')):
+  try:
+   os.lstat(path)
+  except FileNotFoundError:
+   continue
+  except OSError:
+   return False
+  return False
+ return True
 
 # Read-only preflight. These are the exact retained RuntimeDirectory outputs
 # of the four existing one-shot signer roles. A previous task's signature
@@ -200,6 +232,9 @@ def load_issue159_pending_claims(actor_id):
    return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   if not issue159_signer_output_preflight_clear():
    return {'environment':'DEV','pending':False,'reason':'SIGNATURE_OUTPUT_OCCUPIED',
+           'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  if not issue159_approved_packet_slot_clear():
+   return {'environment':'DEV','pending':False,'reason':'APPROVED_PACKET_OUTPUT_OCCUPIED',
            'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   return {
    'environment':'DEV','pending':True,'taskId':claims['taskId'],
