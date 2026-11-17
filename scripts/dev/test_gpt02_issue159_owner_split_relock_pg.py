@@ -13,6 +13,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / "docs/dev/gpt02-issue159-store-owner-relock-helper.PROPOSED.sql"
+MAINT_HELPER = ROOT / "docs/dev/gpt02-issue159-store-owner-relock-helper-maintenance.REVIEW_ONLY.sql"
 MAIN = ROOT / "docs/dev/gpt02-issue159-two-phase-owner-split-relock.PROPOSED.sql"
 ROLE = "dev_gpt02_task_200_abcdef012345"
 AUDITOR = "dev_gpt02_relock_catalog_auditor"
@@ -22,6 +23,9 @@ TABLES = ("approvals","operator_links","receipts",
 IMAGE = os.environ.get("GPT02_RELOCK_TEST_PG_IMAGE", "postgres:16-alpine")
 if IMAGE not in ("postgres:16-alpine", "postgres:17-alpine"):
     raise SystemExit("UNAPPROVED_DISPOSABLE_POSTGRES_IMAGE")
+INSTALLER = os.environ.get("GPT02_RELOCK_TEST_OWNER_INSTALLER", "direct")
+if INSTALLER not in ("direct", "maintenance"):
+    raise SystemExit("UNAPPROVED_DISPOSABLE_OWNER_INSTALLER")
 
 def call(command, *, stdin=None, check=True, timeout=50):
     r = subprocess.run(command,input=stdin,text=True,
@@ -45,6 +49,7 @@ def main():
     name="issue159-owner-split-"+uuid.uuid4().hex[:9]
     root_pw=secrets.token_urlsafe(24)
     owner_pw=secrets.token_urlsafe(24)
+    maintenance_pw=secrets.token_urlsafe(24)
     pg_pw=secrets.token_urlsafe(24)
     auditor_pw=secrets.token_urlsafe(24)
     scoped_pw=secrets.token_urlsafe(24)
@@ -152,9 +157,44 @@ WHERE roleid='{ROLE}'::regrole AND member='postgres'::regrole
             "FAILED_PHASE_INSTALL_LEFT_PRIVILEGED_SCHEMA_BEHIND")
         print("PASS_OWNER_HELPER_REQUIRED_BEFORE_PHASE_FUNCTIONS",flush=True)
 
-        # The non-superuser owner-signed helper is installed separately
-        # from the independent postgres-held catalog relock functions.
-        psql(name,"gpt02_store_owner",owner_pw,HELPER.read_text())
+        # This second installer test is strictly disposable / review only.
+        # The store owner is NOLOGIN before helper installation, and the
+        # independently authenticated maintenance principal is re-locked
+        # BEFORE the same Phase A/B code and recovery guards are exercised.
+        if INSTALLER == "maintenance":
+            marker="CREATE FUNCTION gpt02_private.revoke_expired_scoped_reader_grants"
+            assert HELPER.read_text().split(marker,1)[1] == (
+              MAINT_HELPER.read_text().split(marker,1)[1]), "HELPER_SOURCE_DRIFT"
+            psql(name,"fixture_root",root_pw,
+              "ALTER ROLE gpt02_store_owner NOLOGIN PASSWORD NULL CONNECTION LIMIT 0;"
+              "CREATE ROLE gpt02_owner_maintenance LOGIN NOINHERIT "
+              "NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS "
+              "PASSWORD '"+maintenance_pw+"';"
+              "GRANT gpt02_store_owner TO gpt02_owner_maintenance "
+              "WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;")
+            assert one(name,"fixture_root",root_pw,
+              "SELECT NOT rolcanlogin AND rolconnlimit=0 "
+              "AND rolpassword IS NULL FROM pg_authid "
+              "WHERE rolname='gpt02_store_owner'")=="t"
+            installed=psql(name,"gpt02_owner_maintenance",maintenance_pw,
+              "SET ROLE gpt02_store_owner;"+chr(10)+MAINT_HELPER.read_text())
+            assert "CREATE FUNCTION" in installed.stdout
+            psql(name,"fixture_root",root_pw,
+              "REVOKE gpt02_store_owner FROM gpt02_owner_maintenance;"
+              "ALTER ROLE gpt02_owner_maintenance "
+              "NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL;")
+            assert one(name,"fixture_root",root_pw,
+              "SELECT NOT rolcanlogin AND rolconnlimit=0 "
+              "AND rolpassword IS NULL FROM pg_authid "
+              "WHERE rolname='gpt02_owner_maintenance'")=="t"
+            assert one(name,"fixture_root",root_pw,
+              "SELECT NOT pg_has_role("
+              "'gpt02_owner_maintenance','gpt02_store_owner','SET')")=="t"
+            print("PASS_REVIEW_ONLY_MAINTENANCE_INSTALLER_RETIRED_BEFORE_PHASE_A",flush=True)
+        else:
+            psql(name,"gpt02_store_owner",owner_pw,HELPER.read_text())
+        # Identical Phase A/B code and the same independent auditor prove
+        # owner helper revocation AFTER maintenance authority is gone.
         psql(name,"postgres",pg_pw,MAIN.read_text())
         print("PASS_OWNER_SPLIT_MIGRATIONS_EXISTING_NOLOGIN_ROLE_NOT_RECREATED",flush=True)
 
@@ -334,6 +374,7 @@ VALUES ('{ROLE}',200,'{"a"*64}',clock_timestamp()-interval '1 second');
         assert outsider.returncode!=0 and "RELOCK_INDEPENDENT_CALLER_REQUIRED" in outsider.stderr
         assert psql(name,ROLE,scoped_pw,"SELECT 1",check=False).returncode!=0
         print("PASS_NO_PUBLIC_OR_CROSS_ROLE_AUTHORITY_AND_PASSWORD_STAYS_LOCKED",flush=True)
+        print("DISPOSABLE_OWNER_INSTALLER="+INSTALLER,flush=True)
         print("DISPOSABLE_PG_IMAGE="+IMAGE,flush=True)
         print("DISPOSABLE_PG16_OR_PG17_ONLY_NO_CST_DEV_OR_PROD_MUTATIONS",flush=True)
     finally:

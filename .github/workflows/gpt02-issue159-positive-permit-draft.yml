@@ -150,6 +150,15 @@ jobs:
           GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
             python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
           echo "PASS_OWNER_MAINTENANCE_PG16_PG17_DISPOSABLE_ONLY"
+          # Full two-phase owner split, recovery, ACL and membership proof
+          # after maintenance identity has been revoked and re-locked.
+          # Synthetic network-isolated containers ONLY; no Supabase DB.
+          GPT02_RELOCK_TEST_OWNER_INSTALLER=maintenance \
+            python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          GPT02_RELOCK_TEST_OWNER_INSTALLER=maintenance \
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          echo "PASS_MAINTENANCE_OWNER_SPLIT_PG16_PG17_FULL_LIFECYCLE"
           python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
           python3 scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py
