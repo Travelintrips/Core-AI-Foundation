@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import types
 import unittest
 import urllib.error
@@ -354,6 +355,63 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             })
         self.assertEqual(target.read_bytes(), original)
         self.assertFalse(target.with_name("." + target.name + ".tmp").exists())
+
+    def test_two_simultaneous_packet_publishers_preserve_exactly_one_artifact(self):
+        result = {
+            "intentId": "33333333-3333-4333-8333-333333333333",
+            "claimsSha256": api.validate_approval_claims(CLAIMS)["claimsSha256"],
+            "actorId": CLAIMS["superAdminId"],
+            "authMethod": "supabase_admin_session",
+            "roleAtDecision": "super_admin",
+            "decision": "APPROVE",
+            "recordedAt": BASE_NOW_MS,
+            "expiresAt": CLAIMS["expiresAt"],
+        }
+        barrier = threading.Barrier(2, timeout=5)
+
+        def publish(intent_id):
+            barrier.wait()
+            try:
+                api.persist_issue159_approved_packet(CLAIMS, {
+                    **result, "intentId": intent_id,
+                })
+                return "published"
+            except FileExistsError:
+                return "already_occupied"
+
+        attempts = (
+            "33333333-3333-4333-8333-333333333333",
+            "44444444-4444-4444-8444-444444444444",
+        )
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(publish, attempts))
+        self.assertCountEqual(outcomes, ["published", "already_occupied"])
+        path = Path(self.packet)
+        content = json.loads(path.read_text())
+        self.assertIn(content["intentId"], attempts)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertFalse(path.with_name("." + path.name + ".tmp").exists())
+        self.assertEqual(self.count(), 0)
+
+    def test_approved_packet_symlink_is_occupied_and_never_followed(self):
+        external = Path(self.signer_fixture.name) / "untouched-historical-packet"
+        external.write_bytes(b"immutable-historical-evidence")
+        Path(self.packet).symlink_to(external)
+        self.assertFalse(SOURCE_APPROVED_SLOT_CLEAR())
+        with self.assertRaises(FileExistsError):
+            api.persist_issue159_approved_packet(CLAIMS, {
+                "intentId": "33333333-3333-4333-8333-333333333333",
+                "claimsSha256": api.validate_approval_claims(CLAIMS)["claimsSha256"],
+                "actorId": CLAIMS["superAdminId"],
+                "authMethod": "supabase_admin_session",
+                "roleAtDecision": "super_admin",
+                "decision": "APPROVE",
+                "recordedAt": BASE_NOW_MS,
+                "expiresAt": CLAIMS["expiresAt"],
+            })
+        self.assertEqual(external.read_bytes(), b"immutable-historical-evidence")
+        self.assertEqual(self.count(), 0)
+        Path(self.packet).unlink()
 
     def test_existing_live_readiness_gate_denies_before_approval_write(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
