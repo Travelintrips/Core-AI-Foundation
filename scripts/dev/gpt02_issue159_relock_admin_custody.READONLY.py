@@ -86,7 +86,41 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
             line.strip() for line in raw.splitlines()
             if line.strip() and not line.lstrip().startswith(("#", ";"))
         ]
-        lines = set(effective_lines)
+        # systemd ignores [Service] security directives placed in [Unit]
+        # or [Install]. A text-only set check could falsely mark a
+        # non-sandboxed privileged service READY. Validate exact section
+        # membership before assessing any credential metadata.
+        current_section = None
+        seen_service_section = False
+        service_lines = []
+        sensitive_prefixes = (
+            "User=", "Group=", "Environment=", "EnvironmentFile=",
+            "PassEnvironment=", "UnsetEnvironment=", "NoNewPrivileges=",
+            "ProtectSystem=", "PrivateTmp=", "LoadCredential=",
+            "LoadCredentialEncrypted=", "ExecStart=", "ExecStartPre=",
+            "ExecStartPost=", "BindPaths=", "RootDirectory=",
+        )
+        for line in effective_lines:
+            if line.startswith("["):
+                if line not in ("[Unit]", "[Service]", "[Install]"):
+                    return _fail("AUDITOR_UNIT_UNKNOWN_SECTION_DENIED")
+                if line == "[Service]":
+                    if seen_service_section:
+                        return _fail("AUDITOR_UNIT_DUPLICATE_SERVICE_SECTION_DENIED")
+                    seen_service_section = True
+                current_section = line
+                continue
+            # A continuation may change effective systemd semantics; do not
+            # infer security properties from unreviewed multiline fragments.
+            if line.endswith("\\"):
+                return _fail("AUDITOR_UNIT_MULTILINE_DIRECTIVE_DENIED")
+            if current_section != "[Service]" and line.startswith(sensitive_prefixes):
+                return _fail("AUDITOR_UNIT_SECURITY_DIRECTIVE_OUTSIDE_SERVICE")
+            if current_section == "[Service]":
+                service_lines.append(line)
+        if not seen_service_section:
+            return _fail("AUDITOR_UNIT_SERVICE_SECTION_REQUIRED")
+        lines = set(service_lines)
         if not REQUIRED_LINES.issubset(lines):
             return _fail("AUDITOR_UNIT_CUSTODY_CONFIGURATION_INVALID")
         # systemd uses the effective LAST assignment. A prior strict line
@@ -102,7 +136,7 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
         for expected in singleton_lines:
             prefix = ("Environment=APP_ENV=" if expected.startswith("Environment=")
                       else expected.split("=", 1)[0] + "=")
-            matches = [line for line in effective_lines if line.startswith(prefix)]
+            matches = [line for line in service_lines if line.startswith(prefix)]
             if matches != [expected]:
                 return _fail("AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
         # No secondary environment, pre/post commands, or mount namespace

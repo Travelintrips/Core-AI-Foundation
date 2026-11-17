@@ -64,6 +64,63 @@ class CustodyMetaTest(unittest.TestCase):
         ):
             self.assertIs(result[flag], False)
 
+    def test_require_security_directives_in_service_section(self):
+        # Meta-only preflight must not believe a directive placed into
+        # [Unit] or [Install] applies to [Service] sandbox custody.
+        for missing in (
+            "User=gpt02-issue159-relock-catalog-auditor",
+            "ProtectSystem=strict",
+            "NoNewPrivileges=yes",
+            "PrivateTmp=yes",
+            "Environment=APP_ENV=development",
+            MOD.EXPECTED_BIND,
+        ):
+            with self.subTest(missing=missing):
+                # Keep same effective text in the file but move the line
+                # outside [Service] where systemd will ignore its semantics.
+                source = self.valid_lines.replace(missing + "\n", "")
+                source = source.replace(
+                    "[Unit]\n",
+                    "[Unit]\n" + missing + "\n",
+                    1,
+                )
+                self.unit.write_text(source)
+                out = self.check()
+                self.assert_denied(out)
+                self.assertFalse(out["unitMetadataReady"])
+
+    def test_malformed_extra_or_duplicate_systemd_sections_denied(self):
+        scenarios = (
+            (
+                self.valid_lines + "[Service]\nUser=root\n",
+                "AUDITOR_UNIT_DUPLICATE_SERVICE_SECTION_DENIED",
+            ),
+            (
+                self.valid_lines + "[DropIn]\n",
+                "AUDITOR_UNIT_UNKNOWN_SECTION_DENIED",
+            ),
+            (
+                self.valid_lines.replace("[Service]\n", "[Unit]\n"),
+                "AUDITOR_UNIT_SECURITY_DIRECTIVE_OUTSIDE_SERVICE",
+            ),
+            (
+                self.valid_lines + "[Install]\nProtectSystem=strict\n",
+                "AUDITOR_UNIT_SECURITY_DIRECTIVE_OUTSIDE_SERVICE",
+            ),
+            (
+                self.valid_lines + "Description=long line" + chr(92) +
+                "\ncontinued\n",
+                "AUDITOR_UNIT_MULTILINE_DIRECTIVE_DENIED",
+            ),
+        )
+        for text, expected_reason in scenarios:
+            with self.subTest(expected_reason=expected_reason):
+                self.unit.write_text(text, encoding="utf-8")
+                out = self.check()
+                self.assert_denied(out)
+                self.assertIs(out["unitMetadataReady"], False)
+                self.assertEqual(out["reason"], expected_reason)
+
     def test_uninstalled_unit_rejected_and_no_secret_needed(self):
         self.unit.unlink()
         result = MOD.check_custody_metadata(self.unit, self.credential)
