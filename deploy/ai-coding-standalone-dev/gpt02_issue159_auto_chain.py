@@ -25,16 +25,39 @@ def _unit(name:str):
         raise AutoChainError('UNIT_RESULT_INVALID_'+name.replace('.','_').replace('@','_AT_').upper())
 
 def _write_link(link:dict):
+    # Operator link evidence is one-use, like the approved claims and
+    # signer output. Never clear another task's temporary file or overwrite
+    # an existing link: the original signer/attestor chain must fail closed.
+    if not isinstance(link,dict):
+        raise AutoChainError('VERIFIED_OPERATOR_LINK_INVALID')
     tmp=APP/'.gpt02_issue159_hub_core_link_claims.json.auto.tmp'
-    if tmp.exists(): tmp.unlink()
-    fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600)
+    try:
+        fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600)
+    except FileExistsError as exc:
+        raise AutoChainError('VERIFIED_OPERATOR_LINK_TEMP_OCCUPIED') from exc
     try:
         with os.fdopen(fd,'w',encoding='utf-8') as f:
-            json.dump(link,f,sort_keys=True,separators=(',',':'));f.write('\n');f.flush();os.fsync(f.fileno())
-        os.replace(tmp,LINK)
-        os.chmod(LINK,0o600);os.chown(LINK,0,0)
+            json.dump(link,f,sort_keys=True,separators=(',',':'))
+            f.write('\n')
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp,0o600)
+        if os.geteuid()==0:
+            os.chown(tmp,0,0)
+        # Exclusive creation, not os.replace: preserved evidence cannot
+        # silently be reused, overwritten, or redirected through a symlink.
+        try:
+            os.link(tmp,LINK)
+        except FileExistsError as exc:
+            raise AutoChainError('VERIFIED_OPERATOR_LINK_OUTPUT_OCCUPIED') from exc
+        dirfd=os.open(APP,os.O_DIRECTORY|os.O_RDONLY)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
     finally:
-        if tmp.exists(): tmp.unlink()
+        # Delete only the temporary inode created by this invocation.
+        tmp.unlink(missing_ok=True)
 
 def run_after_approval(expected_task_id:int)->dict:
     _reset_failed(
