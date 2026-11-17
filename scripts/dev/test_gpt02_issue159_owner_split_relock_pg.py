@@ -89,7 +89,15 @@ WHERE roleid='{ROLE}'::regrole AND member='postgres'::regrole
             "GRANT USAGE ON SCHEMA gpt02_private TO "+ROLE+";"+
             "GRANT SELECT ON "+
             ",".join("gpt02_private."+t for t in TABLES)+
-            " TO "+ROLE+";")
+            " TO "+ROLE+";"+
+            "GRANT SELECT (id) ON gpt02_private.approvals TO "+ROLE+";")
+        column_acl = one(name,"postgres",pg_pw,
+           "SELECT COALESCE(attacl::text,'NO_COLUMN_ACL') "
+           "FROM pg_attribute "
+           "WHERE attrelid='gpt02_private.approvals'::regclass "
+           "AND attname='id' AND attnum>0")
+        print("COLUMN_ACL_PRESENT_BEFORE_RELOCK",column_acl!='NO_COLUMN_ACL',flush=True)
+        assert ROLE in column_acl, "NEGATIVE_CONTROL_COLUMN_GRANT_NOT_CREATED"
         assert one(name,"postgres",pg_pw,
             "SELECT has_table_privilege('postgres','gpt02_private.approvals',"
             "'SELECT WITH GRANT OPTION')")=="f"
@@ -173,12 +181,25 @@ VALUES ('{ROLE}',200,'{"a"*64}',clock_timestamp()-interval '1 second');
               "SELECT has_table_privilege('"+ROLE+
               "','gpt02_private."+t+"','SELECT')")=="f",t
         assert one(name,"postgres",pg_pw,
+          "SELECT has_any_column_privilege('"+ROLE+
+          "','gpt02_private.approvals','SELECT')")=="f", (
+            "COLUMN_SELECT_GRANT_SURVIVED_OWNER_CLEANUP")
+        assert one(name,"postgres",pg_pw,
           "SELECT has_schema_privilege('"+ROLE+"','gpt02_private','USAGE')")=="f"
         assert one(name,"postgres",pg_pw,
           "SELECT count(*) FROM gpt02_relock_audit.reader_issuance_watchdog "
           "WHERE cleaned_at IS NOT NULL")=="1"
         assert one(name,AUDITOR,auditor_pw,
           "SELECT gpt02_relock_audit.relock_expired_phase_b()")=="0"
+        # A user might later regain schema USAGE. Assert that the
+        # *catalog column ACL* is removed, not just hidden by no USAGE.
+        column_acl_after=one(name,"postgres",pg_pw,
+          "SELECT COALESCE(attacl::text,'NO_COLUMN_ACL') "
+          "FROM pg_attribute "
+          "WHERE attrelid='gpt02_private.approvals'::regclass "
+          "AND attname='id' AND attnum>0")
+        assert ROLE not in column_acl_after, (
+          "RETAINED_COLUMN_GRANT_SURVIVED_OWNER_CLEANUP")
         print("PASS_OWNER_HELPER_REVOKED_FIVE_TABLE_GRANTS_AND_SCHEMA",flush=True)
         print("PASS_PHASE_B_CLEANUP_DURABLE_AND_REPLAY_IDEMPOTENT",flush=True)
 
