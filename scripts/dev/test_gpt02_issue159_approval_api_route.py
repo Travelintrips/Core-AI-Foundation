@@ -86,6 +86,8 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         # attestor or issuer from an HTTP fixture.
         api.issue159_chain_readiness_gate = lambda record: True
         api.issue159_precommit_presign_matches = lambda record: True
+        # Tests may mock watchdog health but never start a real supervisor.
+        api.issue159_independent_relock_supervisor_ready = lambda: True
         api.run_after_approval = lambda task_id: {
             "environment": "DEV", "taskId": task_id,
             "autoChainCompleted": False,
@@ -194,6 +196,27 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["authorizationGranted"])
         self.assertFalse(body["dispatchPermitted"])
         self.assertEqual(body["releaseDecision"], "NO_GO")
+
+    def test_missing_independent_relock_watchdog_never_consumes_one_use_approval(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        api.issue159_chain_readiness_gate = SOURCE_CHAIN_GATE
+        with patch.dict(os.environ, {
+            "GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY": "true",
+        }), patch.object(Path, "is_socket", return_value=True), (
+            patch.object(api, "issue159_independent_relock_supervisor_ready",
+                         return_value=False)
+        ):
+            self.assertFalse(SOURCE_CHAIN_GATE({"task_id": 140}))
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 409)
+        self.assertEqual(body["error"], "issue159_auto_chain_not_ready")
+        self.assertFalse(body["dispatchPermitted"])
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 0)
 
     def test_runtime_gate_requires_explicit_flag_issuer_socket_and_clean_outputs(self):
         fixture_record={"task_id": 140}
