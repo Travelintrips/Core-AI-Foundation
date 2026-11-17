@@ -124,6 +124,7 @@ CANONICAL_CURRENT_GUARD_SQL = (
 
 def attest_current_approval_held(
     connection: Any, candidate: dict, read_challenge: str,
+    *, recheck: bool = False,
 ) -> None:
     """Start the pinned READ WRITE guard transaction, do NOT end it here.
 
@@ -168,9 +169,12 @@ def attest_current_approval_held(
         "read_challenge": read_challenge,
     }
     with connection.cursor() as cursor:
-        cursor.execute("SET TRANSACTION READ WRITE")
-        cursor.execute("SET LOCAL statement_timeout = '1500ms'")
-        cursor.execute("SET LOCAL lock_timeout = '1500ms'")
+        if not recheck:
+            # Only the FIRST call may begin the transaction. The post-read
+            # clock recheck must use the SAME still-open FOR SHARE lock.
+            cursor.execute("SET TRANSACTION READ WRITE")
+            cursor.execute("SET LOCAL statement_timeout = '1500ms'")
+            cursor.execute("SET LOCAL lock_timeout = '1500ms'")
         cursor.execute(CANONICAL_CURRENT_GUARD_SQL, bind)
         rows = cursor.fetchmany(2)
         cols = tuple(col.name for col in cursor.description)
@@ -396,6 +400,13 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
                     # the EXISTING trusted lineage contract, no replacement.
                     validate_trusted_lineage_row(
                         packet, roots, int(time.time() * 1000), rows,
+                    )
+                    # FOR SHARE prevents revocation from committing during
+                    # the read, but it cannot stop server-clock expiry.
+                    # Re-evaluate CURRENT approval before accepting rows,
+                    # without starting a second guard transaction.
+                    attest_current_approval_held(
+                        guard_conn, candidate, read_challenge, recheck=True,
                     )
                     result = len(rows) == 1
                 # Explicitly release current-approval lock only AFTER the
