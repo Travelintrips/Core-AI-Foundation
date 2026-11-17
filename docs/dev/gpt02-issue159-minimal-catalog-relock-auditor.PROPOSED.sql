@@ -1,3 +1,10 @@
+-- CAUTION 2026-11-18: CST-DEV ALREADY has an inert NOLOGIN
+-- dev_gpt02_relock_catalog_auditor role. This historical proposal
+-- attempts to CREATE ROLE and is NOT deployable unchanged.
+-- It also only proves catalog state, not owner-split table grants.
+-- Use the separately reviewed owner-split Phase-A/Phase-B proposals;
+-- NEVER apply either directly to live DEV without the table owner's
+-- independently authenticated approval, exact grant audit and release gate.
 -- GPT02 DEV Issue159 — MINIMAL boolean relock audit PROPOSAL.
 -- DRAFT / NEVER APPLY TO LIVE DEV OR PROD. No service or login activated.
 -- Unlike giving a catalog auditor SELECT on pg_authid (which would expose
