@@ -7,6 +7,7 @@ lease issuance or worker dispatch. Uses only synthetic fixture outputs.
 from __future__ import annotations
 
 import json
+import subprocess as real_subprocess
 import tempfile
 import time
 import unittest
@@ -75,6 +76,70 @@ class AutoChainSequenceTest(unittest.TestCase):
         for p in self.patches:
             p.start()
             self.addCleanup(p.stop)
+
+    @staticmethod
+    def _systemd_show(condition="yes", *, result="success", exit_status="0",
+                      active="inactive", load="loaded"):
+        return (
+            f"LoadState={load}\\n"
+            f"ConditionResult={condition}\\n"
+            f"Result={result}\\n"
+            f"ExecMainStatus={exit_status}\\n"
+            f"ActiveState={active}\\n"
+        ).replace("\\n", "\n")
+
+    def _run_unit_with(self, start_rc=0, show_output=None, show_rc=0,
+                       start_exception=None):
+        first=real_subprocess.CompletedProcess([],0,stdout="")
+        second=(
+            start_exception if start_exception is not None else
+            real_subprocess.CompletedProcess([],start_rc,stdout="")
+        )
+        last=real_subprocess.CompletedProcess(
+            [],show_rc,stdout=self._systemd_show() if show_output is None
+            else show_output,
+        )
+        with patch.object(chain, "subprocess", real_subprocess):
+            with patch.object(real_subprocess, "run",
+                              side_effect=[first,second,last]) as runner:
+                chain._unit("gpt02-issue159-attestor-record-once.service")
+        return runner.call_count
+
+    def test_successful_oneshot_requires_condition_result_yes(self):
+        self.assertEqual(self._run_unit_with(), 3)
+
+    def test_systemd_skipped_unit_cannot_fake_success_from_stale_exit_zero(self):
+        with self.assertRaisesRegex(chain.AutoChainError,
+                                    "UNIT_CONDITION_NOT_MET"):
+            self._run_unit_with(show_output=self._systemd_show(condition="no"))
+        self.assertFalse(self.sequence)
+
+    def test_oneshot_unavailable_or_malformed_show_is_denied(self):
+        for output in (
+            self._systemd_show().replace("ConditionResult=yes\\n", ""),
+            "success\\n0\\n",
+            self._systemd_show(load="not-found"),
+            self._systemd_show(active="active"),
+            self._systemd_show(exit_status="1"),
+        ):
+            with self.subTest(value=output[:25]):
+                with self.assertRaisesRegex(chain.AutoChainError,
+                                            "UNIT_RESULT_INVALID"):
+                    self._run_unit_with(show_output=output)
+        with self.assertRaisesRegex(chain.AutoChainError,
+                                    "UNIT_RESULT_UNAVAILABLE"):
+            self._run_unit_with(show_rc=1)
+
+    def test_systemd_start_failure_is_not_marked_completed(self):
+        with self.assertRaisesRegex(chain.AutoChainError,"UNIT_FAILED"):
+            self._run_unit_with(start_rc=1)
+
+    def test_systemd_timeout_is_denied_without_signing(self):
+        with self.assertRaisesRegex(chain.AutoChainError,
+                                    "UNIT_SYSTEMD_UNAVAILABLE"):
+            self._run_unit_with(start_exception=real_subprocess.TimeoutExpired(
+                cmd="systemctl start",timeout=25,
+            ))
 
     def test_successful_synthetic_order_reports_no_dispatch(self):
         result = chain.run_after_approval(201)
