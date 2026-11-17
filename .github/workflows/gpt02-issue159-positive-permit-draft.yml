@@ -142,6 +142,12 @@ jobs:
           GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
             python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
           echo "PASS_OWNER_SPLIT_RELOCK_PG16_AND_PG17_DISPOSABLE_ONLY"
+          # Independent owner maintenance installer review-only; distinct
+          # short-lived synthetic identity, no live roles or credentials.
+          python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
+          echo "PASS_OWNER_MAINTENANCE_PG16_PG17_DISPOSABLE_ONLY"
           python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
           python3 scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py
