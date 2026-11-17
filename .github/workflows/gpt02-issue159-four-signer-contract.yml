@@ -44,6 +44,8 @@ on:
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
       - 'scripts/dev/gpt02_issue159_historical_archive_audit_readonly.py'
       - 'scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py'
+      - 'scripts/dev/gpt02_issue159_approval_packet_recovery.py'
+      - 'scripts/dev/test_gpt02_issue159_approval_packet_recovery.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent_contract.py'
       - 'scripts/dev/gpt02_issue159_approval_store_readiness.py'
       - 'scripts/dev/test_gpt02_issue159_approval_store_readiness.py'
@@ -140,6 +142,9 @@ jobs:
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_sign_once.py
           # Public-key only, root-private archive fixture, NO live /opt data.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py
+          # Recover only an existing, fresh, exact SQLite intent after a packet
+          # publication failure. Synthetic fixtures; no live approval or signer.
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_approval_packet_recovery.py
       - name: Targeted contract typecheck
         working-directory: artifacts/api-server
         run: >-
