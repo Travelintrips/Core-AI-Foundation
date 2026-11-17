@@ -95,6 +95,21 @@ BEGIN
    IF pg_terminate_backend(pid_row.pid,3000) IS NOT TRUE
    THEN RAISE EXCEPTION 'RELOCK_SESSION_TERMINATION_UNCONFIRMED'; END IF;
   END LOOP;
+  -- A direct REVOKE can appear complete while the scoped reader still
+  -- has SET-ROLE membership in another role (or another actor can SET the
+  -- scoped role). Table SELECT / schema USAGE are not proof that these
+  -- membership paths are gone. Preserve the durable Phase-A NOLOGIN
+  -- and leave the cleanup ledger pending until separately remediated.
+  -- The sole expected member of the scoped role is its postgres creator.
+  IF EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    WHERE m.member = item.role_name::regrole
+       OR (m.roleid = item.role_name::regrole
+           AND m.member <> 'postgres'::regrole)
+  ) THEN
+    RAISE EXCEPTION 'RELOCK_SCOPED_ROLE_MEMBERSHIP_PRESENT'
+      USING ERRCODE='42501';
+  END IF;
   -- This nested definer runs as EXISTING gpt02_store_owner. postgres
   -- lacks grant option on all five private tables in actual CST-DEV.
   PERFORM gpt02_private.revoke_expired_scoped_reader_grants(item.role_name);

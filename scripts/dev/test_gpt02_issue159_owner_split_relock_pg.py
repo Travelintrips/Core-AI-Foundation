@@ -222,6 +222,46 @@ VALUES ('{ROLE}',200,'{"a"*64}',clock_timestamp()-interval '1 second');
           "FROM pg_authid WHERE rolname='"+ROLE+"'")=="t"
         print("PASS_OWNER_SPLIT_PHASE_B_ABORT_ROLLBACK_PRESERVES_DURABLE_NOLOGIN",flush=True)
         print("PASS_OWNER_NESTED_REVOKE_ROLLED_BACK_AND_LEDGER_STILL_PENDING",flush=True)
+        # A foreign SET membership must NEVER be hidden by clean direct
+        # table/schema ACLs; the owner helper cannot remove role grants.
+        # Phase A has committed NOLOGIN: rejection keeps the role locked
+        # and ledger pending for an authorized role-membership cleanup.
+        psql(name,"fixture_root",root_pw,
+          "CREATE ROLE rogue_set_target NOLOGIN;"
+          "GRANT rogue_set_target TO "+ROLE+
+          " WITH INHERIT FALSE, SET TRUE;")
+        assert one(name,"postgres",pg_pw,
+          "SELECT pg_has_role('"+ROLE+"','rogue_set_target','SET')")=="t"
+        anomalous=psql(name,AUDITOR,auditor_pw,
+          "SELECT gpt02_relock_audit.relock_expired_phase_b()",check=False)
+        assert anomalous.returncode!=0 and (
+          "RELOCK_SCOPED_ROLE_MEMBERSHIP_PRESENT" in anomalous.stderr
+        ), "OUTBOUND_SET_MEMBERSHIP_FALSE_CLEANUP"
+        assert one(name,"postgres",pg_pw,
+          "SELECT count(*) FROM gpt02_relock_audit.reader_issuance_watchdog "
+          "WHERE cleaned_at IS NULL")=="1"
+        assert one(name,"postgres",pg_pw,
+          "SELECT NOT rolcanlogin AND rolconnlimit=0 AND "
+          "rolpassword IS NULL FROM pg_authid WHERE rolname='"+ROLE+"'")=="t"
+        psql(name,"fixture_root",root_pw,
+          "REVOKE rogue_set_target FROM "+ROLE+";")
+        psql(name,"fixture_root",root_pw,
+          "CREATE ROLE rogue_set_caller NOLOGIN;"
+          "GRANT "+ROLE+" TO rogue_set_caller WITH INHERIT FALSE, SET TRUE;")
+        assert one(name,"postgres",pg_pw,
+          "SELECT pg_has_role('rogue_set_caller','"+ROLE+"','SET')")=="t"
+        inbound=psql(name,AUDITOR,auditor_pw,
+          "SELECT gpt02_relock_audit.relock_expired_phase_b()",check=False)
+        assert inbound.returncode!=0 and (
+          "RELOCK_SCOPED_ROLE_MEMBERSHIP_PRESENT" in inbound.stderr
+        ), "INBOUND_SET_MEMBERSHIP_FALSE_CLEANUP"
+        assert one(name,"postgres",pg_pw,
+          "SELECT count(*) FROM gpt02_relock_audit.reader_issuance_watchdog "
+          "WHERE cleaned_at IS NULL")=="1"
+        psql(name,"fixture_root",root_pw,
+          "REVOKE "+ROLE+" FROM rogue_set_caller;")
+        print("PASS_RELOCK_REJECTS_UNEXPECTED_INBOUND_OUTBOUND_SET_MEMBERSHIP",flush=True)
+
         # Retry on an independent PostgreSQL connection.
         assert one(name,AUDITOR,auditor_pw,
           "SELECT gpt02_relock_audit.relock_expired_phase_b()")=="1"
