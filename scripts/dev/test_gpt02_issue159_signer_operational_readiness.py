@@ -63,6 +63,12 @@ def runtime(**patch):
         "issuerReaderBundleVerified": False,
         "authorizerAdaptersInstalled": False,
         "approvalIntentTrustedReadCurrent": False,
+        "oneShotBrokerSourceInstalled": False,
+        "relockWatchdogUnitMetadataPresent": False,
+        "relockEncryptedCredentialMetadataPresent": False,
+        "oneShotReaderSupervisorOperational": False,
+        "independentRelockWatchdogOperational": False,
+        "canonicalCurrentApprovalGuardVerified": False,
     }
     base.update(patch)
     return base
@@ -128,6 +134,78 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertFalse(out["signingPermitted"])
         self.assertFalse(out["operationalSigningReady"])
         self.assertEqual(out["releaseDecision"], "NO_GO")
+
+    def test_broker_watchdog_and_current_approval_blockers_are_separate(self):
+        out = readiness.assess(approval(evidence=True),
+                               custody(host_secret=True, credentials=4),
+                               runtime())
+        expected = {
+            "ONE_SHOT_READER_BROKER_SOURCE_NOT_INSTALLED",
+            "INDEPENDENT_RELOCK_CUSTODY_NOT_PROVISIONED",
+            "ONE_SHOT_READER_SUPERVISOR_NOT_OPERATIONAL",
+            "INDEPENDENT_RELOCK_WATCHDOG_NOT_OPERATIONAL",
+            "CANONICAL_CURRENT_APPROVAL_GUARD_NOT_VERIFIED",
+        }
+        self.assertTrue(expected.issubset(set(out["blockers"])))
+        self.assertFalse(out["signingPermitted"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+
+    def test_release_metadata_never_grants_signing(self):
+        inputs = dict(
+            oneShotBrokerSourceInstalled=True,
+            relockWatchdogUnitMetadataPresent=True,
+            relockEncryptedCredentialMetadataPresent=True,
+            oneShotReaderSupervisorOperational=True,
+            independentRelockWatchdogOperational=True,
+            canonicalCurrentApprovalGuardVerified=True,
+        )
+        out = readiness.assess(approval(evidence=True),
+                               custody(host_secret=True, credentials=4),
+                               runtime(**inputs))
+        blocked = set(out["blockers"])
+        for missing in (
+            "ONE_SHOT_READER_BROKER_SOURCE_NOT_INSTALLED",
+            "INDEPENDENT_RELOCK_CUSTODY_NOT_PROVISIONED",
+            "ONE_SHOT_READER_SUPERVISOR_NOT_OPERATIONAL",
+            "INDEPENDENT_RELOCK_WATCHDOG_NOT_OPERATIONAL",
+            "CANONICAL_CURRENT_APPROVAL_GUARD_NOT_VERIFIED",
+        ):
+            self.assertNotIn(missing, blocked)
+        for field in ("signingPermitted", "authorizationGranted",
+                      "dispatchPermitted", "operationalSigningReady"):
+            self.assertIs(out[field], False)
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+        for key in inputs:
+            self.assertTrue(out[key])
+            out_without = readiness.assess(
+                approval(evidence=True),
+                custody(host_secret=True, credentials=4),
+                runtime(**{**inputs, key: False}),
+            )
+            self.assertFalse(out_without[key])
+            self.assertEqual(out_without["releaseDecision"], "NO_GO")
+
+    def test_release_credential_file_probe_is_metadata_only(self):
+        file = Path("/synthetic/fixture/never-opened.cred")
+        good = SimpleNamespace(st_mode=stat.S_IFREG | 0o600,
+                               st_uid=0, st_gid=0, st_size=32)
+        with patch.object(Path, "lstat", return_value=good) as lstat:
+            self.assertTrue(readiness._root_owned_regular_metadata(
+                file, encrypted_credential=True))
+            lstat.assert_called_once()
+        for mode, owner, size in (
+            (stat.S_IFLNK | 0o600, 0, 32),
+            (stat.S_IFREG | 0o644, 0, 32),
+            (stat.S_IFREG | 0o600, 1000, 32),
+            (stat.S_IFREG | 0o600, 0, 0),
+        ):
+            with self.subTest(mode=mode, owner=owner, size=size):
+                invalid = SimpleNamespace(st_mode=mode, st_uid=owner,
+                                          st_gid=0, st_size=size)
+                with patch.object(Path, "lstat", return_value=invalid):
+                    self.assertFalse(readiness._root_owned_regular_metadata(
+                        file, encrypted_credential=True))
 
     def test_even_all_metadata_present_cannot_claim_operational_signing(self):
         out = readiness.assess(
