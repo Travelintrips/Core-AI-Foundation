@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import gpt02_issue159_auto_chain as chain
+SOURCE_UNIT = chain._unit
 
 
 class AutoChainSequenceTest(unittest.TestCase):
@@ -102,7 +103,7 @@ class AutoChainSequenceTest(unittest.TestCase):
         with patch.object(chain, "subprocess", real_subprocess):
             with patch.object(real_subprocess, "run",
                               side_effect=[first,second,last]) as runner:
-                chain._unit("gpt02-issue159-attestor-record-once.service")
+                SOURCE_UNIT("gpt02-issue159-attestor-record-once.service")
         return runner.call_count
 
     def test_successful_oneshot_requires_condition_result_yes(self):
@@ -116,7 +117,7 @@ class AutoChainSequenceTest(unittest.TestCase):
 
     def test_oneshot_unavailable_or_malformed_show_is_denied(self):
         for output in (
-            self._systemd_show().replace("ConditionResult=yes\\n", ""),
+            self._systemd_show().replace("ConditionResult=yes" + chr(10), ""),
             "success\\n0\\n",
             self._systemd_show(load="not-found"),
             self._systemd_show(active="active"),
