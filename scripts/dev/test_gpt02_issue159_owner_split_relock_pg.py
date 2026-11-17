@@ -261,6 +261,43 @@ VALUES ('{ROLE}',200,'{"a"*64}',clock_timestamp()-interval '1 second');
         psql(name,"fixture_root",root_pw,
           "REVOKE "+ROLE+" FROM rogue_set_caller;")
         print("PASS_RELOCK_REJECTS_UNEXPECTED_INBOUND_OUTBOUND_SET_MEMBERSHIP",flush=True)
+        # Even the sole accepted creator-admin relationship must not
+        # grant SET or INHERIT of the scoped role. The earlier filter
+        # omitted this privilege escalation route for creator membership.
+        psql(name,"fixture_root",root_pw,
+          "GRANT "+ROLE+" TO postgres WITH ADMIN TRUE, "
+          "INHERIT FALSE, SET TRUE;")
+        assert one(name,"postgres",pg_pw,
+          "SELECT pg_has_role('postgres','"+ROLE+"','SET')")=="t"
+        creator_set=psql(name,AUDITOR,auditor_pw,
+          "SELECT gpt02_relock_audit.relock_expired_phase_b()",check=False)
+        assert creator_set.returncode!=0 and (
+          "RELOCK_SCOPED_ROLE_MEMBERSHIP_PRESENT" in creator_set.stderr
+        ), "CREATOR_SET_TRUE_FALSE_CLEANUP"
+        assert one(name,"postgres",pg_pw,
+          "SELECT count(*) FROM gpt02_relock_audit.reader_issuance_watchdog "
+          "WHERE cleaned_at IS NULL")=="1"
+        psql(name,"fixture_root",root_pw,
+          "GRANT "+ROLE+" TO postgres WITH ADMIN TRUE, "
+          "INHERIT TRUE, SET FALSE;")
+        assert one(name,"postgres",pg_pw,
+          "SELECT bool_or(inherit_option)::text FROM pg_auth_members "
+          "WHERE member='postgres'::regrole "
+          "AND roleid='"+ROLE+"'::regrole")=="true"
+        creator_inherit=psql(name,AUDITOR,auditor_pw,
+          "SELECT gpt02_relock_audit.relock_expired_phase_b()",check=False)
+        assert creator_inherit.returncode!=0 and (
+          "RELOCK_SCOPED_ROLE_MEMBERSHIP_PRESENT" in creator_inherit.stderr
+        ), "CREATOR_INHERIT_TRUE_FALSE_CLEANUP"
+        assert one(name,"postgres",pg_pw,
+          "SELECT NOT rolcanlogin AND rolconnlimit=0 AND "
+          "rolpassword IS NULL FROM pg_authid WHERE rolname='"+ROLE+"'")=="t"
+        psql(name,"fixture_root",root_pw,
+          "GRANT "+ROLE+" TO postgres WITH ADMIN TRUE, "
+          "INHERIT FALSE, SET FALSE;")
+        assert one(name,"postgres",pg_pw,
+          "SELECT pg_has_role('postgres','"+ROLE+"','SET')")=="f"
+        print("PASS_CREATOR_ADMIN_SET_INHERIT_OPTIONS_MUST_BE_FALSE",flush=True)
 
         # Retry on an independent PostgreSQL connection.
         assert one(name,AUDITOR,auditor_pw,

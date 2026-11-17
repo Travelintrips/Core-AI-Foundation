@@ -105,7 +105,8 @@ BEGIN
     SELECT 1 FROM pg_auth_members m
     WHERE m.member = item.role_name::regrole
        OR (m.roleid = item.role_name::regrole
-           AND m.member <> 'postgres'::regrole)
+           AND (m.member <> 'postgres'::regrole
+                OR m.set_option OR m.inherit_option))
   ) THEN
     RAISE EXCEPTION 'RELOCK_SCOPED_ROLE_MEMBERSHIP_PRESENT'
       USING ERRCODE='42501';
