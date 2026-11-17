@@ -133,6 +133,42 @@ class CustodyMetaTest(unittest.TestCase):
                 self.assertEqual(result["reason"],
                                  "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
 
+    def test_sandbox_override_and_unreviewed_commands_fail_closed(self):
+        # These additions used to make metadataReady=True because the
+        # old check compared a de-duplicated set of required directives.
+        scenarios = (
+            ("ProtectSystem=off", "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED"),
+            ("NoNewPrivileges=no", "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED"),
+            ("PrivateTmp=no", "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED"),
+            ("ProtectSystem=strict", "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED"),
+            ("Environment=APP_ENV=development",
+             "AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED"),
+            ("Environment=PGPASSWORD=not-a-real-secret",
+             "AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED"),
+            ("EnvironmentFile=/tmp/unreviewed-file",
+             "AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED"),
+            ("PassEnvironment=PGPASSWORD",
+             "AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED"),
+            ("UnsetEnvironment=APP_ENV",
+             "AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED"),
+            ("ExecStartPre=/bin/true",
+             "AUDITOR_UNIT_UNREVIEWED_EXEC_OR_MOUNT_DENIED"),
+            ("RootDirectory=/tmp",
+             "AUDITOR_UNIT_UNREVIEWED_EXEC_OR_MOUNT_DENIED"),
+            ("NetworkNamespacePath=/tmp/unreviewed",
+             "AUDITOR_UNIT_UNREVIEWED_EXEC_OR_MOUNT_DENIED"),
+            (MOD.EXPECTED_BIND, "AUDITOR_CREDENTIAL_ALIAS_NOT_EXCLUSIVE"),
+        )
+        for injected, reason in scenarios:
+            with self.subTest(injected=injected):
+                self.unit.write_text(
+                    self.valid_lines + injected + "\n", encoding="utf-8",
+                )
+                result = self.check()
+                self.assert_denied(result)
+                self.assertIs(result["unitMetadataReady"], False)
+                self.assertEqual(result["reason"], reason)
+
     def test_systemd_dropin_directory_denied(self):
         dropin = self.unit.parent / (self.unit.name + ".d")
         dropin.mkdir()
