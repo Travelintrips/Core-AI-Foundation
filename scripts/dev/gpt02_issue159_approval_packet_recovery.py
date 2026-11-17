@@ -57,19 +57,37 @@ def deny(code: str):
 
 
 def private_regular(path: Path, owner: int, *, binary_read: bool = True) -> bytes | None:
+    # Open the exact inode with O_NOFOLLOW and fstat the open descriptor.
+    # lstat() followed by read_bytes() would permit a path-swap race.
+    fd = None
     try:
-        meta = path.lstat()
+        fd = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0),
+        )
+        meta = os.fstat(fd)
         if (
             not stat.S_ISREG(meta.st_mode) or meta.st_uid != owner
+            or (owner == 0 and meta.st_gid != 0)
             or stat.S_IMODE(meta.st_mode) != 0o600 or meta.st_nlink != 1
             or meta.st_size <= 0 or (binary_read and meta.st_size > 20000)
         ):
             deny("SOURCE_PRIVATE_CUSTODY_INVALID")
-        return path.read_bytes() if binary_read else None
+        if not binary_read:
+            return None
+        with os.fdopen(fd, "rb") as reader:
+            fd = None
+            data = reader.read(meta.st_size + 1)
+        if len(data) != meta.st_size:
+            deny("SOURCE_PRIVATE_CUSTODY_INVALID")
+        return data
     except FileNotFoundError:
         deny("SOURCE_PRIVATE_FILE_MISSING")
     except OSError:
         deny("SOURCE_PRIVATE_FILE_UNREADABLE")
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 def slot_clear(target: Path) -> bool:
