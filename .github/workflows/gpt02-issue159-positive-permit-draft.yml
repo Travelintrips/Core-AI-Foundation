@@ -136,6 +136,12 @@ jobs:
           # GRANT OPTION on the five gpt02_store_owner tables.
           # Isolated PG16 only, no connection to CST-DEV or PROD.
           python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          # CST-DEV is PostgreSQL 17. Exercise the same owner boundary
+          # in another disposable network-isolated PG17 instance.
+          # This never connects to live Supabase or starts the VPS service.
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          echo "PASS_OWNER_SPLIT_RELOCK_PG16_AND_PG17_DISPOSABLE_ONLY"
           python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
           python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
           python3 scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py
