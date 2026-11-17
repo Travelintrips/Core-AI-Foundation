@@ -130,7 +130,28 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
               "ALTER ROLE "+role+" LOGIN CONNECTION LIMIT 1 PASSWORD '"+
               roles_pw[role]+"';"
             )
-        psql(name,"postgres",postgres_pw,"BEGIN;"+"".join(registrations)+"COMMIT;")
+        arm_sql="BEGIN;"+"".join(registrations)+"COMMIT; SELECT pg_sleep(60);"
+        opener=subprocess.Popen(
+            ["docker","exec","-i","-e","PGPASSWORD="+postgres_pw,name,
+             "psql","-X","-w","-v","ON_ERROR_STOP=1","-h","127.0.0.1",
+             "-U","postgres","-d","postgres","-At","-c",arm_sql],
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        for _ in range(35):
+            pending=one(name,"postgres",postgres_pw,
+              "SELECT count(*) FROM gpt02_relock_audit.writer_issuance_watchdog "
+              "WHERE cleaned_at IS NULL")
+            enabled=one(name,"postgres",postgres_pw,
+              "SELECT count(*) FROM pg_roles WHERE rolname IN ("+role_names+
+              ") AND rolcanlogin AND rolconnlimit=1")
+            if pending=="3" and enabled=="3":break
+            time.sleep(.15)
+        else:raise AssertionError("WINDOW_COORDINATOR_DID_NOT_ARM_ALL_ROLES")
+        # Simulate abrupt main-process death after commit. The DB watchdog
+        # row is durable and the independent auditor is the only cleanup path.
+        opener.kill()
+        opener.wait(timeout=4)
+        opener=None
+        print("PASS_MAIN_WINDOW_COORDINATOR_KILLED_AFTER_DURABLE_ARM",flush=True)
         # Only one not-yet-cleaned row per fixed role is permitted.
         duplicate=psql(name,"postgres",postgres_pw,
           "INSERT INTO gpt02_relock_audit.writer_issuance_watchdog "
@@ -218,7 +239,26 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
               "ALTER ROLE "+role+" LOGIN CONNECTION LIMIT 1 PASSWORD '"+
               second_pw[role]+"' VALID UNTIL '"+second_expiry+"';"
             )
-        psql(name,"postgres",postgres_pw,"BEGIN;"+"".join(second)+"COMMIT;")
+        second_arm="BEGIN;"+"".join(second)+"COMMIT; SELECT pg_sleep(60);"
+        opener=subprocess.Popen(
+            ["docker","exec","-i","-e","PGPASSWORD="+postgres_pw,name,
+             "psql","-X","-w","-v","ON_ERROR_STOP=1","-h","127.0.0.1",
+             "-U","postgres","-d","postgres","-At","-c",second_arm],
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        for _ in range(35):
+            pending=one(name,"postgres",postgres_pw,
+              "SELECT count(*) FROM gpt02_relock_audit.writer_issuance_watchdog "
+              "WHERE cleaned_at IS NULL")
+            enabled=one(name,"postgres",postgres_pw,
+              "SELECT count(*) FROM pg_roles WHERE rolname IN ("+role_names+
+              ") AND rolcanlogin AND rolconnlimit=1")
+            if pending=="3" and enabled=="3":break
+            time.sleep(.15)
+        else:raise AssertionError("SECOND_WINDOW_COORDINATOR_DID_NOT_ARM_ALL_ROLES")
+        opener.kill()
+        opener.wait(timeout=4)
+        opener=None
+        print("PASS_SECOND_WINDOW_COORDINATOR_KILLED_AFTER_DURABLE_ARM",flush=True)
         for role in ROLES:
             proc=subprocess.Popen(
                 ["docker","exec","-e","PGPASSWORD="+second_pw[role],name,
@@ -249,6 +289,9 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
         print("PASS_REPEATED_WINDOW_HISTORY_AND_INDEPENDENT_RELOCK",flush=True)
         print("DISPOSABLE_PG17_ONLY_NO_CST_DEV_OR_PROD_MUTATIONS",flush=True)
     finally:
+        if opener is not None:
+            try:opener.kill();opener.wait(timeout=4)
+            except Exception:pass
         for proc in delayed:
             try:
                 if proc.poll() is None:proc.terminate()
