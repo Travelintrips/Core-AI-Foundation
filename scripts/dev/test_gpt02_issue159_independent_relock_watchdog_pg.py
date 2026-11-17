@@ -153,8 +153,31 @@ def main():
         # Whitelist the EXACT predetermined role, not caller-controlled
         # SQL identifiers or a regex that might match other tasks.
         safe_role = role.replace("'", "''")
+        # Durable phase A commits NOLOGIN/PASSWORD NULL BEFORE any active
+        # reader is killed. A post-terminate login cannot race a still-
+        # uncommitted ALTER ROLE. A crash after phase A remains recoverable
+        # because cleaned_at is committed ONLY in phase B.
         cleanup = (
             "SELECT pg_sleep(5);\n"
+            "BEGIN;\n"
+            "DO $relock$\n"
+            "DECLARE rec record;\n"
+            "BEGIN\n"
+            " FOR rec IN SELECT role_name FROM "
+            "gpt02_private.reader_issuance_watchdog "
+            "WHERE expires_at <= clock_timestamp() AND cleaned_at IS NULL "
+            "FOR UPDATE LOOP\n"
+            " IF rec.role_name <> " + quote(role) +
+            " THEN RAISE EXCEPTION 'UNEXPECTED_WATCHDOG_ROLE'; END IF;\n"
+            " EXECUTE format('ALTER ROLE %I NOLOGIN CONNECTION LIMIT 0 "
+            "PASSWORD NULL', rec.role_name);\n"
+            " END LOOP;\n"
+            "END $relock$;\n"
+            "COMMIT;\n"
+            # The fixture intentionally delays phase B so a separate,
+            # unauthenticated parent test can assert durable NOLOGIN and
+            # prove the existing active reader has not yet terminated.
+            "SELECT pg_sleep(3);\n"
             "BEGIN;\n"
             "DO $cleanup$\n"
             "DECLARE rec record; victim record;\n"
@@ -165,8 +188,9 @@ def main():
             "FOR UPDATE LOOP\n"
             " IF rec.role_name <> " + quote(role) +
             " THEN RAISE EXCEPTION 'UNEXPECTED_WATCHDOG_ROLE'; END IF;\n"
-            # Do not acquire new DDL locks while the failed reader is
-            # holding the five protected tables open in a query.
+            " IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname=rec.role_name "
+            "AND (rolcanlogin OR rolconnlimit<>0)) THEN "
+            "RAISE EXCEPTION 'WATCHDOG_RELOCK_NOT_COMMITTED'; END IF;\n"
             " FOR victim IN SELECT pid FROM pg_stat_activity "
             "WHERE usename=rec.role_name AND pid<>pg_backend_pid() LOOP\n"
             " IF pg_terminate_backend(victim.pid,3000) IS NOT TRUE "
@@ -178,8 +202,6 @@ def main():
             " FROM %I', rec.role_name);\n"
             " EXECUTE format('REVOKE USAGE ON SCHEMA gpt02_private "
             "FROM %I', rec.role_name);\n"
-            " EXECUTE format('ALTER ROLE %I NOLOGIN CONNECTION LIMIT 0 "
-            "PASSWORD NULL', rec.role_name);\n"
             " UPDATE gpt02_private.reader_issuance_watchdog "
             "SET cleaned_at=clock_timestamp() WHERE role_name=rec.role_name;\n"
             " END LOOP;\n"
@@ -189,11 +211,41 @@ def main():
         watchdog = subprocess.Popen(
             ["docker", "exec", "-i", db_name, "psql", "-X",
              "-v", "ON_ERROR_STOP=1", "-U", "postgres",
-             "-d", "postgres", "-At"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+             "-d", "postgres", "-Atc", cleanup],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True,
         )
-        out, err = watchdog.communicate(cleanup, timeout=15)
+        # Observe phase A DURABLY committed while the original five-table
+        # reader still holds its active session; cleanup has not yet begun.
+        locked_before_terminate = False
+        for _ in range(115):
+            meta = psql(db_name,
+                "SELECT NOT r.rolcanlogin AND r.rolconnlimit=0 "
+                "AND r.rolpassword IS NULL FROM pg_authid r WHERE r.rolname=" +
+                quote(role))
+            if meta.stdout.strip() == "t":
+                active = psql(db_name,
+                    "SELECT count(*) FROM pg_stat_activity WHERE usename=" +
+                    quote(role)).stdout.strip()
+                pending = psql(db_name,
+                    "SELECT count(*) FROM gpt02_private.reader_issuance_watchdog "
+                    "WHERE role_name=" + quote(role) +
+                    " AND cleaned_at IS NULL").stdout.strip()
+                if active != "1" or pending != "1":
+                    raise AssertionError("DURABLE_RELOCK_PHASE_A_ORDER_INVALID")
+                locked_before_terminate = True
+                break
+            if watchdog.poll() is not None:
+                break
+            time.sleep(.05)
+        if not locked_before_terminate:
+            raise AssertionError("DURABLE_NOLOGIN_NOT_OBSERVED_BEFORE_TERMINATE")
+        assert call(login(db_name, role, disposable_password,
+                          "SELECT 1"), check=False).returncode != 0, (
+            "LATE_LOGIN_STILL_ACCEPTED_AFTER_COMMITTED_NOLOGIN")
+        print("PASS_DURABLE_NOLOGIN_BEFORE_READER_TERMINATION_NO_LATE_LOGIN")
+        print("PASS_PENDING_CLEANUP_RETRYABLE_AFTER_PHASE_A_COMMIT")
+        out, err = watchdog.communicate(timeout=18)
         if watchdog.returncode:
             raise RuntimeError("DISPOSABLE_WATCHDOG_FAILED:" + err[-1300:])
         held.communicate(timeout=8)
