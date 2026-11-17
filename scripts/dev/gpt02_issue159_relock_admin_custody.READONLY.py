@@ -107,13 +107,15 @@ def check_custody_metadata(unit: Path, encrypted_credential: Path) -> dict:
                 return _fail("AUDITOR_UNIT_OVERRIDE_OR_DUPLICATE_DENIED")
         # No secondary environment, pre/post commands, or mount namespace
         # overrides are reviewed for this independent credential boundary.
+        # The privileged supervisor executable does not exist yet: even
+        # ExecStart must be reviewed/pinned before metadata can claim ready.
         for line in effective_lines:
             if (line.startswith(("Environment=", "EnvironmentFile=",
                                  "PassEnvironment=", "UnsetEnvironment="))
                     and line != "Environment=APP_ENV=development"):
                 return _fail("AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED")
             if line.startswith((
-                "ExecStartPre=", "ExecStartPost=", "ExecCondition=",
+                "ExecStart=", "ExecStartPre=", "ExecStartPost=", "ExecCondition=",
                 "ExecReload=", "ExecStop=", "ExecStopPost=",
                 "BindPaths=", "RootDirectory=", "RootImage=",
                 "NetworkNamespacePath=",
