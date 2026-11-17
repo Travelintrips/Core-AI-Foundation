@@ -237,13 +237,43 @@ class PrepareIssue159ApprovalRequestTest(unittest.TestCase):
         )
         with patch.dict(sys.modules, {
             "gpt02_issue159_approval_request_refresh": module,
-        }):
+        }), patch.object(prepare_module.time, "time", return_value=now / 1000):
             prepare_module._require_operational_pre_sign(claims, now)
         self.assertEqual(captured[0], ("read", {
             "companyId": "default", "hubTaskId": 172,
             "commandCandidateId": COMMAND, "attemptId": ATTEMPT,
         }))
         self.assertEqual(captured[1], ("verify", facts, claims, now))
+
+    def test_slow_trusted_reader_uses_post_io_time(self):
+        """An eight-second native reader may not be judged by a stale clock."""
+        now = 1_800_000_000_000
+        clock = [now]
+        claims = {
+            "companyId": "default", "taskId": 172,
+            "commandId": COMMAND, "attemptId": ATTEMPT,
+            "expiresAt": now + 240_000,
+        }
+        observations = []
+        def reader(query):
+            clock[0] += 8000
+            return {"observedAt": clock[0], "source": "trusted-fixture"}
+        def verifier(facts, proposed, observed_at):
+            observations.append(observed_at)
+            if abs(facts["observedAt"] - observed_at) > 5000:
+                raise RuntimeError("STALENESS_GUARD")
+            return now + 300_000
+        fake_reader = types.SimpleNamespace(
+            _socket_fact_reader=reader,
+            _verify_pre_sign_facts=verifier,
+        )
+        with patch.dict(sys.modules, {
+            "gpt02_issue159_approval_request_refresh": fake_reader,
+        }), patch.object(prepare_module.time, "time",
+                        side_effect=lambda: clock[0] / 1000):
+            prepare_module._require_operational_pre_sign(claims, now)
+        self.assertEqual(observations, [now + 8000])
+        self.assertFalse(os.path.exists(self.output))
 
     def test_operational_preparer_denies_reader_failure_or_expired_preparation(self):
         now = 1_800_000_000_000
