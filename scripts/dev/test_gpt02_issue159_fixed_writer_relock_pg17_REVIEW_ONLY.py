@@ -6,7 +6,6 @@ All Docker containers are network isolated and deleted in finally.
 """
 import os,secrets,subprocess,time,uuid
 from datetime import datetime,timezone,timedelta
-from datetime import datetime,timezone,timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +47,7 @@ def main():
     roles_pw={role:secrets.token_urlsafe(28) for role in ROLES}
     role_names=",".join("'"+r+"'" for r in ROLES)
     delayed=[]
+    opener=None
     try:
         command(["docker","run","--rm","-d","--network","none","--name",name,
                  "-e","POSTGRES_USER=fixture_root",
@@ -239,6 +239,16 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
               "SELECT count(*) FROM pg_stat_activity WHERE usename='"+role+"'")=="0"
         print("PASS_PHASE_B_TERMINATES_ALL_SESSIONS_AND_IS_IDEMPOTENT",flush=True)
 
+        # The second window models CST-DEV's real historical baseline:
+        # two expired VALID UNTIL values must be restored *exactly*, not
+        # silently rewritten to infinity. The first window already covered
+        # NULL/infinity and a future expiration without touching live DEV.
+        psql(name,"postgres",postgres_pw,
+          "ALTER ROLE dev_gpt02_attestor_evidence "
+          "VALID UNTIL '1970-01-01 00:00:00+00';"
+          "ALTER ROLE gpt02_issuer_evidence_reader "
+          "VALID UNTIL '2026-11-14 20:15:47+00';")
+
         # A second task can use the same fixed roles after the prior rows
         # are cleaned; the history is retained and only one open row is allowed.
         second_pw={role:secrets.token_urlsafe(28) for role in ROLES}
@@ -298,13 +308,17 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
         for role in ROLES:
             assert yes(name,"postgres",postgres_pw,
               "SELECT NOT rolcanlogin AND rolconnlimit=0 AND rolpassword IS NULL "
-              "AND ((rolname='dev_gpt02_issuer_evidence' AND "
+              "AND ((rolname='dev_gpt02_attestor_evidence' AND "
+              "rolvaliduntil='1970-01-01 00:00:00+00'::timestamptz) OR "
+              "(rolname='dev_gpt02_issuer_evidence' AND "
               "rolvaliduntil='2035-01-01 00:00:00+00'::timestamptz) OR "
-              "(rolname<>'dev_gpt02_issuer_evidence' AND rolvaliduntil='infinity'::timestamptz)) "
+              "(rolname='gpt02_issuer_evidence_reader' AND "
+              "rolvaliduntil='2026-11-14 20:15:47+00'::timestamptz)) "
               "FROM pg_authid WHERE rolname='"+role+"'")
             assert one(name,"postgres",postgres_pw,
               "SELECT count(*) FROM pg_stat_activity WHERE usename='"+role+"'")=="0"
         print("PASS_REPEATED_WINDOW_HISTORY_AND_INDEPENDENT_RELOCK",flush=True)
+        print("PASS_EXPIRED_DEV_ROLE_VALID_UNTIL_RESTORED",flush=True)
         print("DISPOSABLE_PG17_ONLY_NO_CST_DEV_OR_PROD_MUTATIONS",flush=True)
     finally:
         if opener is not None:
