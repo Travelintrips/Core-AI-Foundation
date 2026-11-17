@@ -7,6 +7,7 @@ from admin_identity import admin_identity
 from gpt02_issue159_approval_http import handle_issue159_approval_intent
 from gpt02_issue159_approval_intent_contract import ApprovalIntentContractError, validate_approval_claims
 from gpt02_issue159_approval_request_refresh import refresh_pending, RefreshDenied
+from gpt02_issue159_auto_chain import run_after_approval, AutoChainError
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
 ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
@@ -61,6 +62,18 @@ def issue159_operator_identity(identity,connection):
          'enabled':True,'authMethod':'supabase_admin_session'}
 def issue159_identity_verifier(token,connection):
  return issue159_operator_identity(admin_identity(token,connection),connection)
+def issue159_chain_readiness_gate(record):
+ # Additional DEV-only precommit guard. Do not consume a one-shot Super Admin
+ # approval while issuer reader or one-time signer output custody is not ready.
+ if os.environ.get('GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY','false').strip().lower()!='true':
+  return False
+ if type(record.get('task_id')) is not int or record['task_id']<=139:
+  return False
+ if not Path('/run/gpt02-issuer-reader/reader.sock').is_socket():
+  return False
+ if not issue159_signer_output_preflight_clear():
+  return False
+ return True
 # Read-only preflight. These are the exact retained RuntimeDirectory outputs
 # of the four existing one-shot signer roles. A previous task's signature
 # must NEVER be deleted/overwritten to make room for a new approval.
@@ -239,9 +252,8 @@ class Handler(BaseHTTPRequestHandler):
     if n<0 or n>8192:return self.send(400,{'error':'invalid_size'})
     raw=self.rfile.read(n)
     data=json.loads(raw.decode('utf-8'))
-    # Reuse the SAME authenticated Super Admin/HUB-operator mapping as
-    # the protected GET route. Never leak output occupancy to anonymous
-    # requests, invalid roles, or requests without a valid claims body.
+    # Never report retained signature state before authenticating and
+    # confirming the pinned Super Admin-to-Hub operator mapping.
     if ISSUE159_APPROVAL_INTENT_ENABLED and isinstance(data,dict) and set(data)=={'claims'}:
      auth=self.headers.get('Authorization','')
      if auth.startswith('Bearer '):
@@ -254,9 +266,16 @@ class Handler(BaseHTTPRequestHandler):
     with conn() as c:
      status,body=handle_issue159_approval_intent(
       self.headers.get('Authorization',''),raw,c,issue159_identity_verifier,
-      enabled=ISSUE159_APPROVAL_INTENT_ENABLED)
+      enabled=ISSUE159_APPROVAL_INTENT_ENABLED,
+      readiness_gate=issue159_chain_readiness_gate)
     if status==201 and isinstance(data,dict) and set(data)=={'claims'}:
      persist_issue159_approved_packet(data['claims'],body)
+     try:
+      chain=run_after_approval(data['claims']['taskId'])
+      body={**body,**chain}
+     except AutoChainError as exc:
+      body={**body,'autoChainCompleted':False,'autoChainError':str(exc),
+       'authorizationGranted':False,'dispatchPermitted':False,'releaseDecision':'NO_GO'}
     return self.send(status,body)
    except (ValueError,TypeError,KeyError,sqlite3.Error):
     return self.send(400,{'error':'invalid_request'})

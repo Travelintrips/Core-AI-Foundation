@@ -30,6 +30,9 @@ spec = importlib.util.spec_from_file_location("approval_api_issue159_test", API_
 api = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(api)
+# Capture the real source guard before per-test HTTP fixtures replace the
+# service-calling dependency with inert fail-closed test callbacks.
+SOURCE_CHAIN_GATE = api.issue159_chain_readiness_gate
 
 BASE_NOW_MS = int(time.time() * 1000)
 
@@ -76,6 +79,16 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         api.TOKEN = STATIC_TOKEN
         api.ISSUE159_APPROVAL_INTENT_ENABLED = False
         api.admin_identity = lambda token, connection: None
+        # Tests exercise the API only. Never run any real systemd signer,
+        # attestor or issuer from an HTTP fixture.
+        api.issue159_chain_readiness_gate = lambda record: True
+        api.run_after_approval = lambda task_id: {
+            "environment": "DEV", "taskId": task_id,
+            "autoChainCompleted": False,
+            "autoChainError": "ISOLATED_TEST_NO_SIGNER",
+            "authorizationGranted": False, "dispatchPermitted": False,
+            "releaseDecision": "NO_GO",
+        }
         # Every test uses an isolated signature-output namespace, never the
         # running VPS/systemd RuntimeDirectory.
         self.signer_fixture = tempfile.TemporaryDirectory(
@@ -174,6 +187,36 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["authorizationGranted"])
         self.assertFalse(body["dispatchPermitted"])
         self.assertEqual(body["releaseDecision"], "NO_GO")
+
+    def test_runtime_gate_requires_explicit_flag_issuer_socket_and_clean_outputs(self):
+        fixture_record={"task_id": 140}
+        with patch.dict(os.environ, {"GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY":"false"}):
+            with patch.object(Path, "is_socket", return_value=True):
+                self.assertFalse(SOURCE_CHAIN_GATE(fixture_record))
+        with patch.dict(os.environ, {"GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY":"true"}):
+            with patch.object(Path, "is_socket", return_value=False):
+                self.assertFalse(SOURCE_CHAIN_GATE(fixture_record))
+            with patch.object(Path, "is_socket", return_value=True):
+                self.assertFalse(SOURCE_CHAIN_GATE({"task_id": None}))
+                self.assertTrue(SOURCE_CHAIN_GATE(fixture_record))
+                output=api.ISSUE159_SIGNER_OUTPUTS[-1]
+                output.write_text("fixture-preserved-issuer-signature")
+                self.assertFalse(SOURCE_CHAIN_GATE(fixture_record))
+                self.assertEqual(output.read_text(), "fixture-preserved-issuer-signature")
+                output.unlink()
+
+    def test_existing_live_readiness_gate_denies_before_approval_write(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        api.issue159_chain_readiness_gate = lambda record: False
+        status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 409)
+        self.assertEqual(body["error"], "issue159_auto_chain_not_ready")
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 0)
 
     def test_signer_collision_blocks_pending_and_new_approval_before_write(self):
         api.admin_identity = lambda token, connection: {
