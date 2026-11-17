@@ -363,7 +363,17 @@ class Handler(BaseHTTPRequestHandler):
       enabled=ISSUE159_APPROVAL_INTENT_ENABLED,
       readiness_gate=issue159_chain_readiness_gate)
     if status==201 and isinstance(data,dict) and set(data)=={'claims'}:
-     persist_issue159_approved_packet(data['claims'],body)
+     try:
+      persist_issue159_approved_packet(data['claims'],body)
+     except OSError:
+      # The one-use SQLite approval has ALREADY COMMITTED. Never suggest
+      # reapproving the same task or claim that the decision was rolled back.
+      # A separately supervised recovery may republish only the exact
+      # still-fresh persisted intent, without another approval write.
+      return self.send(503,{'error':'issue159_approved_packet_recovery_required',
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'})
      try:
       chain=run_after_approval(data['claims']['taskId'])
       body={**body,**chain}
