@@ -14,15 +14,40 @@ def _reset_failed(*names:str):
     subprocess.run(['systemctl','reset-failed',*names],capture_output=True,text=True,timeout=5)
 
 def _unit(name:str):
-    subprocess.run(['systemctl','reset-failed',name],capture_output=True,text=True,timeout=5)
-    r=subprocess.run(['systemctl','start',name],capture_output=True,text=True,timeout=25)
-    if r.returncode!=0:
-        raise AutoChainError('UNIT_FAILED_'+name.replace('.','_').replace('@','_AT_').upper())
-    q=subprocess.run(['systemctl','show',name,'-p','Result','-p','ExecMainStatus','--value'],
-                     capture_output=True,text=True,timeout=5)
-    vals=[x.strip() for x in q.stdout.splitlines() if x.strip()]
-    if 'success' not in vals or '0' not in vals:
-        raise AutoChainError('UNIT_RESULT_INVALID_'+name.replace('.','_').replace('@','_AT_').upper())
+    # For ConditionPathExists=, systemctl start may return 0 even when the
+    # oneshot did NOT execute; old Result=success and ExecMainStatus=0 can
+    # also remain from a previous invocation. Require the condition result.
+    code=name.replace('.','_').replace('@','_AT_').upper()
+    try:
+        subprocess.run(['systemctl','reset-failed',name],
+                       capture_output=True,text=True,timeout=5)
+        r=subprocess.run(['systemctl','start',name],
+                         capture_output=True,text=True,timeout=25)
+        if r.returncode!=0:
+            raise AutoChainError('UNIT_FAILED_'+code)
+        q=subprocess.run(
+            ['systemctl','show',name,
+             '-p','LoadState','-p','ConditionResult',
+             '-p','Result','-p','ExecMainStatus','-p','ActiveState',
+             '--no-pager'],
+            capture_output=True,text=True,timeout=5)
+    except subprocess.SubprocessError as exc:
+        raise AutoChainError('UNIT_SYSTEMD_UNAVAILABLE_'+code) from exc
+    if q.returncode!=0:
+        raise AutoChainError('UNIT_RESULT_UNAVAILABLE_'+code)
+    lines=[line.strip() for line in q.stdout.splitlines() if line.strip()]
+    if any(line.count('=')!=1 for line in lines):
+        raise AutoChainError('UNIT_RESULT_INVALID_'+code)
+    state=dict(line.split('=',1) for line in lines)
+    required={'LoadState','ConditionResult','Result','ExecMainStatus','ActiveState'}
+    if set(state)!=required:
+        raise AutoChainError('UNIT_RESULT_INVALID_'+code)
+    if state['ConditionResult']!='yes':
+        raise AutoChainError('UNIT_CONDITION_NOT_MET_'+code)
+    if (state['LoadState']!='loaded' or state['Result']!='success'
+            or state['ExecMainStatus']!='0'
+            or state['ActiveState']!='inactive'):
+        raise AutoChainError('UNIT_RESULT_INVALID_'+code)
 
 def _write_link(link:dict):
     # Operator link evidence is one-use, like the approved claims and
