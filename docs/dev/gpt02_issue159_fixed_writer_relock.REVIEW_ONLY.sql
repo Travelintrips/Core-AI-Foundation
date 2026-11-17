@@ -156,6 +156,10 @@ BEGIN
       IF pg_terminate_backend(pid_row.pid,3000) IS NOT TRUE
       THEN RAISE EXCEPTION 'RELOCK_SESSION_TERMINATION_UNCONFIRMED'; END IF;
     END LOOP;
+    -- Refresh the stats snapshot after pg_terminate_backend's bounded wait;
+    -- otherwise this transaction may still see a terminated backend in a
+    -- cached pg_stat_activity snapshot and falsely fail the postcondition.
+    PERFORM pg_stat_clear_snapshot();
     IF EXISTS (SELECT 1 FROM pg_stat_activity WHERE usename=item.role_name)
     THEN RAISE EXCEPTION 'RELOCK_TARGET_SESSION_SURVIVED'; END IF;
 
