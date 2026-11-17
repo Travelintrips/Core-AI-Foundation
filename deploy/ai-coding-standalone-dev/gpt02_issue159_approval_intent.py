@@ -35,6 +35,7 @@ def record_issue159_approval_intent(
     claims,
     identity_verifier=None,
     now_ms=None,
+    readiness_gate=None,
 ):
     if not isinstance(access_token, str) or not (40 <= len(access_token) <= 8192):
         return _denied("ADMIN_SESSION_TOKEN_REQUIRED")
@@ -74,6 +75,14 @@ def record_issue159_approval_intent(
         return _denied("APPROVAL_CLAIMS_INVALID")
 
     record = built["record"]
+    # Do not consume a one-time Super Admin decision before the DEV chain
+    # is explicitly ready. A denied readiness check never writes evidence.
+    if readiness_gate is not None:
+        try:
+            if not callable(readiness_gate) or readiness_gate(record) is not True:
+                return _denied("AUTO_CHAIN_PREREQUISITES_NOT_READY")
+        except Exception:
+            return _denied("AUTO_CHAIN_PREREQUISITES_NOT_READY")
     try:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
