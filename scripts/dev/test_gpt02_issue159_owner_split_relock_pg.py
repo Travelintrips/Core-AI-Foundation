@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Issue159 owner-split relock SQL: disposable PostgreSQL16 ONLY.
+"""Issue159 owner-split relock SQL: disposable PostgreSQL 16/17 ONLY.
 
 No live DEV/PROD DB, existing credentials, signer, worker or DELL access.
 Runs a true no-superuser postgres definer + separate existing table owner.
@@ -121,6 +121,28 @@ WHERE roleid='{ROLE}'::regrole AND member='postgres'::regrole
           "'gpt02_private.revoke_expired_scoped_reader_grants(name)')")=="", (
             "UNAUTHORIZED_OWNER_HELPER_LEFT_BEHIND")
         print("PASS_LIMITED_POSTGRES_CANNOT_INSTALL_STORE_OWNER_HELPER",flush=True)
+        # SET ROLE via a synthetic temporary grant must not substitute
+        # for a real authenticated owner. This grant exists in the
+        # disposable fixture only and is revoked immediately afterwards.
+        psql(name,"fixture_root",root_pw,
+          "GRANT gpt02_store_owner TO postgres WITH SET TRUE, INHERIT FALSE;")
+        assert one(name,"postgres",pg_pw,
+          "SELECT pg_has_role(current_user,'gpt02_store_owner','SET')")=="t"
+        attempted_owner=psql(name,"postgres",pg_pw,
+          "SET ROLE gpt02_store_owner;" + chr(10) + HELPER.read_text(),
+          check=False)
+        assert attempted_owner.returncode!=0 and (
+          "GPT02_OWNER_SESSION_REQUIRED" in attempted_owner.stderr
+        ), "SET_ROLE_IMPERSONATION_NOT_DENIED: "+attempted_owner.stderr[-300:]
+        assert one(name,"postgres",pg_pw,
+          "SELECT to_regprocedure("
+          "'gpt02_private.revoke_expired_scoped_reader_grants(name)')")=="", (
+          "SET_ROLE_IMPERSONATION_LEFT_OWNER_HELPER")
+        psql(name,"fixture_root",root_pw,
+          "REVOKE gpt02_store_owner FROM postgres;")
+        assert one(name,"postgres",pg_pw,
+          "SELECT pg_has_role(current_user,'gpt02_store_owner','SET')")=="f"
+        print("PASS_SET_ROLE_NOT_EQUIVALENT_TO_OWNER_AUTHENTICATED_SESSION",flush=True)
         missing_helper=psql(name,"postgres",pg_pw,MAIN.read_text(),check=False)
         assert missing_helper.returncode!=0 and (
             "OWNER_BOUND_REVOKE_HELPER_REQUIRED" in missing_helper.stderr
