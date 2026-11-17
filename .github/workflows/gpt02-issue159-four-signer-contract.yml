@@ -45,6 +45,10 @@ on:
       - 'scripts/dev/test_gpt02_issue159_auto_chain_sequence.py'
       - 'scripts/dev/gpt02_issue159_writer_slot_handoff_probe.py'
       - 'scripts/dev/test_gpt02_issue159_writer_slot_handoff_probe.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer'
+      - 'scripts/dev/test_gpt02_issue159_relock_catalog_supervisor_offline.mjs'
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
       - 'scripts/dev/gpt02_issue159_historical_archive_audit_readonly.py'
       - 'scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py'
@@ -152,6 +156,11 @@ jobs:
           # import/run the top-level credential-backed DEV probe in CI.
           python3 -m py_compile scripts/dev/gpt02_issue159_writer_slot_handoff_probe.py
           python3 scripts/dev/test_gpt02_issue159_writer_slot_handoff_probe.py
+          # Existing independent supervisor: offline contract test only.
+          # Timer stays disabled, auditor NOLOGIN, no database or credentials.
+          node --check deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
+          node --test scripts/dev/test_gpt02_issue159_relock_catalog_supervisor_offline.mjs
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer
           # Public-key only, root-private archive fixture, NO live /opt data.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py
           # Recover only an existing, fresh, exact SQLite intent after a packet
