@@ -33,6 +33,7 @@ spec.loader.exec_module(api)
 # Capture the real source guard before per-test HTTP fixtures replace the
 # service-calling dependency with inert fail-closed test callbacks.
 SOURCE_CHAIN_GATE = api.issue159_chain_readiness_gate
+SOURCE_APPROVED_SLOT_CLEAR = api.issue159_approved_packet_slot_clear
 SOURCE_PRECOMMIT_PRESIGN = api.issue159_precommit_presign_matches
 
 BASE_NOW_MS = int(time.time() * 1000)
@@ -288,6 +289,71 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
                 self.assertFalse(SOURCE_PRECOMMIT_PRESIGN(record))
                 reader.assert_not_called()
         self.assertEqual(self.count(), 0)
+
+    def test_prior_approved_packet_or_temp_blocks_one_use_intent_before_insert(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        api.issue159_chain_readiness_gate = SOURCE_CHAIN_GATE
+        base = Path(self.packet)
+        paths = (base, base.with_name("." + base.name + ".tmp"))
+        with patch.dict(os.environ, {
+            "GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY": "true",
+        }), patch.object(Path, "is_socket", return_value=True):
+            for path in paths:
+                with self.subTest(path=path.name):
+                    data = b"prior-immutable-approval"
+                    path.write_bytes(data)
+                    self.assertFalse(SOURCE_APPROVED_SLOT_CLEAR())
+                    status, body = self.request(AAL2_TOKEN)
+                    self.assertEqual(status, 409)
+                    self.assertEqual(body["error"], "issue159_auto_chain_not_ready")
+                    self.assertEqual(body["releaseDecision"], "NO_GO")
+                    self.assertFalse(body["dispatchPermitted"])
+                    self.assertEqual(path.read_bytes(), data)
+                    self.assertEqual(self.count(), 0)
+                    path.unlink()
+            self.assertTrue(SOURCE_APPROVED_SLOT_CLEAR())
+
+    def test_pending_route_hides_approval_when_old_approved_packet_exists(self):
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        Path(self.pending).write_text(json.dumps({"claims": CLAIMS}))
+        os.chmod(self.pending, 0o600)
+        Path(self.packet).write_bytes(b"preserved-prior-approval")
+        status, body = self.pending_request()
+        self.assertEqual(status, 200)
+        self.assertFalse(body["pending"])
+        self.assertEqual(body["reason"], "APPROVED_PACKET_OUTPUT_OCCUPIED")
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 0)
+
+    def test_approved_packet_publication_is_exclusive_and_preserves_old_evidence(self):
+        result = {
+            "intentId": "33333333-3333-4333-8333-333333333333",
+            "claimsSha256": api.validate_approval_claims(CLAIMS)["claimsSha256"],
+            "actorId": CLAIMS["superAdminId"],
+            "authMethod": "supabase_admin_session",
+            "roleAtDecision": "super_admin",
+            "decision": "APPROVE",
+            "recordedAt": BASE_NOW_MS,
+            "expiresAt": CLAIMS["expiresAt"],
+        }
+        api.persist_issue159_approved_packet(CLAIMS, result)
+        target = Path(self.packet)
+        original = target.read_bytes()
+        self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(SOURCE_APPROVED_SLOT_CLEAR() is False)
+        with self.assertRaises(FileExistsError):
+            api.persist_issue159_approved_packet(CLAIMS, {
+                **result, "intentId": "44444444-4444-4444-8444-444444444444",
+            })
+        self.assertEqual(target.read_bytes(), original)
+        self.assertFalse(target.with_name("." + target.name + ".tmp").exists())
 
     def test_existing_live_readiness_gate_denies_before_approval_write(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
