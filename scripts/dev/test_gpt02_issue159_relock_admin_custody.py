@@ -151,6 +151,8 @@ class CustodyMetaTest(unittest.TestCase):
              "AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED"),
             ("UnsetEnvironment=APP_ENV",
              "AUDITOR_UNIT_UNREVIEWED_ENVIRONMENT_DENIED"),
+            ("ExecStart=/bin/sh",
+             "AUDITOR_UNIT_UNREVIEWED_EXEC_OR_MOUNT_DENIED"),
             ("ExecStartPre=/bin/true",
              "AUDITOR_UNIT_UNREVIEWED_EXEC_OR_MOUNT_DENIED"),
             ("RootDirectory=/tmp",
