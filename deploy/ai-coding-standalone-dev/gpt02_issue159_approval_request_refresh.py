@@ -237,7 +237,10 @@ def refresh_pending(db_path: str, output_path: str, actor_id: str, *,
                  "commandCandidateId": claims["commandId"],
                  "attemptId": claims["attemptId"]}
         facts = fact_reader(query)
-        prep_expiry = _verify_pre_sign_facts(facts, claims, now_ms)
+        # Check the independent reader's observation against the clock AFTER I/O.
+        # Keep the original strict five-second trust window.
+        post_reader_now_ms = now_fn()
+        prep_expiry = _verify_pre_sign_facts(facts, claims, post_reader_now_ms)
         # The existing, independently tested preparer is reused, not rewritten.
         target = Path(output_path)
         archive = target.with_name(
@@ -249,7 +252,7 @@ def refresh_pending(db_path: str, output_path: str, actor_id: str, *,
         try:
             result = prepare(db_path, output_path, claims["taskId"],
                              claims["commandId"], claims["attemptId"],
-                             now_ms=now_ms, operational=operational)
+                             now_ms=post_reader_now_ms, operational=operational)
             newest = json.loads(target.read_text("utf-8"))["claims"]
             validate_approval_claims(newest)
             if (newest["nonce"] == claims["nonce"]
