@@ -6,6 +6,7 @@ All Docker containers are network isolated and deleted in finally.
 """
 import os,secrets,subprocess,time,uuid
 from datetime import datetime,timezone,timedelta
+from datetime import datetime,timezone,timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -72,6 +73,11 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
             "NOCREATEROLE NOCREATEDB NOBYPASSRLS "
             "CONNECTION LIMIT 0 PASSWORD NULL;" for r in ROLES
         ))
+        # One target has a non-NULL pre-window VALID UNTIL to prove exact
+        # restoration; the other two retain the original NULL baseline.
+        psql(name,"postgres",postgres_pw,
+          "ALTER ROLE dev_gpt02_issuer_evidence "
+          "VALID UNTIL '2035-01-01 00:00:00+00'")
         for role in ROLES:
             assert yes(name,"postgres",postgres_pw,
                 "SELECT count(*)=1 FROM pg_auth_members "
@@ -120,15 +126,17 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
 
         # One transaction: record all three short-lived DB role windows,
         # then open each existing fixed role with a single connection.
+        first_expiry=(datetime.now(timezone.utc)+timedelta(seconds=7)).isoformat()
         registrations=[]
         for index,role in enumerate(ROLES):
             registrations.append(
               "INSERT INTO gpt02_relock_audit.writer_issuance_watchdog "
-              "(role_name,task_id,scope_sha256,expires_at) VALUES ('"+
-              role+"',201,'"+("%064x"%(index+1))+
-              "',clock_timestamp()+interval '7 seconds');"
+              "(role_name,task_id,scope_sha256,previous_valid_until,expires_at) "
+              "SELECT '"+role+"',201,'"+("%064x"%(index+1))+
+              "',rolvaliduntil,TIMESTAMPTZ '"+first_expiry+"' "
+              "FROM pg_authid WHERE rolname='"+role+"';"
               "ALTER ROLE "+role+" LOGIN CONNECTION LIMIT 1 PASSWORD '"+
-              roles_pw[role]+"';"
+              roles_pw[role]+"' VALID UNTIL '"+first_expiry+"';"
             )
         arm_sql="BEGIN;"+"".join(registrations)+"COMMIT; SELECT pg_sleep(60);"
         opener=subprocess.Popen(
@@ -189,6 +197,9 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
         for role in ROLES:
             assert yes(name,"postgres",postgres_pw,
               "SELECT NOT rolcanlogin AND rolconnlimit=0 AND rolpassword IS NULL "
+              "AND ((rolname='dev_gpt02_issuer_evidence' AND "
+              "rolvaliduntil='2035-01-01 00:00:00+00'::timestamptz) OR "
+              "(rolname<>'dev_gpt02_issuer_evidence' AND rolvaliduntil='infinity'::timestamptz)) "
               "FROM pg_authid WHERE rolname='"+role+"'")
             assert psql(name,role,roles_pw[role],"SELECT 1",check=False).returncode!=0
         assert one(name,"postgres",postgres_pw,
@@ -207,6 +218,9 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
         for role in ROLES:
             assert yes(name,"postgres",postgres_pw,
               "SELECT NOT rolcanlogin AND rolconnlimit=0 AND rolpassword IS NULL "
+              "AND ((rolname='dev_gpt02_issuer_evidence' AND "
+              "rolvaliduntil='2035-01-01 00:00:00+00'::timestamptz) OR "
+              "(rolname<>'dev_gpt02_issuer_evidence' AND rolvaliduntil='infinity'::timestamptz)) "
               "FROM pg_authid WHERE rolname='"+role+"'")
         print("PASS_ABORT_ROLLBACK_KEEP_PASSWORDS_CLEARED",flush=True)
 
@@ -233,9 +247,10 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
         for index,role in enumerate(ROLES):
             second.append(
               "INSERT INTO gpt02_relock_audit.writer_issuance_watchdog "
-              "(role_name,task_id,scope_sha256,expires_at) VALUES ('"+
-              role+"',202,'"+("%064x"%(index+101))+
-              "',TIMESTAMPTZ '"+second_expiry+"');"
+              "(role_name,task_id,scope_sha256,previous_valid_until,expires_at) "
+              "SELECT '"+role+"',202,'"+("%064x"%(index+101))+
+              "',rolvaliduntil,TIMESTAMPTZ '"+second_expiry+"' "
+              "FROM pg_authid WHERE rolname='"+role+"';"
               "ALTER ROLE "+role+" LOGIN CONNECTION LIMIT 1 PASSWORD '"+
               second_pw[role]+"' VALID UNTIL '"+second_expiry+"';"
             )
@@ -283,6 +298,9 @@ CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN NOINHERIT
         for role in ROLES:
             assert yes(name,"postgres",postgres_pw,
               "SELECT NOT rolcanlogin AND rolconnlimit=0 AND rolpassword IS NULL "
+              "AND ((rolname='dev_gpt02_issuer_evidence' AND "
+              "rolvaliduntil='2035-01-01 00:00:00+00'::timestamptz) OR "
+              "(rolname<>'dev_gpt02_issuer_evidence' AND rolvaliduntil='infinity'::timestamptz)) "
               "FROM pg_authid WHERE rolname='"+role+"'")
             assert one(name,"postgres",postgres_pw,
               "SELECT count(*) FROM pg_stat_activity WHERE usename='"+role+"'")=="0"
