@@ -49,6 +49,9 @@ on:
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer'
       - 'scripts/dev/test_gpt02_issue159_relock_catalog_supervisor_offline.mjs'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_relock_supervisor_readiness.py'
+      - 'scripts/dev/test_gpt02_issue159_relock_supervisor_readiness.py'
+      - 'deploy/ai-coding-standalone-dev/approval_api.py'
       - 'docs/dev/gpt02_issue159_fixed_writer_relock.REVIEW_ONLY.sql'
       - 'scripts/dev/test_gpt02_issue159_fixed_writer_relock_pg17_REVIEW_ONLY.py'
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
@@ -162,6 +165,8 @@ jobs:
           # Timer stays disabled, auditor NOLOGIN, no database or credentials.
           node --check deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
           node --test scripts/dev/test_gpt02_issue159_relock_catalog_supervisor_offline.mjs
+          # Source-only fail-closed guard for a skipped/stale watchdog.
+          PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_relock_supervisor_readiness.py
           # The live VPS intentionally pins /usr/bin/node. The GitHub
           # runner installs node under hostedtoolcache instead. Verify an
           # ephemeral service unit with only that path adapted; never change
