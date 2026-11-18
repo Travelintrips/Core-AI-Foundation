@@ -1,0 +1,50 @@
+{
+  "title": "CST AI Team DEV — scoped job completion event RLS and audit",
+  "evidenceDate": "2026-11-19 Asia/Jakarta",
+  "commitBase": "2f3b46c75dc16fb267e6476080dbd82070a0cc95",
+  "isolatedDatabase": {
+    "engine": "PostgreSQL 16",
+    "database": "cst_team_model_rls_pilot_fixture",
+    "network": "none",
+    "test": "scripts/dev/cst-team-dedicated-model-role-rehearsal.py",
+    "result": "PASS",
+    "allowed": [
+      "One exact Company1 model job completion event after persisted job status completed",
+      "One event_published audit referencing the exact persisted event and correlation ID"
+    ],
+    "denied": [
+      "Early completion event",
+      "Wrong source job ID",
+      "Wrong event type",
+      "Wrong worker ID",
+      "Wrong job code",
+      "Wrong source module",
+      "Fabricated event_published audit without persisted event"
+    ],
+    "unrelatedCompanyHidden": true,
+    "roleAndPoliciesRevokedAfterTest": true,
+    "sandboxDeleted": true,
+    "eventDeliveryToSubscribersVerified": false,
+    "QAIndependentReceiptVerified": false
+  },
+  "actualCstDev": {
+    "project": "xssrfshdrtdfupgqwfdw",
+    "priorRealModelJobId": 482,
+    "priorJobStatus": "completed",
+    "priorModelResult": "CST_AI_TEAM_DELL_MODEL_DEV_OK",
+    "priorJobCompletedAuditCount": 1,
+    "priorJobCompletedEventCount": 0,
+    "activeJobCompletedSubscribers": 0,
+    "scopedPilotRoleRemaining": 0,
+    "scopedPilotPoliciesRemaining": 0,
+    "historicalJobNotBackfilled": true,
+    "anyNewRealDevMutationFromEventPolicyWork": false
+  },
+  "authority": {
+    "eventPersistence": "ISOLATED_PASS_REAL_DEV_NOT_YET_RETESTED",
+    "subscriberDelivery": "NOT_CONFIGURED",
+    "rolePromotion": "NONE",
+    "independentQaAndFinalAck": "NOT_VERIFIED",
+    "prod": "UNTOUCHED"
+  }
+}
