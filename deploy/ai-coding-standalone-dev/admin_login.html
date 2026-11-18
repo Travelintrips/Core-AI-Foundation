@@ -92,7 +92,7 @@ async function loadIssue159(){
    const recorded=reason.includes('issue159_approved_packet_recovery_required')&&reason.includes('"intentRecorded":true');
    try{await loadIssue159()}catch(_){root.replaceChildren()}
    el('issue159Status').textContent=recorded?
-    'Persetujuan sudah tercatat, tetapi publikasi bukti perlu pemulihan terawasi. Jangan setujui ulang Task #'+fresh?.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.':
+    'Persetujuan sudah tercatat, tetapi publikasi bukti perlu pemulihan terawasi. Jangan setujui ulang Task #'+d.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.':
     expired?'Permintaan approval kedaluwarsa atau tidak valid. Tidak ada persetujuan tersimpan.':
     'Persetujuan tidak dapat diselesaikan: '+reason+' Periksa status sebelum mencoba lagi.';
 
