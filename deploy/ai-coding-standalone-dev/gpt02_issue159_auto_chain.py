@@ -10,6 +10,65 @@ LINK=APP/'gpt02_issue159_hub_core_link_claims.json'
 
 class AutoChainError(RuntimeError): pass
 
+# systemd manager message IDs, not service-generated stdout. Journal trusted
+# fields (_PID, UNIT, JOB_ID and the boot ID) bind proof to this start job.
+_SYSTEMD_STARTING_ID = '7d4958e842da4a758f6c1cdc7b36dcc5'
+_SYSTEMD_FINISHED_ID = '39f53479d3a045ac8e11786248231fbf'
+
+def _fresh_oneshot_manager_proof(name:str, start_us:int, end_us:int,
+                                 *, run=subprocess.run)->bool:
+    """Fail closed unless PID 1 logged a new start AND finished job.
+
+    An inactive Type=oneshot unit may be immediately garbage-collected by
+    systemd: ConditionResult=no and zero ExecMain timestamps then appear
+    even after a successful invocation. Conversely, ConditionResult=yes and
+    Result=success may be stale from a previous invocation. The same-boot,
+    same-job manager journal pair is authoritative for this bounded window.
+    Nothing here opens a signer, connects to a DB, or grants dispatch.
+    """
+    if (type(start_us) is not int or type(end_us) is not int
+            or start_us <= 0 or end_us < start_us):
+        return False
+    try:
+        r=run(['journalctl','--boot','--unit',name,'--no-pager',
+               '--output=json','--lines=64'],
+              capture_output=True,text=True,timeout=5)
+        if (r.returncode!=0 or type(r.stdout) is not str
+                or len(r.stdout)>262144):
+            return False
+        starting,finished={},{}
+        for line in r.stdout.splitlines():
+            if not 0<len(line)<=16384:
+                continue
+            try:
+                entry=json.loads(line)
+                if (type(entry) is not dict
+                        or str(entry.get('_PID'))!='1'
+                        or entry.get('UNIT')!=name
+                        or entry.get('JOB_TYPE')!='start'
+                        or not isinstance(entry.get('JOB_ID'),str)
+                        or not isinstance(entry.get('_BOOT_ID'),str)):
+                    continue
+                timestamp=int(entry['__MONOTONIC_TIMESTAMP'])
+            except (ValueError,KeyError,TypeError):
+                continue
+            if not start_us<=timestamp<=end_us+1_000_000:
+                continue
+            job=(entry['_BOOT_ID'],entry['JOB_ID'])
+            message=entry.get('MESSAGE')
+            if entry.get('MESSAGE_ID')==_SYSTEMD_STARTING_ID:
+                starting[job]=timestamp
+            elif (entry.get('MESSAGE_ID')==_SYSTEMD_FINISHED_ID
+                  and entry.get('JOB_RESULT')=='done'
+                  and isinstance(message,str)
+                  and (message.startswith('Finished '+name+' ')
+                       or message=='Finished '+name+'.')):
+                finished[job]=timestamp
+        return any(job in finished and started<=finished[job]
+                   for job,started in starting.items())
+    except (OSError,subprocess.SubprocessError):
+        return False
+
 def _reset_failed(*names:str):
     subprocess.run(['systemctl','reset-failed',*names],capture_output=True,text=True,timeout=5)
 
@@ -21,8 +80,10 @@ def _unit(name:str):
     try:
         subprocess.run(['systemctl','reset-failed',name],
                        capture_output=True,text=True,timeout=5)
+        started_us=time.monotonic_ns()//1000
         r=subprocess.run(['systemctl','start',name],
                          capture_output=True,text=True,timeout=25)
+        ended_us=time.monotonic_ns()//1000
         if r.returncode!=0:
             raise AutoChainError('UNIT_FAILED_'+code)
         q=subprocess.run(
@@ -42,12 +103,17 @@ def _unit(name:str):
     required={'LoadState','ConditionResult','Result','ExecMainStatus','ActiveState'}
     if set(state)!=required:
         raise AutoChainError('UNIT_RESULT_INVALID_'+code)
-    if state['ConditionResult']!='yes':
-        raise AutoChainError('UNIT_CONDITION_NOT_MET_'+code)
+    if state['ConditionResult'] not in ('yes','no'):
+        raise AutoChainError('UNIT_CONDITION_UNAVAILABLE_'+code)
     if (state['LoadState']!='loaded' or state['Result']!='success'
             or state['ExecMainStatus']!='0'
             or state['ActiveState']!='inactive'):
         raise AutoChainError('UNIT_RESULT_INVALID_'+code)
+    # A skipped condition, including a cached Result=success/exit=0, never
+    # produces a matching PID-1 Starting/Finished job pair. Legitimate
+    # garbage-collected oneshots are accepted only with the fresh pair.
+    if not _fresh_oneshot_manager_proof(name,started_us,ended_us):
+        raise AutoChainError('UNIT_FRESH_EXECUTION_UNPROVEN_'+code)
 
 def _write_link(link:dict):
     # Operator link evidence is one-use, like the approved claims and
