@@ -189,14 +189,14 @@ BEGIN
   INSERT INTO ai_platform.ai_events(event_id,event_type,source_module,source_id,
     correlation_id,payload_json,status,published_at)
   VALUES ('WRONG-WORKER','job.completed','job-engine',jid::text,
-    'pilot-correlation',jsonb_set(valid_payload,'{workerId}',to_jsonb(999999)),'published',now());
+    'pilot-correlation',jsonb_set(valid_payload,'{{workerId}}',to_jsonb(999999)),'published',now());
   RAISE EXCEPTION 'WRONG_WORKER_EVENT_ALLOWED';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN
   INSERT INTO ai_platform.ai_events(event_id,event_type,source_module,source_id,
     correlation_id,payload_json,status,published_at)
   VALUES ('WRONG-CODE','job.completed','job-engine',jid::text,
-    'pilot-correlation',jsonb_set(valid_payload,'{jobCode}',to_jsonb('FORGED-CODE'::text)),
+    'pilot-correlation',jsonb_set(valid_payload,'{{jobCode}}',to_jsonb('FORGED-CODE'::text)),
     'published',now());
   RAISE EXCEPTION 'WRONG_JOB_CODE_ALLOWED';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
