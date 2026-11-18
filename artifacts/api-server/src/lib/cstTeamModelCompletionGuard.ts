@@ -11,6 +11,19 @@ export type ModelWorkerForCompletion = {
   providerSlug: string | null; runtimeKind: string | null;
   modelId: string | null; capabilities: unknown;
 };
+/** Exact DEV pilot ID is reserved even when an RLS policy hides the row.
+ * A missing SELECT must NEVER turn the reserved pilot into ordinary completion.
+ */
+export function isExactCstDevModelPilotJobId(
+  jobId: number,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return Number.isSafeInteger(jobId) && jobId > 0 &&
+    env.APP_ENV === "development" && env.NODE_ENV === "development" &&
+    env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true" &&
+    env.CST_TEAM_DEV_APPROVED_JOB_ID === String(jobId);
+}
+
 export function classifyCstDevModelCompletion(
   job: ModelJobForCompletion | null | undefined,
   worker: ModelWorkerForCompletion | null | undefined,
