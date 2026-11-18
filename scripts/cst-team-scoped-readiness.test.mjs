@@ -440,3 +440,23 @@ test("completion evidence audit uses only read-only CST-DEV client transaction",
   assert.match(src,/finalAckVerified:false/);
   assert.doesNotMatch(src,/pool\.query\(["'](?:INSERT|UPDATE|DELETE|ALTER|CREATE|GRANT|REVOKE)/i);
 });
+
+test("job evidence reader rehearsal grants only SELECT on one bounded Company1 job", () => {
+  const sql=readFileSync(new URL("../scripts/dev/cst-team-readonly-evidence-rls-disposable.sql",import.meta.url),"utf8");
+  assert.match(sql,/current_database\(\) <> 'cst_team_evidence_reader_rehearsal'/);
+  assert.match(sql,/CST_EVIDENCE_READER_DISPOSABLE_DATABASE_ONLY/);
+  assert.match(sql,/CREATE POLICY cst_evidence_job_482/);
+  assert.match(sql,/CREATE POLICY cst_evidence_event_482/);
+  assert.match(sql,/CREATE POLICY cst_evidence_audit_482/);
+  assert.match(sql,/cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a/);
+  assert.match(sql,/GRANT SELECT ON ai_platform\.ai_jobs/);
+  assert.doesNotMatch(sql,/GRANT (?:INSERT|UPDATE|DELETE|ALL) ON ai_platform/i);
+  assert.doesNotMatch(sql,/BYPASSRLS|DISABLE ROW LEVEL SECURITY|SECURITY DEFINER/i);
+  assert.match(sql,/OTHER-COMPANY-JOB/);
+  assert.match(sql,/OTHER-REQUEST/);
+  assert.match(sql,/READER_ROLE_ACQUIRED_WRITER_PRIVILEGES/);
+  assert.match(sql,/DROP POLICY cst_evidence_job_482/);
+  assert.match(sql,/DROP POLICY cst_evidence_event_482/);
+  assert.match(sql,/DROP POLICY cst_evidence_audit_482/);
+  assert.match(sql,/DROP ROLE aicore_dev_runtime/);
+});
