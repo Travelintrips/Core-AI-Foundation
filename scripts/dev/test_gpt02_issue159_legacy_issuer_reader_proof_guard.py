@@ -96,6 +96,11 @@ class LegacyIssuerProofCatalogGuardTest(unittest.TestCase):
                         text.index('ALTER ROLE gpt02_issuer_evidence_reader LOGIN'))
         self.assertIn("APP_ENV_FILE", text)
         self.assertIn("gpt02_relock_audit.writer_issuance_watchdog", text)
+        # The catalog is rechecked atomically inside the transaction that
+        # would otherwise unlock the role. A changed state fails closed.
+        self.assertLess(text.index("DO $relock_guard$"),
+                        text.index("ALTER ROLE gpt02_issuer_evidence_reader LOGIN"))
+        self.assertIn("RELOCK_UNTRACKED_LEGACY_READER_WINDOW_DENIED", text)
 
 
 if __name__ == "__main__":
