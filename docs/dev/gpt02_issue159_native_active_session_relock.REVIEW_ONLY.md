@@ -43,6 +43,16 @@ SELECT
 
 Execute only through a pre-existing authorized DEV **read-only** administrative connection. All four booleans must be true. This query does not reveal the verifier and does not authorize a role unlock. If the auditor verifier is missing, **NO-GO**: do not start the timer or grant LOGIN. Restore solely through the separately approved encrypted credential process with a guarded rollback and postcondition. Do not generalize `PASSWORD NULL` cleanup from the operational roles to the auditor; do not introduce a new connector, password, or automatic credential reset. The earlier source reference SQL has an **initial-creation-only** prerequisite that the auditor has NULL password; it must not be re-applied to an already installed and provisioned live CST-DEV schema.
 
+## Scoped issuer reader — native DEV preflight snapshot, 18 Nov 2026
+
+This is **read-only evidence for the review gate**, not authorization to activate the reader. Supabase project `xssrfshdrtdfupgqwfdw` was inspected through its official read-only PostgreSQL interface.
+
+- Existing `gpt02_issuer_evidence_reader` is `NOLOGIN`, `CONNECTION LIMIT 0`, `rolpassword IS NULL`, and has a historical `VALID UNTIL` of **2026-11-14 20:15:47 UTC**. All these restrictions are currently effective; that date has expired. The three operational roles have **no active sessions**.
+- Within the checked private GPT02 tables, this reader has `SELECT` on `gpt02_private.issuer_evidences` and `gpt02_private.issuer_lease_consumptions`, and no `INSERT`, `UPDATE`, `DELETE` or `TRUNCATE` on those two tables. Its existing permissions may not be widened for the test.
+- The independent relock auditor is a **separate** `NOLOGIN/limit0` role with a stored SCRAM verifier (now restored to match its encrypted VPS credential), unlike the reader. The watchdog timer is **inactive/disabled** and the open-watchdog count is zero.
+- **Important:** A scoped operational role's database password is intentionally NULL at the safe baseline, so an operator must **not** assume that changing only `NOLOGIN` to `LOGIN` makes the old, expired credential usable. Only an expressly reviewed, atomic, test-only role window that registers the watchdog *before role activation within the same transaction* may supply bounded temporary credentials and expiry; the independently committed relock must clear them again. Never stage a persistent password or bypass the prior safety denial to get this test to run.
+- Do not mistake the isolated real PostgreSQL17 + real Node.js termination PASS or the native **empty-window** auditor smoke PASS for this still-unproven native connected-session test. Keep `NATIVE_ACTIVE_SESSION_RELOCK_PASS=false`, `authorizationGranted=false`, `signingPermitted=false`, and `dispatchPermitted=false` until the reviewed native evidence exists.
+
 ## Authorization/review gate
 
 This test **requires an explicitly reviewed and permitted execution path** for a bounded, test-only native login window. A prior attempt to open a scoped operational role was stopped by the execution safety gate and **must not be worked around by a different tool or credential**.
