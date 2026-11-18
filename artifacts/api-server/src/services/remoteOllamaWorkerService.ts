@@ -80,6 +80,11 @@ export async function registerRemoteOllamaWorker(input: {
 
     if (!sameIdentity) throw new Error("REMOTE_OLLAMA_IDENTITY_CONFLICT");
 
+    // This DEV pilot is a single authorized registration; never reuse a
+    // surviving heartbeat token from a previous run to skip atomic audit.
+    if (devModelOnly && existing.heartbeatToken) {
+      throw new Error("CST_DEV_MODEL_PILOT_ACTIVE_WORKER_REUSE_DENIED");
+    }
     if (existing.heartbeatToken) {
       const renewed = await renewLease(existing.id, existing.heartbeatToken, DEFAULT_LEASE_TTL_MS);
       if (renewed) {
@@ -107,6 +112,7 @@ export async function registerRemoteOllamaWorker(input: {
     version: input.version ?? "1.0.0",
     capabilities: remoteCapabilities,
     maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
+    requireAtomicRegistrationAudit: devModelOnly,
     leaseOwner: "ollama-remote:" + input.nodeId,
     leaseTtlMs: DEFAULT_LEASE_TTL_MS,
     providerSlug: PROVIDER,
