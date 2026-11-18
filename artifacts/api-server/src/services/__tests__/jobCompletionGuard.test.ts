@@ -83,7 +83,9 @@ import {
   ASSET_VALIDATION_FAILED,
 } from "../jobCompletionGuard.js";
 
-import { executeJob } from "../jobWorkerService.js";
+import { executeJob, completeJob } from "../jobWorkerService.js";
+import { db } from "@workspace/db";
+import { publish, publishSafe } from "../aiEventBusService.js";
 
 // ─── Helper: build a minimal fake AiJob ──────────────────────────────────────
 
@@ -419,5 +421,90 @@ describe("Phase 1B — Production Safety Guards", () => {
         })
       ).not.toThrow();
     });
+  });
+});
+
+/** Real async contract of the existing completeJob path, with DB mocked.
+ * These tests never create real jobs or event subscriptions.
+ */
+describe("CST-DEV exact model completion event persistence", () => {
+  const requestId="cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a";
+  const job: AiJob = fakeJob("ollama_model_invocation", {
+    id: 482,jobCode:"OLLAMA-B7F9B5E2",status:"running",
+    payloadJson:{requestId,modelId:"qwen2.5:3b",_claimedByWorkerId:3628},
+  });
+  const worker = {
+    id:3628,workerName:"cst-dev-dell-onejob-20261119",workerType:"coding_worker",
+    providerSlug:"ollama",runtimeKind:"ollama_remote_pull",modelId:"qwen2.5:3b",
+    capabilities:["ollama_inference"],averageLatency:null,
+  };
+  function setupCompletion() {
+    const reads: Array<unknown>=[job,worker];
+    const updates: Array<unknown>=[{...job,status:"completed"}, {...worker,status:"idle"}];
+    vi.mocked(db.select).mockImplementation(() => ({
+      from:vi.fn().mockReturnThis(),
+      where:vi.fn(() => Promise.resolve([reads.shift()])),
+    }) as unknown as ReturnType<typeof db.select>);
+    vi.mocked(db.update).mockImplementation(() => ({
+      set:vi.fn().mockReturnThis(),
+      where:vi.fn().mockReturnThis(),
+      returning:vi.fn(() => Promise.resolve([updates.shift()])),
+    }) as unknown as ReturnType<typeof db.update>);
+    vi.mocked(publish).mockReset();
+    vi.mocked(publishSafe).mockReset();
+  }
+  function scopedEnv() {
+    vi.stubEnv("APP_ENV","development");
+    vi.stubEnv("NODE_ENV","development");
+    vi.stubEnv("CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED","true");
+    vi.stubEnv("CST_TEAM_DEV_APPROVED_JOB_ID","482");
+    vi.stubEnv("CST_TEAM_DEV_APPROVED_WORKER_NAME","cst-dev-dell-onejob-20261119");
+  }
+  it("awaits a real persisted-event acknowledgement before reporting completion",async () => {
+    setupCompletion();scopedEnv();
+    try {
+      let resolveEvent!: (value: unknown) => void;
+      const gate=new Promise(resolve => {resolveEvent=resolve});
+      vi.mocked(publish).mockImplementation(() => gate as ReturnType<typeof publish>);
+      let finished=false;
+      const operation=completeJob(482,3628,{output:{text:"READY"}})
+        .then(value=>{finished=true;return value});
+      await vi.waitFor(()=>expect(publish).toHaveBeenCalledTimes(1));
+      expect(finished).toBe(false);
+      expect(publishSafe).not.toHaveBeenCalled();
+      resolveEvent({eventId:"test-evt-id"});
+      const result=await operation;
+      expect(result.status).toBe("completed");
+      expect(finished).toBe(true);
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it("rejects missing pilot event persistence without creating false final proof",async () => {
+    setupCompletion();scopedEnv();
+    try {
+      vi.mocked(publish).mockRejectedValueOnce(new Error("PILOT_RLS_DENIED"));
+      await expect(completeJob(482,3628,{output:{text:"READY"}}))
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_NOT_PERSISTED");
+      expect(publishSafe).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it("leaves ordinary job completions on the existing fire-and-forget path",async () => {
+    setupCompletion();
+    vi.stubEnv("CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED","false");
+    try {
+      const result=await completeJob(482,3628,{output:{text:"READY"}});
+      expect(result.status).toBe("completed");
+      expect(publishSafe).toHaveBeenCalledTimes(1);
+      expect(publish).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it("fails closed if the approved pilot job ID does not match",async () => {
+    setupCompletion();scopedEnv();
+    vi.stubEnv("CST_TEAM_DEV_APPROVED_JOB_ID","999");
+    try {
+      await expect(completeJob(482,3628,{output:{text:"READY"}}))
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+      expect(publish).not.toHaveBeenCalled();
+      expect(publishSafe).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
   });
 });
