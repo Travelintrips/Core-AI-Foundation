@@ -43,10 +43,13 @@ const AI_TASK_BRIDGE_ROUTES = [
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/ai-task-chatgpt-timeline$/ },
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/runtime-status$/ },
   { method: "GET", pattern: /^\/ai\/coding\/bridge\/ai-task-timeline$/ },
+  { method: "GET", pattern: /^\/ai\/coding\/bridge\/cst-team-readiness$/ },
 ] as const;
 
 function hasValidAiTaskBridgeKey(req: Request): boolean {
   if (!AI_TASK_BRIDGE_ROUTES.some((rule) => rule.method === req.method && rule.pattern.test(req.path))) return false;
+  if (req.path === "/ai/coding/bridge/cst-team-readiness" &&
+      (process.env.APP_ENV !== "development" || process.env.NODE_ENV !== "development")) return false;
   const configured = process.env["AI_TASK_ENGINE_SERVICE_KEY"]?.trim() || process.env["AI_TASK_BRIDGE_TOKEN"]?.trim();
   const supplied = req.headers["x-ai-task-engine-key"];
   if (!configured || typeof supplied !== "string" || !supplied.trim()) return false;

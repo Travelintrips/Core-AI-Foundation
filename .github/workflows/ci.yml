@@ -40,6 +40,8 @@ jobs:
         run: node --test scripts/github-event-correlation.test.mjs scripts/github-ci-handoff-decision.test.mjs
       - name: Verify serialized GitHub CI quorum transitions
         run: node --test scripts/ci-quorum-row-lock.test.mjs
+      - name: Verify scoped CST team DEV readiness is non-authorizing
+        run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap
