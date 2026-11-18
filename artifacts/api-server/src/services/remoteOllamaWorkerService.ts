@@ -258,9 +258,17 @@ export async function enqueueRemoteOllamaInvocation(
 
 export async function claimRemoteOllamaInvocation(
   worker: Pick<AiWorker, "id" | "modelId">,
+  scope: { devExpectedJobId?: number } = {},
 ): Promise<AiJob | null> {
   const workerId = worker.id;
-  if (worker.modelId) {
+  const scopedJobId = scope.devExpectedJobId;
+  if (scopedJobId !== undefined &&
+      (!Number.isSafeInteger(scopedJobId) || scopedJobId < 1 ||
+       (process.env.APP_ENV !== "development" || process.env.NODE_ENV !== "development"))) {
+    throw new Error("REMOTE_OLLAMA_DEV_JOB_SCOPE_INVALID");
+  }
+  // A one-job DEV pilot cannot reconcile or requeue unrelated stale work.
+  if (worker.modelId && scopedJobId === undefined) {
     await maybeRecoverStaleRemoteOllamaCapacity(worker.modelId).catch(() => 0);
   }
 
@@ -269,6 +277,9 @@ export async function claimRemoteOllamaInvocation(
       SELECT * FROM ai_platform.ai_jobs
       WHERE job_type IN (${REMOTE_OLLAMA_JOB_TYPE}, ${REMOTE_OLLAMA_POWERSHELL_JOB_TYPE})
         AND required_capability IN (${REMOTE_OLLAMA_CAPABILITY}, ${REMOTE_OLLAMA_POWERSHELL_CAPABILITY})
+        ${scopedJobId !== undefined
+          ? sql`AND id = ${scopedJobId} AND job_type = ${REMOTE_OLLAMA_JOB_TYPE}`
+          : sql``}
         AND (
           (status = 'queued' AND (scheduled_at IS NULL OR scheduled_at <= NOW()))
           OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at <= NOW())
