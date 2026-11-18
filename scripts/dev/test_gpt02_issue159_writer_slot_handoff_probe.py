@@ -110,7 +110,7 @@ class HandoffSlotSafetyTest(unittest.TestCase):
         self.assertEqual(len(admin.calls), 1)
 
     def test_missing_or_ambiguous_catalog_fails_closed_except_legacy_absence(self):
-        for result in (None, (), (None,), (1,), (True,)):
+        for result in (None, (), (None,), (0,), (1,), (True,), [False]):
             with self.subTest(result=result), self.assertRaisesRegex(
                 RuntimeError, "WRITER_HANDOFF_RELOCK_WATCHDOG_REGISTRATION_REQUIRED"
             ):
