@@ -364,6 +364,7 @@ test("one-job event and audit require one atomic transaction, without global dis
 
 test("real historical job #482 remains completed without falsely asserting an event", () => {
   const input = {
+    requestedJobId:482,
     job: {id:482,job_code:"OLLAMA-B7F9B5E2",job_type:"ollama_model_invocation",
       status:"completed",request_id:"cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a",
       model_id:"qwen2.5:3b",has_result:true},
@@ -382,8 +383,22 @@ test("real historical job #482 remains completed without falsely asserting an ev
   assert.equal(report.independentQaVerified,false);
   assert.equal(report.finalAckVerified,false);
 });
+test("RLS-invisible model job never looks like a nonexistent job or a successful completion", () => {
+  const result=projectCstModelCompletionEvidence({
+    requestedJobId:482,job:null,jobAudits:[],worker:null,
+    events:[],eventAudits:[],
+  });
+  assert.equal(result.status,"source_not_visible");
+  assert.equal(result.jobId,482);
+  assert.deepEqual(result.blockers,["JOB_NOT_VISIBLE_TO_READER_OR_NOT_FOUND"]);
+  assert.equal(result.jobCompleted,false);
+  assert.equal(result.eventPersisted,false);
+  assert.equal(result.eventAuditPersisted,false);
+  assert.equal(result.finalAckVerified,false);
+});
 test("a completed job and forged/duplicate event cannot pass independent persistence proof", () => {
   const base={
+    requestedJobId:482,
     job:{id:482,job_code:"OLLAMA-B7F9B5E2",job_type:"ollama_model_invocation",
       status:"completed",request_id:"cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a",
       model_id:"qwen2.5:3b",has_result:true},
