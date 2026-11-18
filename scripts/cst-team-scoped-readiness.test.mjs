@@ -223,3 +223,18 @@ test("disposable RLS rehearsal is hard-pinned to a throwaway database and proves
   assert.match(source,/CREATE POLICY worker_update/);
   assert.doesNotMatch(source,/ALTER ROLE|BYPASSRLS|DISABLE ROW LEVEL SECURITY/i);
 });
+
+test("approved DEV worker enrollment cannot advertise PowerShell execution", () => {
+  const route=readFileSync(new URL("../artifacts/api-server/src/routes/remote-ollama-worker.ts",import.meta.url),"utf8");
+  const service=readFileSync(new URL("../artifacts/api-server/src/services/remoteOllamaWorkerService.ts",import.meta.url),"utf8");
+  assert.match(route,/DEV_MODEL_PILOT_WORKER_NOT_APPROVED/);
+  assert.match(route,/body\.data\.workerName !== process\.env\.CST_TEAM_DEV_APPROVED_WORKER_NAME/);
+  assert.match(route,/body\.data\.nodeId !== process\.env\.CST_TEAM_DEV_APPROVED_WORKER_NAME/);
+  assert.match(route,/body\.data\.modelId !== "qwen2\.5:3b"/);
+  assert.match(route,/body\.data\.maxConcurrentJobs !== 1/);
+  assert.match(route,/DEV_MODEL_PILOT_POWERSHELL_SELF_TEST_DISABLED/);
+  assert.match(service,/const devModelOnly = process\.env\.APP_ENV === "development"/);
+  assert.match(service,/\? \[REMOTE_OLLAMA_CAPABILITY\]/);
+  assert.match(service,/capabilities: remoteCapabilities/);
+  assert.match(route,/DEV_SCOPED_MODEL_JOB_OR_WORKER_NOT_APPROVED/);
+});
