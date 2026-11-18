@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { CST_MODEL_ADMISSION_REQUIREMENTS, projectCstModelAdmissionReadiness } from "../artifacts/api-server/src/lib/cstTeamModelAdmission.ts";
 import { projectCstModelCompletionEvidence } from "../artifacts/api-server/src/lib/cstTeamCompletionEvidenceProjection.ts";
-import { classifyCstDevModelCompletion } from "../artifacts/api-server/src/lib/cstTeamModelCompletionGuard.ts";
+import { classifyCstDevModelCompletion, isExactCstDevModelPilotJobId } from "../artifacts/api-server/src/lib/cstTeamModelCompletionGuard.ts";
 import {
   CST_TEAM_MONITOR_CLIENTS,
   isCstTeamDevMode,
@@ -329,6 +329,8 @@ test("pilot completion awaits event persistence and fails visibly; ordinary jobs
   const fragment=code.slice(code.indexOf('export async function completeJob('),
     code.indexOf('export async function retryJob('));
   assert.match(fragment,/classifyCstDevModelCompletion\(job, null, workerId\)/);
+  assert.match(fragment,/isExactCstDevModelPilotJobId\(jobId\)/);
+  assert.match(fragment,/CST_DEV_MODEL_COMPLETION_SOURCE_NOT_VISIBLE_OR_INVALID/);
   assert.match(fragment,/classifyCstDevModelCompletion\(job, pilotWorker, workerId\)/);
   assert.match(fragment,/if \(devPilotMode === "blocked"\)/);
   const guardAt=fragment.indexOf("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
@@ -495,4 +497,25 @@ test("disposable PostgreSQL16 proves full model job, worker, event and audit ato
   assert.match(sql,/DROP POLICY event_insert ON ai_platform\.ai_events/);
   assert.match(sql,/DROP ROLE cst_team_atomic_fixture/);
   assert.doesNotMatch(sql,/DISABLE ROW LEVEL SECURITY|SECURITY DEFINER|\bBYPASSRLS\b/i);
+});
+
+test("the exact reserved DEV pilot ID remains blocked if RLS hides its job", () => {
+  const env={
+    APP_ENV:"development",NODE_ENV:"development",
+    CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED:"true",
+    CST_TEAM_DEV_APPROVED_JOB_ID:"482",
+  };
+  assert.equal(isExactCstDevModelPilotJobId(482,env),true);
+  assert.equal(isExactCstDevModelPilotJobId(483,env),false);
+  assert.equal(isExactCstDevModelPilotJobId(482,{...env,APP_ENV:"production"}),false);
+  assert.equal(isExactCstDevModelPilotJobId(482,{...env,NODE_ENV:"production"}),false);
+  assert.equal(isExactCstDevModelPilotJobId(482,{...env,CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED:"false"}),false);
+  assert.equal(isExactCstDevModelPilotJobId(0,env),false);
+  assert.equal(classifyCstDevModelCompletion(null,null,3628,env),"ordinary");
+  // The service MUST reject this otherwise-ordinary path before UPDATE.
+  const src=readFileSync(new URL("../artifacts/api-server/src/services/jobWorkerService.ts",import.meta.url),"utf8");
+  const firstGuard=src.indexOf("CST_DEV_MODEL_COMPLETION_SOURCE_NOT_VISIBLE_OR_INVALID");
+  const modelBranch=src.indexOf('if (devPilotMode === "await_persist")');
+  const ordinaryUpdate=src.indexOf("  const [completed] = await db",firstGuard);
+  assert.ok(firstGuard>0&&modelBranch>firstGuard&&ordinaryUpdate>modelBranch);
 });
