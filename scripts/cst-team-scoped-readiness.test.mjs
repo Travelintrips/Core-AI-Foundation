@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { CST_MODEL_ADMISSION_REQUIREMENTS, projectCstModelAdmissionReadiness } from "../artifacts/api-server/src/lib/cstTeamModelAdmission.ts";
+import { classifyCstDevModelCompletion } from "../artifacts/api-server/src/lib/cstTeamModelCompletionGuard.ts";
 import {
   CST_TEAM_MONITOR_CLIENTS,
   isCstTeamDevMode,
@@ -274,4 +275,62 @@ test("job completion event RLS is bound to persisted Company1 worker and cleanly
   assert.match(rehearsal,/FABRICATED_EVENT_AUDIT_ALLOWED/);
   assert.match(rehearsal,/APPROVED_EVENT_AUDIT_NOT_PERSISTED/);
   assert.match(rehearsal,/PostgreSQL init process complete; ready for start up/);
+});
+
+test("only the exact Company-1 DEV model pilot uses awaited completion-event persistence", () => {
+  const env = {
+    APP_ENV: "development", NODE_ENV: "development",
+    CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED: "true",
+    CST_TEAM_DEV_APPROVED_JOB_ID: "482",
+    CST_TEAM_DEV_APPROVED_WORKER_NAME: "cst-dev-dell-onejob-20261119",
+  };
+  const job = {
+    id: 482, jobType: "ollama_model_invocation",
+    payloadJson: {
+      requestId: "cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a",
+      modelId: "qwen2.5:3b", _claimedByWorkerId: 3628,
+    },
+  };
+  const worker = {
+    id: 3628, workerName: "cst-dev-dell-onejob-20261119",
+    workerType: "coding_worker",providerSlug: "ollama",
+    runtimeKind: "ollama_remote_pull",modelId: "qwen2.5:3b",
+    capabilities: ["ollama_inference"],
+  };
+  const mode=(j=job,w=worker,id=3628,e=env)=>classifyCstDevModelCompletion(j,w,id,e);
+  assert.equal(mode(), "await_persist");
+  for(const mutation of [
+    {id:483}, {jobType:"ollama_powershell_execution"},
+    {payloadJson:{...job.payloadJson,modelId:"other-model"}},
+    {payloadJson:{...job.payloadJson,_claimedByWorkerId:1}},
+    {payloadJson:{...job.payloadJson,requestId:"cst-ai-team-company1-dev:other"}},
+  ]) {
+    assert.equal(mode({...job,...mutation}), 
+      mutation.jobType === "ollama_powershell_execution" ? "ordinary" : "blocked");
+  }
+  for(const mutation of [
+    {id:3629}, {workerName:"another-worker"},
+    {capabilities:["ollama_inference","coding_powershell_execution"]},
+    {runtimeKind:"ollama_worker"}, {providerSlug:"another"},
+  ]) assert.equal(mode(job,{...worker,...mutation}),"blocked");
+  assert.equal(mode(job,worker,9999),"blocked");
+  assert.equal(mode(job,null),"blocked");
+  assert.equal(mode(job,worker,3628,{...env,CST_TEAM_DEV_APPROVED_JOB_ID:"0"}),"blocked");
+  assert.equal(mode(job,worker,3628,{...env,CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED:"false"}),"ordinary");
+  assert.equal(mode(job,worker,3628,{...env,NODE_ENV:"production"}),"ordinary");
+  assert.equal(mode({...job,payloadJson:{...job.payloadJson,requestId:"cst-ai-team-company3-dev:other"}}),"ordinary");
+});
+
+test("pilot completion awaits event persistence and fails visibly; ordinary jobs retain publishSafe", () => {
+  const code=readFileSync(new URL("../artifacts/api-server/src/services/jobWorkerService.ts",import.meta.url),"utf8");
+  const fragment=code.slice(code.indexOf('export async function completeJob('),
+    code.indexOf('export async function retryJob('));
+  assert.match(fragment,/classifyCstDevModelCompletion\(job, worker, workerId\)/);
+  assert.match(fragment,/if \(devPilotMode === "blocked"\)/);
+  assert.match(fragment,/if \(devPilotMode === "await_persist"\)/);
+  assert.match(fragment,/await publish\(completionEvent\)/);
+  assert.match(fragment,/CST_DEV_MODEL_COMPLETION_EVENT_NOT_PERSISTED/);
+  assert.match(fragment,/publishSafe\(completionEvent\)/);
+  assert.match(fragment,/do NOT replay the completed job/);
+  assert.doesNotMatch(fragment,/finalAckVerified: true|attestationVerified: true/);
 });
