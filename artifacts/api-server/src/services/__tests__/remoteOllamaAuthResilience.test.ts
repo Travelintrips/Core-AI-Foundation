@@ -35,7 +35,11 @@ describe("remote Ollama auth resilience contracts", () => {
     );
 
     expect(route).toContain('const worker = res.locals["remoteOllamaWorker"] as AiWorker');
-    expect(route).toContain("claimRemoteOllamaInvocation(worker)");
+    // Legacy calls used one positional argument; the DEV-scoped variant
+    // must still use the worker authenticated by requireWorker middleware.
+    expect(route).toMatch(/claimRemoteOllamaInvocation\(\s*worker,\s*parsedJobId\?\.success/);
+    expect(route).toContain("CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED");
+    expect(route).toContain("DEV_SCOPED_MODEL_CLAIM_DISABLED");
     expect(source).toContain('worker: Pick<AiWorker, "id" | "modelId">');
     expect(source).not.toContain("const [candidate] = await db.select().from(aiWorkersTable)");
   });
