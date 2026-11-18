@@ -43,7 +43,7 @@ export type CompletionEventAuditRow = {
 export type CompletionEvidence = {
   mode: "CST_DEV_READ_ONLY_PERSISTENCE_NOT_DELIVERY";
   jobId: number;
-  status: "blocked" | "job_not_completed" | "completed_event_missing" |
+  status: "source_not_visible" | "blocked" | "job_not_completed" | "completed_event_missing" |
     "event_binding_invalid" | "event_audit_missing" |
     "event_and_audit_persisted";
   jobCompleted: boolean;
@@ -57,6 +57,7 @@ export type CompletionEvidence = {
   blockers: string[];
 };
 export function projectCstModelCompletionEvidence(input: {
+  requestedJobId: number;
   job: CompletionJobRow | null;
   jobAudits: CompletionJobAuditRow[];
   worker: CompletionWorkerRow | null;
@@ -64,7 +65,7 @@ export function projectCstModelCompletionEvidence(input: {
   eventAudits: CompletionEventAuditRow[];
 }): CompletionEvidence {
   const { job, jobAudits, worker, events, eventAudits } = input;
-  const jobId = job?.id ?? 0;
+  const jobId = input.requestedJobId;
   const base = {
     mode: "CST_DEV_READ_ONLY_PERSISTENCE_NOT_DELIVERY" as const,
     jobId, subscriberDeliveryVerified: false as const,
@@ -72,7 +73,17 @@ export function projectCstModelCompletionEvidence(input: {
     cryptographicAttestationVerified: false as const,
     finalAckVerified: false as const,
   };
-  const sourceBound = Boolean(job && Number.isSafeInteger(job.id) && job.id > 0 &&
+  if (!Number.isSafeInteger(jobId) || jobId < 1 || (job && job.id !== jobId)) {
+    return { ...base, status: "blocked", jobCompleted:false, jobAuditBound:false,
+      eventPersisted:false, eventAuditPersisted:false,
+      blockers:["REQUESTED_JOB_ID_MISMATCH"] };
+  }
+  // Under PostgreSQL RLS an empty SELECT may mean the row is not visible.
+  // A caller must never turn that into "job missing", nor infer event state.
+  if (!job) return { ...base, status:"source_not_visible",
+    jobCompleted:false,jobAuditBound:false,eventPersisted:false,
+    eventAuditPersisted:false,blockers:["JOB_NOT_VISIBLE_TO_READER_OR_NOT_FOUND"] };
+  const sourceBound = Boolean(Number.isSafeInteger(job.id) && job.id > 0 &&
     job.job_type === "ollama_model_invocation" &&
     /^cst-ai-team-company1-dev:pilot-[a-f0-9]{20}$/.test(job.request_id ?? "") &&
     job.model_id === "qwen2.5:3b" && typeof job.job_code === "string" &&
