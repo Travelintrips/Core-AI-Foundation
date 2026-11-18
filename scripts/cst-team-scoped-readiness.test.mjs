@@ -171,6 +171,11 @@ test("Core model claim filters exact job ID and rejects scoped requests without 
   assert.match(remoteRoute,/devExpectedJobId/);
   assert.match(remoteRoute,/parsedJobId\?\.success/);
   assert.match(remoteService,/REMOTE_OLLAMA_DEV_JOB_SCOPE_INVALID/);
-  assert.match(remoteService,/AND id = \$\{scopedJobId\} AND job_type = \$\{REMOTE_OLLAMA_JOB_TYPE\}/);
+  assert.match(remoteService,/AND id = \$\{scopedJobId\}\s+AND job_type = \$\{REMOTE_OLLAMA_JOB_TYPE\}/);
+  assert.match(remoteService,/payload_json->>'requestId' LIKE 'cst-ai-team-company1-dev:%'/);
+  assert.match(remoteRoute,/DEV_SCOPED_MODEL_JOB_REQUIRED/);
+  assert.match(remoteRoute,/DEV_SCOPED_MODEL_JOB_OR_WORKER_NOT_APPROVED/);
+  assert.match(remoteRoute,/CST_TEAM_DEV_APPROVED_JOB_ID/);
+  assert.match(remoteRoute,/CST_TEAM_DEV_APPROVED_WORKER_NAME/);
   assert.match(remoteService,/worker\.modelId && scopedJobId === undefined/);
 });
