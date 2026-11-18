@@ -75,10 +75,35 @@ CREATE POLICY cst_model_pilot_worker_update ON ai_platform.ai_workers FOR UPDATE
    AND status IN ('online','idle','busy','offline','stale')
    AND running_jobs BETWEEN 0 AND 1
    AND endpoint_url IS NULL AND capabilities='["ollama_inference"]'::jsonb);
+-- Every permitted audit must point to THIS fresh worker or THIS one approved
+-- completed model job. A pilot login must never fabricate unrelated audit rows.
 CREATE POLICY cst_model_pilot_audit_insert ON ai_platform.ai_audit_logs FOR INSERT TO {{PILOT_ROLE}}
  WITH CHECK (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
-   AND ((module='worker-cluster' AND action='worker_registered' AND resource_type='ai_worker')
-      OR (module='job-engine' AND action='job_completed' AND resource_type='ai_job')
+   AND status='success'
+   AND ((module='worker-cluster' AND action='worker_registered' AND resource_type='ai_worker'
+       AND EXISTS (
+         SELECT 1 FROM ai_platform.ai_workers w
+         WHERE w.id::text=ai_audit_logs.resource_id
+           AND w.worker_name='{{PILOT_WORKER_NAME}}'
+           AND w.worker_type='coding_worker'
+           AND w.provider_slug='ollama' AND w.runtime_kind='ollama_remote_pull'
+           AND w.lease_owner='ollama-remote:{{PILOT_WORKER_NAME}}'
+           AND ai_audit_logs.details->>'workerName'=w.worker_name
+           AND ai_audit_logs.details->>'workerType'=w.worker_type
+           AND ai_audit_logs.details->>'leaseOwner'=w.lease_owner
+           AND ai_audit_logs.details->'capabilities'='["ollama_inference"]'::jsonb
+       ))
+      OR (module='job-engine' AND action='job_completed' AND resource_type='ai_job'
+       AND EXISTS (
+         SELECT 1 FROM ai_platform.ai_jobs j
+         JOIN ai_platform.ai_workers w ON w.worker_name='{{PILOT_WORKER_NAME}}'
+         WHERE j.id::text=ai_audit_logs.resource_id
+           AND j.status='completed' AND j.job_type='ollama_model_invocation'
+           AND j.payload_json->>'requestId'='{{REQUEST_ID}}'
+           AND j.payload_json->>'modelId'='qwen2.5:3b'
+           AND w.provider_slug='ollama' AND w.runtime_kind='ollama_remote_pull'
+           AND ai_audit_logs.details->>'workerId'=w.id::text
+       ))
       OR (module='event-bus' AND action='event_published' AND resource_type='ai_event'
         AND details->>'eventType'='job.completed'
         AND details->>'sourceModule'='job-engine'

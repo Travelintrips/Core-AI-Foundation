@@ -519,3 +519,18 @@ test("the exact reserved DEV pilot ID remains blocked if RLS hides its job", () 
   const ordinaryUpdate=src.indexOf("  const [completed] = await db",firstGuard);
   assert.ok(firstGuard>0&&modelBranch>firstGuard&&ordinaryUpdate>modelBranch);
 });
+
+test("one-job audit writes cannot forge unrelated job or worker receipts", () => {
+  const apply=readFileSync(new URL("../scripts/dev/cst-team-onejob-ephemeral-role-template.sql",import.meta.url),"utf8");
+  const harness=readFileSync(new URL("../scripts/dev/cst-team-dedicated-model-role-rehearsal.py",import.meta.url),"utf8");
+  assert.match(apply,/FOR INSERT TO \{\{PILOT_ROLE\}\}/);
+  assert.match(apply,/w\.id::text=ai_audit_logs\.resource_id/);
+  assert.match(apply,/j\.id::text=ai_audit_logs\.resource_id/);
+  assert.match(apply,/ai_audit_logs\.details->>'workerId'=w\.id::text/);
+  assert.match(apply,/ai_audit_logs\.details->>'workerName'=w\.worker_name/);
+  assert.match(apply,/j\.payload_json->>'requestId'='\{\{REQUEST_ID\}\}'/);
+  assert.match(harness,/FORGED_JOB_AUDIT_ALLOWED/);
+  assert.match(harness,/FORGED_WORKER_AUDIT_ALLOWED/);
+  assert.match(harness,/FORGED_JOB_WORKER_AUDIT_ALLOWED/);
+  assert.match(harness,/SCOPED_AUDIT_CARDINALITY_FAILED/);
+});

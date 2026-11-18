@@ -139,6 +139,11 @@ INSERT INTO ai_platform.ai_workers(worker_name,worker_type,provider_slug,runtime
 VALUES ('{WORKER}','coding_worker','ollama','ollama_remote_pull',
  '{WORKER}','qwen2.5:3b','ollama-remote:{WORKER}',
  1,'online',NULL,'["ollama_inference"]'::jsonb);
+INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+SELECT 'worker-cluster','worker_registered','ai_worker',w.id::text,'success',
+  jsonb_build_object('workerName',w.worker_name,'workerType',w.worker_type,
+   'capabilities',w.capabilities,'leaseOwner',w.lease_owner)
+FROM ai_platform.ai_workers w WHERE w.worker_name='{WORKER}';
 INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,status,payload_json,max_retry,retry_strategy)
 VALUES ('APPROVED-ONE','ollama_model_invocation','ollama_inference','queued',
  '{{"requestId":"{REQUEST}","modelId":"qwen2.5:3b"}}',0,'immediate');
@@ -168,6 +173,36 @@ UPDATE ai_platform.ai_jobs SET status='completed',completed_at=now(),result_json
   WHERE job_code='APPROVED-ONE';
 UPDATE ai_platform.ai_workers SET status='idle',running_jobs=0
   WHERE worker_name='{WORKER}';
+INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+SELECT 'job-engine','job_completed','ai_job',j.id::text,'success',
+ jsonb_build_object('workerId',w.id,'actualDuration',1200,'actualCost',NULL)
+FROM ai_platform.ai_jobs j, ai_platform.ai_workers w
+WHERE j.job_code='APPROVED-ONE' AND w.worker_name='{WORKER}';
+-- Audit insertion for a wrong job or worker must be denied even if the action
+-- and module are otherwise accepted. This is the formerly missing RLS guard.
+DO $negative_audit_scope$
+BEGIN
+ BEGIN
+  INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+  VALUES ('job-engine','job_completed','ai_job','999999','success',
+    jsonb_build_object('workerId',999999));
+  RAISE EXCEPTION 'FORGED_JOB_AUDIT_ALLOWED';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+  INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+  VALUES ('worker-cluster','worker_registered','ai_worker','999999','success',
+    jsonb_build_object('workerName','forged-other-worker','workerType','coding_worker',
+      'leaseOwner','forged-other-owner','capabilities',jsonb_build_array('ollama_inference')));
+  RAISE EXCEPTION 'FORGED_WORKER_AUDIT_ALLOWED';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+  INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+  SELECT 'job-engine','job_completed','ai_job',j.id::text,'success',
+    jsonb_build_object('workerId',999999)
+  FROM ai_platform.ai_jobs j WHERE j.job_code='APPROVED-ONE';
+  RAISE EXCEPTION 'FORGED_JOB_WORKER_AUDIT_ALLOWED';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $negative_audit_scope$;
 -- After model completion, reject attempts to attribute another job,
 -- another worker, or another event type. Only one correct event is accepted.
 DO $negative_event$
@@ -291,6 +326,15 @@ RESET ROLE;
                   AND resource_id='APPROVED-MODEL-COMPLETION')<>1
           THEN RAISE EXCEPTION 'APPROVED_EVENT_AUDIT_NOT_PERSISTED'; END IF;
         END $verify_event_audit$;""")
+        psql("""DO $verify_bounded_audits$
+        BEGIN
+          IF (SELECT count(*) FROM ai_platform.ai_audit_logs
+                WHERE module='worker-cluster' AND action='worker_registered')<>1
+            OR (SELECT count(*) FROM ai_platform.ai_audit_logs
+                WHERE module='job-engine' AND action='job_completed')<>1
+            OR EXISTS (SELECT 1 FROM ai_platform.ai_audit_logs WHERE resource_id='999999')
+          THEN RAISE EXCEPTION 'SCOPED_AUDIT_CARDINALITY_FAILED'; END IF;
+        END $verify_bounded_audits$;""")
         check=psql(f"""SELECT
  (SELECT count(*) FROM pg_roles WHERE rolname='{ROLE}')=0 AS role_absent,
  (SELECT count(*) FROM pg_policies WHERE policyname LIKE 'cst_model_pilot_%')=0 AS policies_absent,
