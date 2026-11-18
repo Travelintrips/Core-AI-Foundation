@@ -58,6 +58,8 @@ el('refresh').onclick=load;
 el('inspectRepo').onclick=async()=>{try{const d=await api('/api/jobs',{kind:'repository_inspection',repository:'Travelintrips/Core-AI-Foundation',ref:'develop'});status('Inspeksi masuk antrean: '+d.job_id);await load()}catch(e){status(e.message)}};
 el('runCoding').onclick=async()=>{try{const source=el('codingSource').value,tests=el('codingTests').value;if(!source.trim()||!tests.trim())throw Error('Kode dan unit test wajib diisi');const d=await api('/api/jobs',{kind:'coding_test',repository:'Travelintrips/Core-AI-Foundation',ref:'develop',filename:'ai-coding-sandbox/solution.py',source,tests});status('Coding test masuk antrean: '+d.job_id);await load()}catch(e){status(e.message)}};
 async function loadIssue159(){
+ // Mirror the existing backend precommit minimum for the one-use chain.
+ const MIN_CHAIN_WINDOW_MS=120000;
  const d=await api('/api/gpt02/issue159/approval-intent/pending'),root=el('issue159Action');root.replaceChildren();
  if(d.pending===true){
   el('issue159Status').textContent='Task #'+d.taskId+' menunggu satu persetujuan Super Admin. Batas waktu: '+new Date(d.expiresAt).toLocaleString('id-ID')+'.';
@@ -67,12 +69,15 @@ async function loadIssue159(){
    if(fresh.pending!==true||fresh.taskId!==d.taskId||!fresh.claims||fresh.expiresAt<=Date.now()){
     await loadIssue159();el('issue159Status').textContent='Permintaan sudah kedaluwarsa atau tidak tersedia. Jangan setujui klaim lama.';return;
    }
+   if(fresh.expiresAt-Date.now()<=MIN_CHAIN_WINDOW_MS){
+    await loadIssue159();el('issue159Status').textContent='Waktu approval kurang dari 2 menit untuk auto-chain. Permintaan perlu diperbarui setelah kedaluwarsa jika preparation masih berlaku.';return;
+   }
    const a=d.claims,c=fresh.claims;
    if(!a||a.commandId!==c.commandId||a.attemptId!==c.attemptId||a.nonce!==c.nonce||d.expiresAt!==fresh.expiresAt){
     await loadIssue159();el('issue159Status').textContent='Permintaan approval telah diperbarui. Periksa batas waktu dan tekan Setujui sekali lagi.';return;
    }
    if(!confirm('Setujui Task #'+fresh.taskId+' sebagai Super Admin?'))return;
-   if(fresh.expiresAt<=Date.now()+1500){await loadIssue159();el('issue159Status').textContent='Permintaan kedaluwarsa sebelum pengiriman. Muat ulang permintaan.';return;}
+   if(fresh.expiresAt-Date.now()<=MIN_CHAIN_WINDOW_MS){await loadIssue159();el('issue159Status').textContent='Waktu approval kurang dari 2 menit setelah konfirmasi. Tidak ada persetujuan dikirim; permintaan perlu diperbarui bila preparation masih berlaku.';return;}
    const out=await api('/api/gpt02/issue159/approval-intent',{claims:c});
    let approvalStatus;
    if(out.autoChainCompleted===true){
@@ -98,7 +103,8 @@ async function loadIssue159(){
 
   }finally{if(root.contains(b))b.disabled=false}};
   if(d.expiresAt<=Date.now()){b.disabled=true;el('issue159Status').textContent='Permintaan kedaluwarsa. Muat ulang halaman.'}
-  else setTimeout(()=>{if(root.contains(b)){b.disabled=true;el('issue159Status').textContent='Permintaan approval kedaluwarsa. Tidak ada persetujuan dikirim.'}},Math.max(0,d.expiresAt-Date.now()));
+  else if(d.expiresAt-Date.now()<=MIN_CHAIN_WINDOW_MS){b.disabled=true;el('issue159Status').textContent='Waktu approval kurang dari 2 menit untuk auto-chain. Permintaan perlu diperbarui setelah kedaluwarsa jika preparation masih berlaku.'}
+  else setTimeout(()=>{if(root.contains(b)){b.disabled=true;el('issue159Status').textContent='Sisa waktu approval kurang dari 2 menit. Tidak ada persetujuan dikirim; perbarui permintaan setelah kedaluwarsa jika preparation masih berlaku.'}},Math.max(0,d.expiresAt-Date.now()-MIN_CHAIN_WINDOW_MS));
   root.append(b);
  }else{
   const messages={NO_PENDING_REQUEST:'Belum ada task baru yang meminta persetujuan. Task lama yang kedaluwarsa tidak digunakan ulang.',PENDING_REQUEST_INVALID:'Permintaan approval tidak valid. Siapkan ulang dari task DEV yang sah.',PENDING_REQUEST_EXPIRED:'Permintaan approval sudah kedaluwarsa. Siapkan permintaan baru dari task yang valid.',PENDING_REQUEST_ALREADY_APPROVED:'Task ini sudah memiliki persetujuan tercatat. Tidak perlu menyetujui ulang.',PENDING_REQUEST_ACTOR_MISMATCH:'Permintaan ini terikat ke akun Super Admin lain.'};
