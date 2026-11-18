@@ -332,9 +332,29 @@ test("pilot completion awaits event persistence and fails visibly; ordinary jobs
   const mutatorAt=fragment.indexOf("const [completed] = await db");
   assert.ok(guardAt>=0 && mutatorAt>guardAt,"pilot validation must precede job mutation");
   assert.match(fragment,/if \(devPilotMode === "await_persist"\)/);
-  assert.match(fragment,/await publish\(completionEvent\)/);
-  assert.match(fragment,/CST_DEV_MODEL_COMPLETION_EVENT_NOT_PERSISTED/);
+  assert.match(fragment,/await publishAuditedCstDevModelCompletion\(completionEvent\)/);
+  assert.match(fragment,/CST_DEV_MODEL_COMPLETION_EVENT_AUDIT_NOT_COMMITTED/);
   assert.match(fragment,/publishSafe\(completionEvent\)/);
   assert.match(fragment,/do NOT replay the completed job/);
   assert.doesNotMatch(fragment,/finalAckVerified: true|attestationVerified: true/);
+});
+
+test("one-job event and audit require one atomic transaction, without global dispatch privileges", () => {
+  const bus=readFileSync(new URL("../artifacts/api-server/src/services/aiEventBusService.ts",import.meta.url),"utf8");
+  const start=bus.indexOf("export async function publishAuditedCstDevModelCompletion(");
+  const end=bus.indexOf("export function publishSafe(",start);
+  const scoped=bus.slice(start,end);
+  assert.ok(start>0 && end>start);
+  assert.match(scoped,/if \(process\.env\.APP_ENV !== "development"/);
+  assert.match(scoped,/CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED/);
+  assert.match(scoped,/CST_DEV_MODEL_EVENT_AUDIT_SCOPE_INVALID/);
+  assert.match(scoped,/db\.transaction\(async tx =>/);
+  assert.match(scoped,/await tx\.insert\(aiEventsTable\)/);
+  assert.match(scoped,/await tx\.insert\(aiAuditLogsTable\)/);
+  assert.match(scoped,/action: "event_published"/);
+  assert.match(scoped,/eventType: "job\.completed"/);
+  assert.match(scoped,/sourceModule: "job-engine"/);
+  assert.match(scoped,/dispatch\(event\)\.catch/);
+  assert.doesNotMatch(scoped,/logAudit\(/);
+  assert.doesNotMatch(scoped,/FinalAckVerified: true|attestationVerified: true/);
 });
