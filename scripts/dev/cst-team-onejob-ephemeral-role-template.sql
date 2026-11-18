@@ -1,6 +1,6 @@
 -- CST AI TEAM MODEL PILOT: short-lived dedicated DB login, exact job and worker.
 -- NOT a general production migration. Only generate after a disposable PostgreSQL rehearsal.
--- Replace all {{...}} placeholders with verified literal values; never execute raw template.
+-- Replace every named template placeholder with a verified literal; never execute raw template.
 -- The runtime application role aicore_dev_runtime is never changed.
 DO $guard$
 BEGIN
