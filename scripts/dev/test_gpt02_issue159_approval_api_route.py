@@ -205,7 +205,7 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
             "user_id": AUTH_USER_ID, "email": "fixture@example.com",
             "role": "super_admin", "auth_level": "aal1",
         }
-        with sqlite3.connect(self.db) as con:
+        with api.conn() as con:
             con.executescript("""
                 CREATE TABLE jobs (
                     id TEXT PRIMARY KEY, kind TEXT NOT NULL,
