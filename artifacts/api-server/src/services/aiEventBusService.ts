@@ -106,8 +106,10 @@ export async function publishAuditedCstDevModelCompletion(
       process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED !== "true" ||
       opts.eventType !== "job.completed" || opts.sourceModule !== "job-engine" ||
       !payload || payload.jobType !== "ollama_model_invocation" ||
-      !Number.isSafeInteger(payload.jobId) || Number(payload.jobId) < 1 ||
-      !Number.isSafeInteger(payload.workerId) || Number(payload.workerId) < 1 ||
+      typeof payload.jobId !== "number" ||
+      !Number.isSafeInteger(payload.jobId) || payload.jobId < 1 ||
+      typeof payload.workerId !== "number" ||
+      !Number.isSafeInteger(payload.workerId) || payload.workerId < 1 ||
       opts.sourceId !== String(payload.jobId) ||
       typeof payload.jobCode !== "string" || !payload.jobCode) {
     throw new Error("CST_DEV_MODEL_EVENT_AUDIT_SCOPE_INVALID");
