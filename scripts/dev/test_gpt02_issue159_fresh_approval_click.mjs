@@ -12,7 +12,7 @@ assert.ok(code.includes("approval-intent',{claims:c}"));
 assert.ok(code.includes("root.contains(b)"));
 assert.ok(code.includes("setTimeout("));
 
-function fixture({initial,preflight,after,now=1000000,confirmYes=true,postError=null}){
+function fixture({initial,preflight,after,now=1000000,confirmYes=true,postError=null,postResponse=null}){
   const actions=[];
   const statuses={textContent:""};
   let btn;
@@ -33,7 +33,7 @@ function fixture({initial,preflight,after,now=1000000,confirmYes=true,postError=
     }
     assert.equal(path,"/api/gpt02/issue159/approval-intent");
     if(postError)throw Error(postError);
-    return {decision:"APPROVE"};
+    return postResponse || {decision:"APPROVE"};
   };
   const context={el:id=>id==="issue159Action"?root:statuses,document:{createElement:()=>({textContent:"",disabled:false})},Date:DateMock,setTimeout:(cb,ms)=>{timers.push({cb,ms});},api,confirm:()=>{actions.push({confirm:true});return confirmYes;}};
   const sandbox=vm.createContext(context);
@@ -86,4 +86,37 @@ const expired=()=>({pending:false,reason:"PENDING_REQUEST_EXPIRED"});
  assert.equal(t.btn.disabled,true);
  assert.match(t.statuses.textContent,/kedaluwarsa/);
 }
-console.log("PASS: 6 stale-claim click guards; refreshed request, changed nonce, expired GET, denied POST, expiry timer, already-expired UI");
+{
+ const changed={...pending(),claims:{...claims(),"commandId":"different-command"}};
+ const t=fixture({initial:pending(),preflight:changed,after:changed});
+ await t.load();await t.btn.onclick();
+ assert.equal(t.actions.filter(x=>x.path==="/api/gpt02/issue159/approval-intent").length,0);
+ assert.equal(t.actions.filter(x=>x.confirm).length,0);
+ assert.match(t.statuses.textContent,/diperbarui/);
+}
+{
+ const t=fixture({initial:pending(),preflight:pending(),after:expired(),
+  postResponse:{autoChainCompleted:true,releaseDecision:"NO_GO",dispatchPermitted:false}});
+ await t.load();await t.btn.onclick();
+ assert.match(t.statuses.textContent,/Final ACK operasional belum terverifikasi/);
+ assert.match(t.statuses.textContent,/Signing, authorization, dan dispatch tetap NO-GO/);
+ assert.doesNotMatch(t.statuses.textContent,/full-chain DEV selesai/);
+ assert.equal(t.actions.filter(x=>x.path==="/api/gpt02/issue159/approval-intent").length,1);
+}
+{
+ const t=fixture({initial:pending(),preflight:pending(),after:expired(),
+  postResponse:{autoChainCompleted:false,autoChainError:"ISSUER_READER_NOT_READY"}});
+ await t.load();await t.btn.onclick();
+ assert.match(t.statuses.textContent,/auto-chain berhenti aman: ISSUER_READER_NOT_READY/);
+ assert.match(t.statuses.textContent,/Final ACK belum terverifikasi/);
+}
+{
+ const t=fixture({initial:pending(),preflight:pending(),after:expired(),
+  postError:'503 {"error":"issue159_approved_packet_recovery_required","intentRecorded":true,"approvalCanBeReplayed":false}'});
+ await t.load();await t.btn.onclick();
+ assert.match(t.statuses.textContent,/Persetujuan sudah tercatat/);
+ assert.match(t.statuses.textContent,/Jangan setujui ulang/);
+ assert.equal(t.actions.filter(x=>x.path==="/api/gpt02/issue159/approval-intent").length,1);
+}
+console.log("PASS: 10 guarded clicks; stale nonce/command, expiry, one-use recovery, truthful auto-chain vs Final ACK");
+
