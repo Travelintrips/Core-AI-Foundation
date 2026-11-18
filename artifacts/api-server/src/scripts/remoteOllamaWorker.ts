@@ -53,6 +53,52 @@ async function markGpuActivity(): Promise<void> {
   }
 }
 
+/** Fail closed when the legacy outbound worker runs for a DEV pilot.
+ * Existing production worker behavior is unchanged. Never silently use the
+ * old production-default URL from a DEV shell or Windows worker.
+ */
+function assertCstDevOutboundTarget(env: NodeJS.ProcessEnv): void {
+  const devRequested = env["APP_ENV"] === "development" ||
+    env["NODE_ENV"] === "development" ||
+    env["CST_TEAM_OUTBOUND_DEV_ONLY"] === "true";
+  if (!devRequested) return;
+  if (env["APP_ENV"] !== "development" || env["NODE_ENV"] !== "development") {
+    throw new Error("CST_TEAM_DEV_RUNTIME_REQUIRED");
+  }
+  const raw = env["AICORE_REMOTE_URL"]?.trim();
+  if (!raw) throw new Error("CST_TEAM_EXPLICIT_DEV_CORE_URL_REQUIRED");
+  let target: URL;
+  try { target = new URL(raw); }
+  catch { throw new Error("CST_TEAM_DEV_CORE_URL_INVALID"); }
+  if (target.username || target.password || target.search || target.hash ||
+      (target.pathname !== "/" && target.pathname !== "")) {
+    throw new Error("CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED");
+  }
+  const allowedDev = target.protocol === "https:" &&
+    ["dev.cstlogistic.co.id", "dev-aicore.cstlogistic.co.id"].includes(target.hostname) &&
+    !target.port;
+  const syntheticLoopback = env["CST_TEAM_SYNTHETIC_LOOPBACK_TEST"] === "true" &&
+    target.protocol === "http:" && target.hostname === "127.0.0.1" &&
+    target.port === "18444";
+  if (!allowedDev && !syntheticLoopback) {
+    throw new Error("CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED");
+  }
+  let local: URL;
+  try { local = new URL(env["OLLAMA_BASE_URL"] ?? "http://127.0.0.1:11434/v1"); }
+  catch { throw new Error("CST_TEAM_LOCAL_OLLAMA_URL_INVALID"); }
+  if (local.origin !== "http://127.0.0.1:11434" || local.pathname !== "/v1" ||
+      local.username || local.password || local.search || local.hash) {
+    throw new Error("CST_TEAM_LOCAL_OLLAMA_ONLY");
+  }
+  if (Number(env["OLLAMA_WORKER_MAX_CONCURRENCY"] ?? "1") !== 1) {
+    throw new Error("CST_TEAM_DEV_SINGLE_WORKER_SLOT_REQUIRED");
+  }
+  if (env["GCP_GPU_AUTO_STOP_ENABLED"] === "true") {
+    throw new Error("CST_TEAM_DEV_GCP_SELF_STOP_FORBIDDEN");
+  }
+}
+assertCstDevOutboundTarget(process.env);
+
 if (!enrollmentSecret) throw new Error("OLLAMA_REMOTE_ENROLLMENT_SECRET is required");
 
 async function json(response: Response): Promise<Record<string, any>> {
