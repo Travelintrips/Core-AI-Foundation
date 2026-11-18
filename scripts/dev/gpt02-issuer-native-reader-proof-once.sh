@@ -75,6 +75,14 @@ SQL
 docker run -i --rm --network host --env-file "$APP_ENV_FILE" --env-file "$SECRET_ENV" "$POSTGRES_IMAGE" \
   sh -lc 'exec psql "$SUPABASE_DATABASE_URL_DEV" -X -q -v ON_ERROR_STOP=1 -v p="$ISSUER_PASS"' >/dev/null <<'SQL'
 BEGIN;
+-- A second check in the same transaction closes the race between the
+-- read-only shell preflight and ALTER ROLE LOGIN.
+DO $relock_guard$
+BEGIN
+ IF to_regclass('gpt02_relock_audit.writer_issuance_watchdog') IS NOT NULL
+ THEN RAISE EXCEPTION 'RELOCK_UNTRACKED_LEGACY_READER_WINDOW_DENIED';
+ END IF;
+END $relock_guard$;
 ALTER ROLE gpt02_issuer_evidence_reader LOGIN CONNECTION LIMIT 1 PASSWORD :'p';
 COMMIT;
 SQL
