@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   validateCredentials,
   validateResult,
@@ -192,4 +194,116 @@ test('per-query deadlines preserve the order: identity then Phase A then Phase B
   const log=source.indexOf("JSON.stringify(cleanupEvidence(");
   assert.ok(validateA>0 && validateA<phaseB && phaseB<log,
     'Phase A must be validated before Phase B and non-authority report');
+});
+
+
+// Run a COPY of the actual supervisor against an isolated in-process pg stub.
+// No real network, Supabase credential, live role or installed VPS file is used.
+function simulateSupervisorWithFakePg(scenario) {
+  const base=mkdtempSync(join(tmpdir(),'gpt02-relock-fake-pg-'));
+  try {
+    const credRoot=join(base,'credentials');
+    const unit=join(credRoot,'fixture.service');
+    mkdirSync(unit,{recursive:true,mode:0o700});
+    const certificate=join(base,'ca.pem');
+    writeFileSync(certificate,'SYNTHETIC_CA_ONLY\n',{mode:0o600});
+    writeFileSync(join(unit,'relock-catalog-dsn'),JSON.stringify({
+      database:'postgres',
+      host:'db.xssrfshdrtdfupgqwfdw.supabase.co',
+      password:'X'.repeat(64),
+      port:5432,
+      projectRef:'xssrfshdrtdfupgqwfdw',
+      sslMode:'verify-full',
+      user:'dev_gpt02_relock_catalog_auditor',
+    }),{mode:0o600});
+    const original=readFileSync(fileURLToPath(new URL(
+      '../../deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs',
+      import.meta.url
+    )),'utf8');
+    const replaceExact=(input,oldText,newText)=>{
+      assert.equal(input.split(oldText).length,2,'pinned source fixture marker changed');
+      return input.replace(oldText,newText);
+    };
+    let isolated=replaceExact(original,
+      "const CERT = '/etc/gpt02-dev/supabase-root-ca-2021.crt';",
+      'const CERT = '+JSON.stringify(certificate)+';');
+    isolated=replaceExact(isolated,
+      "directory?.startsWith('/run/credentials/')",
+      'directory?.startsWith('+JSON.stringify(credRoot+'/')+')');
+    isolated=replaceExact(isolated,
+      "require('/opt/gpt02-reader-runtime/node_modules/pg')",
+      "require('./synthetic-pg.cjs')");
+    const entry=join(base,'relock-simulated.mjs');
+    const stub=join(base,'synthetic-pg.cjs');
+    const trace=join(base,'trace.jsonl');
+    writeFileSync(entry,isolated,{mode:0o600});
+    writeFileSync(stub,"'use strict';\nconst fs = require('node:fs');\nconst scenario = process.env.FAKE_SCENARIO || 'success';\nfunction record(type, extras = {}) {\n  fs.appendFileSync(process.env.FAKE_TRACE, JSON.stringify({type, ...extras}) + '\\n');\n}\nclass Client {\n  constructor(config) {\n    this.config=config;\n    record('constructor', {\n      host:config.host, user:config.user, database:config.database,\n      queryTimeout:config.query_timeout,\n      statementTimeout:config.statement_timeout,\n      connectionTimeout:config.connectionTimeoutMillis,\n    });\n  }\n  async connect() {record('connect');}\n  async query(query) {\n    const sql=typeof query==='string'?query:query.text;\n    const timeout=typeof query==='string'?this.config.query_timeout:query.query_timeout;\n    let kind='unexpected';\n    if (sql.includes('session_user::text'))kind='identity';\n    else if (sql.includes('to_regprocedure'))kind='prerequisites';\n    else if (sql.includes('relock_expired_phase_a() AS count'))kind='phaseA';\n    else if (sql.includes('relock_expired_phase_b() AS count'))kind='phaseB';\n    record('query',{kind, timeout});\n    if(kind==='identity')return {rows:[{\n      actor:scenario==='wrongIdentity'?'postgres':'dev_gpt02_relock_catalog_auditor',\n      database:'postgres'\n    }]};\n    if(kind==='prerequisites')return {rows:[{phase_a:true,phase_b:true}]};\n    if(kind==='phaseA'){\n      if(scenario==='invalidA')return {rows:[{count:'2'}]};\n      return {rows:[{count:2}]};\n    }\n    if(kind==='phaseB'){\n      if(scenario==='phaseBFailure')throw new Error('Synthetic DB termination failure');\n      if(scenario==='invalidB')return {rows:[{count:-1}]};\n      return {rows:[{count:2}]};\n    }\n    throw new Error('UNEXPECTED_QUERY');\n  }\n  async end() {record('end');}\n}\nmodule.exports={Client};\n",{mode:0o600});
+    const child=spawnSync(process.execPath,[entry],{
+      encoding:'utf8',timeout:8000,
+      env:{...process.env, APP_ENV:'development',
+        CREDENTIALS_DIRECTORY:unit,
+        FAKE_TRACE:trace, FAKE_SCENARIO:scenario},
+    });
+    assert.equal(child.error,undefined);
+    const traces=readFileSync(trace,'utf8').trim().split(/\r?\n/).filter(Boolean)
+      .map(line=>JSON.parse(line));
+    return {child,traces};
+  } finally {
+    rmSync(base,{recursive:true,force:true});
+  }
+}
+
+test('full supervisor query sequence uses separate bounded phase calls',()=>{
+  const {child,traces}=simulateSupervisorWithFakePg('success');
+  assert.equal(child.status,0);
+  assert.equal(child.stderr.trim(),'');
+  const out=JSON.parse(child.stdout.trim());
+  assert.equal(out.phaseAWindowCount,2);
+  assert.equal(out.phaseBCleanedWindowCount,2);
+  assert.equal(out.connectedSessionTerminationProven,false);
+  assert.equal(out.authorizationGranted,false);
+  assert.equal(out.signingPermitted,false);
+  assert.equal(out.dispatchPermitted,false);
+  assert.equal(out.releaseDecision,'NO_GO');
+  const names=traces.filter(x=>x.type==='query').map(x=>x.kind);
+  assert.deepEqual(names,['identity','prerequisites','phaseA','phaseB']);
+  assert.equal(traces.find(x=>x.type==='constructor').host,
+    'db.xssrfshdrtdfupgqwfdw.supabase.co');
+  assert.deepEqual(traces.filter(x=>x.type==='query').map(x=>x.timeout),
+    [2500,2500,4500,15000]);
+  assert.equal(traces.at(-1).type,'end');
+});
+
+test('Phase B database failure cannot be reported as cleanup success',()=>{
+  const {child,traces}=simulateSupervisorWithFakePg('phaseBFailure');
+  assert.equal(child.status,3);
+  assert.equal(child.stdout.trim(),'');
+  const out=JSON.parse(child.stderr.trim());
+  assert.equal(out.releaseDecision,'NO_GO');
+  assert.equal(out.signingPermitted,false);
+  assert.equal(out.reason,'RELOCK_DATABASE_OR_CUSTODY_UNAVAILABLE');
+  assert.deepEqual(traces.filter(x=>x.type==='query').map(x=>x.kind),
+    ['identity','prerequisites','phaseA','phaseB']);
+  assert.equal(traces.at(-1).type,'end');
+});
+
+test('malformed Phase A count is rejected before Phase B is called',()=>{
+  const {child,traces}=simulateSupervisorWithFakePg('invalidA');
+  assert.equal(child.status,3);
+  assert.equal(child.stdout.trim(),'');
+  assert.equal(JSON.parse(child.stderr.trim()).releaseDecision,'NO_GO');
+  assert.deepEqual(traces.filter(x=>x.type==='query').map(x=>x.kind),
+    ['identity','prerequisites','phaseA']);
+  assert.equal(traces.at(-1).type,'end');
+});
+
+test('wrong native identity rejects both phases',()=>{
+  const {child,traces}=simulateSupervisorWithFakePg('wrongIdentity');
+  assert.equal(child.status,3);
+  assert.equal(child.stdout.trim(),'');
+  assert.equal(JSON.parse(child.stderr.trim()).reason,
+    'RELOCK_NATIVE_DATABASE_IDENTITY_INVALID');
+  assert.deepEqual(traces.filter(x=>x.type==='query').map(x=>x.kind),
+    ['identity']);
+  assert.equal(traces.at(-1).type,'end');
 });
