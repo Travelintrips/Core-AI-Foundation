@@ -55,3 +55,14 @@ test("new endpoint never exposes write permission, tokens or command dispatch", 
   assert.match(snippet, /projectCstTeamReadiness\(registry\)/);
   assert.doesNotMatch(snippet, /submitCodingBridgeCommand|dispatchExternalAgentWork|claimCodingBridgeCommand|process\.env\.[A-Z_]*TOKEN|req\.body|req\.query/);
 });
+
+test("DEV readiness GET does not attempt schema creation or privileged DDL", () => {
+  const registry = readFileSync(new URL("../artifacts/api-server/src/services/externalAgentRegistryService.ts", import.meta.url), "utf8");
+  const snippet = route.slice(
+    route.indexOf('router.get("/ai/coding/bridge/cst-team-readiness"'),
+    route.indexOf('router.get("/ai/coding/bridge/ai-task-timeline"'),
+  );
+  assert.match(snippet, /getExternalAgentRegistrySnapshot\(\{ skipSchemaEnsure: true \}\)/);
+  assert.doesNotMatch(snippet, /ensureCodingControlBridgeTables|CREATE TABLE|ALTER TABLE/);
+  assert.match(registry, /if \(!options\.skipSchemaEnsure\) await ensureCodingControlBridgeTables\(\)/);
+});
