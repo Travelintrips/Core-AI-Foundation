@@ -97,9 +97,10 @@ export async function publish(opts: PublishOptions): Promise<AiEvent> {
  *
  * Existing publish()/publishSafe() paths stay unchanged for ordinary jobs.
  */
-export async function publishAuditedCstDevModelCompletion(
-  opts: PublishOptions,
-): Promise<AiEvent> {
+/** Construct one guarded pilot event and one matching audit record.
+ * Pure metadata preparation; caller must persist BOTH records atomically.
+ */
+export function prepareCstDevModelCompletionEvent(opts: PublishOptions) {
   const payload = opts.payload;
   if (process.env.APP_ENV !== "development" ||
       process.env.NODE_ENV !== "development" ||
@@ -122,21 +123,34 @@ export async function publishAuditedCstDevModelCompletion(
     payloadJson: payload, metadataJson: opts.metadata ?? {},
     status: "published", publishedAt: new Date(),
   };
+  const audit = {
+    module: "event-bus", action: "event_published", resourceId: eventId,
+    resourceType: "ai_event", status: "success",
+    details: { eventType: "job.completed", sourceModule: "job-engine", correlationId },
+  };
+  return { row, audit };
+}
+
+/** After a successful DB commit only: delivery is best-effort and not proof of QA. */
+export function dispatchCstDevModelCompletionAfterCommit(event: AiEvent): void {
+  dispatch(event).catch(err =>
+    logger.error({ err, eventId: event.eventId },
+      "[event-bus] CST-DEV subscriber dispatch failed"),
+  );
+}
+
+export async function publishAuditedCstDevModelCompletion(
+  opts: PublishOptions,
+): Promise<AiEvent> {
+  const { row, audit } = prepareCstDevModelCompletionEvent(opts);
   const event = await db.transaction(async tx => {
     const [persisted] = await tx.insert(aiEventsTable).values(row).returning();
     if (!persisted) throw new Error("CST_DEV_MODEL_EVENT_INSERT_FAILED");
-    // Do NOT use logAudit here: it intentionally swallows insertion errors.
-    // A failed audit INSERT must ROLLBACK the event INSERT as well.
-    await tx.insert(aiAuditLogsTable).values({
-      module: "event-bus", action: "event_published", resourceId: eventId,
-      resourceType: "ai_event", status: "success",
-      details: { eventType: "job.completed", sourceModule: "job-engine", correlationId },
-    });
+    // A failed audit INSERT must roll back the event INSERT.
+    await tx.insert(aiAuditLogsTable).values(audit);
     return persisted;
   });
-  dispatch(event).catch(err =>
-    logger.error({ err, eventId }, "[event-bus] CST-DEV subscriber dispatch failed"),
-  );
+  dispatchCstDevModelCompletionAfterCommit(event);
   return event;
 }
 
