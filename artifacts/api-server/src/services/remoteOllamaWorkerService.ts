@@ -58,6 +58,13 @@ export async function registerRemoteOllamaWorker(input: {
   region?: string;
   version?: string;
 }): Promise<AiWorker> {
+  const devModelOnly = process.env.APP_ENV === "development" &&
+    process.env.NODE_ENV === "development" &&
+    process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true";
+  // The one-job DEV worker never advertises PowerShell execution capability.
+  const remoteCapabilities = devModelOnly
+    ? [REMOTE_OLLAMA_CAPABILITY]
+    : [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY];
   // Re-enrollment must be idempotent. A second copy of the same outbound
   // agent can overlap briefly during restart/reconnect; rotating the shared
   // heartbeat token on every registration makes both copies invalidate each
@@ -81,7 +88,7 @@ export async function registerRemoteOllamaWorker(input: {
           status: sql`CASE WHEN running_jobs > 0 THEN 'busy' ELSE 'online' END`,
           region: input.region ?? "remote",
           version: input.version ?? "1.0.0",
-          capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
+          capabilities: remoteCapabilities,
           maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
           leaseOwner: "ollama-remote:" + input.nodeId,
           updatedAt: new Date(),
@@ -98,7 +105,7 @@ export async function registerRemoteOllamaWorker(input: {
     nodeId: input.nodeId,
     region: input.region ?? "remote",
     version: input.version ?? "1.0.0",
-    capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
+    capabilities: remoteCapabilities,
     maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
     leaseOwner: "ollama-remote:" + input.nodeId,
     leaseTtlMs: DEFAULT_LEASE_TTL_MS,
