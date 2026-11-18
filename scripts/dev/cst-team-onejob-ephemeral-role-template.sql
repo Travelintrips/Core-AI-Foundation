@@ -80,7 +80,7 @@ BEGIN
    SELECT 1 FROM pg_roles WHERE rolname='{{PILOT_ROLE}}'
      AND (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb)
  ) THEN RAISE EXCEPTION 'CST_MODEL_PILOT_ROLE_ESCALATED'; END IF;
- IF EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON m.member=m.roleid
+ IF EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member
             WHERE r.rolname='{{PILOT_ROLE}}')
  THEN RAISE EXCEPTION 'CST_MODEL_PILOT_ROLE_INHERITANCE_PRESENT'; END IF;
 END $guard$;
