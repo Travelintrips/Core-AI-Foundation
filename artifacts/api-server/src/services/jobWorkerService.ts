@@ -24,7 +24,8 @@ import { MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
 import { prepareCstDevModelCompletionEvent,
   dispatchCstDevModelCompletionAfterCommit, publishSafe } from "./aiEventBusService.js";
-import { classifyCstDevModelCompletion } from "../lib/cstTeamModelCompletionGuard.js";
+import { classifyCstDevModelCompletion,
+  isExactCstDevModelPilotJobId } from "../lib/cstTeamModelCompletionGuard.js";
 import { executeAI } from "./aiExecutionService.js";
 import { finalizeWorkflowCost } from "./observabilityService.js";
 import { routeToModel } from "./aiModelRouter.js";
@@ -783,6 +784,16 @@ export async function completeJob(
     { attempts: 5, baseDelayMs: 250 },
   );
 
+  // The exact approved model pilot ID stays reserved even when the app role
+  // cannot SELECT it due to RLS. In that case we must NOT fall through to
+  // ordinary publishSafe completion. This check precedes ALL job writes.
+  const initialPilotMode = classifyCstDevModelCompletion(job, null, workerId);
+  if (isExactCstDevModelPilotJobId(jobId) &&
+      (!job || job.id !== jobId || initialPilotMode !== "blocked")) {
+    logger.error({ jobId, workerId }, "CST-DEV pilot job row hidden or wrong type");
+    throw new Error("CST_DEV_MODEL_COMPLETION_SOURCE_NOT_VISIBLE_OR_INVALID");
+  }
+
   const actualDuration = job?.startedAt
     ? now.getTime() - job.startedAt.getTime()
     : null;
@@ -790,7 +801,7 @@ export async function completeJob(
   // Fail CLOSED before updating the job row. Previously a mismatched pilot
   // could become status=completed and only then report a binding error.
   // Ordinary jobs still use the original single worker-read after update.
-  let devPilotMode = classifyCstDevModelCompletion(job, null, workerId);
+  let devPilotMode = initialPilotMode;
   let validatedPilotWorker: AiWorker | undefined;
   if (devPilotMode === "blocked") {
     const [pilotWorker] = await db
