@@ -75,7 +75,18 @@ CREATE POLICY cst_model_pilot_worker_update ON ai_platform.ai_workers FOR UPDATE
 CREATE POLICY cst_model_pilot_audit_insert ON ai_platform.ai_audit_logs FOR INSERT TO {{PILOT_ROLE}}
  WITH CHECK (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
    AND ((module='worker-cluster' AND action='worker_registered' AND resource_type='ai_worker')
-      OR (module='job-engine' AND action='job_completed' AND resource_type='ai_job')));
+      OR (module='job-engine' AND action='job_completed' AND resource_type='ai_job')
+      OR (module='event-bus' AND action='event_published' AND resource_type='ai_event'
+        AND details->>'eventType'='job.completed'
+        AND details->>'sourceModule'='job-engine'
+        AND EXISTS (
+          SELECT 1 FROM ai_platform.ai_events e
+          WHERE e.event_id=ai_audit_logs.resource_id
+            AND e.correlation_id=ai_audit_logs.details->>'correlationId'
+            AND e.event_type='job.completed'
+            AND e.source_module='job-engine'
+            AND e.status='published'
+        ))));
 -- Exactly one permitted event shape: a persisted completion for a previously
 -- completed Company-1 model job, with matching jobCode/jobId/workerId.
 -- No event-bus subscription read or event processing privileges are granted.
