@@ -244,6 +244,9 @@ test("job completion event RLS is bound to persisted Company1 worker and cleanly
   const rollback=readFileSync(new URL("../scripts/dev/cst-team-onejob-ephemeral-role-rollback-template.sql",import.meta.url),"utf8");
   const rehearsal=readFileSync(new URL("../scripts/dev/cst-team-dedicated-model-role-rehearsal.py",import.meta.url),"utf8");
   assert.match(apply,/GRANT SELECT,INSERT ON TABLE ai_platform\.ai_events TO/);
+  assert.match(apply,/module='event-bus' AND action='event_published'/);
+  assert.match(apply,/e\.event_id=ai_audit_logs\.resource_id/);
+  assert.match(apply,/e\.correlation_id=ai_audit_logs\.details->>'correlationId'/);
   assert.match(apply,/ai_platform\.ai_events_id_seq/);
   assert.match(apply,/CREATE POLICY cst_model_pilot_event_read/);
   assert.match(apply,/CREATE POLICY cst_model_pilot_event_insert/);
@@ -268,5 +271,7 @@ test("job completion event RLS is bound to persisted Company1 worker and cleanly
   assert.match(rehearsal,/WRONG_JOB_CODE_ALLOWED/);
   assert.match(rehearsal,/WRONG_EVENT_MODULE_ALLOWED/);
   assert.match(rehearsal,/completionEventDispatchVerified":False/);
+  assert.match(rehearsal,/FABRICATED_EVENT_AUDIT_ALLOWED/);
+  assert.match(rehearsal,/APPROVED_EVENT_AUDIT_NOT_PERSISTED/);
   assert.match(rehearsal,/PostgreSQL init process complete; ready for start up/);
 });
