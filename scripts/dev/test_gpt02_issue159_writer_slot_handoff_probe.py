@@ -29,6 +29,41 @@ def load_pure_guard():
 guard = load_pure_guard()
 
 
+def load_catalog_guard():
+    """AST-load only the new pure fail-closed predicate; no VPS imports."""
+    tree = ast.parse(SOURCE.read_text())
+    funcs = [
+        node for node in tree.body if isinstance(node, ast.FunctionDef)
+        and node.name == "require_no_untracked_catalog_window"
+    ]
+    if len(funcs) != 1:
+        raise AssertionError("RELOCK_CATALOG_GUARD_ABSENT")
+    safe_module = ast.Module(body=funcs, type_ignores=[])
+    namespace = {"RuntimeError": RuntimeError}
+    exec(compile(safe_module, str(SOURCE), "exec"), namespace)
+    return namespace["require_no_untracked_catalog_window"]
+
+
+catalog_guard = load_catalog_guard()
+
+
+class FakeCatalogAdmin:
+    def __init__(self, row):
+        self.row = row
+        self.calls = []
+
+    def execute(self, query):
+        expected = ("SELECT to_regclass("
+                    "'gpt02_relock_audit.writer_issuance_watchdog') IS NOT NULL")
+        if query != expected:
+            raise AssertionError("UNEXPECTED_OR_MUTATING_CATALOG_QUERY")
+        self.calls.append(query)
+        return self
+
+    def fetchone(self):
+        return self.row
+
+
 class Result:
     def __init__(self, number):
         self.number = number
@@ -66,6 +101,32 @@ class Clock:
 
 
 class HandoffSlotSafetyTest(unittest.TestCase):
+    def test_installed_relock_catalog_blocks_legacy_role_opening(self):
+        admin = FakeCatalogAdmin((True,))
+        with self.assertRaisesRegex(
+            RuntimeError, "WRITER_HANDOFF_RELOCK_WATCHDOG_REGISTRATION_REQUIRED"
+        ):
+            catalog_guard(admin)
+        self.assertEqual(len(admin.calls), 1)
+
+    def test_missing_or_ambiguous_catalog_fails_closed_except_legacy_absence(self):
+        for result in (None, (), (None,), (1,), (True,)):
+            with self.subTest(result=result), self.assertRaisesRegex(
+                RuntimeError, "WRITER_HANDOFF_RELOCK_WATCHDOG_REGISTRATION_REQUIRED"
+            ):
+                catalog_guard(FakeCatalogAdmin(result))
+        legacy = FakeCatalogAdmin((False,))
+        catalog_guard(legacy)
+        self.assertEqual(len(legacy.calls), 1)
+
+    def test_catalog_guard_executes_before_first_legacy_role_open(self):
+        text = SOURCE.read_text()
+        call = text.index("\\n require_no_untracked_catalog_window(admin)\\n".replace("\\n", "\n"))
+        armed = text.index("\\n armed=True\\n".replace("\\n", "\n"))
+        unlock = text.index('admin.execute(sql.SQL("ALTER ROLE {} LOGIN')
+        self.assertLess(call, armed)
+        self.assertLess(armed, unlock)
+
     def test_immediate_free_attestor_slot(self):
         admin = FakeAdmin([0])
         clock = Clock()
