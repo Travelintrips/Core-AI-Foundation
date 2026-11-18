@@ -736,6 +736,59 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(body["releaseDecision"], "NO_GO")
         self.assertEqual(self.count(), 1)
 
+    def test_committed_intent_packet_serialization_failure_cannot_be_retried(self):
+        # Approval is committed BEFORE packet JSON publication. A ValueError
+        # must be reported as recovery-required, not generic 400 invalid_request.
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        private_marker = "SYNTHETIC_PACKET_SERIALIZATION_DETAILS"
+        with patch.object(api, "persist_issue159_approved_packet",
+                          side_effect=ValueError(private_marker)), \
+             patch.object(api, "run_after_approval") as signer:
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 503)
+        self.assertEqual(body["error"], "issue159_approved_packet_recovery_required")
+        self.assertIs(body["intentRecorded"], True)
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["signingPermitted"], False)
+        self.assertIs(body["authorizationGranted"], False)
+        self.assertIs(body["dispatchPermitted"], False)
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertNotIn(private_marker, json.dumps(body))
+        self.assertEqual(self.count(), 1)
+        self.assertFalse(Path(self.packet).exists())
+        signer.assert_not_called()
+        again, replay = self.request(AAL2_TOKEN)
+        self.assertEqual(again, 409)
+        self.assertEqual(replay["error"], "approval_intent_conflict")
+        self.assertEqual(self.count(), 1)
+
+    def test_committed_intent_packet_type_failure_cannot_be_retried(self):
+        # Non-IO serialization errors use the same fail-closed recovery gate.
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        with patch.object(api, "persist_issue159_approved_packet",
+                          side_effect=TypeError("SYNTHETIC_INTERNAL_PACKET")) as pub, \
+             patch.object(api, "run_after_approval") as signer:
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 503)
+        pub.assert_called_once()
+        signer.assert_not_called()
+        self.assertTrue(body["intentRecorded"])
+        self.assertFalse(body["approvalCanBeReplayed"])
+        self.assertEqual(body["error"], "issue159_approved_packet_recovery_required")
+        self.assertNotIn("SYNTHETIC_INTERNAL_PACKET", json.dumps(body))
+        self.assertFalse(body["dispatchPermitted"])
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+        self.assertFalse(Path(self.packet).exists())
+
     def test_committed_sqlite_intent_survives_packet_publish_io_failure(self):
         """A publish error must never imply the one-use approval can be repeated."""
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
