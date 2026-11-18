@@ -77,6 +77,7 @@ class AutoChainSequenceTest(unittest.TestCase):
         for p in self.patches:
             p.start()
             self.addCleanup(p.stop)
+        self.reset_failed = chain._reset_failed
 
     @staticmethod
     def _systemd_show(condition="yes", *, result="success", exit_status="0",
@@ -225,6 +226,14 @@ class AutoChainSequenceTest(unittest.TestCase):
             "gpt02-issue159-issuer-finalize-once.service",
         ])
         self.assertTrue(result["autoChainCompleted"])
+        self.reset_failed.assert_called_once_with(
+            "gpt02-issue159-sign-once-approval.service",
+            "gpt02-issue159-sign-once-operator@hub.service",
+            "gpt02-issue159-sign-once-operator@core.service",
+            "gpt02-issue159-attestor-record-once.service",
+            "gpt02-issue159-sign-once-issuer.service",
+            "gpt02-issue159-issuer-finalize-once.service",
+        )
         self.assertFalse(result["authorizationGranted"])
         self.assertFalse(result["dispatchPermitted"])
         self.assertEqual(result["releaseDecision"], "NO_GO")
@@ -270,11 +279,39 @@ class AutoChainSequenceTest(unittest.TestCase):
         with self.assertRaisesRegex(chain.AutoChainError, "APPROVAL_NOT_FRESH"):
             chain.run_after_approval(201)
         self.assertFalse(self.sequence)
+        self.reset_failed.assert_not_called()
 
     def test_wrong_task_binding_cannot_start_any_unit(self):
         with self.assertRaisesRegex(chain.AutoChainError, "APPROVED_TASK_BINDING_MISMATCH"):
             chain.run_after_approval(202)
         self.assertFalse(self.sequence)
+        self.reset_failed.assert_not_called()
+
+    def test_malformed_approved_packets_never_reset_systemd(self):
+        # A broken/partial packet is an approval failure, not permission
+        # to reset FAILED state on any of the protected signer units.
+        payloads = (
+            b"not-json",
+            b"[]",
+            b'{"claims": null}',
+            b'{"claims": {}}',
+            b'{"claims": {"taskId": 201, "expiresAt": "not-an-int"}}',
+        )
+        for packet in payloads:
+            with self.subTest(packet=packet[:30]):
+                self.approved.write_bytes(packet)
+                self.reset_failed.reset_mock()
+                with self.assertRaises((ValueError, TypeError,
+                                        AttributeError, chain.AutoChainError)):
+                    chain.run_after_approval(201)
+                self.reset_failed.assert_not_called()
+                self.assertFalse(self.sequence)
+        self.approved.unlink()
+        with self.assertRaises(FileNotFoundError):
+            chain.run_after_approval(201)
+        self.reset_failed.assert_not_called()
+        self.assertFalse(self.sequence)
+
 
 
 if __name__ == "__main__":
