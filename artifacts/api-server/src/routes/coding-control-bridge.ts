@@ -57,7 +57,7 @@ router.get("/ai/coding/bridge/cst-team-readiness", async (_req, res): Promise<vo
     return;
   }
   try {
-    const registry = await getExternalAgentRegistrySnapshot();
+    const registry = await getExternalAgentRegistrySnapshot({ skipSchemaEnsure: true });
     res.setHeader("Cache-Control", "no-store");
     res.json(projectCstTeamReadiness(registry));
   } catch {
