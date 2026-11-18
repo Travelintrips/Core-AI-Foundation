@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   validateCredentials,
   validateResult,
+  cleanupEvidence,
   RELOCK_TERMINATION_BUDGET,
   main
 } from '../../deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs';
@@ -137,8 +138,58 @@ test('confirmed PID termination budgets exceed the actual PostgreSQL waits',()=>
   const timeout=drop.match(/^TimeoutStartSec=(\d+)s$/m);
   assert.ok(timeout,'systemd must explicitly accommodate confirmed backend waits');
   assert.equal(Number(timeout[1])*1000,budget.systemdStartTimeoutMs);
-  assert.ok(budget.systemdStartTimeoutMs >
-    budget.queryTimeoutMs+4000,
-    'oneshot must survive query and TLS/connect timeout');
+  assert.equal(budget.preflightQueryTimeoutMs,2500);
+  assert.equal(budget.phaseAQueryTimeoutMs,4500);
+  assert.equal(budget.connectionTimeoutMs,4000);
+  assert.ok(budget.preflightQueryTimeoutMs < budget.phaseAQueryTimeoutMs,
+    'preflight must fail quickly rather than consume Phase B budget');
+  assert.ok(budget.phaseAQueryTimeoutMs < budget.queryTimeoutMs,
+    'Phase B must have the longest query budget');
+  const totalBound = budget.connectionTimeoutMs +
+    2*budget.preflightQueryTimeoutMs +
+    budget.phaseAQueryTimeoutMs + budget.queryTimeoutMs;
+  assert.ok(budget.systemdStartTimeoutMs > totalBound+3000,
+    'oneshot must exceed the complete sequential worst-case query budget');
+
   assert.match(drop,/ExecStart=\/usr\/bin\/node --jitless --no-experimental-fetch /);
+});
+
+test('cleanup catalog counts never confer positive authority or live-disconnect proof',()=>{
+  for(const [a,b] of [[0,0],[1,1],[0,1],[3,3]]) {
+    const out=cleanupEvidence(a,b);
+    assert.deepEqual(Object.keys(out).sort(),[
+      'authorizationGranted','connectedSessionTerminationProven',
+      'dispatchPermitted','environment','independentSupervisor',
+      'phaseAWindowCount','phaseBCleanedWindowCount','reason',
+      'releaseDecision','signingPermitted'
+    ].sort());
+    assert.equal(out.environment,'DEV');
+    assert.equal(out.reason,'RELOCK_CLEANUP_ONLY');
+    assert.equal(out.phaseAWindowCount,a);
+    assert.equal(out.phaseBCleanedWindowCount,b);
+    assert.equal(out.connectedSessionTerminationProven,false);
+    assert.equal(out.authorizationGranted,false);
+    assert.equal(out.signingPermitted,false);
+    assert.equal(out.dispatchPermitted,false);
+    assert.equal(out.releaseDecision,'NO_GO');
+  }
+  for(const invalid of [-1,1001,2.1,NaN,Infinity,null,undefined,'3',true]) {
+    assert.throws(()=>cleanupEvidence(invalid,0),/RELOCK_/);
+    assert.throws(()=>cleanupEvidence(0,invalid),/RELOCK_/);
+  }
+});
+
+test('per-query deadlines preserve the order: identity then Phase A then Phase B',()=>{
+  const source=readFileSync(fileURLToPath(new URL(
+    '../../deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs',
+    import.meta.url
+  )),'utf8');
+  assert.match(source,/query_timeout:\s*RELOCK_TERMINATION_BUDGET\.preflightQueryTimeoutMs/);
+  assert.match(source,/query_timeout:\s*RELOCK_TERMINATION_BUDGET\.phaseAQueryTimeoutMs/);
+  assert.match(source,/query_timeout:\s*RELOCK_TERMINATION_BUDGET\.queryTimeoutMs/);
+  const validateA=source.indexOf('const phaseAWindows = validateResult(');
+  const phaseB=source.indexOf('gpt02_relock_audit.relock_expired_phase_b() AS count');
+  const log=source.indexOf("JSON.stringify(cleanupEvidence(");
+  assert.ok(validateA>0 && validateA<phaseB && phaseB<log,
+    'Phase A must be validated before Phase B and non-authority report');
 });
