@@ -67,7 +67,7 @@ def require_no_untracked_catalog_window(admin):
     row = admin.execute(
         "SELECT to_regclass('gpt02_relock_audit.writer_issuance_watchdog') IS NOT NULL"
     ).fetchone()
-    if row != (False,):
+    if not isinstance(row, tuple) or len(row) != 1 or row[0] is not False:
         raise RuntimeError("WRITER_HANDOFF_RELOCK_WATCHDOG_REGISTRATION_REQUIRED")
 
 
