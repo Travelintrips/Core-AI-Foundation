@@ -18,9 +18,12 @@ const EXPECTED = ['database','host','password','port','projectRef','sslMode','us
 export const RELOCK_TERMINATION_BUDGET = Object.freeze({
   roleSlots: 3,
   perBackendWaitMs: 3000,
+  connectionTimeoutMs: 4000,
+  preflightQueryTimeoutMs: 2500,
+  phaseAQueryTimeoutMs: 4500,
   statementTimeoutMs: 12000,
   queryTimeoutMs: 15000,
-  systemdStartTimeoutMs: 30000,
+  systemdStartTimeoutMs: 35000,
 });
 
 export function validateCredentials(candidate) {
@@ -62,6 +65,16 @@ function result(reason, extra = {}) {
   };
 }
 
+// These are counts of catalog windows, NOT proof that a connected backend
+// was terminated. That proof also requires a live PID and client disconnect.
+export function cleanupEvidence(phaseA, phaseB) {
+  return result('RELOCK_CLEANUP_ONLY', {
+    phaseAWindowCount: validateResult(phaseA, 'PHASE_A'),
+    phaseBCleanedWindowCount: validateResult(phaseB, 'PHASE_B'),
+    connectedSessionTerminationProven: false,
+  });
+}
+
 export async function main() {
   let client;
   try {
@@ -83,8 +96,10 @@ export async function main() {
       password: credentials.password,
       ssl: { ca, rejectUnauthorized: true, servername: HOST },
       application_name: 'gpt02-issue159-independent-relock-dev',
-      connectionTimeoutMillis: 4000,
-      query_timeout: RELOCK_TERMINATION_BUDGET.queryTimeoutMs,
+      connectionTimeoutMillis: RELOCK_TERMINATION_BUDGET.connectionTimeoutMs,
+      // Fast fail-closed identity/installation checks must never consume
+      // the entire oneshot budget before Phase A/B can run.
+      query_timeout: RELOCK_TERMINATION_BUDGET.preflightQueryTimeoutMs,
       statement_timeout: RELOCK_TERMINATION_BUDGET.statementTimeoutMs,
     });
     await client.connect();
@@ -113,16 +128,20 @@ export async function main() {
     // Each query is its own AUTOCOMMITTED transaction; never enclose both
     // phases in BEGIN/COMMIT. This prevents the proven late-login race.
     // SQL names and argument counts are exact and NOT user controlled.
-    const a = await client.query(
-      'SELECT gpt02_relock_audit.relock_expired_phase_a() AS count'
-    );
-    validateResult(a.rows.length === 1 ? a.rows[0].count : null, 'PHASE_A');
-    const b = await client.query(
-      'SELECT gpt02_relock_audit.relock_expired_phase_b() AS count'
-    );
-    validateResult(b.rows.length === 1 ? b.rows[0].count : null, 'PHASE_B');
+    const a = await client.query({
+      text: 'SELECT gpt02_relock_audit.relock_expired_phase_a() AS count',
+      query_timeout: RELOCK_TERMINATION_BUDGET.phaseAQueryTimeoutMs,
+    });
+    const b = await client.query({
+      text: 'SELECT gpt02_relock_audit.relock_expired_phase_b() AS count',
+      query_timeout: RELOCK_TERMINATION_BUDGET.queryTimeoutMs,
+    });
     // Even successfully completed cleanup is NOT a release authorization.
-    console.log(JSON.stringify(result('RELOCK_CLEANUP_ONLY')));
+    // Counts do not assert that a live backend was terminated.
+    console.log(JSON.stringify(cleanupEvidence(
+      a.rows.length === 1 ? a.rows[0].count : null,
+      b.rows.length === 1 ? b.rows[0].count : null
+    )));
     return 0;
   } catch (error) {
     // No SQL text, connection strings, passwords or raw DB errors in logs.
