@@ -94,6 +94,10 @@ async function run() {
       eventCount:events.length,eventAuditCount:eventAudits.length,
       ...result,
     }));
+    // A read-only audit can execute successfully while its evidence is still
+    // blocked by RLS or missing. Never export shell exit 0 in that case:
+    // CI/agents must not convert "audit ran" into "operational PASS".
+    if (result.status !== "event_and_audit_persisted") process.exitCode = 4;
   } finally {
     await client.query("ROLLBACK").catch(()=>{});
     client.release();
