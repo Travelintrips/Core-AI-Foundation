@@ -57,6 +57,7 @@ on:
       - 'deploy/ai-coding-standalone-dev/approval_api.py'
       - 'docs/dev/gpt02_issue159_fixed_writer_relock.REVIEW_ONLY.sql'
       - 'scripts/dev/test_gpt02_issue159_fixed_writer_relock_pg17_REVIEW_ONLY.py'
+      - 'scripts/dev/test_gpt02_issue159_supervisor_pg17_node_integration_REVIEW_ONLY.py'
       - 'scripts/dev/test_gpt02_issue159_sign_once.py'
       - 'scripts/dev/gpt02_issue159_historical_archive_audit_readonly.py'
       - 'scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py'
@@ -198,6 +199,17 @@ jobs:
           # No Supabase credentials, no PROD, no signing or dispatch.
           python3 -m py_compile scripts/dev/test_gpt02_issue159_fixed_writer_relock_pg17_REVIEW_ONLY.py
           python3 scripts/dev/test_gpt02_issue159_fixed_writer_relock_pg17_REVIEW_ONLY.py
+          # Separate disposable loopback PostgreSQL 17 fixture using the
+          # canonical Node supervisor and a real pg driver. No Supabase access
+          # or production credentials; all container assets are cleaned.
+          pg_fixture_dir="$(mktemp -d)"
+          trap 'rm -rf "$pg_fixture_dir"' EXIT
+          npm install --prefix "$pg_fixture_dir" --no-save --ignore-scripts \
+            --no-audit --no-fund --silent pg@8.23.1
+          python3 scripts/dev/test_gpt02_issue159_supervisor_pg17_node_integration_REVIEW_ONLY.py \
+            --sql docs/dev/gpt02_issue159_fixed_writer_relock.REVIEW_ONLY.sql \
+            --supervisor deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs \
+            --pg "$pg_fixture_dir/node_modules/pg"
           # Public-key only, root-private archive fixture, NO live /opt data.
           PYTHONPATH=deploy/ai-coding-standalone-dev:scripts/dev python3 scripts/dev/test_gpt02_issue159_historical_archive_audit_readonly.py
           # Recover only an existing, fresh, exact SQLite intent after a packet
