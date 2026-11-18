@@ -293,6 +293,99 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertIs(payload["requires_ollama"], False)
         self.assertEqual(self.count(), 0)
 
+    def test_direct_worker_queue_fails_closed_on_forged_issuer_lease_kind(self):
+        # Second, independent boundary: even direct SQLite queue injection
+        # cannot turn GPT02 NO_DISPATCH lease evidence into a worker action.
+        # Exercise the ORIGINAL durable_worker.py step() using only an
+        # in-memory database and inert modules in place of external runners.
+        from types import ModuleType
+        worker_path = DEPLOY / "durable_worker.py"
+        fake_inspector = ModuleType("repository_inspect")
+        fake_runner = ModuleType("coding_runner")
+        def external_execution_forbidden(*args, **kwargs):
+            raise AssertionError("GPT02_ISSUER_LEASE_MUST_NEVER_EXECUTE")
+        fake_inspector.inspect = external_execution_forbidden
+        fake_runner.run = external_execution_forbidden
+
+        with patch.dict(sys.modules, {
+            "repository_inspect": fake_inspector,
+            "coding_runner": fake_runner,
+        }):
+            spec = importlib.util.spec_from_file_location(
+                "gpt02_worker_boundary_fixture", worker_path,
+            )
+            worker = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(worker)
+
+        with sqlite3.connect(":memory:") as db:
+            worker.setup(db)
+            forged = {
+                "environment": "DEV", "taskId": 171,
+                "issuerEvidenceVerified": True,
+                "leaseConsumed": True,
+                "dispatch_allowed": False,
+                "autoChainCompleted": True,
+                "releaseDecision": "NO_GO",
+                "kind": "coding_test",
+                "requires_ollama": True,
+            }
+            db.execute("""INSERT INTO jobs
+                (id,kind,payload,status,updated_at)
+                VALUES (?,?,?,?,?)""", (
+                    "synthetic-issuer-lease",
+                    "gpt02_issue159_issuer_dispatch",
+                    json.dumps(forged), "QUEUED", worker.now(),
+                ))
+            db.commit()
+            with patch.object(worker, "inspect",
+                              side_effect=external_execution_forbidden) as inspector, \
+                 patch.object(worker, "run_coding",
+                              side_effect=external_execution_forbidden) as coder:
+                self.assertTrue(worker.step(db))
+                inspector.assert_not_called()
+                coder.assert_not_called()
+
+            result = db.execute("""SELECT status,attempts,checkpoint
+                FROM jobs WHERE id='synthetic-issuer-lease'""").fetchone()
+            self.assertEqual(result[0], "FAILED")
+            self.assertEqual(result[1], 1)
+            self.assertEqual(result[2], "unsupported job kind")
+            self.assertEqual([
+                row[0] for row in db.execute("""SELECT status
+                  FROM job_events WHERE job_id='synthetic-issuer-lease'
+                  ORDER BY id""")
+            ], ["RUNNING", "FAILED"])
+            self.assertFalse(worker.step(db))
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM jobs WHERE status='QUEUED'").fetchone()[0],
+                0,
+            )
+            # A supported inspection still works; GPT02 lease forgery never
+            # promotes to worker dispatch or gains an execution branch.
+            db.execute("""INSERT INTO jobs
+                (id,kind,payload,status,updated_at)
+                VALUES (?,?,?,?,?)""", (
+                    "synthetic-repo-inspection",
+                    "repository_inspection",
+                    json.dumps({
+                        "repository": "Travelintrips/Core-AI-Foundation",
+                        "ref": "develop",
+                    }), "QUEUED", worker.now(),
+                ))
+            db.commit()
+            with patch.object(worker, "inspect",
+                              return_value={"isolatedReadOnly": True}) as inspector, \
+                 patch.object(worker, "run_coding",
+                              side_effect=external_execution_forbidden) as coder:
+                self.assertTrue(worker.step(db))
+                inspector.assert_called_once_with(
+                    "Travelintrips/Core-AI-Foundation", "develop",
+                )
+                coder.assert_not_called()
+            self.assertEqual(db.execute("""SELECT status FROM jobs
+                WHERE id='synthetic-repo-inspection'""").fetchone()[0], "SUCCESS")
+            self.assertEqual(self.count(), 0)
+
     def test_authenticated_http_denied_by_unset_auto_chain_flag_without_consumption(self):
         # Mirror the real DEV fail-closed gate: approval-intent route is
         # enabled but unattended one-use auto-chain cannot consume an
