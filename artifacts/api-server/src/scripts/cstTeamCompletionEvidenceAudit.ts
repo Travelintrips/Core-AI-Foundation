@@ -83,6 +83,7 @@ async function run() {
           ORDER BY id LIMIT 10
         `,[eventIds]) : {rows:[] as CompletionEventAuditRow[]};
     const result = projectCstModelCompletionEvidence({
+      requestedJobId:jobId,
       job:jobs[0]??null,jobAudits,worker:workers[0]??null,
       events,eventAudits,
     });
