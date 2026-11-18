@@ -134,6 +134,38 @@ BEGIN
  EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
 END $negative$;
+-- DEV registration must keep worker/lease + worker_registered audit in one
+-- PostgreSQL transaction. If RLS denies its audit, the new worker disappears.
+DO $atomic_worker_register_denial$
+DECLARE created_id integer;
+BEGIN
+ BEGIN
+  INSERT INTO ai_platform.ai_workers(
+    worker_name,worker_type,provider_slug,runtime_kind,node_id,model_id,
+    lease_owner,max_concurrent_jobs,status,endpoint_url,capabilities)
+  VALUES ('{WORKER}','coding_worker','ollama','ollama_remote_pull',
+    '{WORKER}','qwen2.5:3b','ollama-remote:{WORKER}',1,'online',
+    NULL,'["ollama_inference"]'::jsonb)
+  RETURNING id INTO created_id;
+  INSERT INTO ai_platform.ai_audit_logs(
+    module,action,resource_type,resource_id,status,details)
+  VALUES ('worker-cluster','worker_registered','ai_worker',
+    created_id::text,'success',
+    jsonb_build_object(
+      'workerName','unapproved-different-worker',
+      'workerType','coding_worker',
+      'capabilities',jsonb_build_array('ollama_inference'),
+      'leaseOwner','ollama-remote:{WORKER}'
+    ));
+  RAISE EXCEPTION 'FORGED_WORKER_REGISTRATION_AUDIT_WAS_ACCEPTED';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ IF EXISTS (SELECT 1 FROM ai_platform.ai_workers
+   WHERE worker_name='{WORKER}') THEN
+  RAISE EXCEPTION 'REGISTRATION_WORKER_INSERT_NOT_ROLLED_BACK_AFTER_AUDIT_RLS_DENIAL';
+ END IF;
+ RAISE NOTICE 'CST_MODEL_WORKER_REGISTRATION_AUDIT_ROLLBACK_PASS';
+END $atomic_worker_register_denial$;
 INSERT INTO ai_platform.ai_workers(worker_name,worker_type,provider_slug,runtime_kind,node_id,model_id,
  lease_owner,max_concurrent_jobs,status,endpoint_url,capabilities)
 VALUES ('{WORKER}','coding_worker','ollama','ollama_remote_pull',
@@ -347,6 +379,7 @@ RESET ROLE;
         report.update({"result":"PASS","negativeCases":3,"approvedJobTransitions":["queued","running","completed"],
             "approvedWorker":"idle","completionEventPersisted":True,"completionEventAuditPersisted":True,
             "fabricatedEventAuditRejected":True,
+            "workerRegistrationAuditDenialRolledBackWorker":True,
             "auditFailureRolledBackEventInsert":True,
             "completionEventDispatchVerified":False,
             "earlyAndForgedEventAttemptsRejected":6,
