@@ -11,6 +11,7 @@ NAME="cst-team-model-role-sandbox-20261119"
 DB="cst_team_model_rls_pilot_fixture"
 ROLE="cst_team_model_pilot_20261119"
 REQUEST="cst-ai-team-company1-dev:rls-sandbox-20261119"
+WORKER="cst-dev-dell-onejob-20261119-"+secrets.token_hex(4)
 def run(args,stdin=None):
     p=subprocess.run(args,input=stdin,capture_output=True,text=True,timeout=30)
     if p.returncode:
@@ -23,7 +24,7 @@ def render(template):
     values={"EXPECTED_DATABASE":DB,"PILOT_ROLE":ROLE,
         "PILOT_PASSWORD":secrets.token_hex(32),
         "PILOT_EXPIRES":(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat(),
-        "REQUEST_ID":REQUEST}
+        "REQUEST_ID":REQUEST,"PILOT_WORKER_NAME":WORKER}
     for key,value in values.items():out=out.replace("{{"+key+"}}",value)
     assert "{{" not in out and "}}" not in out
     return out
@@ -135,8 +136,8 @@ BEGIN
 END $negative$;
 INSERT INTO ai_platform.ai_workers(worker_name,worker_type,provider_slug,runtime_kind,node_id,model_id,
  lease_owner,max_concurrent_jobs,status,endpoint_url,capabilities)
-VALUES ('cst-dev-dell-onejob-20261119','coding_worker','ollama','ollama_remote_pull',
- 'cst-dev-dell-onejob-20261119','qwen2.5:3b','ollama-remote:cst-dev-dell-onejob-20261119',
+VALUES ('{WORKER}','coding_worker','ollama','ollama_remote_pull',
+ '{WORKER}','qwen2.5:3b','ollama-remote:{WORKER}',
  1,'online',NULL,'["ollama_inference"]'::jsonb);
 INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,status,payload_json,max_retry,retry_strategy)
 VALUES ('APPROVED-ONE','ollama_model_invocation','ollama_inference','queued',
@@ -147,7 +148,7 @@ DECLARE jid integer;wid integer;
 BEGIN
  SELECT id INTO jid FROM ai_platform.ai_jobs WHERE job_code='APPROVED-ONE';
  SELECT id INTO wid FROM ai_platform.ai_workers
- WHERE worker_name='cst-dev-dell-onejob-20261119';
+ WHERE worker_name='{WORKER}';
  BEGIN
   INSERT INTO ai_platform.ai_events(event_id,event_type,source_module,source_id,
    correlation_id,payload_json,status,published_at)
@@ -162,11 +163,11 @@ END $early$;
 UPDATE ai_platform.ai_jobs SET status='running',started_at=now()
   WHERE job_code='APPROVED-ONE';
 UPDATE ai_platform.ai_workers SET status='busy',running_jobs=1
-  WHERE worker_name='cst-dev-dell-onejob-20261119';
+  WHERE worker_name='{WORKER}';
 UPDATE ai_platform.ai_jobs SET status='completed',completed_at=now(),result_json='{{"result":"PASS"}}'::jsonb
   WHERE job_code='APPROVED-ONE';
 UPDATE ai_platform.ai_workers SET status='idle',running_jobs=0
-  WHERE worker_name='cst-dev-dell-onejob-20261119';
+  WHERE worker_name='{WORKER}';
 -- After model completion, reject attempts to attribute another job,
 -- another worker, or another event type. Only one correct event is accepted.
 DO $negative_event$
@@ -174,7 +175,7 @@ DECLARE jid integer;wid integer;valid_payload jsonb;
 BEGIN
  SELECT id INTO jid FROM ai_platform.ai_jobs WHERE job_code='APPROVED-ONE';
  SELECT id INTO wid FROM ai_platform.ai_workers
- WHERE worker_name='cst-dev-dell-onejob-20261119';
+ WHERE worker_name='{WORKER}';
  valid_payload=jsonb_build_object('jobId',jid,'workerId',wid,
      'jobCode','APPROVED-ONE','jobType','ollama_model_invocation');
  BEGIN
@@ -222,7 +223,7 @@ SELECT 'APPROVED-MODEL-COMPLETION','job.completed','job-engine',j.id::text,
    'jobCode',j.job_code,'jobType',j.job_type),
  '{{}}'::jsonb,'published',now()
 FROM ai_platform.ai_jobs j, ai_platform.ai_workers w
-WHERE j.job_code='APPROVED-ONE' AND w.worker_name='cst-dev-dell-onejob-20261119'
+WHERE j.job_code='APPROVED-ONE' AND w.worker_name='{WORKER}'
 RETURNING event_id,status;
 -- The matching audit is allowed only after the event has been persisted.
 -- A fabricated audit without a real event must remain rejected by RLS.
@@ -248,7 +249,7 @@ DECLARE jid integer; wid integer;
 BEGIN
  SELECT id INTO jid FROM ai_platform.ai_jobs WHERE job_code='APPROVED-ONE';
  SELECT id INTO wid FROM ai_platform.ai_workers
-   WHERE worker_name='cst-dev-dell-onejob-20261119';
+   WHERE worker_name='{WORKER}';
  BEGIN
    INSERT INTO ai_platform.ai_events(event_id,event_type,source_module,source_id,
      correlation_id,payload_json,status,published_at)

@@ -9,6 +9,9 @@ BEGIN
     OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='aicore_dev_runtime')
     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{{PILOT_ROLE}}')
  THEN RAISE EXCEPTION 'CST_MODEL_PILOT_WRONG_DATABASE_OR_EXISTING_ROLE'; END IF;
+ IF '{{PILOT_WORKER_NAME}}' !~ '^cst-dev-dell-onejob-[0-9]{8}-[0-9a-f]{8}$'
+    OR EXISTS(SELECT 1 FROM ai_platform.ai_workers WHERE worker_name='{{PILOT_WORKER_NAME}}')
+ THEN RAISE EXCEPTION 'CST_MODEL_PILOT_FRESH_WORKER_REQUIRED'; END IF;
  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='ai_platform.ai_jobs'::regclass)
     OR NOT (SELECT relrowsecurity FROM pg_class WHERE oid='ai_platform.ai_workers'::regclass)
  THEN RAISE EXCEPTION 'CST_MODEL_PILOT_RLS_MUST_REMAIN_ENABLED'; END IF;
@@ -47,27 +50,27 @@ CREATE POLICY cst_model_pilot_jobs_update ON ai_platform.ai_jobs FOR UPDATE TO {
    AND status IN ('queued','running','completed','failed','retrying'));
 CREATE POLICY cst_model_pilot_worker_read ON ai_platform.ai_workers FOR SELECT TO {{PILOT_ROLE}}
  USING (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
-   AND worker_name='cst-dev-dell-onejob-20261119'
+   AND worker_name='{{PILOT_WORKER_NAME}}'
    AND provider_slug='ollama' AND runtime_kind='ollama_remote_pull'
-   AND node_id='cst-dev-dell-onejob-20261119' AND model_id='qwen2.5:3b');
+   AND node_id='{{PILOT_WORKER_NAME}}' AND model_id='qwen2.5:3b');
 CREATE POLICY cst_model_pilot_worker_insert ON ai_platform.ai_workers FOR INSERT TO {{PILOT_ROLE}}
  WITH CHECK (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
-   AND worker_name='cst-dev-dell-onejob-20261119'
+   AND worker_name='{{PILOT_WORKER_NAME}}'
    AND worker_type='coding_worker' AND provider_slug='ollama'
-   AND runtime_kind='ollama_remote_pull' AND node_id='cst-dev-dell-onejob-20261119'
-   AND lease_owner='ollama-remote:cst-dev-dell-onejob-20261119'
+   AND runtime_kind='ollama_remote_pull' AND node_id='{{PILOT_WORKER_NAME}}'
+   AND lease_owner='ollama-remote:{{PILOT_WORKER_NAME}}'
    AND model_id='qwen2.5:3b' AND max_concurrent_jobs=1
    AND status='online' AND endpoint_url IS NULL
    AND capabilities='["ollama_inference"]'::jsonb);
 CREATE POLICY cst_model_pilot_worker_update ON ai_platform.ai_workers FOR UPDATE TO {{PILOT_ROLE}}
  USING (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
-   AND worker_name='cst-dev-dell-onejob-20261119'
+   AND worker_name='{{PILOT_WORKER_NAME}}'
    AND provider_slug='ollama' AND runtime_kind='ollama_remote_pull')
  WITH CHECK (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
-   AND worker_name='cst-dev-dell-onejob-20261119'
+   AND worker_name='{{PILOT_WORKER_NAME}}'
    AND worker_type='coding_worker' AND provider_slug='ollama'
-   AND runtime_kind='ollama_remote_pull' AND node_id='cst-dev-dell-onejob-20261119'
-   AND lease_owner='ollama-remote:cst-dev-dell-onejob-20261119'
+   AND runtime_kind='ollama_remote_pull' AND node_id='{{PILOT_WORKER_NAME}}'
+   AND lease_owner='ollama-remote:{{PILOT_WORKER_NAME}}'
    AND model_id='qwen2.5:3b' AND max_concurrent_jobs=1
    AND status IN ('online','idle','busy','offline','stale')
    AND running_jobs BETWEEN 0 AND 1
@@ -99,7 +102,7 @@ CREATE POLICY cst_model_pilot_event_read ON ai_platform.ai_events FOR SELECT TO 
    AND EXISTS (
      SELECT 1 FROM ai_platform.ai_jobs j
      JOIN ai_platform.ai_workers w
-       ON w.worker_name='cst-dev-dell-onejob-20261119'
+       ON w.worker_name='{{PILOT_WORKER_NAME}}'
      WHERE j.id::text = ai_events.source_id
        AND j.job_type='ollama_model_invocation'
        AND j.status='completed'
@@ -120,7 +123,7 @@ CREATE POLICY cst_model_pilot_event_insert ON ai_platform.ai_events FOR INSERT T
    AND EXISTS (
      SELECT 1 FROM ai_platform.ai_jobs j
      JOIN ai_platform.ai_workers w
-       ON w.worker_name='cst-dev-dell-onejob-20261119'
+       ON w.worker_name='{{PILOT_WORKER_NAME}}'
      WHERE j.id::text = ai_events.source_id
        AND j.job_type='ollama_model_invocation'
        AND j.status='completed'

@@ -462,3 +462,14 @@ test("job evidence reader rehearsal grants only SELECT on one bounded Company1 j
   assert.match(sql,/DROP POLICY cst_evidence_audit_482/);
   assert.match(sql,/DROP ROLE aicore_dev_runtime/);
 });
+
+test("fresh model-pilot worker name cannot reuse historical DELL identity", () => {
+  const apply=readFileSync(new URL("../scripts/dev/cst-team-onejob-ephemeral-role-template.sql",import.meta.url),"utf8");
+  const harness=readFileSync(new URL("../scripts/dev/cst-team-dedicated-model-role-rehearsal.py",import.meta.url),"utf8");
+  assert.match(apply,/\{\{PILOT_WORKER_NAME\}\}/);
+  assert.match(apply,/CST_MODEL_PILOT_FRESH_WORKER_REQUIRED/);
+  assert.match(apply,/EXISTS\(SELECT 1 FROM ai_platform\.ai_workers WHERE worker_name='/);
+  assert.doesNotMatch(apply,/'cst-dev-dell-onejob-20261119'/);
+  assert.match(harness,/"PILOT_WORKER_NAME":WORKER/);
+  assert.match(harness,/WORKER="cst-dev-dell-onejob-20261119-"\+secrets\.token_hex\(4\)/);
+});
