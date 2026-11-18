@@ -12,6 +12,16 @@ const ROLE = 'dev_gpt02_relock_catalog_auditor';
 const CERT = '/etc/gpt02-dev/supabase-root-ca-2021.crt';
 const CRED = 'relock-catalog-dsn';
 const EXPECTED = ['database','host','password','port','projectRef','sslMode','user'];
+// Phase B may wait up to 3 seconds for EACH of the three fixed roles' one
+// live backend. SQL, node-postgres and systemd timeouts must allow that work
+// to finish; a prematurely cancelled cleanup is NOT a successful relock.
+export const RELOCK_TERMINATION_BUDGET = Object.freeze({
+  roleSlots: 3,
+  perBackendWaitMs: 3000,
+  statementTimeoutMs: 12000,
+  queryTimeoutMs: 15000,
+  systemdStartTimeoutMs: 30000,
+});
 
 export function validateCredentials(candidate) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
@@ -73,8 +83,9 @@ export async function main() {
       password: credentials.password,
       ssl: { ca, rejectUnauthorized: true, servername: HOST },
       application_name: 'gpt02-issue159-independent-relock-dev',
-      connectionTimeoutMillis: 4000, query_timeout: 2500,
-      statement_timeout: 2000,
+      connectionTimeoutMillis: 4000,
+      query_timeout: RELOCK_TERMINATION_BUDGET.queryTimeoutMs,
+      statement_timeout: RELOCK_TERMINATION_BUDGET.statementTimeoutMs,
     });
     await client.connect();
     const identity = await client.query(
