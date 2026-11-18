@@ -18,10 +18,12 @@ verifies its embedded source commit, or an ancestor whose intervening changes
 have **no** differences in backend runtime or the bounded pilot RLS templates.
 It checks the candidate container `cst-core-onejob-dev-candidate`, requiring
 healthy status, identical image ID, non-host/non-production Docker network and
-no ports bound publicly. The future dedicated DEV endpoint
-`dev-aicore.cstlogistic.co.id` must resolve and return `x-cst-source-commit`
+no ports bound publicly. The existing unified DEV endpoint
+`dev.cstlogistic.co.id` must resolve and return `x-cst-source-commit`
 matching the current source commit or an independently proven code-equivalent
-ancestral candidate. Do **not** substitute the PROD hostname.
+ancestral candidate. The retired `dev-aicore.cstlogistic.co.id` Nginx vhost
+must remain HTTP 410 (quarantined since 31 October 2026). Never re-enable
+that retired endpoint or substitute the PROD hostname merely for a pilot.
 
 For database verification the probe executes a *SELECT-only* PostgreSQL
 transaction **inside the existing DEV container or healthy candidate**. It
@@ -43,9 +45,9 @@ pilot does **not** authorize PROD, signer activation or multi-agent release.
 
 Read-only probe on VPS returned `pilotAdmissionReady=false` / exit 2. The
 candidate image was correctly built from Core source `9fabedcd`, but there
-was no running blue-green candidate, no DNS record for the dedicated DEV
-hostname, no dedicated one-job role, and no newly queued Company-1 model
-pilot. Existing Core DEV still uses the older image and job #482 remains
+was no running blue-green candidate, no verified routing of the active
+unified DEV host to that candidate, no dedicated one-job role, and no newly
+queued Company-1 model pilot. The retired host remains HTTP 410. Existing Core DEV still uses the older image and job #482 remains
 untouched. **No attempt to bypass these blockers should be made.**
 
 Unit regression: `node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs`.

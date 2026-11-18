@@ -7,7 +7,8 @@ const sha="a".repeat(40), imageId="sha256:"+"f".repeat(64);
 const ready={
   sourceSha:sha,imageSourceSha:sha,imageId,
   candidateRunning:true,candidateHealthy:true,candidateImageId:imageId,
-  candidateNetworkIsolated:true,devHostResolved:true,endpointTargetsCandidate:true,
+  candidateNetworkIsolated:true,devHostResolved:true,retiredHostQuarantined:true,
+  endpointTargetsCandidate:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
   dbRole:"cst_team_model_pilot_20261119_abcdef12",
   roleCount:1,safeRoleCount:1,
@@ -39,7 +40,8 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({candidateImageId:"sha256:"+"1".repeat(64)},"BLUE_GREEN_RUNTIME_NOT_HEALTHY_OR_DIFFERENT_IMAGE");
   check({imageSourceSha:"b".repeat(40)},"SOURCE_IMAGE_COMMIT_MISMATCH");
   check({candidateNetworkIsolated:false},"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
-  check({devHostResolved:false},"DEDICATED_DEV_HOST_DNS_MISSING");
+  check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
+  check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
   check({endpointTargetsCandidate:false},"DEV_ENDPOINT_TO_CANDIDATE_UNVERIFIED");
 });
 test("an ancestral QA image is reusable only if runtime code and pilot RLS are unchanged",()=>{
@@ -77,6 +79,8 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/ROLLBACK/);
   assert.match(file,/RUNNING|Running/);
   assert.match(file,/x-cst-source-commit/);
+  assert.match(file,/RETIRED_VHOST/);
+  assert.match(file,/dev.cstlogistic.co.id/);
   assert.match(file,/READ_ONLY_ADVISORY_NO_DISPATCH/);
   assert.doesNotMatch(file,/docker.*\b(?:run|start|stop|rm|exec\s+-it)\b/);
   assert.doesNotMatch(file,/(?:CREATE|ALTER|DROP|GRANT|REVOKE)\s+ROLE\b/i);

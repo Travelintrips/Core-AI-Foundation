@@ -2,12 +2,14 @@
  * Run on the authorized CST DEV VPS. It never prints credentials or a DSN.
  */
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 const PROJECT = "xssrfshdrtdfupgqwfdw";
-const HOST = "dev-aicore.cstlogistic.co.id";
+const HOST = "dev.cstlogistic.co.id";
+const RETIRED_VHOST = "/etc/nginx/sites-enabled/dev-aicore.cstlogistic.co.id";
 const CANDIDATE = "cst-core-onejob-dev-candidate";
 const CORE = "core-ai-dev";
 const ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -81,7 +83,8 @@ export function projectOneJobGate(data) {
  deny(data.candidateRunning===true && data.candidateHealthy===true &&
       data.candidateImageId===data.imageId,"BLUE_GREEN_RUNTIME_NOT_HEALTHY_OR_DIFFERENT_IMAGE");
  deny(data.candidateNetworkIsolated===true,"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
- deny(data.devHostResolved===true,"DEDICATED_DEV_HOST_DNS_MISSING");
+ deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
+ deny(data.retiredHostQuarantined===true,"RETIRED_DEV_HOST_NOT_QUARANTINED");
  deny(data.endpointTargetsCandidate===true,"DEV_ENDPOINT_TO_CANDIDATE_UNVERIFIED");
  deny(data.dbStatus==="DEV_DB_READ_ONLY_PASS" && data.database==="postgres" &&
       data.dbRole?.startsWith("cst_team_model_pilot_")===true,
@@ -127,8 +130,14 @@ async function main() {
  } catch {}
  const networkScopeSafe=Boolean(networkMode) && networkMode!=="host" &&
    networkMode!=="none" && !/prod/i.test(networkMode);
- let hostResolved=false,endpointTargetsCandidate=false;
+ let hostResolved=false,endpointTargetsCandidate=false,retiredHostQuarantined=false;
  try{const target=await lookup(HOST);hostResolved=Boolean(target?.address)}catch{}
+ try {
+   const retired=readFileSync(RETIRED_VHOST,"utf8");
+   retiredHostQuarantined=/server_name\s+dev-aicore\.cstlogistic\.co\.id;/.test(retired) &&
+     (retired.match(/return\s+410;/g)||[]).length>=2 &&
+     !/proxy_pass\s+[^;]+;/.test(retired);
+ } catch {}
  if(hostResolved){
    const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),3500);
    try {const r=await fetch("https://"+HOST+"/api/healthz",{signal:ctl.signal});
@@ -140,7 +149,7 @@ async function main() {
  const facts={sourceSha:sha,imageId,imageSourceSha,sourceContentEquivalent,
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
    candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe,
-   devHostResolved:hostResolved,endpointTargetsCandidate,
+   devHostResolved:hostResolved,retiredHostQuarantined,endpointTargetsCandidate,
    dbStatus:db.status,database:db.database,dbRole:db.role,
    roleCount:db.roleCount,safeRoleCount:db.safeRoleCount,
    jobId:db.jobId,jobQueued:db.jobStatus==="queued" && db.jobType==="ollama_model_invocation",
@@ -153,7 +162,7 @@ async function main() {
  console.log(JSON.stringify({...verdict,observedAt:new Date().toISOString(),
    project:PROJECT,devHost:HOST,sourceSha:sha,imageSourceSha:imageSourceSha||null,
    sourceContentEquivalent,imagePresent:Boolean(imageId),candidateRunning:facts.candidateRunning,
-   devHostResolved:hostResolved,dbReadStatus:db.status,
+   devHostResolved:hostResolved,retiredHostQuarantined,dbReadStatus:db.status,
    roleCount:db.roleCount??null},null,2));
  if(!verdict.pilotAdmissionReady) process.exitCode=2;
 }
