@@ -325,8 +325,12 @@ test("pilot completion awaits event persistence and fails visibly; ordinary jobs
   const code=readFileSync(new URL("../artifacts/api-server/src/services/jobWorkerService.ts",import.meta.url),"utf8");
   const fragment=code.slice(code.indexOf('export async function completeJob('),
     code.indexOf('export async function retryJob('));
-  assert.match(fragment,/classifyCstDevModelCompletion\(job, worker, workerId\)/);
+  assert.match(fragment,/classifyCstDevModelCompletion\(job, null, workerId\)/);
+  assert.match(fragment,/classifyCstDevModelCompletion\(job, pilotWorker, workerId\)/);
   assert.match(fragment,/if \(devPilotMode === "blocked"\)/);
+  const guardAt=fragment.indexOf("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+  const mutatorAt=fragment.indexOf("const [completed] = await db");
+  assert.ok(guardAt>=0 && mutatorAt>guardAt,"pilot validation must precede job mutation");
   assert.match(fragment,/if \(devPilotMode === "await_persist"\)/);
   assert.match(fragment,/await publish\(completionEvent\)/);
   assert.match(fragment,/CST_DEV_MODEL_COMPLETION_EVENT_NOT_PERSISTED/);
