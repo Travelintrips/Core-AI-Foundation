@@ -98,7 +98,7 @@ import {
 } from "../jobCompletionGuard.js";
 
 import { executeJob, completeJob } from "../jobWorkerService.js";
-import { db } from "@workspace/db";
+import { db, aiJobsTable, aiWorkersTable, aiEventsTable, aiAuditLogsTable } from "@workspace/db";
 import { prepareCstDevModelCompletionEvent,
   dispatchCstDevModelCompletionAfterCommit, publishSafe } from "../aiEventBusService.js";
 
