@@ -132,15 +132,21 @@ export async function main() {
       text: 'SELECT gpt02_relock_audit.relock_expired_phase_a() AS count',
       query_timeout: RELOCK_TERMINATION_BUDGET.phaseAQueryTimeoutMs,
     });
+    // Validate the committed Phase A count before proceeding to Phase B.
+    const phaseAWindows = validateResult(
+      a.rows.length === 1 ? a.rows[0].count : null, 'PHASE_A'
+    );
     const b = await client.query({
       text: 'SELECT gpt02_relock_audit.relock_expired_phase_b() AS count',
       query_timeout: RELOCK_TERMINATION_BUDGET.queryTimeoutMs,
     });
+    const phaseBWindows = validateResult(
+      b.rows.length === 1 ? b.rows[0].count : null, 'PHASE_B'
+    );
     // Even successfully completed cleanup is NOT a release authorization.
     // Counts do not assert that a live backend was terminated.
     console.log(JSON.stringify(cleanupEvidence(
-      a.rows.length === 1 ? a.rows[0].count : null,
-      b.rows.length === 1 ? b.rows[0].count : null
+      phaseAWindows, phaseBWindows
     )));
     return 0;
   } catch (error) {
