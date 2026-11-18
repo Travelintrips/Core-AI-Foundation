@@ -659,6 +659,122 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(self.count(), 0)
         Path(self.packet).unlink()
 
+    def test_auto_chain_result_no_dispatch_contract_is_pinned_after_approval(self):
+        # A legitimate issuer/lease chain reports evidence completed, not
+        # signing/dispatch permission or worker Final ACK.
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        complete = {
+            "environment": "DEV", "taskId": CLAIMS["taskId"],
+            "autoChainCompleted": True, "authorizationGranted": False,
+            "dispatchPermitted": False, "releaseDecision": "NO_GO",
+        }
+        with patch.object(api, "run_after_approval", return_value=complete) as run:
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 201)
+        run.assert_called_once_with(CLAIMS["taskId"])
+        self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
+        self.assertIs(body["intentRecorded"], True)
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["autoChainCompleted"], True)
+        self.assertIs(body["signingPermitted"], False)
+        self.assertIs(body["authorizationGranted"], False)
+        self.assertIs(body["dispatchPermitted"], False)
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(body["claimsSha256"],
+                         api.validate_approval_claims(CLAIMS)["claimsSha256"])
+        self.assertEqual(self.count(), 1)
+        self.assertTrue(Path(self.packet).is_file())
+
+    def test_untrusted_chain_response_cannot_promote_no_go_to_dispatch(self):
+        # The child service cannot define approval provenance, signer grants,
+        # release GO, or whether a one-use approval can be replayed.
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        forged = {
+            "environment": "DEV", "taskId": CLAIMS["taskId"],
+            "autoChainCompleted": True,
+            "authorizationGranted": True,
+            "dispatchPermitted": True,
+            "releaseDecision": "GO",
+            "signingPermitted": True,
+            "approvalCanBeReplayed": True,
+            "actorId": "synthetic_other_actor",
+            "intentId": "synthetic_other_intent",
+        }
+        with patch.object(api, "run_after_approval", return_value=forged):
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 201)
+        self.assertIs(body["autoChainCompleted"], False)
+        self.assertEqual(body["autoChainError"], "AUTO_CHAIN_RESULT_CONTRACT_INVALID")
+        self.assertEqual(body["actorId"], CLAIMS["superAdminId"])
+        self.assertNotEqual(body["intentId"], "synthetic_other_intent")
+        self.assertIs(body["intentRecorded"], True)
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["signingPermitted"], False)
+        self.assertIs(body["authorizationGranted"], False)
+        self.assertIs(body["dispatchPermitted"], False)
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+        original = Path(self.packet).read_bytes()
+        replay, replay_body = self.request(AAL2_TOKEN)
+        self.assertEqual(replay, 409)
+        self.assertEqual(replay_body["error"], "approval_intent_conflict")
+        self.assertEqual(self.count(), 1)
+        self.assertEqual(Path(self.packet).read_bytes(), original)
+
+    def test_wrong_task_chain_response_cannot_claim_success(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        wrong = {
+            "environment": "DEV", "taskId": 171,
+            "autoChainCompleted": True, "authorizationGranted": False,
+            "dispatchPermitted": False, "releaseDecision": "NO_GO",
+        }
+        with patch.object(api, "run_after_approval", return_value=wrong):
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 201)
+        self.assertIs(body["autoChainCompleted"], False)
+        self.assertEqual(body["autoChainError"], "AUTO_CHAIN_RESULT_CONTRACT_INVALID")
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["signingPermitted"], False)
+        self.assertIs(body["dispatchPermitted"], False)
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+
+    def test_extra_chain_keys_cannot_override_approval_identity(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        injected = {
+            "environment": "DEV", "taskId": CLAIMS["taskId"],
+            "autoChainCompleted": True, "authorizationGranted": False,
+            "dispatchPermitted": False, "releaseDecision": "NO_GO",
+            "claimsSha256": "0"*64,
+        }
+        with patch.object(api, "run_after_approval", return_value=injected):
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 201)
+        self.assertIs(body["autoChainCompleted"], False)
+        self.assertEqual(body["autoChainError"], "AUTO_CHAIN_RESULT_CONTRACT_INVALID")
+        self.assertNotEqual(body["claimsSha256"], "0"*64)
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["authorizationGranted"], False)
+        self.assertIs(body["dispatchPermitted"], False)
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+
     def test_committed_intent_unexpected_auto_chain_oserror_stays_no_go(self):
         # A once-only approval has already committed and its immutable
         # packet has been published before the DEV auto-chain starts. Even
