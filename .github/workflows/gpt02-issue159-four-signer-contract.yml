@@ -44,6 +44,8 @@ on:
       - 'scripts/dev/test_gpt02_issue159_auto_chain_link.py'
       - 'scripts/dev/test_gpt02_issue159_auto_chain_sequence.py'
       - 'scripts/dev/gpt02_issue159_writer_slot_handoff_probe.py'
+      - 'scripts/dev/gpt02-issuer-native-reader-proof-once.sh'
+      - 'scripts/dev/test_gpt02_issue159_legacy_issuer_reader_proof_guard.py'
       - 'scripts/dev/test_gpt02_issue159_writer_slot_handoff_probe.py'
       - 'deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs'
       - 'deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service'
@@ -162,6 +164,10 @@ jobs:
           # import/run the top-level credential-backed DEV probe in CI.
           python3 -m py_compile scripts/dev/gpt02_issue159_writer_slot_handoff_probe.py
           python3 scripts/dev/test_gpt02_issue159_writer_slot_handoff_probe.py
+          # Preserve the legacy VPS proof but deny an untracked LOGIN window
+          # when the independent catalog exists. Synthetic PATH stubs only.
+          bash -n scripts/dev/gpt02-issuer-native-reader-proof-once.sh
+          python3 scripts/dev/test_gpt02_issue159_legacy_issuer_reader_proof_guard.py
           # Existing independent supervisor: offline contract test only.
           # Timer stays disabled, auditor NOLOGIN, no database or credentials.
           node --check deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
