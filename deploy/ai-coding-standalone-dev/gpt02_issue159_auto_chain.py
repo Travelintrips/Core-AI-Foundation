@@ -152,13 +152,8 @@ def _write_link(link:dict):
         tmp.unlink(missing_ok=True)
 
 def run_after_approval(expected_task_id:int)->dict:
-    _reset_failed(
-      'gpt02-issue159-sign-once-approval.service',
-      'gpt02-issue159-sign-once-operator@hub.service',
-      'gpt02-issue159-sign-once-operator@core.service',
-      'gpt02-issue159-attestor-record-once.service',
-      'gpt02-issue159-sign-once-issuer.service',
-      'gpt02-issue159-issuer-finalize-once.service')
+    # Do not mutate even the systemd failure state for an unbound, malformed
+    # or stale one-use approval. Verify the packet before touching units.
     packet=json.loads(APPROVED.read_text('utf-8'))
     claims=packet.get('claims')
     if not isinstance(claims,dict) or claims.get('taskId')!=expected_task_id:
@@ -166,6 +161,14 @@ def run_after_approval(expected_task_id:int)->dict:
     now=int(time.time()*1000)
     if claims.get('expiresAt',0)-now<30000:
         raise AutoChainError('APPROVAL_NOT_FRESH_ENOUGH_FOR_AUTO_CHAIN')
+
+    _reset_failed(
+      'gpt02-issue159-sign-once-approval.service',
+      'gpt02-issue159-sign-once-operator@hub.service',
+      'gpt02-issue159-sign-once-operator@core.service',
+      'gpt02-issue159-attestor-record-once.service',
+      'gpt02-issue159-sign-once-issuer.service',
+      'gpt02-issue159-issuer-finalize-once.service')
 
     _unit('gpt02-issue159-sign-once-approval.service')
     if not Path('/run/gpt02-issue159-sign-once-approval/approval-signature.json').is_file():
