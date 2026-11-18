@@ -438,8 +438,8 @@ describe("CST-DEV exact model completion event persistence", () => {
     providerSlug:"ollama",runtimeKind:"ollama_remote_pull",modelId:"qwen2.5:3b",
     capabilities:["ollama_inference"],averageLatency:null,
   };
-  function setupCompletion() {
-    const reads: Array<unknown>=[job,worker];
+  function setupCompletion(workerFixture: typeof worker = worker) {
+    const reads: Array<unknown>=[job,workerFixture];
     const updates: Array<unknown>=[{...job,status:"completed"}, {...worker,status:"idle"}];
     vi.mocked(db.select).mockImplementation(() => ({
       from:vi.fn().mockReturnThis(),
@@ -497,12 +497,25 @@ describe("CST-DEV exact model completion event persistence", () => {
       expect(publish).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
+  it("never marks a job completed when the preflight worker is not approved",async () => {
+    setupCompletion({...worker,workerName:"forged-other-worker"});scopedEnv();
+    try {
+      vi.mocked(db.update).mockClear();
+      await expect(completeJob(482,3628,{output:{text:"READY"}}))
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+      expect(db.update).not.toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
+      expect(publishSafe).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("fails closed if the approved pilot job ID does not match",async () => {
     setupCompletion();scopedEnv();
     vi.stubEnv("CST_TEAM_DEV_APPROVED_JOB_ID","999");
     try {
+      vi.mocked(db.update).mockClear();
       await expect(completeJob(482,3628,{output:{text:"READY"}}))
         .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+      expect(db.update).not.toHaveBeenCalled();
       expect(publish).not.toHaveBeenCalled();
       expect(publishSafe).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
