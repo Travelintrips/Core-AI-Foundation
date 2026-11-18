@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   CST_TEAM_MONITOR_CLIENTS,
@@ -87,4 +88,58 @@ test("registered dispatch policy remains unchanged; tools heartbeat is observed 
   assert.equal(worker.reportedHealth, "healthy");
   assert.equal(worker.eligible, false);
   assert.equal("dispatchAllowed" in worker, false);
+});
+
+const outboundWorker = new URL("../artifacts/api-server/src/scripts/remoteOllamaWorker.ts", import.meta.url);
+function runDevOnlyOutboundWorker(overrides = {}) {
+  const env = { ...process.env,
+    APP_ENV: "development", NODE_ENV: "development",
+    CST_TEAM_OUTBOUND_DEV_ONLY: "true",
+    CST_TEAM_SYNTHETIC_LOOPBACK_TEST: "false",
+    AICORE_REMOTE_URL: "",
+    OLLAMA_REMOTE_ENROLLMENT_SECRET: "SYNTHETIC-DEV-ONLY-NO-REAL-CREDENTIAL",
+    OLLAMA_BASE_URL: "http://127.0.0.1:11434/v1",
+    OLLAMA_WORKER_MAX_CONCURRENCY: "1",
+    GCP_GPU_AUTO_STOP_ENABLED: "false",
+    ...overrides,
+  };
+  return spawnSync(process.execPath, ["--experimental-strip-types", outboundWorker.pathname], {
+    env, encoding: "utf8", timeout: 5000,
+  });
+}
+test("DEV outbound Ollama must specify its Core DEV host; never use the legacy PROD fallback", () => {
+  const missing = runDevOnlyOutboundWorker();
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /CST_TEAM_EXPLICIT_DEV_CORE_URL_REQUIRED/);
+  const prodDefault = runDevOnlyOutboundWorker({AICORE_REMOTE_URL:"https://aicore.cstlogistic.co.id"});
+  assert.notEqual(prodDefault.status, 0);
+  assert.match(prodDefault.stderr, /CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED/);
+  const arbitraryHost = runDevOnlyOutboundWorker({AICORE_REMOTE_URL:"http://192.168.0.1:3000"});
+  assert.notEqual(arbitraryHost.status, 0);
+  assert.match(arbitraryHost.stderr, /CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED/);
+  const localWithoutSynthetic = runDevOnlyOutboundWorker({AICORE_REMOTE_URL:"http://127.0.0.1:18444"});
+  assert.notEqual(localWithoutSynthetic.status, 0);
+  assert.match(localWithoutSynthetic.stderr, /CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED/);
+});
+test("DEV outbound Ollama refuses wrong runtime, nonlocal model URL, concurrency, or GCP stop", () => {
+  const baseline = {AICORE_REMOTE_URL:"https://dev.cstlogistic.co.id"};
+  for (const [change, expected] of [
+    [{NODE_ENV:"production"}, /CST_TEAM_DEV_RUNTIME_REQUIRED/],
+    [{OLLAMA_BASE_URL:"http://10.0.0.8:11434/v1"}, /CST_TEAM_LOCAL_OLLAMA_ONLY/],
+    [{OLLAMA_WORKER_MAX_CONCURRENCY:"2"}, /CST_TEAM_DEV_SINGLE_WORKER_SLOT_REQUIRED/],
+    [{GCP_GPU_AUTO_STOP_ENABLED:"true"}, /CST_TEAM_DEV_GCP_SELF_STOP_FORBIDDEN/],
+    [{AICORE_REMOTE_URL:"https://dev.cstlogistic.co.id/api"}, /CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED/],
+  ]) {
+    const result=runDevOnlyOutboundWorker({...baseline,...change});
+    assert.notEqual(result.status,0);
+    assert.match(result.stderr,expected);
+  }
+});
+test("isolated local API exception requires explicit synthetic flag, never production permission", () => {
+  const source=readFileSync(outboundWorker,"utf8");
+  assert.match(source,/CST_TEAM_SYNTHETIC_LOOPBACK_TEST/);
+  assert.match(source,/target\.hostname === "127\.0\.0\.1"/);
+  assert.match(source,/target\.port === "18444"/);
+  assert.match(source,/!allowedDev && !syntheticLoopback/);
+  assert.doesNotMatch(source,/https:\/\/aicore\.cstlogistic\.co\.id"\]\.includes/);
 });
