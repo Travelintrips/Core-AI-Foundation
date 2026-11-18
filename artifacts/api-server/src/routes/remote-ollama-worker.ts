@@ -138,9 +138,15 @@ router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Pro
   // pilot. This is not a general scheduler and does not grant new capabilities.
   const requestedJobId = (req.body as Record<string, unknown> | undefined)?.devExpectedJobId;
   const hasJobScope = requestedJobId !== undefined;
-  if (hasJobScope &&
-      (process.env.APP_ENV !== "development" || process.env.NODE_ENV !== "development" ||
-       process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED !== "true")) {
+  const pilotEnabled = process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true";
+  const isDev = process.env.APP_ENV === "development" && process.env.NODE_ENV === "development";
+  // With the DEV pilot flag on, no authenticated worker can fall back to
+  // the legacy shared-queue claim by omitting devExpectedJobId.
+  if (pilotEnabled && (!isDev || !hasJobScope)) {
+    res.status(403).json({ error: "DEV_SCOPED_MODEL_JOB_REQUIRED" });
+    return;
+  }
+  if (hasJobScope && (!isDev || !pilotEnabled)) {
     res.status(403).json({ error: "DEV_SCOPED_MODEL_CLAIM_DISABLED" });
     return;
   }
@@ -148,6 +154,18 @@ router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Pro
   if (parsedJobId && !parsedJobId.success) {
     res.status(400).json({ error: "INVALID_DEV_EXPECTED_JOB_ID" });
     return;
+  }
+  if (pilotEnabled) {
+    const approvedId = z.coerce.number().int().min(1).max(2147483647).safeParse(
+      process.env.CST_TEAM_DEV_APPROVED_JOB_ID ?? "",
+    );
+    const approvedWorkerName = process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME?.trim();
+    if (!approvedId.success || !approvedWorkerName ||
+        approvedWorkerName !== worker.workerName ||
+        parsedJobId?.data !== approvedId.data) {
+      res.status(403).json({ error: "DEV_SCOPED_MODEL_JOB_OR_WORKER_NOT_APPROVED" });
+      return;
+    }
   }
   try {
     const job = await claimRemoteOllamaInvocation(
