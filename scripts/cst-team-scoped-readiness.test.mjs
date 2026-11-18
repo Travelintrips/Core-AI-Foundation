@@ -52,7 +52,7 @@ test("new endpoint never exposes write permission, tokens or command dispatch", 
     route.indexOf('router.get("/ai/coding/bridge/cst-team-readiness"'),
     route.indexOf('router.get("/ai/coding/bridge/ai-task-timeline"'),
   );
-  assert.match(snippet, /projectCstTeamReadiness\(registry\)/);
+  assert.match(snippet, /projectCstTeamReadiness\(readinessRows\)/);
   assert.doesNotMatch(snippet, /submitCodingBridgeCommand|dispatchExternalAgentWork|claimCodingBridgeCommand|process\.env\.[A-Z_]*TOKEN|req\.body|req\.query/);
 });
 
@@ -65,4 +65,26 @@ test("DEV readiness GET does not attempt schema creation or privileged DDL", () 
   assert.match(snippet, /getExternalAgentRegistrySnapshot\(\{ skipSchemaEnsure: true \}\)/);
   assert.doesNotMatch(snippet, /ensureCodingControlBridgeTables|CREATE TABLE|ALTER TABLE/);
   assert.match(registry, /if \(!options\.skipSchemaEnsure\) await ensureCodingControlBridgeTables\(\)/);
+});
+
+test("registered dispatch policy remains unchanged; tools heartbeat is observed without eligibility", () => {
+  const registry = readFileSync(new URL("../artifacts/api-server/src/services/externalAgentRegistryService.ts", import.meta.url), "utf8");
+  const presenceOnly = registry.slice(registry.indexOf("export async function getCstTeamPresenceOnlyWorkerReadback"));
+  assert.match(presenceOnly, /const clientId = "openclaw-travelintrips-tools-dev" as const/);
+  assert.match(presenceOnly, /eligible: false as const/);
+  assert.match(presenceOnly, /\.select\(/);
+  assert.doesNotMatch(presenceOnly, /CREATE TABLE|ALTER TABLE|GRANT |INSERT INTO|DELETE FROM|db\.update\(|db\.insert\(/);
+  assert.match(route, /getCstTeamPresenceOnlyWorkerReadback\(\)/);
+  assert.match(route, /getExternalAgentRegistrySnapshot\(\{ skipSchemaEnsure: true \}\)/);
+  const now = new Date("2026-11-18T14:00:00Z");
+  const result = projectCstTeamReadiness([
+    { clientId: "openclaw-travelintrips-tools-dev", eligible: false,
+      presenceState: "ACTIVE", reportedHealth: "healthy",
+      lastSeenAt: now, leaseExpiresAt: new Date(now.getTime() + 90_000) },
+  ], now);
+  const worker = result.workers.find(w => w.clientId === "openclaw-travelintrips-tools-dev");
+  assert.equal(worker.presenceState, "ACTIVE");
+  assert.equal(worker.reportedHealth, "healthy");
+  assert.equal(worker.eligible, false);
+  assert.equal("dispatchAllowed" in worker, false);
 });
