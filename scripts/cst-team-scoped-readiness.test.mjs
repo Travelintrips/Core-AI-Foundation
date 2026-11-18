@@ -273,6 +273,8 @@ test("job completion event RLS is bound to persisted Company1 worker and cleanly
   assert.match(rehearsal,/WRONG_EVENT_MODULE_ALLOWED/);
   assert.match(rehearsal,/completionEventDispatchVerified":False/);
   assert.match(rehearsal,/FABRICATED_EVENT_AUDIT_ALLOWED/);
+  assert.match(rehearsal,/EVENT_INSERT_DID_NOT_ROLLBACK_AFTER_AUDIT_DENIAL/);
+  assert.match(rehearsal,/AUDIT-TX-MUST-ROLLBACK/);
   assert.match(rehearsal,/APPROVED_EVENT_AUDIT_NOT_PERSISTED/);
   assert.match(rehearsal,/PostgreSQL init process complete; ready for start up/);
 });
