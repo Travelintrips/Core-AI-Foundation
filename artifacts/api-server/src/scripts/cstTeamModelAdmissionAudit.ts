@@ -12,7 +12,8 @@ type RoleRow = {
   runtime_role: string;
   jobs_rls_enabled: boolean;
   workers_rls_enabled: boolean;
-  jobs_select: boolean; jobs_insert: boolean; jobs_update: boolean;
+  jobs_select: boolean; jobs_insert: boolean;
+  jobs_missing_update_columns: string[];
   workers_select: boolean; workers_insert: boolean; workers_update: boolean;
 };
 type PolicyRow = {
@@ -37,7 +38,16 @@ async function audit() {
         WHERE oid = 'ai_platform.ai_workers'::regclass) AS workers_rls_enabled,
       has_table_privilege(current_user,'ai_platform.ai_jobs','SELECT') AS jobs_select,
       has_table_privilege(current_user,'ai_platform.ai_jobs','INSERT') AS jobs_insert,
-      has_table_privilege(current_user,'ai_platform.ai_jobs','UPDATE') AS jobs_update,
+      ARRAY(
+        SELECT column_name FROM unnest(ARRAY[
+          'status','started_at','payload_json','updated_at','result_json',
+          'completed_at','actual_duration','actual_cost','error_message',
+          'retry_count','next_retry_at'
+        ]) AS column_name
+        WHERE NOT has_column_privilege(
+          current_user,'ai_platform.ai_jobs',column_name,'UPDATE'
+        )
+      ) AS jobs_missing_update_columns,
       has_table_privilege(current_user,'ai_platform.ai_workers','SELECT') AS workers_select,
       has_table_privilege(current_user,'ai_platform.ai_workers','INSERT') AS workers_insert,
       has_table_privilege(current_user,'ai_platform.ai_workers','UPDATE') AS workers_update
@@ -66,7 +76,8 @@ async function audit() {
     WORKERS_RLS_ENABLED:r.workers_rls_enabled===true,
     JOBS_SELECT_GRANT:r.jobs_select===true,
     JOBS_INSERT_GRANT:r.jobs_insert===true,
-    JOBS_UPDATE_GRANT:r.jobs_update===true,
+    JOBS_REQUIRED_UPDATE_COLUMNS:Array.isArray(r.jobs_missing_update_columns) &&
+      r.jobs_missing_update_columns.length===0,
     WORKERS_SELECT_GRANT:r.workers_select===true,
     WORKERS_INSERT_GRANT:r.workers_insert===true,
     WORKERS_UPDATE_GRANT:r.workers_update===true,
@@ -78,7 +89,8 @@ async function audit() {
     WORKERS_REMOTE_UPDATE_RLS:has("ai_workers","UPDATE",row=>hasRemote(row.qual)&&hasRemote(row.with_check)),
   };
   const report=projectCstModelAdmissionReadiness(checks);
-  console.log(JSON.stringify({project:"CST_DEV",role:r.runtime_role,readOnly:true,...report}));
+  console.log(JSON.stringify({project:"CST_DEV",role:r.runtime_role,readOnly:true,
+    missingJobUpdateColumns:r.jobs_missing_update_columns,...report}));
 }
 try {
   await audit();
