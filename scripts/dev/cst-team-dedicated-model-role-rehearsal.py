@@ -224,6 +224,23 @@ SELECT 'APPROVED-MODEL-COMPLETION','job.completed','job-engine',j.id::text,
 FROM ai_platform.ai_jobs j, ai_platform.ai_workers w
 WHERE j.job_code='APPROVED-ONE' AND w.worker_name='cst-dev-dell-onejob-20261119'
 RETURNING event_id,status;
+-- The matching audit is allowed only after the event has been persisted.
+-- A fabricated audit without a real event must remain rejected by RLS.
+DO $fake_audit$
+BEGIN
+ BEGIN
+  INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+  VALUES ('event-bus','event_published','ai_event','NO-SUCH-EVENT','success',
+   jsonb_build_object('eventType','job.completed',
+    'sourceModule','job-engine','correlationId','pilot-correlation'));
+  RAISE EXCEPTION 'FABRICATED_EVENT_AUDIT_ALLOWED';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+END $fake_audit$;
+INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+VALUES ('event-bus','event_published','ai_event','APPROVED-MODEL-COMPLETION','success',
+ jsonb_build_object('eventType','job.completed','sourceModule','job-engine',
+  'correlationId','pilot-correlation'));
 DO $pass$
 BEGIN
  IF (SELECT count(*) FROM ai_platform.ai_jobs) <> 1 OR
@@ -239,6 +256,14 @@ RESET ROLE;
 """
         psql(test)
         psql(render(ROLLBACK))
+        # Owner check after revoking role: pilot cannot SELECT audit_log rows.
+        psql("""DO $verify_event_audit$
+        BEGIN
+          IF (SELECT count(*) FROM ai_platform.ai_audit_logs
+                WHERE module='event-bus' AND action='event_published'
+                  AND resource_id='APPROVED-MODEL-COMPLETION')<>1
+          THEN RAISE EXCEPTION 'APPROVED_EVENT_AUDIT_NOT_PERSISTED'; END IF;
+        END $verify_event_audit$;""")
         check=psql(f"""SELECT
  (SELECT count(*) FROM pg_roles WHERE rolname='{ROLE}')=0 AS role_absent,
  (SELECT count(*) FROM pg_policies WHERE policyname LIKE 'cst_model_pilot_%')=0 AS policies_absent,
@@ -249,8 +274,8 @@ RESET ROLE;
         if " t " not in check.replace("\n"," "):
             raise RuntimeError("ROLLBACK_PROOF_NOT_CONFIRMED "+check[-300:])
         report.update({"result":"PASS","negativeCases":3,"approvedJobTransitions":["queued","running","completed"],
-            "approvedWorker":"idle","completionEventPersisted":True,
-            "completionEventDispatchVerified":False,
+            "approvedWorker":"idle","completionEventPersisted":True,"completionEventAuditPersisted":True,
+            "fabricatedEventAuditRejected":True,"completionEventDispatchVerified":False,
             "earlyAndForgedEventAttemptsRejected":6,
             "roleRolledBack":True,"policiesRolledBack":True,"otherCompanyUnchanged":True,
             "database":DB,"portExposed":False})
