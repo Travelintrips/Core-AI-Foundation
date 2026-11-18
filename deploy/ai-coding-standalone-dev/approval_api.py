@@ -396,9 +396,10 @@ class Handler(BaseHTTPRequestHandler):
     if status==201 and isinstance(data,dict) and set(data)=={'claims'}:
      try:
       persist_issue159_approved_packet(data['claims'],body)
-     except OSError:
-      # The one-use SQLite approval has ALREADY COMMITTED. Never suggest
-      # reapproving the same task or claim that the decision was rolled back.
+     except Exception:
+      # The one-use SQLite approval has ALREADY COMMITTED. JSON serialization
+      # and packet validation can also fail without raising OSError. Never
+      # emit a generic 400/500 or reveal exception details after the commit.
       # A separately supervised recovery may republish only the exact
       # still-fresh persisted intent, without another approval write.
       return self.send(503,{'error':'issue159_approved_packet_recovery_required',
