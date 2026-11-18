@@ -438,6 +438,8 @@ test("completion evidence audit uses only read-only CST-DEV client transaction",
   assert.match(src,/resource_id=ANY\(\$1::text\[\]\)/);
   assert.match(src,/client\.query\("ROLLBACK"\)/);
   assert.match(src,/finalAckVerified:false/);
+  assert.match(src,/result\.status !== "event_and_audit_persisted"/);
+  assert.match(src,/process\.exitCode = 4/);
   assert.doesNotMatch(src,/pool\.query\(["'](?:INSERT|UPDATE|DELETE|ALTER|CREATE|GRANT|REVOKE)/i);
 });
 
