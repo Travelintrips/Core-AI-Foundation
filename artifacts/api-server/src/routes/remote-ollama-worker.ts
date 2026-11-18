@@ -88,6 +88,21 @@ router.post("/ai/ollama-workers/register", async (req, res): Promise<void> => {
     return;
   }
 
+  if (process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true") {
+    // The DEV-only pilot can enroll exactly one model-only DELL worker.
+    // Never turn enrollment into a general-purpose PowerShell executor.
+    if (process.env.APP_ENV !== "development" ||
+        process.env.NODE_ENV !== "development" ||
+        !process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+        body.data.workerName !== process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+        body.data.nodeId !== process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+        body.data.modelId !== "qwen2.5:3b" ||
+        body.data.maxConcurrentJobs !== 1) {
+      res.status(403).json({ error: "DEV_MODEL_PILOT_WORKER_NOT_APPROVED" });
+      return;
+    }
+  }
+
   try {
     const worker = await registerRemoteOllamaWorker(body.data);
     res.status(201).json({
@@ -105,6 +120,10 @@ router.post("/ai/ollama-workers/register", async (req, res): Promise<void> => {
 
 
 router.post("/ai/ollama-workers/:id/self-test", requireWorker, async (req, res): Promise<void> => {
+  if (process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true") {
+    res.status(403).json({ error: "DEV_MODEL_PILOT_POWERSHELL_SELF_TEST_DISABLED" });
+    return;
+  }
   const workerId = Number.parseInt(routeParam(req, "id"), 10);
   try {
     const job = await enqueueRemotePowerShellSelfTest(workerId);
