@@ -1,7 +1,7 @@
 {
   "title": "CST AI Team — read-only remote-model RLS admission audit and disposable rehearsal",
   "date": "2026-11-18",
-  "sourceCommit": "dc0e5bf58f2c610a6a8601c49f10d3408ca23a72",
+  "sourceCommit": "2d39fe7d30639352d22df5f81b143296ba48f983",
   "project": "CST-DEV",
   "databaseProjectRef": "xssrfshdrtdfupgqwfdw",
   "applicationRole": "aicore_dev_runtime",
@@ -10,7 +10,7 @@
     "requiredChecks": 16,
     "passedChecks": 10,
     "blockers": [
-      "JOBS_UPDATE_GRANT",
+      "JOBS_REQUIRED_UPDATE_COLUMNS",
       "JOBS_MODEL_SELECT_RLS",
       "JOBS_MODEL_INSERT_RLS",
       "JOBS_MODEL_UPDATE_RLS",
@@ -20,7 +20,16 @@
     "modelJobsQueuedBeforeAndAfter": 0,
     "tool": "artifacts/api-server/src/scripts/cstTeamModelAdmissionAudit.ts",
     "databaseMutationsByAudit": 0,
-    "executionEnvironment": "APP_ENV=development; NODE_ENV=development"
+    "executionEnvironment": "APP_ENV=development; NODE_ENV=development",
+    "missingJobUpdateColumns": [
+      "actual_cost",
+      "actual_duration",
+      "next_retry_at",
+      "payload_json",
+      "result_json",
+      "retry_count"
+    ],
+    "note": "The role already has column-level UPDATE on some job fields (status, started_at, completed_at, updated_at, error_message), but not on the six fields above needed for model-claim, completion and failure recovery. This is not a blanket absence of all UPDATE permissions."
   },
   "disposablePostgres16Rehearsal": {
     "script": "scripts/dev/cst-team-model-rls-disposable-rehearsal.sql",
