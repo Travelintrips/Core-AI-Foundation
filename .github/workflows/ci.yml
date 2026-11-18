@@ -42,6 +42,8 @@ jobs:
         run: node --test scripts/ci-quorum-row-lock.test.mjs
       - name: Verify scoped CST team DEV readiness is non-authorizing
         run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
+      - name: Verify read-only CST-DEV one-job pilot preflight cannot execute or sign
+        run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap
