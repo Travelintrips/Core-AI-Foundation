@@ -478,3 +478,21 @@ test("fresh model-pilot worker name cannot reuse historical DELL identity", () =
   assert.match(harness,/"PILOT_WORKER_NAME":WORKER/);
   assert.match(harness,/WORKER="cst-dev-dell-onejob-20261119-"\+secrets\.token_hex\(4\)/);
 });
+
+test("disposable PostgreSQL16 proves full model job, worker, event and audit atomic rollback", () => {
+  const sql=readFileSync(new URL("../scripts/dev/cst-team-atomic-full-job-rls-disposable.sql",import.meta.url),"utf8");
+  assert.match(sql,/current_database\(\)<>'cst_team_atomic_job_fixture'/);
+  assert.match(sql,/CST_ATOMIC_COMPLETION_DISPOSABLE_DATABASE_ONLY/);
+  assert.match(sql,/CREATE ROLE cst_team_atomic_fixture NOLOGIN NOBYPASSRLS/);
+  assert.match(sql,/ALTER TABLE ai_platform\.ai_jobs ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql,/ALTER TABLE ai_platform\.ai_events ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql,/EXCEPTION WHEN insufficient_privilege THEN NULL/);
+  assert.match(sql,/ATOMIC_ROLLBACK_FAILED_AFTER_AUDIT_RLS_DENIAL/);
+  assert.match(sql,/CST_MODEL_ATOMIC_ROLLBACK_ON_EVENT_AUDIT_DENIAL_PASS/);
+  assert.match(sql,/CST_MODEL_ATOMIC_FIVE_RECORD_COMMIT_PASS/);
+  assert.match(sql,/CST_MODEL_TERMINAL_REPLAY_AND_TENANT_ISOLATION_PASS/);
+  assert.match(sql,/COMPANY3-OTHER/);
+  assert.match(sql,/DROP POLICY event_insert ON ai_platform\.ai_events/);
+  assert.match(sql,/DROP ROLE cst_team_atomic_fixture/);
+  assert.doesNotMatch(sql,/DISABLE ROW LEVEL SECURITY|SECURITY DEFINER|\bBYPASSRLS\b/i);
+});
