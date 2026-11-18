@@ -785,6 +785,25 @@ export async function completeJob(
     ? now.getTime() - job.startedAt.getTime()
     : null;
 
+  // Fail CLOSED before updating the job row. Previously a mismatched pilot
+  // could become status=completed and only then report a binding error.
+  // Ordinary jobs still use the original single worker-read after update.
+  let devPilotMode = classifyCstDevModelCompletion(job, null, workerId);
+  let validatedPilotWorker: AiWorker | undefined;
+  if (devPilotMode === "blocked") {
+    const [pilotWorker] = await db
+      .select()
+      .from(aiWorkersTable)
+      .where(eq(aiWorkersTable.id, workerId));
+    devPilotMode = classifyCstDevModelCompletion(job, pilotWorker, workerId);
+    if (devPilotMode !== "await_persist") {
+      logger.error({ jobId, workerId },
+        "CST-DEV model completion evidence binding rejected before job update");
+      throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+    }
+    validatedPilotWorker = pilotWorker;
+  }
+
   const [completed] = await db
     .update(aiJobsTable)
     .set({
@@ -814,7 +833,7 @@ export async function completeJob(
   }
 
   // Update worker — rolling latency average
-  const [worker] = await db
+  const [worker] = validatedPilotWorker ? [validatedPilotWorker] : await db
     .select()
     .from(aiWorkersTable)
     .where(eq(aiWorkersTable.id, workerId));
@@ -852,11 +871,6 @@ export async function completeJob(
   // Only the explicitly approved Company-1 model pilot waits for persisted
   // event evidence. All existing production/regular completions retain the
   // previous non-blocking publishSafe behavior.
-  const devPilotMode = classifyCstDevModelCompletion(job, worker, workerId);
-  if (devPilotMode === "blocked") {
-    logger.error({ jobId, workerId }, "CST-DEV model completion evidence binding rejected");
-    throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
-  }
   if (devPilotMode === "await_persist") {
     try {
       const storedEvent = await publish(completionEvent);
