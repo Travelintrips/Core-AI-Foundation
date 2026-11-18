@@ -52,7 +52,7 @@ vi.mock("@workspace/db", () => ({
 }));
 
 vi.mock("../aiAuditService.js",  () => ({ logAudit: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("../aiEventBusService.js", () => ({ publishSafe: vi.fn() }));
+vi.mock("../aiEventBusService.js", () => ({ publishSafe: vi.fn(), publish: vi.fn().mockResolvedValue({eventId:"synthetic-event"}) }));
 vi.mock("../aiExecutionService.js", () => ({ executeAI: vi.fn() }));
 vi.mock("../aiModelRouter.js",  () => ({ routeToModel: vi.fn().mockResolvedValue(null) }));
 vi.mock("../aiSecretService.js", () => ({ getProviderApiKey: vi.fn().mockReturnValue(null) }));
