@@ -78,6 +78,7 @@ describe("CST-DEV model event + audit transaction (no real DB)", () => {
     state.failAudit = false;
     state.transactionCalls = 0;
     state.subscriberLookups = 0;
+    vi.mocked(db.transaction).mockClear();
     vi.mocked(logAudit).mockClear();
   });
   afterEach(() => { vi.unstubAllEnvs(); });
