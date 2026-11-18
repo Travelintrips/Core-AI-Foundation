@@ -60,7 +60,7 @@ def prepare_supervisor(original_path, module_path, port, pg_driver, directory):
     content = original_path.read_text(encoding="utf8")
     if "connectedSessionTerminationProven: false" not in content:
         raise AssertionError("SUPERVISOR_MUST_REMAIN_NO_GO")
-    directory.mkdir(mode=0o700)
+    directory.mkdir(mode=0o700, exist_ok=True)
     creds = directory / "credentials"
     unit = creds / "fixture.service"
     unit.mkdir(parents=True, mode=0o700)
