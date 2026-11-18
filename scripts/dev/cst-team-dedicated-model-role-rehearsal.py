@@ -241,6 +241,32 @@ INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,st
 VALUES ('event-bus','event_published','ai_event','APPROVED-MODEL-COMPLETION','success',
  jsonb_build_object('eventType','job.completed','sourceModule','job-engine',
   'correlationId','pilot-correlation'));
+-- Prove atomic event+audit: a rejected audit must roll back the event INSERT
+-- in the same PostgreSQL transaction/subtransaction, never leaving a ghost.
+DO $atomic_audit$
+DECLARE jid integer; wid integer;
+BEGIN
+ SELECT id INTO jid FROM ai_platform.ai_jobs WHERE job_code='APPROVED-ONE';
+ SELECT id INTO wid FROM ai_platform.ai_workers
+   WHERE worker_name='cst-dev-dell-onejob-20261119';
+ BEGIN
+   INSERT INTO ai_platform.ai_events(event_id,event_type,source_module,source_id,
+     correlation_id,payload_json,status,published_at)
+   VALUES ('AUDIT-TX-MUST-ROLLBACK','job.completed','job-engine',jid::text,
+     'rollback-correlation',
+     jsonb_build_object('jobId',jid,'workerId',wid,'jobCode','APPROVED-ONE',
+       'jobType','ollama_model_invocation'),'published',now());
+   INSERT INTO ai_platform.ai_audit_logs(module,action,resource_type,resource_id,status,details)
+   VALUES ('event-bus','event_published','ai_event','WRONG_EVENT_ID','success',
+     jsonb_build_object('eventType','job.completed','sourceModule','job-engine',
+       'correlationId','rollback-correlation'));
+   RAISE EXCEPTION 'FORGED_EVENT_AUDIT_UNEXPECTEDLY_ALLOWED';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ IF EXISTS (SELECT 1 FROM ai_platform.ai_events WHERE event_id='AUDIT-TX-MUST-ROLLBACK') THEN
+    RAISE EXCEPTION 'EVENT_INSERT_DID_NOT_ROLLBACK_AFTER_AUDIT_DENIAL';
+ END IF;
+END $atomic_audit$;
 DO $pass$
 BEGIN
  IF (SELECT count(*) FROM ai_platform.ai_jobs) <> 1 OR
@@ -275,7 +301,9 @@ RESET ROLE;
             raise RuntimeError("ROLLBACK_PROOF_NOT_CONFIRMED "+check[-300:])
         report.update({"result":"PASS","negativeCases":3,"approvedJobTransitions":["queued","running","completed"],
             "approvedWorker":"idle","completionEventPersisted":True,"completionEventAuditPersisted":True,
-            "fabricatedEventAuditRejected":True,"completionEventDispatchVerified":False,
+            "fabricatedEventAuditRejected":True,
+            "auditFailureRolledBackEventInsert":True,
+            "completionEventDispatchVerified":False,
             "earlyAndForgedEventAttemptsRejected":6,
             "roleRolledBack":True,"policiesRolledBack":True,"otherCompanyUnchanged":True,
             "database":DB,"portExposed":False})
