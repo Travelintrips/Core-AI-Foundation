@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { CST_MODEL_ADMISSION_REQUIREMENTS, projectCstModelAdmissionReadiness } from "../artifacts/api-server/src/lib/cstTeamModelAdmission.ts";
 import {
   CST_TEAM_MONITOR_CLIENTS,
   isCstTeamDevMode,
@@ -178,4 +179,32 @@ test("Core model claim filters exact job ID and rejects scoped requests without 
   assert.match(remoteRoute,/CST_TEAM_DEV_APPROVED_JOB_ID/);
   assert.match(remoteRoute,/CST_TEAM_DEV_APPROVED_WORKER_NAME/);
   assert.match(remoteService,/worker\.modelId && scopedJobId === undefined/);
+});
+
+test("model worker preflight must never authorize execution or weaken RLS", () => {
+  const allMissing=projectCstModelAdmissionReadiness({});
+  assert.equal(allMissing.status,"blocked");
+  assert.equal(allMissing.eligibleToDispatch,false);
+  assert.equal(allMissing.verifiedOperationalWorker,false);
+  assert.equal(allMissing.blockers.length,CST_MODEL_ADMISSION_REQUIREMENTS.length);
+  const allPresent=Object.fromEntries(CST_MODEL_ADMISSION_REQUIREMENTS.map(key=>[key,true]));
+  const review=projectCstModelAdmissionReadiness(allPresent);
+  assert.equal(review.status,"review_required");
+  assert.equal(review.eligibleToDispatch,false);
+  assert.equal(review.verifiedOperationalWorker,false);
+  const partial=projectCstModelAdmissionReadiness({...allPresent,JOBS_UPDATE_GRANT:false,
+    JOBS_MODEL_INSERT_RLS:false,WORKERS_REMOTE_UPDATE_RLS:false});
+  assert.deepEqual(partial.blockers,["JOBS_UPDATE_GRANT","JOBS_MODEL_INSERT_RLS","WORKERS_REMOTE_UPDATE_RLS"]);
+});
+test("DEV remote worker RLS preflight only reads PostgreSQL catalogs, never writes", () => {
+  const source=readFileSync(new URL("../artifacts/api-server/src/scripts/cstTeamModelAdmissionAudit.ts",import.meta.url),"utf8");
+  assert.match(source,/CST_DEV_READ_ONLY_RLS_PREFLIGHT_NOT_AUTHORIZATION/);
+  assert.match(source,/SUPABASE_DATABASE_URL_DEV/);
+  assert.match(source,/xssrfshdrtdfupgqwfdw/);
+  assert.match(source,/pg_policies/);
+  assert.match(source,/has_table_privilege/);
+  assert.match(source,/current_user/);
+  assert.match(source,/JOBS_MODEL_INSERT_RLS/);
+  assert.match(source,/WORKERS_REMOTE_UPDATE_RLS/);
+  assert.doesNotMatch(source,/await\s+(?:db|pool)\.insert\(|await\s+(?:db|pool)\.update\(|CREATE\s+POLICY|ALTER\s+ROLE|GRANT\s+UPDATE\s+ON/i);
 });
