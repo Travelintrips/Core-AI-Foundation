@@ -100,6 +100,7 @@ function runDevOnlyOutboundWorker(overrides = {}) {
     OLLAMA_REMOTE_ENROLLMENT_SECRET: "SYNTHETIC-DEV-ONLY-NO-REAL-CREDENTIAL",
     OLLAMA_BASE_URL: "http://127.0.0.1:11434/v1",
     OLLAMA_WORKER_MAX_CONCURRENCY: "1",
+    CST_TEAM_DEV_SINGLE_JOB_ID: "421",
     GCP_GPU_AUTO_STOP_ENABLED: "false",
     ...overrides,
   };
@@ -142,4 +143,34 @@ test("isolated local API exception requires explicit synthetic flag, never produ
   assert.match(source,/target\.port === "18444"/);
   assert.match(source,/!allowedDev && !syntheticLoopback/);
   assert.doesNotMatch(source,/https:\/\/aicore\.cstlogistic\.co\.id"\]\.includes/);
+});
+
+test("DEV model worker requires one exact job ID, not a shared queue or PowerShell self-test", () => {
+  for (const invalid of ["", "0", "-1", "3.5", "2147483648", "not-a-job"]) {
+    const result=runDevOnlyOutboundWorker({
+      AICORE_REMOTE_URL:"https://dev.cstlogistic.co.id",
+      CST_TEAM_DEV_SINGLE_JOB_ID:invalid,
+    });
+    assert.notEqual(result.status,0);
+    assert.match(result.stderr,/CST_TEAM_DEV_SINGLE_JOB_ID_REQUIRED/);
+  }
+  const worker=readFileSync(outboundWorker,"utf8");
+  assert.match(worker,/devOneShotJobId !== null/);
+  assert.match(worker,/JSON\.stringify\(\{ devExpectedJobId: devOneShotJobId \}\)/);
+  assert.match(worker,/CST_TEAM_DEV_JOB_OR_TYPE_MISMATCH/);
+  assert.match(worker,/CST_TEAM_DEV_SINGLE_JOB_COMPLETED/);
+  assert.match(worker,/CST_TEAM_DEV_POWERSHELL_SELF_TEST_NOT_ALLOWED/);
+  assert.match(worker,/CST_TEAM_DEV_REGISTRATION_FAILED/);
+});
+
+test("Core model claim filters exact job ID and rejects scoped requests without DEV authorization", () => {
+  const remoteRoute=readFileSync(new URL("../artifacts/api-server/src/routes/remote-ollama-worker.ts",import.meta.url),"utf8");
+  const remoteService=readFileSync(new URL("../artifacts/api-server/src/services/remoteOllamaWorkerService.ts",import.meta.url),"utf8");
+  assert.match(remoteRoute,/CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED/);
+  assert.match(remoteRoute,/DEV_SCOPED_MODEL_CLAIM_DISABLED/);
+  assert.match(remoteRoute,/devExpectedJobId/);
+  assert.match(remoteRoute,/parsedJobId\?\.success/);
+  assert.match(remoteService,/REMOTE_OLLAMA_DEV_JOB_SCOPE_INVALID/);
+  assert.match(remoteService,/AND id = \$\{scopedJobId\} AND job_type = \$\{REMOTE_OLLAMA_JOB_TYPE\}/);
+  assert.match(remoteService,/worker\.modelId && scopedJobId === undefined/);
 });
