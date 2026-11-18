@@ -197,6 +197,37 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["dispatchPermitted"])
         self.assertEqual(body["releaseDecision"], "NO_GO")
 
+    def test_authenticated_http_denied_by_unset_auto_chain_flag_without_consumption(self):
+        # Mirror the real DEV fail-closed gate: approval-intent route is
+        # enabled but unattended one-use auto-chain cannot consume an
+        # authenticated Super Admin decision before its runtime is ready.
+        # All identity/claims and database data in this test are synthetic.
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        api.issue159_chain_readiness_gate = SOURCE_CHAIN_GATE
+        with patch.dict(os.environ, {
+            "GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY": "false",
+        }), patch.object(api, "run_after_approval", side_effect=AssertionError(
+            "FAIL_CLOSED_MUST_NOT_START_SIGNER",
+        )) as signer, patch.object(
+            api, "persist_issue159_approved_packet",
+            side_effect=AssertionError("FAIL_CLOSED_MUST_NOT_PUBLISH_PACKET"),
+        ) as packet:
+            status, body = self.request(AAL2_TOKEN)
+            self.assertEqual(status, 409)
+            self.assertEqual(body["error"], "issue159_auto_chain_not_ready")
+            self.assertIs(body["signingPermitted"], False)
+            self.assertIs(body["authorizationGranted"], False)
+            self.assertIs(body["dispatchPermitted"], False)
+            self.assertEqual(body["releaseDecision"], "NO_GO")
+            self.assertEqual(self.count(), 0)
+            self.assertFalse(signer.called)
+            self.assertFalse(packet.called)
+            self.assertFalse(Path(self.packet).exists())
+
     def test_missing_independent_relock_watchdog_never_consumes_one_use_approval(self):
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
         api.admin_identity = lambda token, connection: {
