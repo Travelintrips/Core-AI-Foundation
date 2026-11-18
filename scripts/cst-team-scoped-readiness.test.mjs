@@ -411,3 +411,17 @@ test("a completed job and forged/duplicate event cannot pass independent persist
   assert.equal(proof.subscriberDeliveryVerified,false);
   assert.equal(proof.finalAckVerified,false);
 });
+
+test("completion evidence audit uses only read-only CST-DEV client transaction", () => {
+  const src=readFileSync(new URL("../artifacts/api-server/src/scripts/cstTeamCompletionEvidenceAudit.ts",import.meta.url),"utf8");
+  assert.match(src,/BEGIN READ ONLY/);
+  assert.match(src,/xssrfshdrtdfupgqwfdw/);
+  assert.match(src,/runtime_role !== "aicore_dev_runtime"/);
+  assert.match(src,/CST_DEV_EVIDENCE_READER_NOT_AUTHORIZED/);
+  assert.match(src,/projectCstModelCompletionEvidence/);
+  assert.match(src,/source_id=\$1/);
+  assert.match(src,/resource_id=ANY\(\$1::text\[\]\)/);
+  assert.match(src,/client\.query\("ROLLBACK"\)/);
+  assert.match(src,/finalAckVerified:false/);
+  assert.doesNotMatch(src,/pool\.query\(["'](?:INSERT|UPDATE|DELETE|ALTER|CREATE|GRANT|REVOKE)/i);
+});
