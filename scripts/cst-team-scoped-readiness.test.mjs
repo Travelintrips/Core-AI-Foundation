@@ -305,7 +305,7 @@ test("only the exact Company-1 DEV model pilot uses awaited completion-event per
     {payloadJson:{...job.payloadJson,_claimedByWorkerId:1}},
     {payloadJson:{...job.payloadJson,requestId:"cst-ai-team-company1-dev:other"}},
   ]) {
-    assert.equal(mode({...job,...mutation}), 
+    assert.equal(mode({...job,...mutation}),
       mutation.jobType === "ollama_powershell_execution" ? "ordinary" : "blocked");
   }
   for(const mutation of [
