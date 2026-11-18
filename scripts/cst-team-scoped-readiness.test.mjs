@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { CST_MODEL_ADMISSION_REQUIREMENTS, projectCstModelAdmissionReadiness } from "../artifacts/api-server/src/lib/cstTeamModelAdmission.ts";
+import { projectCstModelCompletionEvidence } from "../artifacts/api-server/src/lib/cstTeamCompletionEvidenceProjection.ts";
 import { classifyCstDevModelCompletion } from "../artifacts/api-server/src/lib/cstTeamModelCompletionGuard.ts";
 import {
   CST_TEAM_MONITOR_CLIENTS,
@@ -359,4 +360,54 @@ test("one-job event and audit require one atomic transaction, without global dis
   assert.match(scoped,/dispatch\(event\)\.catch/);
   assert.doesNotMatch(scoped,/logAudit\(/);
   assert.doesNotMatch(scoped,/FinalAckVerified: true|attestationVerified: true/);
+});
+
+test("real historical job #482 remains completed without falsely asserting an event", () => {
+  const input = {
+    job: {id:482,job_code:"OLLAMA-B7F9B5E2",job_type:"ollama_model_invocation",
+      status:"completed",request_id:"cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a",
+      model_id:"qwen2.5:3b",has_result:true},
+    jobAudits:[{resource_id:"482",worker_id:"3628"}],
+    worker:{id:3628,worker_name:"cst-dev-dell-onejob-20261119",
+      provider_slug:"ollama",runtime_kind:"ollama_remote_pull",model_id:"qwen2.5:3b"},
+    events:[],eventAudits:[],
+  };
+  const report=projectCstModelCompletionEvidence(input);
+  assert.equal(report.status,"completed_event_missing");
+  assert.equal(report.jobCompleted,true);
+  assert.equal(report.jobAuditBound,true);
+  assert.equal(report.eventPersisted,false);
+  assert.equal(report.eventAuditPersisted,false);
+  assert.equal(report.subscriberDeliveryVerified,false);
+  assert.equal(report.independentQaVerified,false);
+  assert.equal(report.finalAckVerified,false);
+});
+test("a completed job and forged/duplicate event cannot pass independent persistence proof", () => {
+  const base={
+    job:{id:482,job_code:"OLLAMA-B7F9B5E2",job_type:"ollama_model_invocation",
+      status:"completed",request_id:"cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a",
+      model_id:"qwen2.5:3b",has_result:true},
+    jobAudits:[{resource_id:"482",worker_id:"3628"}],
+    worker:{id:3628,worker_name:"cst-dev-dell-onejob-20261119",
+      provider_slug:"ollama",runtime_kind:"ollama_remote_pull",model_id:"qwen2.5:3b"},
+    events:[],eventAudits:[],
+  };
+  const event={event_id:"event-a",event_type:"job.completed",source_module:"job-engine",
+    source_id:"482",status:"published",correlation_id:"correlation-a",
+    payload_job_id:"482",payload_worker_id:"3628",
+    payload_job_code:"OLLAMA-B7F9B5E2",payload_job_type:"ollama_model_invocation"};
+  const validAudit={resource_id:"event-a",correlation_id:"correlation-a",
+    event_type:"job.completed",source_module:"job-engine"};
+  assert.equal(projectCstModelCompletionEvidence({...base,events:[event,event]}).status,"event_binding_invalid");
+  assert.equal(projectCstModelCompletionEvidence({...base,events:[{...event,payload_worker_id:"999"}]}).status,"event_binding_invalid");
+  assert.equal(projectCstModelCompletionEvidence({...base,events:[event]}).status,"event_audit_missing");
+  assert.equal(projectCstModelCompletionEvidence({...base,events:[event],eventAudits:[{...validAudit,correlation_id:"forged"}]}).status,"event_audit_missing");
+  assert.equal(projectCstModelCompletionEvidence({...base,jobAudits:[]}).status,"blocked");
+  assert.equal(projectCstModelCompletionEvidence({...base,job:{...base.job,request_id:"cst-ai-team-company3-dev:other"}}).status,"blocked");
+  const proof=projectCstModelCompletionEvidence({...base,events:[event],eventAudits:[validAudit]});
+  assert.equal(proof.status,"event_and_audit_persisted");
+  assert.equal(proof.eventPersisted,true);
+  assert.equal(proof.eventAuditPersisted,true);
+  assert.equal(proof.subscriberDeliveryVerified,false);
+  assert.equal(proof.finalAckVerified,false);
 });
