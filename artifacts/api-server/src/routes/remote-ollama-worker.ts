@@ -134,8 +134,26 @@ router.post("/ai/ollama-workers/:id/heartbeat", requireWorker, async (req, res):
 router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Promise<void> => {
   const workerId = Number.parseInt(routeParam(req, "id"), 10);
   const worker = res.locals["remoteOllamaWorker"] as AiWorker;
+  // Optional DEV-only one-job claim for an explicitly admitted model-worker
+  // pilot. This is not a general scheduler and does not grant new capabilities.
+  const requestedJobId = (req.body as Record<string, unknown> | undefined)?.devExpectedJobId;
+  const hasJobScope = requestedJobId !== undefined;
+  if (hasJobScope &&
+      (process.env.APP_ENV !== "development" || process.env.NODE_ENV !== "development" ||
+       process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED !== "true")) {
+    res.status(403).json({ error: "DEV_SCOPED_MODEL_CLAIM_DISABLED" });
+    return;
+  }
+  const parsedJobId = hasJobScope ? z.number().int().min(1).max(2147483647).safeParse(requestedJobId) : null;
+  if (parsedJobId && !parsedJobId.success) {
+    res.status(400).json({ error: "INVALID_DEV_EXPECTED_JOB_ID" });
+    return;
+  }
   try {
-    const job = await claimRemoteOllamaInvocation(worker);
+    const job = await claimRemoteOllamaInvocation(
+      worker,
+      parsedJobId?.success ? { devExpectedJobId: parsedJobId.data } : undefined,
+    );
     if (!job) {
       res.status(204).end();
       return;
