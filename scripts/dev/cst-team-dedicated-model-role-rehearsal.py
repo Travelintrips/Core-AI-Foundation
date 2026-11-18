@@ -39,12 +39,18 @@ def main():
             "-e","POSTGRES_DB="+DB,"-e","POSTGRES_HOST_AUTH_METHOD=trust","postgres:16-alpine"])
         created=True
         import time
-        for _ in range(50):
-            ready=subprocess.run(["docker","exec",NAME,"pg_isready","-U","postgres","-d",DB],
-                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
-            if ready:break
-            time.sleep(.3)
-        else:raise RuntimeError("PG16_NOT_READY")
+        # Official postgres image briefly opens a bootstrap server and then
+        # shuts it down before starting the final server. pg_isready alone
+        # can report a false PASS during that temporary bootstrap window.
+        for _ in range(65):
+            logs=subprocess.run(["docker","logs",NAME],capture_output=True,text=True,timeout=3)
+            initialized="PostgreSQL init process complete; ready for start up." in (logs.stdout+logs.stderr)
+            if initialized:
+                query=subprocess.run(["docker","exec",NAME,"psql","-At","-U","postgres","-d",DB,"-c","SELECT 1"],
+                    capture_output=True,text=True,timeout=3)
+                if query.returncode==0 and query.stdout.strip()=="1":break
+            time.sleep(.4)
+        else:raise RuntimeError("PG16_FINAL_SERVER_NOT_READY")
         fixture=r"""
 CREATE ROLE dev_gpt02_relock_catalog_auditor NOLOGIN;
 CREATE ROLE aicore_dev_runtime NOLOGIN;
