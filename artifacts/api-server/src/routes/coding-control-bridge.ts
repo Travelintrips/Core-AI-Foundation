@@ -26,7 +26,7 @@ import {
   OPENCLAW_AGENT_CLIENT_ID,
 } from "../services/externalAgentDispatchService.js";
 import { queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../services/devChatGptWakeService.js";
-import { getExternalAgentRegistrySnapshot } from "../services/externalAgentRegistryService.js";
+import { getExternalAgentRegistrySnapshot, getCstTeamPresenceOnlyWorkerReadback } from "../services/externalAgentRegistryService.js";
 import { isCstTeamDevMode, projectCstTeamReadiness } from "../lib/cstTeamReadinessProjection.js";
 const router=Router(); const Uuid=z.string().uuid();
 
@@ -57,9 +57,13 @@ router.get("/ai/coding/bridge/cst-team-readiness", async (_req, res): Promise<vo
     return;
   }
   try {
-    const registry = await getExternalAgentRegistrySnapshot({ skipSchemaEnsure: true });
+    const [registry, presenceOnlyWorker] = await Promise.all([
+      getExternalAgentRegistrySnapshot({ skipSchemaEnsure: true }),
+      getCstTeamPresenceOnlyWorkerReadback(),
+    ]);
+    const readinessRows = presenceOnlyWorker ? [...registry, presenceOnlyWorker] : registry;
     res.setHeader("Cache-Control", "no-store");
-    res.json(projectCstTeamReadiness(registry));
+    res.json(projectCstTeamReadiness(readinessRows));
   } catch {
     res.status(503).json({ error: "AGENT_READINESS_UNAVAILABLE" });
   }
