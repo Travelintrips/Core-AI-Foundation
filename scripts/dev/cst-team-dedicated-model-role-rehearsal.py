@@ -214,7 +214,7 @@ SELECT 'APPROVED-MODEL-COMPLETION','job.completed','job-engine',j.id::text,
  'pilot-correlation',
  jsonb_build_object('jobId',j.id,'workerId',w.id,
    'jobCode',j.job_code,'jobType',j.job_type),
- '{}'::jsonb,'published',now()
+ '{{}}'::jsonb,'published',now()
 FROM ai_platform.ai_jobs j, ai_platform.ai_workers w
 WHERE j.job_code='APPROVED-ONE' AND w.worker_name='cst-dev-dell-onejob-20261119'
 RETURNING event_id,status;
