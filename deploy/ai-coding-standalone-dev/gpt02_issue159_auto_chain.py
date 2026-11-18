@@ -112,7 +112,8 @@ def _unit(name:str):
     # A skipped condition, including a cached Result=success/exit=0, never
     # produces a matching PID-1 Starting/Finished job pair. Legitimate
     # garbage-collected oneshots are accepted only with the fresh pair.
-    if not _fresh_oneshot_manager_proof(name,started_us,ended_us):
+    if not _fresh_oneshot_manager_proof(name,started_us,ended_us,
+                                        run=subprocess.run):
         raise AutoChainError('UNIT_FRESH_EXECUTION_UNPROVEN_'+code)
 
 def _write_link(link:dict):
