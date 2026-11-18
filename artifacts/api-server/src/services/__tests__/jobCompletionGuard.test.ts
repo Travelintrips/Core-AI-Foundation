@@ -622,6 +622,42 @@ describe("CST-DEV exact one-job atomic completion", () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
+  it("RLS-hidden approved model job never falls through to ordinary completion", async () => {
+    setupCompletion(); scopedEnv();
+    vi.mocked(db.select).mockImplementationOnce(() => ({
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([]),
+    }) as unknown as ReturnType<typeof db.select>);
+    try {
+      vi.mocked(db.update).mockClear();
+      vi.mocked(db.transaction).mockClear();
+      await expect(completeJob(482,3628,{output:{text:"READY"}}))
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_SOURCE_NOT_VISIBLE_OR_INVALID");
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
+      expect(prepareCstDevModelCompletionEvent).not.toHaveBeenCalled();
+      expect(publishSafe).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("approved pilot ID cannot be treated as ordinary if RLS exposes wrong job type", async () => {
+    setupCompletion(); scopedEnv();
+    vi.mocked(db.select).mockImplementationOnce(() => ({
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([{...job,jobType:"coding_workstream_execution"}]),
+    }) as unknown as ReturnType<typeof db.select>);
+    try {
+      vi.mocked(db.update).mockClear();
+      vi.mocked(db.transaction).mockClear();
+      await expect(completeJob(482,3628,{output:{text:"READY"}}))
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_SOURCE_NOT_VISIBLE_OR_INVALID");
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
+      expect(prepareCstDevModelCompletionEvent).not.toHaveBeenCalled();
+      expect(publishSafe).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it("mismatched approved worker or job ID cannot mutate any job row", async () => {
     setupCompletion({ workerName: "unapproved-worker" }); scopedEnv();
     try {
