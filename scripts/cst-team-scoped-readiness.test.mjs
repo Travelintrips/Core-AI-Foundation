@@ -335,7 +335,7 @@ test("pilot completion awaits event persistence and fails visibly; ordinary jobs
   assert.match(fragment,/await publishAuditedCstDevModelCompletion\(completionEvent\)/);
   assert.match(fragment,/CST_DEV_MODEL_COMPLETION_EVENT_AUDIT_NOT_COMMITTED/);
   assert.match(fragment,/publishSafe\(completionEvent\)/);
-  assert.match(fragment,/do NOT replay the completed job/);
+  assert.match(fragment,/Never replay the completed job/);
   assert.doesNotMatch(fragment,/finalAckVerified: true|attestationVerified: true/);
 });
 
