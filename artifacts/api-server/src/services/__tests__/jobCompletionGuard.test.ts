@@ -52,7 +52,10 @@ vi.mock("@workspace/db", () => ({
 }));
 
 vi.mock("../aiAuditService.js",  () => ({ logAudit: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("../aiEventBusService.js", () => ({ publishSafe: vi.fn(), publish: vi.fn().mockResolvedValue({eventId:"synthetic-event"}) }));
+vi.mock("../aiEventBusService.js", () => ({
+  publishSafe: vi.fn(),
+  publishAuditedCstDevModelCompletion: vi.fn().mockResolvedValue({eventId:"synthetic-event"}),
+}));
 vi.mock("../aiExecutionService.js", () => ({ executeAI: vi.fn() }));
 vi.mock("../aiModelRouter.js",  () => ({ routeToModel: vi.fn().mockResolvedValue(null) }));
 vi.mock("../aiSecretService.js", () => ({ getProviderApiKey: vi.fn().mockReturnValue(null) }));
@@ -85,7 +88,7 @@ import {
 
 import { executeJob, completeJob } from "../jobWorkerService.js";
 import { db } from "@workspace/db";
-import { publish, publishSafe } from "../aiEventBusService.js";
+import { publishAuditedCstDevModelCompletion, publishSafe } from "../aiEventBusService.js";
 
 // ─── Helper: build a minimal fake AiJob ──────────────────────────────────────
 
@@ -450,7 +453,7 @@ describe("CST-DEV exact model completion event persistence", () => {
       where:vi.fn().mockReturnThis(),
       returning:vi.fn(() => Promise.resolve([updates.shift()])),
     }) as unknown as ReturnType<typeof db.update>);
-    vi.mocked(publish).mockReset();
+    vi.mocked(publishAuditedCstDevModelCompletion).mockReset();
     vi.mocked(publishSafe).mockReset();
   }
   function scopedEnv() {
@@ -465,11 +468,12 @@ describe("CST-DEV exact model completion event persistence", () => {
     try {
       let resolveEvent!: (value: unknown) => void;
       const gate=new Promise(resolve => {resolveEvent=resolve});
-      vi.mocked(publish).mockImplementation(() => gate as ReturnType<typeof publish>);
+      vi.mocked(publishAuditedCstDevModelCompletion).mockImplementation(() =>
+        gate as ReturnType<typeof publishAuditedCstDevModelCompletion>);
       let finished=false;
       const operation=completeJob(482,3628,{output:{text:"READY"}})
         .then(value=>{finished=true;return value});
-      await vi.waitFor(()=>expect(publish).toHaveBeenCalledTimes(1));
+      await vi.waitFor(()=>expect(publishAuditedCstDevModelCompletion).toHaveBeenCalledTimes(1));
       expect(finished).toBe(false);
       expect(publishSafe).not.toHaveBeenCalled();
       resolveEvent({eventId:"test-evt-id"});
@@ -481,9 +485,9 @@ describe("CST-DEV exact model completion event persistence", () => {
   it("rejects missing pilot event persistence without creating false final proof",async () => {
     setupCompletion();scopedEnv();
     try {
-      vi.mocked(publish).mockRejectedValueOnce(new Error("PILOT_RLS_DENIED"));
+      vi.mocked(publishAuditedCstDevModelCompletion).mockRejectedValueOnce(new Error("PILOT_RLS_DENIED"));
       await expect(completeJob(482,3628,{output:{text:"READY"}}))
-        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_NOT_PERSISTED");
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_AUDIT_NOT_COMMITTED");
       expect(publishSafe).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
@@ -494,7 +498,7 @@ describe("CST-DEV exact model completion event persistence", () => {
       const result=await completeJob(482,3628,{output:{text:"READY"}});
       expect(result.status).toBe("completed");
       expect(publishSafe).toHaveBeenCalledTimes(1);
-      expect(publish).not.toHaveBeenCalled();
+      expect(publishAuditedCstDevModelCompletion).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
   it("never marks a job completed when the preflight worker is not approved",async () => {
@@ -504,7 +508,7 @@ describe("CST-DEV exact model completion event persistence", () => {
       await expect(completeJob(482,3628,{output:{text:"READY"}}))
         .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
       expect(db.update).not.toHaveBeenCalled();
-      expect(publish).not.toHaveBeenCalled();
+      expect(publishAuditedCstDevModelCompletion).not.toHaveBeenCalled();
       expect(publishSafe).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
@@ -516,7 +520,7 @@ describe("CST-DEV exact model completion event persistence", () => {
       await expect(completeJob(482,3628,{output:{text:"READY"}}))
         .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
       expect(db.update).not.toHaveBeenCalled();
-      expect(publish).not.toHaveBeenCalled();
+      expect(publishAuditedCstDevModelCompletion).not.toHaveBeenCalled();
       expect(publishSafe).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
