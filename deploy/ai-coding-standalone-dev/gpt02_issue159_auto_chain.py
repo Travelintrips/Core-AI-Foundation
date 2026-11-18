@@ -52,7 +52,7 @@ def _fresh_oneshot_manager_proof(name:str, start_us:int, end_us:int,
                 timestamp=int(entry['__MONOTONIC_TIMESTAMP'])
             except (ValueError,KeyError,TypeError):
                 continue
-            if not start_us<=timestamp<=end_us+1_000_000:
+            if not start_us<=timestamp<=end_us:
                 continue
             job=(entry['_BOOT_ID'],entry['JOB_ID'])
             message=entry.get('MESSAGE')
