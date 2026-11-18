@@ -408,7 +408,25 @@ class Handler(BaseHTTPRequestHandler):
        'dispatchPermitted':False,'releaseDecision':'NO_GO'})
      try:
       chain=run_after_approval(data['claims']['taskId'])
-      body={**body,**chain}
+      # The delegated systemd chain is not an authorization or HTTP identity
+      # authority. Never merge arbitrary result keys into a committed one-use
+      # Super Admin decision, even when the child reports success.
+      if (type(chain) is not dict
+          or set(chain)!={'environment','taskId','autoChainCompleted',
+                          'authorizationGranted','dispatchPermitted',
+                          'releaseDecision'}
+          or chain['environment']!='DEV'
+          or type(chain['taskId']) is not int
+          or chain['taskId']!=data['claims']['taskId']
+          or chain['autoChainCompleted'] is not True
+          or chain['authorizationGranted'] is not False
+          or chain['dispatchPermitted'] is not False
+          or chain['releaseDecision']!='NO_GO'):
+       raise AutoChainError('AUTO_CHAIN_RESULT_CONTRACT_INVALID')
+      body={**body,'autoChainCompleted':True,
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'}
      except AutoChainError as exc:
       body={**body,'autoChainCompleted':False,'autoChainError':str(exc),
        'intentRecorded':True,'approvalCanBeReplayed':False,
