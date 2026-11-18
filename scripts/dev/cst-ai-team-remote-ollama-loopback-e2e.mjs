@@ -66,6 +66,11 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (u==="/api/ai/ollama-workers/777/claim") {
+      if (body.devExpectedJobId!==JOB_ID) {
+        json(res,403,{error:"TEST_ONLY_EXPECTED_JOB_REQUIRED"});
+        doneReject(Error("WORKER_REQUESTED_UNSCOPED_QUEUE"));
+        return;
+      }
       if (claimed===0) {
         claimed+=1;
         json(res,200,{jobId:JOB_ID,jobCode:"LOCAL-SYNTHETIC-CODING-TEST",
@@ -112,6 +117,7 @@ try {
   const env={...process.env,
     APP_ENV:"development",NODE_ENV:"development",
     CST_TEAM_OUTBOUND_DEV_ONLY:"true",CST_TEAM_SYNTHETIC_LOOPBACK_TEST:"true",
+    CST_TEAM_DEV_SINGLE_JOB_ID:String(JOB_ID),
     AICORE_REMOTE_URL:"http://127.0.0.1:"+PORT,
     OLLAMA_REMOTE_ENROLLMENT_SECRET:TEST_ONLY_ENROLLMENT,
     OLLAMA_BASE_URL:"http://127.0.0.1:11434/v1",
