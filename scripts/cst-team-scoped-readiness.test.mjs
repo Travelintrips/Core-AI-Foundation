@@ -335,16 +335,21 @@ test("pilot completion awaits event persistence and fails visibly; ordinary jobs
   const mutatorAt=fragment.indexOf("const [completed] = await db");
   assert.ok(guardAt>=0 && mutatorAt>guardAt,"pilot validation must precede job mutation");
   assert.match(fragment,/if \(devPilotMode === "await_persist"\)/);
-  assert.match(fragment,/await publishAuditedCstDevModelCompletion\(completionEvent\)/);
-  assert.match(fragment,/CST_DEV_MODEL_COMPLETION_EVENT_AUDIT_NOT_COMMITTED/);
+  assert.match(fragment,/settled = await db\.transaction\(async \(tx\) =>/);
+  assert.match(fragment,/await tx\.update\(aiJobsTable\)/);
+  assert.match(fragment,/await tx\.update\(aiWorkersTable\)/);
+  assert.match(fragment,/await tx\.insert\(aiAuditLogsTable\)/);
+  assert.match(fragment,/await tx\.insert\(aiEventsTable\)/);
+  assert.match(fragment,/dispatchCstDevModelCompletionAfterCommit\(settled\.event\)/);
+  assert.match(fragment,/CST_DEV_MODEL_ATOMIC_COMPLETION_NOT_COMMITTED/);
   assert.match(fragment,/publishSafe\(completionEvent\)/);
-  assert.match(fragment,/Never replay the completed job/);
+  assert.match(fragment,/No downstream dispatch occurs before DB commit/);
   assert.doesNotMatch(fragment,/finalAckVerified: true|attestationVerified: true/);
 });
 
 test("one-job event and audit require one atomic transaction, without global dispatch privileges", () => {
   const bus=readFileSync(new URL("../artifacts/api-server/src/services/aiEventBusService.ts",import.meta.url),"utf8");
-  const start=bus.indexOf("export async function publishAuditedCstDevModelCompletion(");
+  const start=bus.indexOf("export function prepareCstDevModelCompletionEvent(");
   const end=bus.indexOf("export function publishSafe(",start);
   const scoped=bus.slice(start,end);
   assert.ok(start>0 && end>start);
