@@ -208,3 +208,16 @@ test("DEV remote worker RLS preflight only reads PostgreSQL catalogs, never writ
   assert.match(source,/WORKERS_REMOTE_UPDATE_RLS/);
   assert.doesNotMatch(source,/await\s+(?:db|pool)\.insert\(|await\s+(?:db|pool)\.update\(|CREATE\s+POLICY|ALTER\s+ROLE|GRANT\s+UPDATE\s+ON/i);
 });
+
+test("disposable RLS rehearsal is hard-pinned to a throwaway database and proves tenant isolation", () => {
+  const source=readFileSync(new URL("../scripts/dev/cst-team-model-rls-disposable-rehearsal.sql",import.meta.url),"utf8");
+  assert.match(source,/current_database\(\) <> 'cst_team_rls_rehearsal'/);
+  assert.match(source,/DISPOSABLE_RLS_REHEARSAL_DATABASE_ONLY/);
+  assert.match(source,/WRONG_COMPANY_JOB_UNEXPECTEDLY_ALLOWED/);
+  assert.match(source,/UNAPPROVED_WORKER_UNEXPECTEDLY_ALLOWED/);
+  assert.match(source,/DISPOSABLE_RLS_SCOPE_PASS/);
+  assert.match(source,/RESET ROLE;/);
+  assert.match(source,/CREATE POLICY model_insert/);
+  assert.match(source,/CREATE POLICY worker_update/);
+  assert.doesNotMatch(source,/ALTER ROLE|BYPASSRLS|DISABLE ROW LEVEL SECURITY/i);
+});
