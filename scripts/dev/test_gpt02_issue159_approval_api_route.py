@@ -659,6 +659,83 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertEqual(self.count(), 0)
         Path(self.packet).unlink()
 
+    def test_committed_intent_unexpected_auto_chain_oserror_stays_no_go(self):
+        # A once-only approval has already committed and its immutable
+        # packet has been published before the DEV auto-chain starts. Even
+        # an unexpected file/socket failure cannot imply safe reapproval.
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        sensitive = "SYNTHETIC_PRIVATE_DETAILS_MUST_NOT_LEAK"
+        with patch.object(api, "run_after_approval",
+                          side_effect=FileNotFoundError(sensitive)) as run:
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 201)
+        run.assert_called_once_with(CLAIMS["taskId"])
+        self.assertTrue(body["intentRecorded"])
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["autoChainCompleted"], False)
+        self.assertEqual(body["autoChainError"], "AUTO_CHAIN_UNEXPECTED_FAILURE")
+        self.assertNotIn(sensitive, json.dumps(body))
+        self.assertIs(body["signingPermitted"], False)
+        self.assertIs(body["authorizationGranted"], False)
+        self.assertIs(body["dispatchPermitted"], False)
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+        original_packet = Path(self.packet).read_bytes()
+        self.assertTrue(original_packet)
+        replay, replay_body = self.request(AAL2_TOKEN)
+        self.assertEqual(replay, 409)
+        self.assertEqual(replay_body["error"], "approval_intent_conflict")
+        self.assertEqual(self.count(), 1)
+        self.assertEqual(Path(self.packet).read_bytes(), original_packet)
+
+    def test_committed_intent_unexpected_auto_chain_valueerror_not_http_400(self):
+        # A ValueError used to escape to the outer generic invalid_request
+        # handler even though SQLite was irrevocably committed.
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        with patch.object(api, "run_after_approval",
+                          side_effect=ValueError("SYNTHETIC_INTERNAL_DETAIL")):
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 201)
+        self.assertTrue(body["intentRecorded"])
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["autoChainCompleted"], False)
+        self.assertEqual(body["autoChainError"], "AUTO_CHAIN_UNEXPECTED_FAILURE")
+        self.assertNotIn("SYNTHETIC_INTERNAL_DETAIL", json.dumps(body))
+        self.assertFalse(body["signingPermitted"])
+        self.assertFalse(body["authorizationGranted"])
+        self.assertFalse(body["dispatchPermitted"])
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+        self.assertTrue(Path(self.packet).is_file())
+
+    def test_committed_intent_expected_auto_chain_error_still_no_go(self):
+        api.ISSUE159_APPROVAL_INTENT_ENABLED = True
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        with patch.object(api, "run_after_approval",
+                          side_effect=api.AutoChainError("UNIT_FAILED_SYNTHETIC")):
+            status, body = self.request(AAL2_TOKEN)
+        self.assertEqual(status, 201)
+        self.assertTrue(body["intentRecorded"])
+        self.assertIs(body["approvalCanBeReplayed"], False)
+        self.assertIs(body["autoChainCompleted"], False)
+        self.assertEqual(body["autoChainError"], "UNIT_FAILED_SYNTHETIC")
+        self.assertIs(body["signingPermitted"], False)
+        self.assertIs(body["authorizationGranted"], False)
+        self.assertIs(body["dispatchPermitted"], False)
+        self.assertEqual(body["releaseDecision"], "NO_GO")
+        self.assertEqual(self.count(), 1)
+
     def test_committed_sqlite_intent_survives_packet_publish_io_failure(self):
         """A publish error must never imply the one-use approval can be repeated."""
         api.ISSUE159_APPROVAL_INTENT_ENABLED = True
