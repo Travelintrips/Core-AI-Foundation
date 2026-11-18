@@ -238,3 +238,35 @@ test("approved DEV worker enrollment cannot advertise PowerShell execution", () 
   assert.match(service,/capabilities: remoteCapabilities/);
   assert.match(route,/DEV_SCOPED_MODEL_JOB_OR_WORKER_NOT_APPROVED/);
 });
+
+test("job completion event RLS is bound to persisted Company1 worker and cleanly revoked", () => {
+  const apply=readFileSync(new URL("../scripts/dev/cst-team-onejob-ephemeral-role-template.sql",import.meta.url),"utf8");
+  const rollback=readFileSync(new URL("../scripts/dev/cst-team-onejob-ephemeral-role-rollback-template.sql",import.meta.url),"utf8");
+  const rehearsal=readFileSync(new URL("../scripts/dev/cst-team-dedicated-model-role-rehearsal.py",import.meta.url),"utf8");
+  assert.match(apply,/GRANT SELECT,INSERT ON TABLE ai_platform\.ai_events TO/);
+  assert.match(apply,/ai_platform\.ai_events_id_seq/);
+  assert.match(apply,/CREATE POLICY cst_model_pilot_event_read/);
+  assert.match(apply,/CREATE POLICY cst_model_pilot_event_insert/);
+  assert.match(apply,/event_type='job\.completed'/);
+  assert.match(apply,/source_module='job-engine'/);
+  assert.match(apply,/j\.status='completed'/);
+  assert.match(apply,/j\.payload_json->>'requestId'='\{\{REQUEST_ID\}\}'/);
+  assert.match(apply,/ai_events\.payload_json->>'jobId'=j\.id::text/);
+  assert.match(apply,/ai_events\.payload_json->>'jobCode'=j\.job_code/);
+  assert.match(apply,/ai_events\.payload_json->>'jobType'=j\.job_type/);
+  assert.match(apply,/ai_events\.payload_json->>'workerId'=w\.id::text/);
+  assert.doesNotMatch(apply,/GRANT (?:ALL|UPDATE|DELETE) ON TABLE ai_platform\.ai_events/i);
+  assert.doesNotMatch(apply,/GRANT.*ai_event_subscriptions/i);
+  assert.match(rollback,/DROP POLICY IF EXISTS cst_model_pilot_event_read/);
+  assert.match(rollback,/DROP POLICY IF EXISTS cst_model_pilot_event_insert/);
+  assert.match(rollback,/REVOKE SELECT,INSERT ON TABLE ai_platform\.ai_events/);
+  assert.match(rollback,/ai_platform\.ai_events_id_seq/);
+  assert.match(rehearsal,/EARLY_COMPLETION_EVENT_ALLOWED/);
+  assert.match(rehearsal,/WRONG_SOURCE_EVENT_ALLOWED/);
+  assert.match(rehearsal,/WRONG_EVENT_TYPE_ALLOWED/);
+  assert.match(rehearsal,/WRONG_WORKER_EVENT_ALLOWED/);
+  assert.match(rehearsal,/WRONG_JOB_CODE_ALLOWED/);
+  assert.match(rehearsal,/WRONG_EVENT_MODULE_ALLOWED/);
+  assert.match(rehearsal,/completionEventDispatchVerified":False/);
+  assert.match(rehearsal,/PostgreSQL init process complete; ready for start up/);
+});
