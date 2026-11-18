@@ -534,3 +534,19 @@ test("one-job audit writes cannot forge unrelated job or worker receipts", () =>
   assert.match(harness,/FORGED_JOB_WORKER_AUDIT_ALLOWED/);
   assert.match(harness,/SCOPED_AUDIT_CARDINALITY_FAILED/);
 });
+
+test("one-job DEV worker registration and its audit are committed or rolled back together", () => {
+  const service=readFileSync(new URL("../artifacts/api-server/src/services/workerClusterService.ts",import.meta.url),"utf8");
+  const remote=readFileSync(new URL("../artifacts/api-server/src/services/remoteOllamaWorkerService.ts",import.meta.url),"utf8");
+  const fixture=readFileSync(new URL("../scripts/dev/cst-team-dedicated-model-role-rehearsal.py",import.meta.url),"utf8");
+  assert.match(service,/requireAtomicRegistrationAudit\?: boolean/);
+  assert.match(service,/CST_DEV_MODEL_WORKER_ATOMIC_AUDIT_SCOPE_DENIED/);
+  assert.match(service,/const auditPilotWorker = async \(worker/);
+  assert.match(service,/await tx\.insert\(aiAuditLogsTable\)\.values\(/);
+  assert.match(service,/if \(!atomicPilotAudit\) \{/);
+  assert.match(remote,/requireAtomicRegistrationAudit: devModelOnly/);
+  assert.match(remote,/CST_DEV_MODEL_PILOT_ACTIVE_WORKER_REUSE_DENIED/);
+  assert.match(fixture,/CST_MODEL_WORKER_REGISTRATION_AUDIT_ROLLBACK_PASS/);
+  assert.match(fixture,/REGISTRATION_WORKER_INSERT_NOT_ROLLED_BACK_AFTER_AUDIT_RLS_DENIAL/);
+  assert.doesNotMatch(service,/DISABLE ROW LEVEL SECURITY|SECURITY DEFINER/i);
+});
