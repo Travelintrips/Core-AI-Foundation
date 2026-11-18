@@ -146,5 +146,16 @@ const expired=()=>({pending:false,reason:"PENDING_REQUEST_EXPIRED"});
  assert.equal(t.actions.filter(x=>x.path==="/api/gpt02/issue159/approval-intent").length,0);
  assert.match(t.statuses.textContent,/kurang dari 2 menit setelah konfirmasi/);
 }
-console.log("PASS: 13 guarded clicks; backend 120s chain window, expiry, nonce/command, one-use recovery, truthful Final ACK");
+{
+ // Native confirm can be dismissed after the chain deadline. The finally
+ // handler must never reactivate the already-expired approval button.
+ const t=fixture({initial:pending(),preflight:pending(),
+  confirmYes:false,confirmAdvanceMs:81000});
+ await t.load();await t.btn.onclick();
+ assert.equal(t.actions.filter(x=>x.confirm).length,1);
+ assert.equal(t.actions.filter(x=>x.path==="/api/gpt02/issue159/approval-intent").length,0);
+ assert.equal(t.btn.disabled,true);
+ assert.match(t.statuses.textContent,/kurang dari 2 menit/);
+}
+console.log("PASS: 14 guarded clicks; strict 120s precommit window, cancel race, consent binding and truthful Final ACK");
 
