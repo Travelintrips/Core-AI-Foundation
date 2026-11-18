@@ -73,9 +73,29 @@ async function loadIssue159(){
    }
    if(!confirm('Setujui Task #'+fresh.taskId+' sebagai Super Admin?'))return;
    if(fresh.expiresAt<=Date.now()+1500){await loadIssue159();el('issue159Status').textContent='Permintaan kedaluwarsa sebelum pengiriman. Muat ulang permintaan.';return;}
-   await api('/api/gpt02/issue159/approval-intent',{claims:c});
-   el('issue159Status').textContent='Persetujuan tersimpan untuk Task #'+fresh.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.';await loadIssue159();
-  }catch(e){const expired=String(e.message).includes('invalid_claims');await loadIssue159().catch(()=>{});el('issue159Status').textContent=expired?'Permintaan approval kedaluwarsa atau tidak valid. Tidak ada persetujuan tersimpan.':'Persetujuan gagal: '+e.message;
+   const out=await api('/api/gpt02/issue159/approval-intent',{claims:c});
+   let approvalStatus;
+   if(out.autoChainCompleted===true){
+    approvalStatus='Task #'+fresh.taskId+' disetujui. Rangkaian bukti DEV sampai issuer/lease dilaporkan selesai; Final ACK operasional belum terverifikasi. Signing, authorization, dan dispatch tetap NO-GO.';
+   }else if(out.autoChainCompleted===false){
+    approvalStatus='Persetujuan tersimpan untuk Task #'+fresh.taskId+', tetapi auto-chain berhenti aman: '+(out.autoChainError||'alasan tidak diketahui')+'. Final ACK belum terverifikasi. Signing, authorization, dan dispatch tetap NO-GO.';
+   }else{
+    approvalStatus='Persetujuan tersimpan untuk Task #'+fresh.taskId+'. Final ACK belum terverifikasi. Signing, authorization, dan dispatch tetap NO-GO.';
+   }
+   // Refresh the button state before showing the result. A refresh failure
+   // must not re-enable the one-use approval button or imply a replay is safe.
+   try{await loadIssue159()}catch(_){root.replaceChildren()}
+   el('issue159Status').textContent=approvalStatus;
+  }catch(e){
+   const reason=String(e.message);
+   const expired=reason.includes('invalid_claims');
+   const recorded=reason.includes('issue159_approved_packet_recovery_required')&&reason.includes('"intentRecorded":true');
+   try{await loadIssue159()}catch(_){root.replaceChildren()}
+   el('issue159Status').textContent=recorded?
+    'Persetujuan sudah tercatat, tetapi publikasi bukti perlu pemulihan terawasi. Jangan setujui ulang Task #'+fresh?.taskId+'. Signing, authorization, dan dispatch tetap NO-GO.':
+    expired?'Permintaan approval kedaluwarsa atau tidak valid. Tidak ada persetujuan tersimpan.':
+    'Persetujuan tidak dapat diselesaikan: '+reason+' Periksa status sebelum mencoba lagi.';
+
   }finally{if(root.contains(b))b.disabled=false}};
   if(d.expiresAt<=Date.now()){b.disabled=true;el('issue159Status').textContent='Permintaan kedaluwarsa. Muat ulang halaman.'}
   else setTimeout(()=>{if(root.contains(b)){b.disabled=true;el('issue159Status').textContent='Permintaan approval kedaluwarsa. Tidak ada persetujuan dikirim.'}},Math.max(0,d.expiresAt-Date.now()));
