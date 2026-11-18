@@ -410,7 +410,18 @@ class Handler(BaseHTTPRequestHandler):
       body={**body,**chain}
      except AutoChainError as exc:
       body={**body,'autoChainCompleted':False,'autoChainError':str(exc),
-       'authorizationGranted':False,'dispatchPermitted':False,'releaseDecision':'NO_GO'}
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'}
+     except Exception:
+      # The one-use SQLite intent and approved packet have ALREADY COMMITTED.
+      # Do not return generic 400/500, expose an exception message (may hold
+      # restricted data), or imply that the Super Admin may approve again.
+      body={**body,'autoChainCompleted':False,
+       'autoChainError':'AUTO_CHAIN_UNEXPECTED_FAILURE',
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'}
     return self.send(status,body)
    except (ValueError,TypeError,KeyError,sqlite3.Error):
     return self.send(400,{'error':'invalid_request'})
