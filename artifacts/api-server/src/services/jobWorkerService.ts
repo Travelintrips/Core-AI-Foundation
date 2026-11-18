@@ -21,7 +21,8 @@ import type { AiJob, AiWorker } from "@workspace/db";
 import { createHash } from "crypto";
 import { MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
-import { publishSafe } from "./aiEventBusService.js";
+import { publish, publishSafe } from "./aiEventBusService.js";
+import { classifyCstDevModelCompletion } from "../lib/cstTeamModelCompletionGuard.js";
 import { executeAI } from "./aiExecutionService.js";
 import { finalizeWorkflowCost } from "./observabilityService.js";
 import { routeToModel } from "./aiModelRouter.js";
@@ -842,12 +843,34 @@ export async function completeJob(
     workerId,
   });
 
-  publishSafe({
+  const completionEvent = {
     eventType:    "job.completed",
     sourceModule: "job-engine",
     sourceId:     String(jobId),
     payload:      { jobId, workerId, jobCode: completed!.jobCode, jobType: completed!.jobType, actualDuration, actualCost },
-  });
+  };
+  // Only the explicitly approved Company-1 model pilot waits for persisted
+  // event evidence. All existing production/regular completions retain the
+  // previous non-blocking publishSafe behavior.
+  const devPilotMode = classifyCstDevModelCompletion(job, worker, workerId);
+  if (devPilotMode === "blocked") {
+    logger.error({ jobId, workerId }, "CST-DEV model completion evidence binding rejected");
+    throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+  }
+  if (devPilotMode === "await_persist") {
+    try {
+      const storedEvent = await publish(completionEvent);
+      logger.info({ jobId, workerId, eventId: storedEvent.eventId },
+        "CST-DEV model completion event persisted (not independent QA/Final ACK)");
+    } catch (err) {
+      logger.error({ err, jobId, workerId }, "CST-DEV model completion event not persisted");
+      // The job row may already be completed. Acknowledge neither event
+      // delivery nor QA; do NOT replay the completed job to repair the event.
+      throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_NOT_PERSISTED");
+    }
+  } else {
+    publishSafe(completionEvent);
+  }
 
   return completed!;
 }
