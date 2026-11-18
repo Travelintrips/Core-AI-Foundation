@@ -278,7 +278,9 @@ export async function claimRemoteOllamaInvocation(
       WHERE job_type IN (${REMOTE_OLLAMA_JOB_TYPE}, ${REMOTE_OLLAMA_POWERSHELL_JOB_TYPE})
         AND required_capability IN (${REMOTE_OLLAMA_CAPABILITY}, ${REMOTE_OLLAMA_POWERSHELL_CAPABILITY})
         ${scopedJobId !== undefined
-          ? sql`AND id = ${scopedJobId} AND job_type = ${REMOTE_OLLAMA_JOB_TYPE}`
+          ? sql`AND id = ${scopedJobId}
+                  AND job_type = ${REMOTE_OLLAMA_JOB_TYPE}
+                  AND payload_json->>'requestId' LIKE 'cst-ai-team-company1-dev:%'`
           : sql``}
         AND (
           (status = 'queued' AND (scheduled_at IS NULL OR scheduled_at <= NOW()))
