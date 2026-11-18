@@ -24,6 +24,7 @@ on:
       - "docs/dev/gpt02-issue159-store-owner-relock-helper.PROPOSED.sql"
       - "docs/dev/gpt02-issue159-store-owner-relock-helper-maintenance.REVIEW_ONLY.sql"
       - "scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py"
+      - "scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py"
       - "docs/dev/gpt02-issue159-two-phase-owner-split-relock.PROPOSED.sql"
       - "scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
@@ -150,6 +151,13 @@ jobs:
           GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
             python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
           echo "PASS_OWNER_MAINTENANCE_PG16_PG17_DISPOSABLE_ONLY"
+          # Sam/Supabase's proposed postgres SET ROLE path: isolated only.
+          # Preserve provider-granted ADMIN SET=false membership, restore
+          # NOLOGIN owner, and revoke seven-table + column ACLs.
+          python3 scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py
+          echo "PASS_SAM_POSTGRES_OWNER_ROUTE_PG16_PG17_DISPOSABLE_ONLY"
           # Full two-phase owner split, recovery, ACL and membership proof
           # after maintenance identity has been revoked and re-locked.
           # Synthetic network-isolated containers ONLY; no Supabase DB.
