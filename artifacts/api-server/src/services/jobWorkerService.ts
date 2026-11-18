@@ -21,7 +21,7 @@ import type { AiJob, AiWorker } from "@workspace/db";
 import { createHash } from "crypto";
 import { MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
-import { publish, publishSafe } from "./aiEventBusService.js";
+import { publishAuditedCstDevModelCompletion, publishSafe } from "./aiEventBusService.js";
 import { classifyCstDevModelCompletion } from "../lib/cstTeamModelCompletionGuard.js";
 import { executeAI } from "./aiExecutionService.js";
 import { finalizeWorkflowCost } from "./observabilityService.js";
@@ -873,14 +873,14 @@ export async function completeJob(
   // previous non-blocking publishSafe behavior.
   if (devPilotMode === "await_persist") {
     try {
-      const storedEvent = await publish(completionEvent);
+      const storedEvent = await publishAuditedCstDevModelCompletion(completionEvent);
       logger.info({ jobId, workerId, eventId: storedEvent.eventId },
-        "CST-DEV model completion event persisted (not independent QA/Final ACK)");
+        "CST-DEV model completion event and audit committed (not subscriber delivery, QA or Final ACK)");
     } catch (err) {
-      logger.error({ err, jobId, workerId }, "CST-DEV model completion event not persisted");
-      // The job row may already be completed. Acknowledge neither event
-      // delivery nor QA; do NOT replay the completed job to repair the event.
-      throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_NOT_PERSISTED");
+      logger.error({ err, jobId, workerId }, "CST-DEV completion event or audit not committed");
+      // The job row may already be completed. Neither event nor audit is
+      // confirmed. Never replay the completed job or invent subscriber/QA ACK.
+      throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_AUDIT_NOT_COMMITTED");
     }
   } else {
     publishSafe(completionEvent);
