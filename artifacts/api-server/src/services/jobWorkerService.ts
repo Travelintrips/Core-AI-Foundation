@@ -13,7 +13,8 @@
 
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import {
-  db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable,
+  db, aiJobsTable, aiWorkersTable, aiEventsTable, aiAuditLogsTable,
+  aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable,
   creativeProjectsTable, creativeProjectStepsTable, creativeAiAssetsTable,
   withTransientDatabaseRetry,
 } from "@workspace/db";
@@ -21,7 +22,8 @@ import type { AiJob, AiWorker } from "@workspace/db";
 import { createHash } from "crypto";
 import { MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
-import { publishAuditedCstDevModelCompletion, publishSafe } from "./aiEventBusService.js";
+import { prepareCstDevModelCompletionEvent,
+  dispatchCstDevModelCompletionAfterCommit, publishSafe } from "./aiEventBusService.js";
 import { classifyCstDevModelCompletion } from "../lib/cstTeamModelCompletionGuard.js";
 import { executeAI } from "./aiExecutionService.js";
 import { finalizeWorkflowCost } from "./observabilityService.js";
@@ -804,6 +806,100 @@ export async function completeJob(
     validatedPilotWorker = pilotWorker;
   }
 
+  if (devPilotMode === "await_persist") {
+    // The special one-job DEV route must NOT mark ai_jobs COMPLETED before
+    // its worker bookkeeping, job audit, completion event and event audit
+    // have all committed. Failure at any stage rolls back the entire unit.
+    // No ordinary worker, GPT02 or production path enters this branch.
+    let settled: { job: AiJob; event: import("@workspace/db").AiEvent };
+    try {
+      settled = await db.transaction(async (tx) => {
+        const [freshJob] = await tx.select().from(aiJobsTable)
+          .where(eq(aiJobsTable.id, jobId)).for("update");
+        const [freshWorker] = await tx.select().from(aiWorkersTable)
+          .where(eq(aiWorkersTable.id, workerId)).for("update");
+        if (classifyCstDevModelCompletion(freshJob, freshWorker, workerId) !== "await_persist") {
+          throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+        }
+        if (!freshJob || freshJob.status !== "running" ||
+            !freshWorker || freshWorker.status !== "busy" ||
+            freshWorker.currentJob !== jobId ||
+            freshWorker.runningJobs < 1 ||
+            !freshWorker.leaseExpiresAt ||
+            freshWorker.leaseExpiresAt.getTime() <= now.getTime()) {
+          throw new JobOwnershipLostError(jobId, workerId);
+        }
+
+        const [completed] = await tx.update(aiJobsTable).set({
+          status: "completed", completedAt: now, resultJson: result,
+          actualCost: actualCost != null ? String(actualCost) : null,
+          actualDuration,
+          payloadJson: sql`COALESCE(payload_json, '{}'::jsonb) - ${WORKER_CLAIM_PAYLOAD_KEY}`,
+          updatedAt: now,
+        }).where(and(
+          eq(aiJobsTable.id, jobId),
+          eq(aiJobsTable.status, "running"),
+          sql`${aiJobsTable.payloadJson}->>${WORKER_CLAIM_PAYLOAD_KEY} = ${String(workerId)}`,
+        )).returning();
+        if (!completed) throw new JobOwnershipLostError(jobId, workerId);
+
+        const prevAvg = freshWorker.averageLatency != null
+          ? Number(freshWorker.averageLatency) : null;
+        const nextAvg = prevAvg != null && actualDuration != null
+          ? Math.round((prevAvg + actualDuration) / 2) : actualDuration;
+        const [released] = await tx.update(aiWorkersTable).set({
+          status: sql`CASE WHEN GREATEST(running_jobs - 1, 0) = 0 THEN 'idle' ELSE 'busy' END`,
+          currentJob: sql`CASE WHEN current_job = ${jobId} THEN NULL ELSE current_job END`,
+          runningJobs: sql`GREATEST(running_jobs - 1, 0)`,
+          completedToday: sql`completed_today + 1`,
+          averageLatency: nextAvg != null ? String(nextAvg) : null,
+          lastHeartbeat: now, updatedAt: now,
+        }).where(and(
+          eq(aiWorkersTable.id, workerId),
+          eq(aiWorkersTable.workerName, freshWorker.workerName),
+          eq(aiWorkersTable.currentJob, jobId),
+          eq(aiWorkersTable.status, "busy"),
+          sql`${aiWorkersTable.runningJobs} > 0`,
+        )).returning({ id: aiWorkersTable.id });
+        if (!released) throw new JobOwnershipLostError(jobId, workerId);
+
+        // Write a job audit, then an event and its matching audit on the SAME
+        // connection and transaction. The RLS policies see the completed job.
+        await tx.insert(aiAuditLogsTable).values({
+          module: "job-engine", action: "job_completed",
+          resourceId: String(jobId), resourceType: "ai_job", status: "success",
+          details: { actualDuration, actualCost, workerId },
+        });
+        const draft = prepareCstDevModelCompletionEvent({
+          eventType: "job.completed", sourceModule: "job-engine",
+          sourceId: String(jobId),
+          payload: {
+            jobId, workerId, jobCode: completed.jobCode,
+            jobType: completed.jobType, actualDuration, actualCost,
+          },
+        });
+        const [event] = await tx.insert(aiEventsTable).values(draft.row).returning();
+        if (!event) throw new Error("CST_DEV_MODEL_EVENT_INSERT_FAILED");
+        await tx.insert(aiAuditLogsTable).values(draft.audit);
+        return { job: completed, event };
+      });
+    } catch (err) {
+      logger.error({ err, jobId, workerId },
+        "CST-DEV job+worker+event+audits atomic completion rolled back");
+      if (err instanceof JobOwnershipLostError) throw err;
+      if (err instanceof Error && err.message === "CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED") {
+        throw err;
+      }
+      throw new Error("CST_DEV_MODEL_ATOMIC_COMPLETION_NOT_COMMITTED");
+    }
+    // No downstream dispatch occurs before DB commit. This is NOT proof that
+    // any subscriber received the event, nor a cryptographic QA Final ACK.
+    dispatchCstDevModelCompletionAfterCommit(settled.event);
+    logger.info({ jobId, workerId, eventId: settled.event.eventId },
+      "CST-DEV model job, worker release, event and audits committed atomically");
+    return settled.job;
+  }
+
   const [completed] = await db
     .update(aiJobsTable)
     .set({
@@ -868,23 +964,10 @@ export async function completeJob(
     sourceId:     String(jobId),
     payload:      { jobId, workerId, jobCode: completed!.jobCode, jobType: completed!.jobType, actualDuration, actualCost },
   };
-  // Only the explicitly approved Company-1 model pilot waits for persisted
-  // event evidence. All existing production/regular completions retain the
-  // previous non-blocking publishSafe behavior.
-  if (devPilotMode === "await_persist") {
-    try {
-      const storedEvent = await publishAuditedCstDevModelCompletion(completionEvent);
-      logger.info({ jobId, workerId, eventId: storedEvent.eventId },
-        "CST-DEV model completion event and audit committed (not subscriber delivery, QA or Final ACK)");
-    } catch (err) {
-      logger.error({ err, jobId, workerId }, "CST-DEV completion event or audit not committed");
-      // The job row may already be completed. Neither event nor audit is
-      // confirmed. Never replay the completed job or invent subscriber/QA ACK.
-      throw new Error("CST_DEV_MODEL_COMPLETION_EVENT_AUDIT_NOT_COMMITTED");
-    }
-  } else {
-    publishSafe(completionEvent);
-  }
+  // The exact scoped model pilot already returned from its own atomic
+  // transaction above. Keep all ordinary/production jobs on their existing
+  // best-effort fire-and-forget publisher without changing their behavior.
+  publishSafe(completionEvent);
 
   return completed!;
 }
