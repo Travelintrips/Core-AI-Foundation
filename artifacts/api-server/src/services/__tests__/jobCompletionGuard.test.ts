@@ -44,6 +44,8 @@ vi.mock("@workspace/db", () => ({
     execute: vi.fn().mockResolvedValue({ rows: [] }),
     transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
   },
+  aiEventsTable: { eventId: "eventId", eventType: "eventType", status: "status" },
+  aiAuditLogsTable: { module: "module", action: "action" },
   aiJobsTable:    { id: "id", status: "status", jobType: "jobType", jobCode: "jobCode", startedAt: "startedAt", completedAt: "completedAt", retryCount: "retryCount", maxRetry: "maxRetry", retryStrategy: "retryStrategy", errorMessage: "errorMessage", updatedAt: "updatedAt", nextRetryAt: "nextRetryAt", resultJson: "resultJson" },
   aiWorkersTable: { id: "id", status: "status", currentJob: "currentJob", runningJobs: "runningJobs", completedToday: "completedToday", failedToday: "failedToday", averageLatency: "averageLatency", lastHeartbeat: "lastHeartbeat", updatedAt: "updatedAt", leaseExpiresAt: "leaseExpiresAt", maxConcurrentJobs: "maxConcurrentJobs", capabilities: "capabilities" },
   aiModelsTable:    { id: "id", modelId: "modelId", providerId: "providerId", isActive: "isActive", capabilities: "capabilities" },
@@ -54,7 +56,16 @@ vi.mock("@workspace/db", () => ({
 vi.mock("../aiAuditService.js",  () => ({ logAudit: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../aiEventBusService.js", () => ({
   publishSafe: vi.fn(),
-  publishAuditedCstDevModelCompletion: vi.fn().mockResolvedValue({eventId:"synthetic-event"}),
+  prepareCstDevModelCompletionEvent: vi.fn((opts: { payload: Record<string, unknown>; sourceId: string }) => ({
+    row: { eventId: "cst-test-event", eventType: "job.completed",
+      sourceModule: "job-engine", sourceId: opts.sourceId,
+      correlationId: "cst-test-correlation", payloadJson: opts.payload, status: "published" },
+    audit: { module: "event-bus", action: "event_published",
+      resourceType: "ai_event", resourceId: "cst-test-event",
+      details: { eventType: "job.completed", sourceModule: "job-engine",
+        correlationId: "cst-test-correlation" }, status: "success" },
+  })),
+  dispatchCstDevModelCompletionAfterCommit: vi.fn(),
 }));
 vi.mock("../aiExecutionService.js", () => ({ executeAI: vi.fn() }));
 vi.mock("../aiModelRouter.js",  () => ({ routeToModel: vi.fn().mockResolvedValue(null) }));
@@ -88,7 +99,8 @@ import {
 
 import { executeJob, completeJob } from "../jobWorkerService.js";
 import { db } from "@workspace/db";
-import { publishAuditedCstDevModelCompletion, publishSafe } from "../aiEventBusService.js";
+import { prepareCstDevModelCompletionEvent,
+  dispatchCstDevModelCompletionAfterCommit, publishSafe } from "../aiEventBusService.js";
 
 // ─── Helper: build a minimal fake AiJob ──────────────────────────────────────
 
@@ -430,98 +442,214 @@ describe("Phase 1B — Production Safety Guards", () => {
 /** Real async contract of the existing completeJob path, with DB mocked.
  * These tests never create real jobs or event subscriptions.
  */
-describe("CST-DEV exact model completion event persistence", () => {
-  const requestId="cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a";
+describe("CST-DEV exact one-job atomic completion", () => {
+  const requestId = "cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a";
   const job: AiJob = fakeJob("ollama_model_invocation", {
-    id: 482,jobCode:"OLLAMA-B7F9B5E2",status:"running",
-    payloadJson:{requestId,modelId:"qwen2.5:3b",_claimedByWorkerId:3628},
+    id: 482, jobCode: "OLLAMA-B7F9B5E2", status: "running",
+    payloadJson: { requestId, modelId: "qwen2.5:3b", _claimedByWorkerId: 3628 },
   });
   const worker = {
-    id:3628,workerName:"cst-dev-dell-onejob-20261119",workerType:"coding_worker",
-    providerSlug:"ollama",runtimeKind:"ollama_remote_pull",modelId:"qwen2.5:3b",
-    capabilities:["ollama_inference"],averageLatency:null,
+    id: 3628, workerName: "cst-dev-dell-onejob-20261119", workerType: "coding_worker",
+    providerSlug: "ollama", runtimeKind: "ollama_remote_pull", modelId: "qwen2.5:3b",
+    capabilities: ["ollama_inference"], averageLatency: null as string | null,
+    currentJob: 482, status: "busy", runningJobs: 1,
+    leaseExpiresAt: new Date(Date.now() + 15 * 60_000),
   };
-  function setupCompletion(workerFixture: typeof worker = worker) {
-    const reads: Array<unknown>=[job,workerFixture];
-    const updates: Array<unknown>=[{...job,status:"completed"}, {...worker,status:"idle"}];
+
+  function setupCompletion(workerOverrides: Partial<typeof worker> = {}, options: {
+    denyEventAudit?: boolean;
+    denyWorkerRelease?: boolean;
+    awaitAudit?: Promise<void>;
+  } = {}) {
+    const w = { ...worker, leaseExpiresAt: new Date(Date.now() + 15 * 60_000), ...workerOverrides };
+    const committed: { step: string; data: unknown }[] = [];
+    const jobReads: unknown[] = [job, w];
+    const ordinaryUpdates: unknown[] = [{ ...job, status: "completed" }, { ...w, status: "idle" }];
+
     vi.mocked(db.select).mockImplementation(() => ({
-      from:vi.fn().mockReturnThis(),
-      where:vi.fn(() => Promise.resolve([reads.shift()])),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn(() => Promise.resolve([jobReads.shift()])),
     }) as unknown as ReturnType<typeof db.select>);
     vi.mocked(db.update).mockImplementation(() => ({
-      set:vi.fn().mockReturnThis(),
-      where:vi.fn().mockReturnThis(),
-      returning:vi.fn(() => Promise.resolve([updates.shift()])),
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn(() => Promise.resolve([ordinaryUpdates.shift()])),
     }) as unknown as ReturnType<typeof db.update>);
-    vi.mocked(publishAuditedCstDevModelCompletion).mockReset();
-    vi.mocked(publishSafe).mockReset();
+
+    vi.mocked(db.transaction).mockImplementation((async (
+      callback: (tx: unknown) => Promise<unknown>,
+    ) => {
+      const pending: typeof committed = [];
+      let queried: unknown;
+      const tx = {
+        select: () => {
+          const chain = {
+            from: (table: unknown) => { queried = table; return chain; },
+            where: () => chain,
+            for: async () => [queried === aiJobsTable ? job : w],
+          };
+          return chain;
+        },
+        update: (table: unknown) => {
+          let value: unknown = null;
+          const chain = {
+            set: (patch: unknown) => { value = patch; return chain; },
+            where: () => chain,
+            returning: async () => {
+              if (table === aiJobsTable) {
+                pending.push({ step: "job", data: value });
+                return [{ ...job, status: "completed" }];
+              }
+              if (options.denyWorkerRelease) return [];
+              pending.push({ step: "worker", data: value });
+              return [{ id: w.id }];
+            },
+          };
+          return chain;
+        },
+        insert: (table: unknown) => ({
+          values: (data: Record<string, unknown>) => {
+            if (table === aiEventsTable) return {
+              returning: async () => {
+                pending.push({ step: "event", data });
+                return [{ ...data, id: 1 }];
+              },
+            };
+            if (table === aiAuditLogsTable) return Promise.resolve().then(async () => {
+              if (data.action === "event_published" && options.awaitAudit) {
+                await options.awaitAudit;
+              }
+              if (data.action === "event_published" && options.denyEventAudit) {
+                throw Object.assign(new Error("DEV_RLS_AUDIT_DENIED"), { code: "42501" });
+              }
+              pending.push({
+                step: data.action === "job_completed" ? "job_audit" : "event_audit",
+                data,
+              });
+            });
+            throw new Error("UNEXPECTED_TEST_INSERT_TABLE");
+          },
+        }),
+      };
+      const result = await callback(tx);
+      committed.push(...pending);
+      return result;
+    }) as typeof db.transaction);
+
+    vi.mocked(db.transaction).mockClear();
+    vi.mocked(db.update).mockClear();
+    vi.mocked(publishSafe).mockClear();
+    vi.mocked(prepareCstDevModelCompletionEvent).mockClear();
+    vi.mocked(dispatchCstDevModelCompletionAfterCommit).mockClear();
+    return committed;
   }
+
   function scopedEnv() {
-    vi.stubEnv("APP_ENV","development");
-    vi.stubEnv("NODE_ENV","development");
-    vi.stubEnv("CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED","true");
-    vi.stubEnv("CST_TEAM_DEV_APPROVED_JOB_ID","482");
-    vi.stubEnv("CST_TEAM_DEV_APPROVED_WORKER_NAME","cst-dev-dell-onejob-20261119");
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED", "true");
+    vi.stubEnv("CST_TEAM_DEV_APPROVED_JOB_ID", "482");
+    vi.stubEnv("CST_TEAM_DEV_APPROVED_WORKER_NAME", "cst-dev-dell-onejob-20261119");
   }
-  it("awaits a real persisted-event acknowledgement before reporting completion",async () => {
-    setupCompletion();scopedEnv();
+
+  it("commits job, worker, both audits and event together; dispatches only after commit", async () => {
+    const committed = setupCompletion(); scopedEnv();
     try {
-      let resolveEvent!: (value: unknown) => void;
-      const gate=new Promise(resolve => {resolveEvent=resolve});
-      vi.mocked(publishAuditedCstDevModelCompletion).mockImplementation(() =>
-        gate as ReturnType<typeof publishAuditedCstDevModelCompletion>);
-      let finished=false;
-      const operation=completeJob(482,3628,{output:{text:"READY"}})
-        .then(value=>{finished=true;return value});
-      await vi.waitFor(()=>expect(publishAuditedCstDevModelCompletion).toHaveBeenCalledTimes(1));
+      const completed = await completeJob(482, 3628, { output: { text: "READY" } });
+      expect(completed.status).toBe("completed");
+      expect(committed.map(x => x.step)).toEqual([
+        "job", "worker", "job_audit", "event", "event_audit",
+      ]);
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(prepareCstDevModelCompletionEvent).toHaveBeenCalledTimes(1);
+      expect(dispatchCstDevModelCompletionAfterCommit).toHaveBeenCalledTimes(1);
+      expect(publishSafe).not.toHaveBeenCalled();
+      const event = committed.find(x => x.step === "event")?.data as Record<string, unknown>;
+      const audit = committed.find(x => x.step === "event_audit")?.data as Record<string, unknown>;
+      expect(audit.resourceId).toBe(event.eventId);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("waits for event audit before committing the job or dispatching", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const committed = setupCompletion({}, { awaitAudit: gate }); scopedEnv();
+    try {
+      let finished = false;
+      const operation = completeJob(482, 3628, { output: { text: "READY" } })
+        .then(value => { finished = true; return value; });
+      await vi.waitFor(() => expect(prepareCstDevModelCompletionEvent).toHaveBeenCalledTimes(1));
+      expect(committed).toHaveLength(0);
       expect(finished).toBe(false);
-      expect(publishSafe).not.toHaveBeenCalled();
-      resolveEvent({eventId:"test-evt-id"});
-      const result=await operation;
+      expect(dispatchCstDevModelCompletionAfterCommit).not.toHaveBeenCalled();
+      release();
+      const result = await operation;
       expect(result.status).toBe("completed");
+      expect(committed).toHaveLength(5);
       expect(finished).toBe(true);
-    } finally { vi.unstubAllEnvs(); }
+    } finally { release?.(); vi.unstubAllEnvs(); }
   });
-  it("rejects missing pilot event persistence without creating false final proof",async () => {
-    setupCompletion();scopedEnv();
+
+  it("audit RLS denial rolls back job+worker+event and never reports a false completion", async () => {
+    const committed = setupCompletion({}, { denyEventAudit: true }); scopedEnv();
     try {
-      vi.mocked(publishAuditedCstDevModelCompletion).mockRejectedValueOnce(new Error("PILOT_RLS_DENIED"));
-      await expect(completeJob(482,3628,{output:{text:"READY"}}))
-        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_AUDIT_NOT_COMMITTED");
+      await expect(completeJob(482, 3628, { output: { text: "READY" } }))
+        .rejects.toThrow("CST_DEV_MODEL_ATOMIC_COMPLETION_NOT_COMMITTED");
+      expect(committed).toHaveLength(0);
+      expect(dispatchCstDevModelCompletionAfterCommit).not.toHaveBeenCalled();
       expect(publishSafe).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
-  it("leaves ordinary job completions on the existing fire-and-forget path",async () => {
+
+  it("worker-bookkeeping failure rolls back the job before recording event or audit", async () => {
+    const committed = setupCompletion({}, { denyWorkerRelease: true }); scopedEnv();
+    try {
+      await expect(completeJob(482, 3628, { output: { text: "READY" } }))
+        .rejects.toThrow("no longer owns running job");
+      expect(committed).toHaveLength(0);
+      expect(prepareCstDevModelCompletionEvent).not.toHaveBeenCalled();
+      expect(dispatchCstDevModelCompletionAfterCommit).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("stale or wrong worker identity fails before transaction commit", async () => {
+    const committed = setupCompletion({ leaseExpiresAt: new Date(Date.now() - 1000) }); scopedEnv();
+    try {
+      await expect(completeJob(482, 3628, { output: { text: "READY" } }))
+        .rejects.toThrow("no longer owns running job");
+      expect(committed).toHaveLength(0);
+      expect(dispatchCstDevModelCompletionAfterCommit).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("mismatched approved worker or job ID cannot mutate any job row", async () => {
+    setupCompletion({ workerName: "unapproved-worker" }); scopedEnv();
+    try {
+      await expect(completeJob(482, 3628, { output: { text: "READY" } }))
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+    setupCompletion(); scopedEnv();
+    vi.stubEnv("CST_TEAM_DEV_APPROVED_JOB_ID", "999");
+    try {
+      await expect(completeJob(482, 3628, { output: { text: "READY" } }))
+        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("ordinary completion retains the original non-transactional publishSafe path", async () => {
     setupCompletion();
-    vi.stubEnv("CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED","false");
+    vi.stubEnv("CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED", "false");
     try {
-      const result=await completeJob(482,3628,{output:{text:"READY"}});
-      expect(result.status).toBe("completed");
+      const completed = await completeJob(482, 3628, { output: { text: "READY" } });
+      expect(completed.status).toBe("completed");
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(db.update).toHaveBeenCalledTimes(2);
       expect(publishSafe).toHaveBeenCalledTimes(1);
-      expect(publishAuditedCstDevModelCompletion).not.toHaveBeenCalled();
-    } finally { vi.unstubAllEnvs(); }
-  });
-  it("never marks a job completed when the preflight worker is not approved",async () => {
-    setupCompletion({...worker,workerName:"forged-other-worker"});scopedEnv();
-    try {
-      vi.mocked(db.update).mockClear();
-      await expect(completeJob(482,3628,{output:{text:"READY"}}))
-        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
-      expect(db.update).not.toHaveBeenCalled();
-      expect(publishAuditedCstDevModelCompletion).not.toHaveBeenCalled();
-      expect(publishSafe).not.toHaveBeenCalled();
-    } finally { vi.unstubAllEnvs(); }
-  });
-  it("fails closed if the approved pilot job ID does not match",async () => {
-    setupCompletion();scopedEnv();
-    vi.stubEnv("CST_TEAM_DEV_APPROVED_JOB_ID","999");
-    try {
-      vi.mocked(db.update).mockClear();
-      await expect(completeJob(482,3628,{output:{text:"READY"}}))
-        .rejects.toThrow("CST_DEV_MODEL_COMPLETION_EVENT_BINDING_REJECTED");
-      expect(db.update).not.toHaveBeenCalled();
-      expect(publishAuditedCstDevModelCompletion).not.toHaveBeenCalled();
-      expect(publishSafe).not.toHaveBeenCalled();
+      expect(dispatchCstDevModelCompletionAfterCommit).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
 });
