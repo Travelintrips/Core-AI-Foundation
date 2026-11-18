@@ -19,8 +19,11 @@ CREATE ROLE {{PILOT_ROLE}} LOGIN PASSWORD '{{PILOT_PASSWORD}}'
 GRANT CONNECT ON DATABASE {{EXPECTED_DATABASE}} TO {{PILOT_ROLE}};
 GRANT USAGE ON SCHEMA ai_platform TO {{PILOT_ROLE}};
 GRANT SELECT,INSERT,UPDATE ON TABLE ai_platform.ai_jobs,ai_platform.ai_workers TO {{PILOT_ROLE}};
+-- Existing event-bus publish() uses INSERT ... RETURNING, so both SELECT
+-- and INSERT are needed. No event UPDATE, subscription access or dispatch grant.
+GRANT SELECT,INSERT ON TABLE ai_platform.ai_events TO {{PILOT_ROLE}};
 GRANT INSERT ON TABLE ai_platform.ai_audit_logs TO {{PILOT_ROLE}};
-GRANT USAGE ON SEQUENCE ai_platform.ai_jobs_id_seq,ai_platform.ai_workers_id_seq,ai_platform.ai_audit_logs_id_seq TO {{PILOT_ROLE}};
+GRANT USAGE ON SEQUENCE ai_platform.ai_jobs_id_seq,ai_platform.ai_workers_id_seq,ai_platform.ai_audit_logs_id_seq,ai_platform.ai_events_id_seq TO {{PILOT_ROLE}};
 -- All policies expire independently of the LOGIN password/session.
 -- No DELETE grant. Only one precisely-bound model job and model-only worker.
 CREATE POLICY cst_model_pilot_jobs_read ON ai_platform.ai_jobs FOR SELECT TO {{PILOT_ROLE}}
@@ -73,6 +76,51 @@ CREATE POLICY cst_model_pilot_audit_insert ON ai_platform.ai_audit_logs FOR INSE
  WITH CHECK (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
    AND ((module='worker-cluster' AND action='worker_registered' AND resource_type='ai_worker')
       OR (module='job-engine' AND action='job_completed' AND resource_type='ai_job')));
+-- Exactly one permitted event shape: a persisted completion for a previously
+-- completed Company-1 model job, with matching jobCode/jobId/workerId.
+-- No event-bus subscription read or event processing privileges are granted.
+CREATE POLICY cst_model_pilot_event_read ON ai_platform.ai_events FOR SELECT TO {{PILOT_ROLE}}
+ USING (
+   clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
+   AND event_type='job.completed'
+   AND source_module='job-engine'
+   AND status='published'
+   AND EXISTS (
+     SELECT 1 FROM ai_platform.ai_jobs j
+     JOIN ai_platform.ai_workers w
+       ON w.worker_name='cst-dev-dell-onejob-20261119'
+     WHERE j.id::text = ai_events.source_id
+       AND j.job_type='ollama_model_invocation'
+       AND j.status='completed'
+       AND j.payload_json->>'requestId'='{{REQUEST_ID}}'
+       AND j.payload_json->>'modelId'='qwen2.5:3b'
+       AND ai_events.payload_json->>'jobId'=j.id::text
+       AND ai_events.payload_json->>'jobCode'=j.job_code
+       AND ai_events.payload_json->>'jobType'=j.job_type
+       AND ai_events.payload_json->>'workerId'=w.id::text
+   )
+ );
+CREATE POLICY cst_model_pilot_event_insert ON ai_platform.ai_events FOR INSERT TO {{PILOT_ROLE}}
+ WITH CHECK (
+   clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
+   AND event_type='job.completed'
+   AND source_module='job-engine'
+   AND status='published'
+   AND EXISTS (
+     SELECT 1 FROM ai_platform.ai_jobs j
+     JOIN ai_platform.ai_workers w
+       ON w.worker_name='cst-dev-dell-onejob-20261119'
+     WHERE j.id::text = ai_events.source_id
+       AND j.job_type='ollama_model_invocation'
+       AND j.status='completed'
+       AND j.payload_json->>'requestId'='{{REQUEST_ID}}'
+       AND j.payload_json->>'modelId'='qwen2.5:3b'
+       AND ai_events.payload_json->>'jobId'=j.id::text
+       AND ai_events.payload_json->>'jobCode'=j.job_code
+       AND ai_events.payload_json->>'jobType'=j.job_type
+       AND ai_events.payload_json->>'workerId'=w.id::text
+   )
+ );
 -- Independently validate the login has no role memberships, bypassrls or unsafe extra tables.
 DO $guard$
 BEGIN
