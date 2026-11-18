@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   validateCredentials,
   validateResult,
+  RELOCK_TERMINATION_BUDGET,
   main
 } from '../../deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs';
 
@@ -108,4 +110,35 @@ test('supervisor CLI rejects PROD even when an apparent credential directory is 
     APP_ENV:'production',
     CREDENTIALS_DIRECTORY:'/run/credentials/synthetic.unit'
   }),'RELOCK_EXPLICIT_DEV_MODE_REQUIRED');
+});
+
+test('confirmed PID termination budgets exceed the actual PostgreSQL waits',()=>{
+  const sql=readFileSync(fileURLToPath(new URL(
+    '../../docs/dev/gpt02_issue159_fixed_writer_relock.REVIEW_ONLY.sql',
+    import.meta.url
+  )),'utf8');
+  const match=sql.match(/pg_terminate_backend\(pid_row\.pid,\s*(\d+)\)/);
+  assert.ok(match,'exact PostgreSQL confirmed termination timeout must exist');
+  const confirmedWaitMs=Number(match[1]);
+  const budget=RELOCK_TERMINATION_BUDGET;
+  assert.equal(budget.roleSlots,3,'all three fixed scoped roles must be covered');
+  assert.equal(confirmedWaitMs,budget.perBackendWaitMs);
+  assert.ok(budget.statementTimeoutMs >
+    budget.roleSlots*confirmedWaitMs,
+    'SQL must outlast all three bounded PID waits');
+  assert.ok(budget.queryTimeoutMs>budget.statementTimeoutMs,
+    'client query must not cancel server before its SQL deadline');
+
+  const drop=readFileSync(fileURLToPath(new URL(
+    '../../deploy/ai-coding-standalone-dev/' +
+      'gpt02-issue159-relock-catalog-auditor.service.d/10-node-jitless.conf',
+    import.meta.url
+  )),'utf8');
+  const timeout=drop.match(/^TimeoutStartSec=(\d+)s$/m);
+  assert.ok(timeout,'systemd must explicitly accommodate confirmed backend waits');
+  assert.equal(Number(timeout[1])*1000,budget.systemdStartTimeoutMs);
+  assert.ok(budget.systemdStartTimeoutMs >
+    budget.queryTimeoutMs+4000,
+    'oneshot must survive query and TLS/connect timeout');
+  assert.match(drop,/ExecStart=\/usr\/bin\/node --jitless --no-experimental-fetch /);
 });
