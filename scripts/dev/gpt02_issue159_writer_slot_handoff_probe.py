@@ -53,6 +53,24 @@ def require_writer_slot_drained(admin, role, label, *, timeout_seconds=10,
         sleep(.25)
 
 
+def require_no_untracked_catalog_window(admin):
+    """Refuse the obsolete writer handoff if the independent relock catalog exists.
+
+    This legacy probe opens short-lived writer identities but does NOT register
+    task-bound issuance watchdog rows. With an installed independent relock
+    supervisor, using the old path could leave a LOGIN role untracked if the
+    main process is killed. Refuse before any ALTER ROLE, unit start, or client
+    session; do not treat an absent/ambiguous catalog response as permission.
+    A future supervised probe must register its exact rows atomically before
+    opening roles, rather than bypassing this check.
+    """
+    row = admin.execute(
+        "SELECT to_regclass('gpt02_relock_audit.writer_issuance_watchdog') IS NOT NULL"
+    ).fetchone()
+    if row != (False,):
+        raise RuntimeError("WRITER_HANDOFF_RELOCK_WATCHDOG_REGISTRATION_REQUIRED")
+
+
 def credential(name,role,host,pw_len):
  f="/etc/credstore.encrypted/gpt02-issue159-"+name+"-dsn"
  statf=os.lstat(f)
@@ -120,6 +138,9 @@ try:
    AND has_function_privilege(%s,p.oid,'EXECUTE')""",(role,role)).fetchone()[0]
   check(num==functions,"PRIVILEGED_RPC_SCOPE_DRIFT_"+name)
  emit("BASELINE_PASS",roleCount=3,directWritePrivileges=0,ledgerConsistent=True)
+ # This legacy probe has no independent watchdog enrollment. A live catalog
+ # must fail closed BEFORE the first role-login transaction.
+ require_no_untracked_catalog_window(admin)
  # Cleanup armed before the transaction that unlocks any role.
  armed=True
  until=(datetime.now(timezone.utc)+timedelta(seconds=115)).isoformat()
