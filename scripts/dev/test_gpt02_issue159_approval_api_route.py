@@ -197,6 +197,102 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         self.assertFalse(body["dispatchPermitted"])
         self.assertEqual(body["releaseDecision"], "NO_GO")
 
+    def test_issue159_no_dispatch_lease_cannot_enter_coding_worker_queue(self):
+        # Distinct DEV queues must not turn a GPT02 issuer/lease record into
+        # a coding job or a worker permission. No real worker, auth account
+        # or database is used: this class hosts a disposable local HTTP API.
+        api.admin_identity = lambda token, connection: {
+            "user_id": AUTH_USER_ID, "email": "fixture@example.com",
+            "role": "super_admin", "auth_level": "aal1",
+        }
+        with sqlite3.connect(self.db) as con:
+            con.executescript("""
+                CREATE TABLE jobs (
+                    id TEXT PRIMARY KEY, kind TEXT NOT NULL,
+                    payload TEXT NOT NULL, status TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    checkpoint TEXT, updated_at TEXT NOT NULL
+                );
+                CREATE TABLE job_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL, status TEXT NOT NULL,
+                    detail TEXT, created_at TEXT NOT NULL
+                );
+            """)
+            con.execute("""INSERT INTO approval_permissions
+                (principal,repository,environment,action,enabled)
+                VALUES (?,?,?,?,1)""", (
+                    AUTH_USER_ID, "Travelintrips/Core-AI-Foundation",
+                    "DEV", "approve_coding",
+                ))
+            con.commit()
+
+        def post_job(data):
+            request = urllib.request.Request(
+                self.base + "/api/jobs", method="POST",
+                data=json.dumps(data).encode(),
+                headers={
+                    "Authorization": "Bearer " + AAL2_TOKEN,
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=3) as response:
+                    return response.status, json.load(response)
+            except urllib.error.HTTPError as exc:
+                return exc.code, json.loads(exc.read().decode())
+
+        forged_lease = {
+            "environment": "DEV", "issuerEvidenceVerified": True,
+            "leaseConsumed": True, "dispatchAllowed": False,
+            "autoChainCompleted": True, "releaseDecision": "NO_GO",
+        }
+        status, body = post_job({
+            "kind": "gpt02_issue159_issuer_dispatch",
+            "repository": "Travelintrips/Core-AI-Foundation",
+            "ref": "develop", "issuerLease": forged_lease,
+        })
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "job_not_allowed")
+        with sqlite3.connect(self.db) as con:
+            self.assertEqual(
+                con.execute("SELECT count(*) FROM jobs").fetchone()[0], 0,
+            )
+
+        # An authorized ordinary coding-test request remains usable, but
+        # nested GPT02 claims/leases are not copied to the durable queue.
+        status, body = post_job({
+            "kind": "coding_test",
+            "repository": "Travelintrips/Core-AI-Foundation",
+            "ref": "develop",
+            "filename": "ai-coding-sandbox/solution.py",
+            "source": "def add(a, b): return a + b\\n",
+            "tests": "def test_add(): assert 2 + 3 == 5\\n",
+            "requires_ollama": False,
+            "issuerLease": forged_lease,
+            "approvalIntent": {"taskId": 171, "approved": True},
+            "autoChainCompleted": True,
+            "dispatchAllowed": True,
+        })
+        self.assertEqual(status, 201)
+        self.assertEqual(body["status"], "QUEUED")
+        self.assertEqual(body["environment"], "DEV")
+        with sqlite3.connect(self.db) as con:
+            queued = con.execute(
+                "SELECT kind,payload,status FROM jobs",
+            ).fetchall()
+        self.assertEqual(len(queued), 1)
+        self.assertEqual(queued[0][0], "coding_test")
+        self.assertEqual(queued[0][2], "QUEUED")
+        payload = json.loads(queued[0][1])
+        self.assertEqual(set(payload), {
+            "repository", "ref", "filename", "source", "tests",
+            "requires_ollama", "environment",
+        })
+        self.assertEqual(payload["environment"], "DEV")
+        self.assertIs(payload["requires_ollama"], False)
+        self.assertEqual(self.count(), 0)
+
     def test_authenticated_http_denied_by_unset_auto_chain_flag_without_consumption(self):
         # Mirror the real DEV fail-closed gate: approval-intent route is
         # enabled but unattended one-use auto-chain cannot consume an
