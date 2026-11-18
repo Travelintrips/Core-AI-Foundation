@@ -89,31 +89,97 @@ class AutoChainSequenceTest(unittest.TestCase):
             f"ActiveState={active}\\n"
         ).replace("\\n", "\n")
 
+    @staticmethod
+    def _manager_journal(*, skip=False, pid="1", start_ts=1_002_000,
+                         finish_ts=1_005_000, first_job="42",
+                         finished_job="42", first_boot="fixtureboot",
+                         finished_boot="fixtureboot"):
+        name="gpt02-issue159-attestor-record-once.service"
+        events=[]
+        if not skip:
+            events.append({
+                "_PID":pid, "UNIT":name, "JOB_TYPE":"start",
+                "JOB_ID":first_job, "_BOOT_ID":first_boot,
+                "__MONOTONIC_TIMESTAMP":str(start_ts),
+                "MESSAGE_ID":chain._SYSTEMD_STARTING_ID,
+                "MESSAGE":"Starting "+name+" - synthetic one-shot.",
+            })
+        events.append({
+            "_PID":pid, "UNIT":name, "JOB_TYPE":"start",
+            "JOB_ID":finished_job, "_BOOT_ID":finished_boot,
+            "__MONOTONIC_TIMESTAMP":str(finish_ts),
+            "MESSAGE_ID":chain._SYSTEMD_FINISHED_ID,
+            "JOB_RESULT":"done",
+            "MESSAGE":(
+                name+" was skipped because of an unmet condition check."
+                if skip else "Finished "+name+" - synthetic one-shot."
+            ),
+        })
+        return "\n".join(json.dumps(event) for event in events)+"\n"
+
     def _run_unit_with(self, start_rc=0, show_output=None, show_rc=0,
-                       start_exception=None):
+                       start_exception=None, journal_output=None,
+                       journal_rc=0):
         first=real_subprocess.CompletedProcess([],0,stdout="")
         second=(
             start_exception if start_exception is not None else
             real_subprocess.CompletedProcess([],start_rc,stdout="")
         )
-        last=real_subprocess.CompletedProcess(
+        third=real_subprocess.CompletedProcess(
             [],show_rc,stdout=self._systemd_show() if show_output is None
             else show_output,
         )
+        fourth=real_subprocess.CompletedProcess(
+            [],journal_rc,stdout=(
+                self._manager_journal() if journal_output is None
+                else journal_output
+            ),
+        )
         with patch.object(chain, "subprocess", real_subprocess):
             with patch.object(real_subprocess, "run",
-                              side_effect=[first,second,last]) as runner:
-                SOURCE_UNIT("gpt02-issue159-attestor-record-once.service")
+                              side_effect=[first,second,third,fourth]) as runner:
+                with patch.object(chain.time, "monotonic_ns",
+                                  side_effect=[1_000_000_000,1_010_000_000]):
+                    SOURCE_UNIT("gpt02-issue159-attestor-record-once.service")
         return runner.call_count
 
-    def test_successful_oneshot_requires_condition_result_yes(self):
-        self.assertEqual(self._run_unit_with(), 3)
+    def test_successful_oneshot_requires_fresh_manager_start_and_finish(self):
+        self.assertEqual(self._run_unit_with(), 4)
+
+    def test_successful_oneshot_can_be_garbage_collected_before_systemctl_show(self):
+        # Verified on the real DEV VPS: successful oneshots often report
+        # ConditionResult=no and zero execution timestamps after unit GC.
+        self.assertEqual(self._run_unit_with(
+            show_output=self._systemd_show(condition="no"),
+        ),4)
 
     def test_systemd_skipped_unit_cannot_fake_success_from_stale_exit_zero(self):
         with self.assertRaisesRegex(chain.AutoChainError,
-                                    "UNIT_CONDITION_NOT_MET"):
-            self._run_unit_with(show_output=self._systemd_show(condition="no"))
+                                    "UNIT_FRESH_EXECUTION_UNPROVEN"):
+            self._run_unit_with(
+                show_output=self._systemd_show(condition="no"),
+                journal_output=self._manager_journal(skip=True),
+            )
         self.assertFalse(self.sequence)
+
+    def test_stale_or_forged_journal_proof_is_denied(self):
+        for journal in (
+            self._manager_journal(start_ts=800_000,finish_ts=900_000),
+            self._manager_journal(first_job="42",finished_job="43"),
+            self._manager_journal(first_boot="oldboot",finished_boot="newboot"),
+            self._manager_journal(pid="999"),
+            self._manager_journal(start_ts=1_100_000,finish_ts=1_110_000),
+            self._manager_journal(skip=True),
+            "not-json\n",
+            "",
+        ):
+            with self.subTest(journal=journal[:55]):
+                with self.assertRaisesRegex(chain.AutoChainError,
+                                            "UNIT_FRESH_EXECUTION_UNPROVEN"):
+                    self._run_unit_with(journal_output=journal)
+        with self.assertRaisesRegex(chain.AutoChainError,
+                                    "UNIT_FRESH_EXECUTION_UNPROVEN"):
+            self._run_unit_with(journal_rc=1)
 
     def test_oneshot_unavailable_or_malformed_show_is_denied(self):
         for output in (
