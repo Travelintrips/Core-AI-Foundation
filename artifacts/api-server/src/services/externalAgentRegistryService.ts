@@ -225,8 +225,9 @@ export async function heartbeatExternalAgent(input: {
   };
 }
 
-export async function getExternalAgentRegistrySnapshot() {
-  await ensureCodingControlBridgeTables();
+export async function getExternalAgentRegistrySnapshot(options: { skipSchemaEnsure?: boolean } = {}) {
+  // Diagnostic-only callers must not create/alter schema. Missing tables fail closed on SELECT.
+  if (!options.skipSchemaEnsure) await ensureCodingControlBridgeTables();
   const now = Date.now();
 
   return Promise.all(
