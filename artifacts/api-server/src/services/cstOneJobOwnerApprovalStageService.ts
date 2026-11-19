@@ -8,7 +8,8 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { sql } from "drizzle-orm";
-import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";\nimport {CST_ONEJOB_STAGE_LOGIN} from "../lib/cstOneJobStageDbConfig.js";
+import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";
+import {CST_ONEJOB_STAGE_LOGIN} from "../lib/cstOneJobStageDbConfig.js";
 
 const SHA = /^[a-f0-9]{40}$/;
 const WORKER = /^cst-dev-dell-onejob-[0-9]{8}-[a-f0-9]{8}$/;
