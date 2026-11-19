@@ -223,38 +223,38 @@ def main():
                'ai_platform.cst_onejob_owner_approvals','UPDATE')
             THEN RAISE EXCEPTION 'BROKER_HAS_DIRECT_WRITES'; END IF;
           END $assert$;""")
-        psql("""SET ROLE cst_onejob_unprivileged;
+        approval_id=psql("""SELECT id FROM ai_platform.cst_onejob_owner_approvals
+          WHERE job_id=484;""").strip().splitlines()[-1].strip()
+        if len(approval_id)!=36:
+            raise RuntimeError("BROKER_APPROVAL_FIXTURE_ID_INVALID")
+        psql(f"""SET ROLE cst_onejob_unprivileged;
           DO $deny$
           BEGIN
             BEGIN
               PERFORM cst_onejob_private.admit_waiting_job(
-                (SELECT id FROM ai_platform.cst_onejob_owner_approvals LIMIT 1),
-                484,'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+                '{approval_id}'::uuid,484,
+                'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
                 'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
               RAISE EXCEPTION 'UNPRIVILEGED_BROKER_CALL_ALLOWED';
             EXCEPTION WHEN insufficient_privilege THEN NULL; END;
           END $deny$;
           RESET ROLE;""")
-        psql("""SET ROLE cst_onejob_admission_broker;
+        psql(f"""SET ROLE cst_onejob_admission_broker;
           DO $deny$
           BEGIN
             BEGIN
               PERFORM cst_onejob_private.admit_waiting_job(
-                (SELECT id FROM ai_platform.cst_onejob_owner_approvals
-                  WHERE job_id=484),
-                484,'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+                '{approval_id}'::uuid,484,
+                'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
                 'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
               RAISE EXCEPTION 'BROKER_DISPATCHED_WITHOUT_READINESS_PROOF';
-            EXCEPTION WHEN insufficient_privilege THEN NULL;
+            EXCEPTION WHEN raise_exception THEN
+              IF SQLERRM <> 'ONEJOB_INDEPENDENT_READINESS_PROOF_MISSING'
+              THEN RAISE; END IF;
             END;
           END $deny$;
           RESET ROLE;""")
         state_broker=psql("""SELECT CASE WHEN
-           (SELECT status FROM ai_platform.ai_jobs WHERE id=484)='waiting'
-           AND (SELECT status FROM ai_platform.cst_onejob_owner_approvals
-                WHERE job_id=484)='APPROVED'
-           AND (SELECT count(*) FROM ai_platform.ai_audit_logs)=0
-           THEN 'BROKER_NO_SIDE_EFFECT_PASS' ELSE 'BROKER_MUTATED_DATA' END;""") if False else psql("""SELECT CASE WHEN
            (SELECT status FROM ai_platform.ai_jobs WHERE id=484)='waiting'
            AND (SELECT status FROM ai_platform.cst_onejob_owner_approvals
                 WHERE job_id=484)='APPROVED'
