@@ -10,6 +10,7 @@ const ready={
   candidateRunning:true,candidateHealthy:true,candidateImageId:imageId,
   candidateNetworkIsolated:true,candidateHostGatewayBlocked:true,
   candidateIndependentNetworkAclVerified:true,candidateDedicatedDevDbTransportVerified:true,
+  candidateBrokerUnixFilesystemVerified:true,candidateBrokerKernelPeerCredentialsVerified:true,
   devHostResolved:true,retiredHostQuarantined:true,
   candidateDirectHealthy:true,nginxApiRetainsExistingCore:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
@@ -53,6 +54,12 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({candidateDedicatedDevDbTransportVerified:false},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
   check({candidateDedicatedDevDbTransportVerified:null},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
   check({candidateDedicatedDevDbTransportVerified:"true"},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
+  check({candidateBrokerUnixFilesystemVerified:false},"BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
+  check({candidateBrokerUnixFilesystemVerified:null},"BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
+  check({candidateBrokerUnixFilesystemVerified:"true"},"BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
+  check({candidateBrokerKernelPeerCredentialsVerified:false},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
+  check({candidateBrokerKernelPeerCredentialsVerified:null},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
+  check({candidateBrokerKernelPeerCredentialsVerified:"true"},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
   check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
   check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
   check({candidateDirectHealthy:false},"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -171,6 +178,10 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED/);
   assert.match(file,/CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED/);
   assert.match(file,/DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED/);
+  assert.match(file,/BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED/);
+  assert.match(file,/BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED/);
+  assert.match(file,/candidateBrokerUnixFilesystemVerified:false/);
+  assert.match(file,/candidateBrokerKernelPeerCredentialsVerified:false/);
   // Preflight must not accept a user-supplied flag as operational proof.
   assert.match(file,/candidateIndependentNetworkAclVerified:false/);
   assert.match(file,/candidateDedicatedDevDbTransportVerified:false/);
