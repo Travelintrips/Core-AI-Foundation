@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import test from "node:test";
 import {
@@ -10,6 +11,7 @@ import {
   CST_ONEJOB_DEV_SOCKET_PATH,
 } from "../../lib/db/src/cstOneJobDevSocketTransport.ts";
 
+const PINNED_CA_FIXTURE = fileURLToPath(new URL("./fixtures/supabase-root-2021-public-qa.crt",import.meta.url));
 const DEV_REF = "xssrfshdrtdfupgqwfdw";
 const POOLER = "aws-1-ap-southeast-2.pooler.supabase.com";
 const USER = "cst_team_model_pilot_20261119_abcdef12." + DEV_REF;
@@ -37,8 +39,9 @@ test("disabled by default: no changes to ordinary DEV or PROD pool",()=>{
 });
 
 test("only exact Company-1 DEV model job and dedicated role can opt in",()=>{
-  const opts=createCstDevOneJobSocketOptions(goodDsn,{...env});
+  const opts=createCstDevOneJobSocketOptions(goodDsn,{...env},PINNED_CA_FIXTURE);
   assert.equal(opts?.ssl.rejectUnauthorized,true);
+  assert.ok(opts?.ssl.ca.toString().includes("BEGIN CERTIFICATE"));
   assert.equal(typeof opts?.stream,"function");
   assert.equal(CST_ONEJOB_DEV_SOCKET_PATH,
     "/run/cst-onejob-dev-db/pg-pooler.sock");
