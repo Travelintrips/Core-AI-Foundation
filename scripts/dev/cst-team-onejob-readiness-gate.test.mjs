@@ -5,7 +5,7 @@ import { projectOneJobGate } from "./cst-team-onejob-readiness-gate.mjs";
 
 const sha="a".repeat(40), imageId="sha256:"+"f".repeat(64);
 const ready={
-  sourceSha:sha,imageSourceSha:sha,imageId,
+  sourceSha:sha,imageSourceSha:sha,imageBuildMarkerSha:sha,imageId,
   candidateRunning:true,candidateHealthy:true,candidateImageId:imageId,
   candidateNetworkIsolated:true,devHostResolved:true,retiredHostQuarantined:true,
   candidateDirectHealthy:true,nginxApiRetainsExistingCore:true,
@@ -39,6 +39,8 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({candidateHealthy:false},"BLUE_GREEN_RUNTIME_NOT_HEALTHY_OR_DIFFERENT_IMAGE");
   check({candidateImageId:"sha256:"+"1".repeat(64)},"BLUE_GREEN_RUNTIME_NOT_HEALTHY_OR_DIFFERENT_IMAGE");
   check({imageSourceSha:"b".repeat(40)},"SOURCE_IMAGE_COMMIT_MISMATCH");
+  check({imageBuildMarkerSha:"b".repeat(40)},"IMAGE_BUILD_SHA_MARKER_MISMATCH");
+  check({imageBuildMarkerSha:null},"IMAGE_BUILD_SHA_MARKER_MISMATCH");
   check({candidateNetworkIsolated:false},"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
   check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
   check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
@@ -48,7 +50,7 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
 test("an ancestral QA image is reusable only if runtime code and pilot RLS are unchanged",()=>{
   const oldSha="b".repeat(40);
   assert.equal(projectOneJobGate({...ready,imageSourceSha:oldSha,sourceContentEquivalent:false}).pilotAdmissionReady,false);
-  const safe=projectOneJobGate({...ready,imageSourceSha:oldSha,sourceContentEquivalent:true});
+  const safe=projectOneJobGate({...ready,imageSourceSha:oldSha,imageBuildMarkerSha:oldSha,sourceContentEquivalent:true});
   assert.equal(safe.pilotAdmissionReady,true);
   assert.equal(safe.operationalE2EVerified,false);
 });
@@ -88,6 +90,8 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED/);
   assert.match(file,/SHARED_DEV_API_ROUTE_CHANGED/);
   assert.match(file,/candidateLoopbackPort/);
+  assert.match(file,/IMAGE_BUILD_SHA_MARKER_MISMATCH/);
+  assert.match(file,/\.cst-build-sha/);
   assert.match(file,/cst-core-onejob-dev-net/);
   assert.match(file,/members\.length===1/);
   assert.match(file,/isInternal==="true"/);
