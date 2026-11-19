@@ -180,9 +180,9 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   const file=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
   assert.match(file,/BEGIN READ ONLY/);
   assert.match(file,/DEV_TRUSTED_CA_NOT_VERIFIED/);
-  assert.match(file,/prod-ca-2021\\.crt/);
-  assert.match(file,/cert\\.fingerprint256/);
-  assert.match(file,/cert\\.verify\\(cert\\.publicKey\\)/);
+  assert.ok(file.includes("prod-ca-2021.crt"));
+  assert.ok(file.includes("cert.fingerprint256"));
+  assert.ok(file.includes("cert.verify(cert.publicKey)"));
   assert.match(file,/rejectUnauthorized:true,ca:rootCa/);
   assert.doesNotMatch(file,/rejectUnauthorized:false/);
   assert.match(file,/ROLLBACK/);
