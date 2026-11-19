@@ -360,3 +360,47 @@ unproven. `candidateIndependentNetworkAclVerified` and
 the live one-job preflight. Do not launch the client using shared
 `aicore_dev_runtime` credentials. Do not promote the PR, dispatch,
 write CST-DEV jobs or touch PROD based on this offline proof.
+
+## Offline-only fixed-destination broker contract (20 November 2026)
+
+A live read-only inspection of the healthy existing `core-ai-dev` container
+reported **`aws-1-ap-southeast-2.pooler.supabase.com:6543`**, not the
+`aws-0` hostname originally written into the first socket adapter. The
+client allowlist, negative tests and documentation were aligned to the
+**one observed `aws-1` endpoint**. The old endpoint is rejected rather than
+added as a fallback. No password, database DSN, or service credential was
+copied or logged.
+
+The new `scripts/dev/cst-team-onejob-fixed-db-broker.mjs` contains a fixed,
+read-only destination contract for `aws-1`, port 6543 and project
+`xssrfshdrtdfupgqwfdw`, plus a **test-only**, local Unix-socket byte
+forwarder. This broker module has no listening side effects when imported.
+The operational entrypoint unconditionally throws
+`CST_ONEJOB_BROKER_INDEPENDENT_ACL_AND_DB_TRANSPORT_NOT_VERIFIED` even if
+an environment flag is set. It is NOT installed as a VPS service.
+
+The offline harness checks a fresh, canonical socket path inside a
+non-world/group-writable parent directory, rejects occupied paths and
+symlinks without unlinking someone else's socket, chmods a newly owned
+socket to `0600`, permits **one active client**, and closes on a refused
+upstream. It never interprets client bytes as a destination, accepts an
+upstream address from a client, terminates TLS, logs SQL or passwords,
+or falls back to an unrestricted TCP connection.
+
+A separate integrated test starts a local mock TCP PostgreSQL listener,
+then forwards bytes via the harness and Unix socket to the real installed
+`pg` 8.22.0 client. The mock accepts PostgreSQL `SSLRequest`, inspects
+the ensuing TLS `ClientHello` for exact `aws-1` SNI, then deliberately
+disconnects before any authentication. The tests have **no Supabase,
+PROD, or external network dependency**. An absent broker still fails with
+no public-TCP fallback, as proven by the existing client-side test.
+
+The production-ready broker is **not implemented or authorized** by this
+offline harness. Remaining prerequisites include independently reviewed
+upstream-only egress ACL, DNS and certificate authentication failure
+checks against actual Supabase, deployment identity and filesystem GID
+policy for the candidate's read-only mount, broker restarts/cleanup,
+short-lived RLS pilot login and role revocation, rate/session limits under
+actual job load, receipt-based subscriber delivery and independent QA
+Final ACK. The live preflight continues to return NO-GO for the independent
+ACL and real CST-DEV transport fields.
