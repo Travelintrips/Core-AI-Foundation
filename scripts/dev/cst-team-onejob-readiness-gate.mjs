@@ -43,12 +43,15 @@ if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
    " and rolvaliduntil > now() + interval '2 minutes'"+
    " and rolvaliduntil < now() + interval '45 minutes') as safe_role_count");
   const v=r.rows[0];
-  const uniqueIndex=await c.query("select count(*)::int as n from pg_indexes "+
-    "where schemaname='ai_platform' and tablename='ai_jobs' "+
-    "and indexname='ai_jobs_company1_pilot_request_unique' "+
-    "and indexdef ilike 'CREATE UNIQUE INDEX%' "+
-    "and indexdef like '%payload_json%requestId%' "+
-    "and indexdef like '%cst-ai-team-company1-dev:pilot-%'");
+  const uniqueIndex=await c.query("select count(*)::int as n from pg_index i "+
+    "join pg_class idx on idx.oid=i.indexrelid "+
+    "join pg_class tbl on tbl.oid=i.indrelid "+
+    "join pg_namespace ns on ns.oid=tbl.relnamespace "+
+    "where ns.nspname='ai_platform' and tbl.relname='ai_jobs' "+
+    "and idx.relname='ai_jobs_company1_pilot_request_unique' "+
+    "and i.indisunique and i.indisvalid and i.indisready "+
+    "and pg_get_indexdef(i.indexrelid) like '%payload_json%requestId%' "+
+    "and pg_get_indexdef(i.indexrelid) like '%cst-ai-team-company1-dev:pilot-%'");
   const uniqueIndexPresent=uniqueIndex.rows[0]?.n===1;
   const jobId=Number(process.env.CST_TEAM_DEV_APPROVED_JOB_ID);
   const workerName=process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME||"";
