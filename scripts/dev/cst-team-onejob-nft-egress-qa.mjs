@@ -3,7 +3,7 @@
  *
  * This is an offline QA evidence projector, NOT a firewall installer, DNS
  * resolver, broker launcher, DB authenticator or operational release gate.
- * The actual destination IP still requires separately approved provenance;
+ * Output filter priority 0 runs after ordinary destination-NAT priorities.\n * The actual destination IP still requires separately approved provenance;
  * an observed QA ruleset can never be promoted to operational authority.
  */
 import { isIP } from "node:net";
@@ -24,7 +24,7 @@ export function renderOneJobQaEgressPolicy(allowedIPv4) {
   const ip=address(allowedIPv4);
   return `table inet ${QA_EGRESS_TABLE} {
  chain output {
-  type filter hook output priority -100; policy drop;
+  type filter hook output priority 0; policy drop;
   ip daddr ${ip} tcp dport ${QA_POOLER_PORT} counter accept
   counter drop
  }
@@ -83,7 +83,7 @@ export function auditOneJobQaKernelEgress(nftJson, expectedIPv4) {
     const chain=chains[0];
     if(!belongsTo(chain) || chain.name!=="output" ||
        chain.type!=="filter" || chain.hook!=="output" ||
-       chain.policy!=="drop" || chain.prio!==-100)
+       chain.policy!=="drop" || chain.prio!==0)
       throw Error("OUTPUT_CHAIN_NOT_STRICT");
     if(!rules.every(r=>belongsTo(r)&&r.chain==="output"))
       throw Error("FOREIGN_RULES");
