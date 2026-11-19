@@ -61,7 +61,14 @@ PID="$(docker inspect "$HOLDER" --format '{{.State.Pid}}')"
 [[ "$(readlink "/proc/$PID/ns/net")" != "$(readlink /proc/1/ns/net)" ]]
 [[ "$(docker inspect "$HOLDER" --format '{{.HostConfig.Privileged}}')" == false ]]
 [[ "$(docker inspect "$HOLDER" --format '{{json .HostConfig.CapDrop}}')" == '["ALL"]' ]]
-[[ -z "$(nsenter --target "$PID" --net nft list tables)" ]]
+# Docker may create a private ip nat table in the container namespace.
+# Reject other pre-existing tables, but do not mutate Docker's own NAT table.
+EXISTING="$(nsenter --target "$PID" --net nft list tables)"
+if [[ -n "$EXISTING" && "$EXISTING" != "table ip nat" ]]; then
+  echo "UNEXPECTED_QA_NAMESPACE_TABLES_REFUSE_START"
+  exit 6
+fi
+echo "PREEXISTING_PRIVATE_DOCKER_NAT_RECOGNIZED"
 
 # Install the single-destination, default-DROP rule into THIS namespace ONLY.
 node --input-type=module -e '
@@ -125,7 +132,7 @@ s.once("close",()=>{if(!done)finish("CLIENT_DENIED_BEFORE_ACK",expect==="deny"&&
 JS
 chmod 0644 "$DIR/mock-broker.mjs" "$DIR/client.js"
 nsenter --target "$PID" --net -- \
-  setpriv --reuid=28500 --regid=28501 --clear-groups \
+  setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups \
   /usr/bin/node "$DIR/mock-broker.mjs" \
   "$ROOT/scripts/dev/cst-team-onejob-fixed-db-broker.mjs" \
   "$SOCK" "$IP_ALLOW" >"$DIR/broker.log" 2>&1 &
