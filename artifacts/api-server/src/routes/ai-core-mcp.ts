@@ -1,3 +1,4 @@
+import { readHandshakeSopSettings } from "../services/handshakeSopSettingsService.js";
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
@@ -6,6 +7,8 @@ import { z } from "zod";
 import { resolveAiCoreInternalBaseUrl } from "../services/aiCoreWhatsappChatService.js";
 import { isAllowedLocalMcpServiceToken } from "../services/mcpLocalServiceTokenService.js";
 import { recordAiCoreMcpTerminalResult } from "../services/aiCoreMcpResultEventService.js";
+import { readCodingBridgeSubscriptionHealth } from "../services/codingBridgeSubscriptionDiagnostics.js";
+import { verifiedSignedCheckpointMcpEvent } from "../services/mcpSignedCheckpointEventService.js";
 import {
   classifyAiCoreChatDispatch,
   isSafeDirectOpenClawPcCommand,
@@ -24,7 +27,7 @@ import {
 } from "../services/aiCoreMcpOAuthService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { dispatchExternalAgentWork, getExternalAgentWorkState } from "../services/externalAgentDispatchService.js";
-import { isDevBrowserWakeAllowed, queueDevBrowserWake } from "../services/devChatGptWakeService.js";
+import { isConfiguredDevWakeAccountTarget, isDevBrowserWakeAllowed, queueDevBrowserWake } from "../services/devChatGptWakeService.js";
 import { allowedDevWakeOwners, DEV_WAKE_DELL_WORKER, isOwnedDevWakeProgressCommand } from "../services/devChatGptWakeBindingService.js";
 import {
   isDevChatGptContinuityMessage, parseDevChatGptContinuityCommand,
@@ -122,10 +125,10 @@ const ExternalCommandProgressArgs = z.object({
   ownerConversationId: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
-const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"]);
+const EventTypes = z.enum(["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED", "CHECKPOINT"]);
 const SubscribeEventsArgs = z.object({
   conversationId: z.string().trim().min(1).max(200),
-  eventTypes: z.array(EventTypes).min(1).max(5).default([...DEFAULT_TERMINAL_EVENT_TYPES]),
+  eventTypes: z.array(EventTypes).min(1).max(6).default([...DEFAULT_TERMINAL_EVENT_TYPES]),
   leaseSeconds: z.number().int().min(30).max(MAX_CONVERSATION_EVENT_LEASE_SECONDS)
     .default(DEFAULT_CONVERSATION_EVENT_LEASE_SECONDS),
 }).strict();
@@ -249,10 +252,20 @@ const nativeEvents = [
 
 function classifyLifecycleEvent(input: {
   kind: string;
+  commandId: string;
   message: string;
   checkpoint: Record<string, unknown>;
   metadata: Record<string, unknown>;
-}): "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED" | null {
+}): "COMPLETED" | "FAILED" | "BLOCKED" | "MERGED" | "DEPLOYED" | "CHECKPOINT" | null {
+  if (input.kind === "CHECKPOINT") {
+    // Never expose an unverified or worker-self-attested checkpoint as an MCP
+    // lifecycle event. The actual server issuer signature must match the row.
+    return verifiedSignedCheckpointMcpEvent({
+      kind: input.kind, commandId: input.commandId,
+      checkpoint: input.checkpoint, metadata: input.metadata,
+      issuerPrivateKeyDerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
+    });
+  }
   const explicit = [input.checkpoint["eventType"], input.metadata["eventType"]]
     .find((value) => typeof value === "string");
   if (
@@ -508,9 +521,9 @@ const tools = [
         conversationId: { type: "string", minLength: 1, maxLength: 200 },
         eventTypes: {
           type: "array",
-          items: { type: "string", enum: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"] },
+          items: { type: "string", enum: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED", "CHECKPOINT"] },
           minItems: 1,
-          maxItems: 5,
+          maxItems: 6,
           default: ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
         },
         leaseSeconds: {
@@ -1164,10 +1177,11 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const handshakeId = randomUUID();
       const ownerChannel = oauthEventChannel(identity);
       const verifiedEvidence = ownerChannel
-        ? await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel).catch(() => null)
+        ? await getVerifiedMcpHandshakeEvidenceForConversation(ownerChannel, { requestHost: req.hostname }).catch(() => null)
         : null;
       payload = {
         protocol: "ai-core-communication/v1",
+        operationalSop: (await readHandshakeSopSettings()).operationalSop,
         authenticated: true,
         handshakeId,
         handshakeAck: { received: true, handshakeId, source: "ai_core_mcp_server" },
@@ -1346,6 +1360,25 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         // second work command. The worker also checks marker visibility.
         const wakeEventId = wake[2]!.toLowerCase();
         const destinationConversationId = wake[1]!.toLowerCase();
+        const isGpt02Target = await isConfiguredDevWakeAccountTarget({
+          accountAlias: "GPT02",
+          ownerChannel: principalChannel,
+          targetConversationId: destinationConversationId,
+          requestHost: req.hostname,
+        });
+        if (isGpt02Target) {
+          res.status(200).json(rpcResult(body.id ?? null, {
+            content: [{ type: "text", text: "GPT02_V2_INSTRUCTION_REQUIRED: GPT02 DEV wake must carry an explicit bounded instruction." }],
+            structuredContent: {
+              blocked: true,
+              reason: "GPT02_V2_INSTRUCTION_REQUIRED",
+              dispatched: false,
+              browserWakeVerified: false,
+            },
+            isError: true,
+          }));
+          return;
+        }
         try {
           const queued = await queueDevBrowserWake({ ownerChannel: principalChannel,
             targetConversationId: destinationConversationId, eventId: wakeEventId, requestHost: req.hostname });
@@ -1580,8 +1613,14 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
         conversationId: parsed.conversationId,
         instruction: command.instruction,
         payload,
-      }).catch(() => {
+      }).catch((eventError: unknown) => {
         // Preserve the completed command result so clients do not retry execution.
+        // Never log command contents or credentials.
+        req.log?.error?.({
+          errorName: eventError instanceof Error ? eventError.name : "UnknownError",
+          conversationBound: Boolean(parsed.conversationId),
+          eventStage: "mcp_terminal_result_persistence",
+        }, "[mcp-events] durable result persistence failed");
         payload = { ...(payload as Record<string, unknown>), eventDeliveryError: "The command returned, but its durable event could not be saved." };
       });
     } else if (params.name === "get_ai_core_task_progress") {
@@ -1691,7 +1730,22 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
       const parsed = eventChannelArgs(identity, ReadEventsArgs.parse(params.arguments ?? {}));
       // A read-only event query must not create or renew a subscription.
       // Subscriptions require an explicit subscribe_ai_core_events call.
-      const rows = await listPendingCodingBridgeResponsesForConversation(parsed);
+      // Filter lifecycle rows IN the owner-scoped query before applying LIMIT.
+      // Otherwise a large backlog of worker ACKs can starve real terminal
+      // results and indefinitely block a ChatGPT-side Final ACK.
+      const subscription = await readCodingBridgeSubscriptionHealth(parsed.conversationId).catch(() => ({
+        state: "UNAVAILABLE" as const,
+        renewalRequired: false,
+        expiresAt: null,
+        pendingCount: null,
+      }));
+      const rows = await listPendingCodingBridgeResponsesForConversation({
+        ...parsed, lifecycleOnly: true,
+        // Do not alter existing terminal-only reads. Signed checkpoints are
+        // returned only to an ACTIVE exact-owner MCP subscription that opted in.
+        ...( "wantsSignedCheckpoints" in subscription && subscription.wantsSignedCheckpoints === true
+          ? { includeSignedCheckpoints: true } : {}),
+      });
       let devEvents: unknown[] = [];
       if (identity.kind === "oauth" && devRelayEnabled()) {
         try {
@@ -1701,15 +1755,18 @@ router.post(["/ai/core-chat/mcp", "/ai/core-chat/mcp-v2"], async (req, res): Pro
           // Do not claim DEV delivery when DEV is unavailable.
         }
       }
-      const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId).catch(() => null);
+      const handshakeEvidence = await getVerifiedMcpHandshakeEvidenceForConversation(parsed.conversationId, { requestHost: req.hostname }).catch(() => null);
       payload = {
         conversationId: parsed.conversationId,
+        subscription,
+        ...(subscription.renewalRequired ? { advisory: "SUBSCRIPTION_EXPIRED_OR_INACTIVE: authenticate via MCP and explicitly call subscribe_ai_core_events; pending events are preserved. Reading does not renew a lease or authorize an ACK." } : {}),
         handshakeEvidence,
         events: [...rows
           .map((row) => ({
             ...row,
             eventType: classifyLifecycleEvent({
               kind: row.kind,
+              commandId: row.commandId,
               message: row.message,
               checkpoint: row.checkpoint,
               metadata: row.metadata,

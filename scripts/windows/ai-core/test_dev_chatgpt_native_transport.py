@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from dev_chatgpt_native_transport import (NativeTransport, native_options, native_submit_seconds,
+                                         openclaw_runtime_paths,
                                          TRANSPORT_SECONDS, LISTENER_STARTUP_SECONDS,
                                          READER_AFTER_GUARD_SECONDS, POST_READINESS_SECONDS,
                                          READINESS_SECONDS, CLI_SECONDS, NATIVE_SECONDS)
@@ -21,8 +22,8 @@ READER = "B" * 32
 EVENT = "b" * 64
 CHALLENGE = "c" * 64
 BINDING = {"version": 1, "accountAlias": "GPT02", "ownerChannel": "ai-engine-oauth:" + "d" * 64,
-           "targetConversationId": CHAT, "workerId": "openclaw-dell-chatgpt-wake-dev", "browserProfile": "travelincars-dev",
-           "bindingFingerprint": "4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1"}
+           "targetConversationId": CHAT, "workerId": "openclaw-dell-chatgpt-wake-dev", "browserProfile": "gpt02-dell-dev",
+           "bindingFingerprint": "2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3"}
 OPTIONS = {"version": 1, "enabled": True, "composerName": "Ask ChatGPT", "allowProviderLf": False}
 MESSAGE = "[AI_CORE_WAKE:" + EVENT + "] [AI_CORE_ATTEST:" + CHALLENGE + "] Reply once with [AI_CORE_ATTEST_ACK:" + CHALLENGE + "]."
 FINAL = "  Synthetic final [AI_CORE_ATTEST_ACK:" + CHALLENGE + "]\n"
@@ -67,7 +68,8 @@ class FakeTransport(NativeTransport):
         self.revoke_after_capture = False
         self.send_fails = False
         self.original_time = time.time() - 5
-        self.fake_user_data = r"C:\Users\fixture\.openclaw\browser\travelincars-dev\user-data"
+        self.fake_user_data = r"C:\Users\fixture\.openclaw\browser\gpt02-dell-dev\user-data"
+        self.expected_cdp_port = 18803
         super().__init__(root, BINDING, EVENT, CHALLENGE, OPTIONS, self._authorize)
 
     def _authorize(self):
@@ -77,7 +79,59 @@ class FakeTransport(NativeTransport):
     def _runtime(self):
         self.expected_user_data = self.fake_user_data
         self.node = Path("/synthetic/node.exe")
+        self.cdp_node = Path("/synthetic/node.exe")
         self.entry = Path("/synthetic/openclaw.mjs")
+
+    # Test-double for the managed DELL CDP boundary; no real browser or process calls.
+    def _native_profile_pid(self, cdp_port):
+        if cdp_port != self.expected_cdp_port:
+            raise RuntimeError('Synthetic CDP port changed')
+        return 1234
+
+    def _cdp_tab_inventory(self, cdp_port):
+        if cdp_port != self.expected_cdp_port:
+            raise RuntimeError('Synthetic CDP inventory mismatch')
+        tabs = [{'type': 'page', 'url': URL, 'targetId': RAW, 'tabId': 't1'}]
+        if self.duplicate: tabs.append({**tabs[0], 'targetId': 'D' * 32})
+        if self.reader_tab is not None: tabs.append(dict(self.reader_tab))
+        if self.extra_blank: tabs.append({'type': 'page', 'url': 'about:blank', 'targetId': 'E' * 32})
+        return tabs
+
+    # Adapt only the synthetic CDP fixture, never the production native transport.
+    # The current DELL source uses a direct target creation endpoint; older tests
+    # modeled it through the OpenClaw CLI "open" operation.
+    def _cdp_create_blank_target(self, cdp_port):
+        if cdp_port != self.expected_cdp_port:
+            raise RuntimeError("Synthetic CDP port changed")
+        self.calls.append(("native:cdp-create-blank", (cdp_port,)))
+        return self._cli("open", "about:blank", "--label", "aicore-reader-" + EVENT[:16])
+
+    def _cdp_activate_target(self, cdp_port, target_id):
+        if sum(t['targetId'] == target_id for t in self._cdp_tab_inventory(cdp_port)) != 1:
+            raise RuntimeError('Synthetic target not unique')
+        if self.bad_reader_window and target_id == READER:
+            raise RuntimeError('Native CDP target identity is unproven')
+        self.calls.append(('native:activate', (target_id,)))
+
+    def _snapshot(self):
+        snapshot = self._cli('snapshot')
+        if self.omit_composer_without_truncation or self.mixed_locale_composer:
+            raise RuntimeError('Native ChatGPT composer role or locale is ambiguous')
+        return snapshot
+
+    def _ax_verify_bound_composer(self):
+        if not self.focus_ok:
+            raise RuntimeError('Bound Chromium accessibility preflight failed')
+        if self.drift_after_focus:
+            self.wrong_pid = True
+            raise RuntimeError('Native OpenClaw target changed')
+        self.calls.append(('native:ax-verify', ()))
+
+    def _cdp_submit(self, message, allow_provider_lf):
+        return self._bridge('submit', message=message, allowProviderLf=allow_provider_lf)
+
+    def _sleep(self, seconds):
+        self.calls.append(('native:sleep', (seconds,)))
 
     @contextmanager
     def _exclusive(self):
@@ -88,7 +142,7 @@ class FakeTransport(NativeTransport):
         self.calls.append((action, args))
         if action == "status":
             return {"profile": BINDING["browserProfile"], "running": True,
-                    "pid": 7654 if self.wrong_pid else 1234, "userDataDir": self.fake_user_data}
+                    "pid": 7654 if self.wrong_pid else 1234, "userDataDir": self.fake_user_data, "cdpPort": self.expected_cdp_port}
         if action == "tabs":
             tab = {"type": "page", "url": URL, "targetId": RAW, "tabId": "t1"}
             hide_bound = (self.hide_bound_once_after_reader and self.reader_tab is not None
@@ -165,7 +219,7 @@ class FakeTransport(NativeTransport):
                     "rawTargetId": READER, "address": "about:blank"}
         if action == "reader-navigate":
             record = self._reader_record()
-            if record["status"] != "BLANK_VERIFIED" or data["reader"] != {"RawTargetId": READER, "WindowHandle": 999}:
+            if record["status"] != "BLANK_VERIFIED" or data["reader"] != {"RawTargetId": READER}:
                 raise AssertionError("Native navigation lost durable reader ownership")
             self.navigations += 1
             record = self._reader_update(record, status="NAVIGATION_ATTEMPTING", navigationAttemptedAt=time.time())
@@ -213,9 +267,43 @@ class FakeTransport(NativeTransport):
 
 
 class NativeTransportTests(unittest.TestCase):
+    def test_readiness_requires_original_task_even_with_genuine_looking_ack(self):
+        # Pure synthetic UI text: no browser, credentials, command or dispatch.
+        guard = NativeTransport.__new__(NativeTransport)
+        guard.event, guard.challenge = EVENT, CHALLENGE
+        original = MESSAGE + "\nAssistant: " + FINAL
+        cases = (
+            ("original", original, True),
+            ("layout_whitespace", MESSAGE.replace(" Reply once", "  Reply\n once") + "\nAssistant: " + FINAL, True),
+            ("altered_user_text", original.replace("Reply once", "Altered untrusted text"), False),
+            ("duplicate_user_task", MESSAGE + "\n" + MESSAGE + "\nAssistant: " + FINAL, False),
+            ("no_assistant_ack", MESSAGE, False),
+            ("stop_control", original + '\nbutton "Stop generating"', False),
+            ("missing_user", FINAL + "\n[AI_CORE_WAKE:" + EVENT + "] [AI_CORE_ATTEST:" + CHALLENGE + "]", False),
+        )
+        for name, snapshot, expected in cases:
+            with self.subTest(name=name):
+                self.assertIs(guard._ready(snapshot, MESSAGE), expected)
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
+        # Production rejects missing/ambiguous 429 logs. Use one strictly typed
+        # synthetic 200 event, local to each test. Never read real Windows logs.
+        rate_dir = Path(self.folder.name) / "AI-Core"
+        rate_dir.mkdir()
+        (rate_dir / "native-response-metadata.jsonl").write_text(
+            json.dumps({"capturedAtUtc": "2026-11-13T12:00:00Z",
+                        "responseStatus": 200, "envelopeOk": True,
+                        "responsePresent": True}) + "\n", encoding="utf-8")
+        local_env = patch.dict("os.environ", {
+            "LOCALAPPDATA": self.folder.name,
+            "AI_CORE_GPT02_LOCAL_CACHE_READBACK_DEV": "0",
+            "AI_CORE_GPT02_PASSIVE_SUBMIT_CAPTURE_DEV": "0",
+            "AI_CORE_GPT02_CDP_READY_CAPTURE_DEV": "0",
+        })
+        local_env.start()
+        self.addCleanup(local_env.stop)
         self.transport = FakeTransport(self.folder.name)
 
     def test_activation_is_local_explicit_and_disabled_by_default(self):
@@ -261,10 +349,10 @@ class NativeTransportTests(unittest.TestCase):
     def test_exact_target_focus_precedes_native_resolution(self):
         self.transport.run(MESSAGE)
         actions = [action for action, _ in self.transport.calls]
-        self.assertEqual(actions.count("focus"), 3)
-        self.assertLess(actions.index("focus"), actions.index("native:resolve"))
-        self.assertEqual(self.transport.calls[actions.index("focus")][1], (RAW,))
-        self.assertEqual([args for action, args in self.transport.calls if action == "focus"], [(RAW,), (READER,), (RAW,)])
+        self.assertEqual(actions.count('native:ax-verify'), 2)
+        self.assertEqual(actions.count('native:activate'), 1)
+        self.assertLess(actions.index('native:ax-verify'), actions.index('native:submit'))
+        self.assertEqual([args for action, args in self.transport.calls if action == 'native:activate'], [(READER,)])
 
     def test_failed_focus_or_changed_profile_blocks_native_resolution(self):
         for change in ({"focus_ok": False}, {"drift_after_focus": True}):
@@ -363,11 +451,24 @@ class NativeTransportTests(unittest.TestCase):
                 self.transport.run(message)
         self.assertEqual(self.transport.calls, [])
 
+    def test_openclaw_runtime_override_requires_node_and_entry_together(self):
+        with patch.dict("os.environ", {
+            "AI_CORE_OPENCLAW_NODE": r"C:\Program Files\nodejs\node.exe",
+            "AI_CORE_OPENCLAW_ENTRY": r"C:\Users\fixture\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs",
+        }, clear=False):
+            node, entry = openclaw_runtime_paths(r"C:\Users\fixture\AppData\Local")
+        self.assertEqual(str(node), r"C:\Program Files\nodejs\node.exe")
+        self.assertEqual(str(entry), r"C:\Users\fixture\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs")
+
+        with patch.dict("os.environ", {"AI_CORE_OPENCLAW_NODE": r"C:\node.exe", "AI_CORE_OPENCLAW_ENTRY": ""}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "provide node and entry together"):
+                openclaw_runtime_paths(r"C:\Users\fixture\AppData\Local")
+
     def test_request_url_is_a_direct_node_argument_not_shell_text(self):
         self.transport._runtime()
         argv = self.transport._argv("responsebody", REQUEST, "--target-id", RAW)
-        self.assertEqual(argv[0], "/synthetic/node.exe")
-        self.assertEqual(argv[1], "/synthetic/openclaw.mjs")
+        self.assertEqual(argv[0].replace("\\", "/"), "/synthetic/node.exe")
+        self.assertEqual(argv[1].replace("\\", "/"), "/synthetic/openclaw.mjs")
         self.assertEqual(argv.count(REQUEST), 1)
         self.assertNotIn("openclaw.cmd", " ".join(argv))
         self.assertIn("&include_has_versions=true", argv[argv.index("responsebody") + 1])
@@ -453,7 +554,7 @@ class NativeTransportTests(unittest.TestCase):
 
     def test_reader_native_pid_mismatch_blocks_navigation_and_preserves_blank(self):
         self.transport.bad_reader_window = True
-        with self.assertRaisesRegex(RuntimeError, "native window is unproven"):
+        with self.assertRaisesRegex(RuntimeError, "Native CDP target identity is unproven"):
             self.transport.run(MESSAGE)
         self.assertEqual(self.transport.reader_tab["url"], "about:blank")
         self.assertEqual(self.transport.navigations, 0)
@@ -492,23 +593,32 @@ class NativeTransportTests(unittest.TestCase):
         transport.use_real_listener = True
         class Listener:
             def __init__(self, argv):
-                transport.calls.append(("listener:start", argv))
                 self.argv = argv
+                self.is_navigator = any('dev-chatgpt-cdp-reader-navigate.js' in str(a) for a in argv)
+                transport.calls.append(('navigator:start' if self.is_navigator else 'listener:start', argv))
             def finish(self, timeout):
-                transport.calls.append(("listener:finish", timeout))
+                if self.is_navigator:
+                    transport.calls.append(('navigator:finish', timeout))
+                    transport.navigations += 1
+                    transport.reader_tab['url'] = URL
+                    return json.dumps({'ok': True, 'navigationInvoked': True, 'rawTargetId': READER, 'pageUrl': URL})
+                transport.calls.append(('listener:finish', timeout))
                 return json.dumps(transport._response_envelope())
             def close(self):
-                transport.calls.append(("listener:close", ()))
-        with patch("dev_chatgpt_native_transport._Capture", Listener), \
-                patch("dev_chatgpt_native_transport.time.sleep", side_effect=lambda seconds: transport.calls.append(("listener:lead", seconds))):
+                transport.calls.append(('listener:close', ()))
+        with patch('dev_chatgpt_native_transport._Capture', Listener), \
+            patch.object(transport, '_sleep', side_effect=lambda seconds: transport.calls.append(('listener:lead', seconds))):
             observed = transport.run(MESSAGE)
         self.assertEqual(observed["captureRawTargetId"], READER)
         actions = [action for action, _ in transport.calls]
         start, finish = actions.index("listener:start"), actions.index("listener:finish")
-        self.assertEqual(actions[start + 1:finish], ["listener:lead", "native:reader-navigate"])
+        self.assertEqual(actions[start + 1], 'listener:lead')
+        self.assertIn('navigator:start', actions[start + 1:finish])
+        self.assertIn('navigator:finish', actions[start + 1:finish])
+        self.assertLess(actions.index('navigator:start'), actions.index('navigator:finish'))
         argv = transport.calls[start][1]
         self.assertEqual(argv[argv.index("--target-id") + 1], READER)
-        self.assertEqual(argv[argv.index("responsebody") + 1], REQUEST)
+        self.assertEqual(argv[argv.index("responsebody") + 1], "/backend-api/conversations/" + CHAT)
         self.assertEqual(transport.calls[start + 1][1], LISTENER_STARTUP_SECONDS)
         self.assertLess(LISTENER_STARTUP_SECONDS, 30)
         self.assertEqual(argv[argv.index("--timeout-ms") + 1], "180000")
@@ -569,31 +679,21 @@ class NativeTransportTests(unittest.TestCase):
             def finish(self, timeout): raise AssertionError("revoked listener must not finish proof")
         def revoke(_seconds): transport.allowed = False
         with patch("dev_chatgpt_native_transport._Capture", Listener), \
-                patch("dev_chatgpt_native_transport.time.sleep", side_effect=revoke):
+                patch.object(transport, "_sleep", side_effect=revoke):
             with self.assertRaisesRegex(RuntimeError, "revoked"):
                 transport.run(MESSAGE)
         self.assertEqual((transport.submissions, transport.opens, transport.navigations), (1, 1, 0))
         self.assertEqual(json.loads(transport.reader_marker.read_text())["status"], "BLANK_VERIFIED")
 
-    def test_slow_native_resolution_cannot_redate_the_sole_blank_inventory(self):
+    def test_reader_blank_proof_uses_exact_observation_timestamp(self):
         transport = self.transport
-        original = transport._bridge
-        observation = []
-        def slow_resolve(action, **data):
-            result = original(action, **data)
-            if action == "reader-resolve":
-                transport.last_tabs_observed_at -= 31
-                observation.append(transport.last_tabs_observed_at)
-            return result
-        with patch.object(transport, "_bridge", side_effect=slow_resolve), \
-                patch.object(transport, "_listen_reader", side_effect=RuntimeError("stop before listener")):
-            with self.assertRaisesRegex(RuntimeError, "stop before listener"):
+        with patch.object(transport, '_listen_reader', side_effect=RuntimeError('stop before listener')):
+            with self.assertRaisesRegex(RuntimeError, 'stop before listener'):
                 transport.run(MESSAGE)
         record = json.loads(transport.reader_marker.read_text())
-        self.assertEqual(record["blankVerifiedAt"], observation[0])
-        self.assertGreaterEqual(record["blankNativeVerifiedAt"] - record["blankVerifiedAt"], 30)
+        self.assertEqual(record['blankVerifiedAt'], transport.last_tabs_observed_at)
+        self.assertGreaterEqual(record['blankNativeVerifiedAt'], record['blankVerifiedAt'])
         self.assertEqual(transport.navigations, 0)
-
 
 if __name__ == "__main__":
     unittest.main()

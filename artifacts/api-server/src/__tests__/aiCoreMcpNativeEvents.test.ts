@@ -7,6 +7,15 @@ const eventMocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
 }));
 
+vi.mock("../services/aiCoreMcpOAuthService.js", () => ({ oauthIssuer: () => "https://example.test", oauthResource: () => "https://example.test/api", verifyMcpAccessToken: vi.fn() }));
+vi.mock("../services/openClawPcLeaderService.js", () => ({}));
+vi.mock("../services/externalAgentRegistryService.js", () => ({}));
+vi.mock("../services/devContinuityWatchService.js", () => ({ registerDevContinuityWatch: vi.fn(), updateDevContinuityWatch: vi.fn(), getDevContinuityWatchStatus: vi.fn() }));
+vi.mock("../services/aiModelService.js", () => ({ getModelConfig: vi.fn(), getModelById: vi.fn(), listModels: vi.fn() }));
+vi.mock("../services/codingBridgeSubscriptionDiagnostics.js", () => ({ readCodingBridgeSubscriptionHealth: vi.fn().mockResolvedValue({ renewalRequired: false }) }));
+vi.mock("../services/localCodingControlBridgeService.js", () => ({ subscribeCodingBridgeConversation: vi.fn(), unsubscribeCodingBridgeConversation: vi.fn(), listPendingCodingBridgeResponsesForConversation: vi.fn(), acknowledgeCodingBridgeResponseForConversation: vi.fn(), getVerifiedMcpHandshakeEvidenceForConversation: vi.fn() }));
+vi.mock("../services/aiCoreChatLearningService.js", () => ({ recordChatLearningEvent: vi.fn() }));
+vi.mock("../services/handshakeSopSettingsService.js", () => ({ readHandshakeSopSettings: vi.fn().mockResolvedValue({ operationalSop: {} }) }));
 vi.mock("../services/aiAuditService.js", () => ({
   logAudit: vi.fn().mockResolvedValue(undefined),
 }));

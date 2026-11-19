@@ -185,9 +185,20 @@ describe("adminAuthWithExceptions", () => {
       "/ai/core-chat/dev/accounts/session/activate",
     ];
 
-    it.each(routes)("lets exact DEV POST %s reach route-level worker authentication", (path) => {
+    it.each(routes)("lets exact DEV POST %s reach route-level scoped worker authentication", (path) => {
       process.env["APP_ENV"] = "development";
       const req = makeReq("POST", path, { authorization: "Bearer scoped-worker-token" });
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.statusCode).toBeUndefined();
+    });
+
+    it.each(routes)("handles Express originalUrl with the /api mount prefix for %s", (path) => {
+      process.env["APP_ENV"] = "development";
+      const req = makeReq("POST", "/api" + path, { authorization: "Bearer scoped-worker-token" });
+      Object.assign(req, { originalUrl: "/api" + path + "?source=worker" });
       const res = makeRes();
       const next = vi.fn();
       adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
@@ -205,12 +216,14 @@ describe("adminAuthWithExceptions", () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it("does not widen the bypass to adjacent paths or methods", () => {
+    it("does not widen the bypass to adjacent paths, methods, or admin routes", () => {
       process.env["APP_ENV"] = "development";
+      const headers = { authorization: "Bearer scoped-worker-token" };
       for (const req of [
-        makeReq("GET", "/ai/core-chat/dev/accounts/session/challenge"),
-        makeReq("POST", "/ai/core-chat/dev/accounts/session/challenge/extra"),
-        makeReq("POST", "/ai/core-chat/dev/accounts"),
+        makeReq("GET", "/ai/core-chat/dev/accounts/session/challenge", headers),
+        makeReq("POST", "/ai/core-chat/dev/accounts/session/challenge/extra", headers),
+        makeReq("POST", "/ai/core-chat/dev/accounts", headers),
+        makeReq("GET", "/ai/core-chat/databases/metadata", headers),
       ]) {
         const res = makeRes();
         const next = vi.fn();

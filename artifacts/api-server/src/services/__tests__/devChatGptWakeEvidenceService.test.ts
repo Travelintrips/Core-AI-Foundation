@@ -31,10 +31,10 @@ function proof() {
 
 describe("profile-bound receipt contract", () => {
   it("matches worker challenge vectors including the checkpoint revision", () => {
-    expect(deriveDevAssistantChallenge(expected)).toBe("2a4c9bcdf77cb321930750a835f29cd065d70c1ea8b20f8a4c302853b6267a2a");
+    expect(deriveDevAssistantChallenge(expected)).toBe("668e37e7ea50f4a3fdc13b73def177651bb3b8ca12364eeb48b41a1c8e190438");
     expect(deriveDevAssistantChallenge({ ...expected, watchCommandId: "55555555-5555-4555-8555-555555555555",
       jobId: "66666666-6666-4666-8666-666666666666", checkpointRevision: 7 }))
-      .toBe("79960f0819bca525e9f2930fc13b4c94b538c06fc0860686b4d051f84d53feec");
+      .toBe("34fbd3af6b9f7c4dc213a8566082e0e5df4fcc8c87f1474877f98d2276e3cc53");
     expect(devWakeAttestationExpected(metadata)).toEqual(expected);
     expect(verifyDevWakeCommandReceipt(proof()).verified).toBe(true);
   });

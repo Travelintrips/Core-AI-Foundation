@@ -1,6 +1,6 @@
 # Isolated VPS development releases
 
-The **DEV** application is built on Hostinger VPS `srv1792369`, Docker container `core-ai-dev`, bound to `127.0.0.1:18082`. Its website is `dev-aicore.cstlogistic.co.id`, terminated by the existing VPS Nginx TLS configuration and serving static files from `/var/www/dev-aicore`.
+The **DEV** application is built on Hostinger VPS `srv1792369`, Docker container `core-ai-dev`, bound to `127.0.0.1:18082`. Its canonical OAuth issuer and ChatGPT MCP resource are `https://dev.cstlogistic.co.id` and `https://dev.cstlogistic.co.id/api/ai/core-chat/mcp`. The legacy deployment/DNS vhost `dev-aicore.cstlogistic.co.id` still exists for release compatibility; it is **not** the canonical OAuth issuer. DEV HTTPS is terminated by the existing VPS Nginx TLS configuration and serves static files from `/var/www/dev-aicore`. Do not switch an authenticated ChatGPT connection between hostnames: the OAuth issuer and client ID contribute to the event channel identity, and switching hosts cannot recover historical ACKs automatically.
 
 **PROD** at `aicore.cstlogistic.co.id` remains independently deployed from the protected `main` branch on Hostinger's managed application service. The VPS `ai-core-prod-api` container, where deployed, has separate image, credentials, port and database; the DEV release script never changes it.
 

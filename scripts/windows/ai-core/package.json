@@ -1,0 +1,6 @@
+{
+  "name": "gpt02-dell-dev-native-source",
+  "private": true,
+  "type": "commonjs",
+  "description": "Existing Windows DELL native helper modules; no publish or deployment scripts"
+}

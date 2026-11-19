@@ -29,6 +29,15 @@ describe("OAuth login routes under strict script CSP", () => {
     expect(response.headers["content-type"]).toMatch(/^application\/javascript/);
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(() => new Script(response.text)).not.toThrow();
+    expect(response.text).toContain('"/api/internal/auth/logout"');
+    expect(response.text).toContain('"/api/ai/core-chat/oauth/main-client-status"');
+    expect(response.text).toContain('method: "GET"');
+    expect(response.text).not.toContain('ack_ai_core_event');
+
+    expect(response.text).toContain('method: "POST"');
+    expect(response.text).toContain('credentials: "same-origin"');
+    expect(response.text).toContain('window.location.replace("/api/ai/core-chat/oauth/login")');
+
     expect(resolver).not.toHaveBeenCalled();
   });
 
@@ -39,7 +48,52 @@ describe("OAuth login routes under strict script CSP", () => {
     expect(response.text).toContain("Sesi AI Engine aktif");
     expect(response.text).toContain("/api/ai/core-chat/oauth/pair/enter");
     expect(response.text).not.toContain("<form");
-    expect(response.text).not.toContain("<script");
+    expect(response.text).toContain('<script src="' + OAUTH_LOGIN_SCRIPT_PATH + '" defer></script>');
+    expect(response.text).toContain('id="mcp-switch-account"');
+    expect(response.text).toContain("Ganti Akun");
+    expect(response.text).toContain('role="status"');
+  });
+
+  it("shows only the signed-in account and never claims OAuth event ACK", async () => {
+    const app = express();
+    app.use(createAiCoreMcpOAuthLoginRouter(async () => ({
+      id: 5, email: 'owner+<test>&"\'@example.com',
+    })));
+    const response = await request(app).get(OAUTH_LOGIN_PATH);
+    expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(response.text).toContain("owner+&lt;test&gt;&amp;&quot;&#39;@example.com");
+    expect(response.text).not.toContain('owner+<test>&"\'@example.com');
+    expect(response.text).toContain("Login saja belum berarti ChatGPT telah tersambung");
+    expect(response.text).not.toContain("<form");
+  });
+
+  it("scopes DEV readiness diagnostics to a signed-in session, not a URL owner", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    try {
+      const app = express();
+      app.use(createAiCoreMcpOAuthLoginRouter(async () => null));
+      const response = await request(app).get("/api/ai/core-chat/oauth/main-client-status?clientId=someone-else");
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: "authenticated_session_required" });
+      expect(response.headers["cache-control"]).toContain("no-store");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("excludes the DEV-only readiness route from production even for a signed session", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      const app = express();
+      app.use(createAiCoreMcpOAuthLoginRouter(async () => ({ id: 5, email: "user@example.com" })));
+      const response = await request(app).get("/api/ai/core-chat/oauth/main-client-status");
+      expect(response.status).toBe(404);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("does not own auth submission or permit non-GET access to the asset", async () => {

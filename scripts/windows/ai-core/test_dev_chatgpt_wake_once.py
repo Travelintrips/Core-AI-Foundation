@@ -124,6 +124,38 @@ class BrowserWakeTests(WakeTestCase):
         self.assertEqual(len(browser.submissions), 1)
         self.assertIn(TASK_TEXT, browser.submissions[0][-1])
 
+    def test_v2_multiline_sop_and_forbidden_controls(self):
+        multiline = "AI CORE — CONTINUE_JOB\r\njobId: job-123\n\tcheckpointId: cp-7"
+        encoded = wake.base64.urlsafe_b64encode(multiline.encode()).decode().rstrip("=")
+        command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + encoded
+        browser = FakeBrowser()
+        self.run_browser(browser, command)
+        self.assertEqual(len(browser.submissions), 1)
+        self.assertIn(multiline, browser.submissions[0][-1])
+
+        for control in ("\x00", "\x1b", "\x7f"):
+            unsafe = "CONTINUE_JOB" + control + "test"
+            token = wake.base64.urlsafe_b64encode(unsafe.encode()).decode().rstrip("=")
+            invalid_command = COMMAND.replace("_V1 ", "_V2 ") + " task=" + token
+            with self.subTest(control=ord(control)), patch.object(wake, "browser") as mock_browser:
+                with self.assertRaisesRegex(RuntimeError, "Invalid DEV wake task instruction"):
+                    wake.submit_once(invalid_command, WORKER, self.root)
+                mock_browser.assert_not_called()
+
+    def test_native_wake_prompt_encodes_multiline_unicode_as_safe_ascii(self):
+        raw_task = "AI CORE \u2014 CONTINUE_JOB\r\ncheckpointId: cp-7\n\tstepId: step-8"
+        message = wake._wake_message(EVENT, CHALLENGE, raw_task)
+        self.assertTrue(message.isascii())
+        self.assertNotIn("\n", message)
+        self.assertNotIn("\r", message)
+        self.assertIn(r"\u2014", message)
+        self.assertIn(r"\n", message)
+        self.assertEqual(message.count("[AI_CORE_WAKE:" + EVENT + "]"), 1)
+        self.assertEqual(message.count("[AI_CORE_ATTEST:" + CHALLENGE + "]"), 1)
+        self.assertEqual(message.count("[AI_CORE_ATTEST_ACK:" + CHALLENGE + "]"), 1)
+        self.assertLessEqual(len(message), 4096)
+        self.assertIn(raw_task, __import__("json").loads(message[message.index('"') : message.index('"', message.index('"') + 1) + 1]))
+
     def test_wrong_target_worker_or_shell_suffix_never_touch_browser(self):
         with patch.object(wake, "browser") as browser:
             for command, worker in [
@@ -348,14 +380,14 @@ class DellBindingTests(WakeTestCase):
 
     def test_canonical_cross_language_fingerprint_and_challenge_vectors(self):
         fingerprint = self.wake.binding_fingerprint(self.binding)
-        self.assertEqual(fingerprint, "4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1")
+        self.assertEqual(fingerprint, "2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3")
         metadata = self.metadata()
         self.assertEqual(self.wake.assistant_challenge(metadata, fingerprint),
-                         "2a4c9bcdf77cb321930750a835f29cd065d70c1ea8b20f8a4c302853b6267a2a")
+                         "668e37e7ea50f4a3fdc13b73def177651bb3b8ca12364eeb48b41a1c8e190438")
         metadata.update(watchCommandId="55555555-5555-4555-8555-555555555555",
                         jobId="66666666-6666-4666-8666-666666666666", checkpointRevision=7)
         self.assertEqual(self.wake.assistant_challenge(metadata, fingerprint),
-                         "79960f0819bca525e9f2930fc13b4c94b538c06fc0860686b4d051f84d53feec")
+                         "34fbd3af6b9f7c4dc213a8566082e0e5df4fcc8c87f1474877f98d2276e3cc53")
         del metadata["jobId"]
         with self.assertRaisesRegex(RuntimeError, "challenge context"):
             self.wake.assistant_challenge(metadata, fingerprint)
@@ -659,7 +691,7 @@ class HelperLeaseEntrypointTests(unittest.TestCase):
              patch.object(wake.os, "_exit", side_effect=exit_after_flush):
             wake.main()
         initialize.assert_called_once_with(input_stream.buffer)
-        submit.assert_called_once_with("fixture", DELL, metadata=payload["metadata"], lease_guard=guard)
+        submit.assert_called_once_with("fixture", DELL, metadata=payload["metadata"], lease_guard=guard, command_id=None)
         self.assertEqual(guard.authorize.call_count, 2)
         self.assertEqual(exits, [(0, {"ok": True, "synthetic": True})])
         guard.job.close.assert_not_called()
@@ -672,6 +704,29 @@ class HelperLeaseEntrypointTests(unittest.TestCase):
                 wake.submit_once(COMMAND, WORKER, lease_guard=guard)
         config.assert_not_called()
         browser.assert_not_called()
+
+
+class CheckpointPromptTests(unittest.TestCase):
+    def test_binds_ids_and_keeps_ack_token_inside_json(self):
+        text = wake._wake_message(
+            EVENT, CHALLENGE,
+            'Return {"kind":"SOP_CHECKPOINT","status":"PAUSED"}',
+            "11111111-1111-4111-8111-111111111111", "ai-task:110:1:regression20261028",
+        )
+        self.assertIn("11111111-1111-4111-8111-111111111111", text)
+        self.assertIn("ai-task:110:1:regression20261028", text)
+        self.assertIn("attestationAck", text)
+        self.assertIn("tanpa Markdown", text)
+        self.assertEqual(text.count("[AI_CORE_WAKE:" + EVENT + "]"), 1)
+        self.assertEqual(text.count("[AI_CORE_ATTEST:" + CHALLENGE + "]"), 1)
+        self.assertEqual(text.count("[AI_CORE_ATTEST_ACK:" + CHALLENGE + "]"), 1)
+        self.assertLessEqual(len(text), 4096)
+        self.assertTrue(all(32 <= ord(c) <= 126 for c in text))
+
+    def test_normal_wake_remains_unmodified(self):
+        text = wake._wake_message(EVENT, CHALLENGE, "hello")
+        self.assertNotIn("attestationAck", text)
+        self.assertIn("AI_CORE_ATTEST_ACK", text)
 
 
 if __name__ == "__main__":

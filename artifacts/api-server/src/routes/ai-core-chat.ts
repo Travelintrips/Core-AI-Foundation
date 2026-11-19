@@ -1,3 +1,5 @@
+import { renderAiCoreBlockerSop } from "../services/aiCoreOperationalSop.js";
+import { readHandshakeSopSettings } from "../services/handshakeSopSettingsService.js";
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
@@ -1304,19 +1306,12 @@ async function openAiFirstReadOnlyIntent(
   // An explicitly requested blocker-recovery SOP is deterministic operational guidance,
   // not an LLM classification. Never use this shortcut for arbitrary prompts.
   if (/^\/sop[ \t]+blocker(?:[ \t]+(?:resource-first|human-last))?[.!?]?[ \t]*$/i.test(trimmed)) {
+    const configured = await readHandshakeSopSettings();
     return {
       kind: "answer", route: "DETERMINISTIC_BLOCKER_SOP", provider: null, model: null,
       workload: "REVIEW", costClass: "ZERO",
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, estimatedCostUsd: 0,
-      reply: [
-        "Resource-First, Human-Last — SOP pemulihan blocker:",
-        "1. Catat blocker, correlation ID, resource yang gagal, dan dampaknya.",
-        "2. Gunakan jalur resmi yang tersedia: GitHub, AI Core, OpenClaw atau Desktop Commander pada perangkat terotorisasi.",
-        "3. Pulihkan koneksi dengan retry terbatas dan backoff; jangan melewati autentikasi atau pembatasan keamanan.",
-        "4. Verifikasi hasil tindakan melalui sumber status resmi, callback, dan ACK terautentikasi; jangan klaim PASS sebelum bukti lengkap.",
-        "5. Eskalasi hanya bila perlu persetujuan keamanan, operasi destruktif, perubahan PROD berisiko, atau semua jalur sah gagal.",
-        "SOP ini hanya respons baca-saja; tidak membuat job, tidak membuktikan delivery ke sesi ChatGPT, dan tidak memberikan persetujuan baru.",
-      ].join("\n"),
+      reply: renderAiCoreBlockerSop(configured.operationalSop),
     };
   }
   if (!trimmed || /^\/(?:status|model|routing|help)\b/i.test(trimmed)) return null;
@@ -2555,12 +2550,38 @@ async function startAgentTask(input: z.infer<typeof ChatRequest>): Promise<Recor
   };
 }
 
+// DEV-only deterministic /job lane; never uses cloud intent classification.
+function parseInternalDevJob(message: string): ChatGptWakeCommand | null {
+  if (!/^\/job(?:\s|$)/i.test(message.trim())) return null;
+  if (!isDevInternalOnly()) return null;
+  const lines = message.trim().split(/\r?\n/);
+  if (lines[0]?.trim().toLowerCase() !== "/job") return null;
+  const fields = new Map<string, string>();
+  const allowed = new Set(["environment", "target", "mode"]);
+  let index = 1;
+  for (; index < lines.length; index++) {
+    const line = lines[index]!.trim();
+    if (!line) continue;
+    const match = /^(Environment|Target|Mode):\s*(.+)$/i.exec(line);
+    if (!match) break;
+    const key = match[1]!.toLowerCase();
+    if (!allowed.has(key) || fields.has(key)) return null;
+    fields.set(key, match[2]!.trim().toUpperCase());
+  }
+  if (fields.size !== 3 || fields.get("environment") !== "DEV" ||
+      fields.get("mode") !== "TEST_ONLY" || !/^GPT[0-9]{2,4}$/.test(fields.get("target") ?? "")) return null;
+  const instruction = lines.slice(index).join("\n").trim();
+  if (!instruction || instruction.length > 2000 || /[\u0000-\u0008\u000b-\u001f\u007f]/.test(instruction)) return null;
+  return { accountAlias: fields.get("target")!, jobAlias: null, instruction };
+}
+
 async function startSimpleChatGptWake(
   command: ChatGptWakeCommand,
   requestHost?: string,
   expectedOwnerChannel?: string,
+  expectedWorkerId?: string,
 ): Promise<Record<string, unknown>> {
-  const target = await resolveVerifiedDevWakeTarget(command.accountAlias, requestHost, expectedOwnerChannel);
+  const target = await resolveVerifiedDevWakeTarget(command.accountAlias, requestHost, expectedOwnerChannel, expectedWorkerId);
   const eventId = randomBytes(32).toString("hex");
   const jobLabel = command.jobAlias ?? "JOB";
   const correlationId =
@@ -2632,6 +2653,9 @@ async function startExternalAgentWork(
       ...(input.branch ? { branch: input.branch } : {}),
       ...(openClawExecutionProfile ? { openClawExecutionProfile } : {}),
       source: input.source,
+      ...(clientId === "openclaw-dell-chatgpt-wake-dev"
+        ? { explicitWorkerTarget: true, preferredClientId: clientId }
+        : {}),
       ...(clientId === OPENCLAW_AGENT_CLIENT_ID && /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.test(input.message)
         ? { openClawExecutionProfile: "monitor-direct", directOperation: /\bmonitor-direct\s+(ai-core-health|github-repository|hostinger-deployment)\b/i.exec(input.message)![1]!.toLowerCase() }
         : {}),
@@ -3828,6 +3852,10 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
     return;
   }
 
+  if (/^\/job(?:\s|$)/i.test(parsed.data.message.trim()) && !parseInternalDevJob(parsed.data.message)) {
+    res.status(400).json({ error: "INVALID_DEV_JOB_COMMAND" });
+    return;
+  }
   if (parsed.data.mode === "agent") {
     res.status(400).json({
       error: "Streaming endpoint supports Ask/Auto only; Agent Mode uses the control-plane endpoint.",
@@ -3848,11 +3876,13 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
 
   try {
     const simpleWakeCommand = !parsed.data.image
-      ? parseChatGptWakeCommand(parsed.data.message)
+      ? (parseInternalDevJob(parsed.data.message) ?? parseChatGptWakeCommand(parsed.data.message))
       : null;
     if (simpleWakeCommand) {
       writeBufferedChatStream(res, await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
-          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined));
+          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined,
+          parsed.data.message.trim().startsWith("/job") && simpleWakeCommand.accountAlias === "GPT02"
+            ? "openclaw-dell-chatgpt-wake-dev" : undefined));
       return;
     }
 
@@ -3987,9 +4017,13 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
   }
 
   const simpleWakeCommand = !parsed.data.image
-    ? parseChatGptWakeCommand(parsed.data.message)
+    ? (parseInternalDevJob(parsed.data.message) ?? parseChatGptWakeCommand(parsed.data.message))
     : null;
 
+  if (/^\/job(?:\s|$)/i.test(parsed.data.message.trim()) && !simpleWakeCommand) {
+    res.status(400).json({ error: "INVALID_DEV_JOB_COMMAND" });
+    return;
+  }
   // Refuse source-changing coding at the chat boundary in every mode,
   // rather than returning the ambiguous internal NO_WORKER routing lane.
 
@@ -4091,10 +4125,19 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
       !parsed.data.image
         ? (parseOpenClawPcCodingRequest(rawInput.message) ?? parseDirectOpenClawPcCommand(rawInput.message))
         : null;
+    // Explicit DELL commands take precedence over ChatGPT account aliases.
+    // A pinned worker is fail-closed: never substitute a legacy account or PC.
+    const explicitDellWorker = parsed.data.mode === "agent" &&
+      rawInput.message.trim().startsWith("@") &&
+      /\bopenclaw-dell-chatgpt-wake-dev\b/i.test(rawInput.message);
     const result =
-      simpleWakeCommand
+      explicitDellWorker
+        ? await startExternalAgentWork(effectiveInput, "openclaw-dell-chatgpt-wake-dev")
+        : simpleWakeCommand
         ? await startSimpleChatGptWake(simpleWakeCommand, req.hostname,
-          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined)
+          parsed.data.conversationId?.startsWith("ai-engine-oauth:") ? parsed.data.conversationId : undefined,
+          parsed.data.message.trim().startsWith("/job") && simpleWakeCommand.accountAlias === "GPT02"
+            ? "openclaw-dell-chatgpt-wake-dev" : undefined)
         : directAccountReset
         ? {
             kind: "external_agent_binding",

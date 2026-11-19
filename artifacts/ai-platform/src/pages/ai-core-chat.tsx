@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { apiEventStream, apiFetch } from "@/lib/apiFetch";
 import { formatAiCoreInboxForChat } from "@/lib/aiCoreChatResultSummary";
+import { externalJobStatusLabel, externalWorkRouteLabel, isExternalJobTerminal, type ExternalJobStatus } from "@/lib/aiCoreExternalWorkState";
 import { useToast } from "@/hooks/use-toast";
 import {
   PWA_APP_INSTALLED_EVENT,
@@ -63,6 +64,9 @@ type ChatMessage = {
     estimatedCostUsd?: number | null;
     taskNumber?: string;
     workspaceUrl?: string;
+    commandId?: string;
+    responseId?: string;
+    jobStatus?: ExternalJobStatus;
   };
 };
 
@@ -368,6 +372,8 @@ function routeLabel(route?: string | null): string {
   if (route === "CLOUD_FALLBACK") return "Cloud fallback";
   if (route === "CONTROL_PLANE") return "Control plane";
   if (route === "REMOTE_OLLAMA_POWERSHELL") return "Read-only worker";
+  const externalLabel = externalWorkRouteLabel(route);
+  if (externalLabel) return externalLabel;
   return route || "AI Core";
 }
 
@@ -1403,6 +1409,7 @@ export default function AiCoreChat() {
 
   function watchExternalWork(commandId: string, assistantId: string) {
     let attempts = 0;
+    let lastStatus: ExternalJobStatus | null = null;
     const maxAttempts = 150;
 
     const poll = async () => {
@@ -1411,12 +1418,19 @@ export default function AiCoreChat() {
         const state = await apiFetch<ExternalWorkState>(
           "/api/ai/core-chat/external-work/" + encodeURIComponent(commandId),
         );
-        const terminal =
-          state.callbackProcessingState === "COMPLETED" ||
-          state.callbackProcessingState === "FAILED";
+        const status = state.callbackProcessingState;
+        const terminal = isExternalJobTerminal(status);
+        if (status !== lastStatus) {
+          lastStatus = status;
+          updateMessage(assistantId, (message) => ({
+            ...message,
+            meta: { ...message.meta, commandId, jobStatus: status },
+          }));
+        }
 
         if (terminal && state.latestResponse) {
           const resultText = cleanExternalReply(state.latestResponse.message || "");
+          const responseId = state.latestResponse.id;
           updateMessage(assistantId, (message) => ({
             ...message,
             text:
@@ -1427,7 +1441,9 @@ export default function AiCoreChat() {
             error: state.callbackProcessingState === "FAILED",
             meta: {
               ...message.meta,
-              route: "CHATGPT_DEV_WAKE",
+              commandId,
+              jobStatus: status,
+              responseId,
             },
           }));
           return;
@@ -1436,7 +1452,13 @@ export default function AiCoreChat() {
         // Keep polling transient read failures; the original routing ACK remains visible.
       }
 
-      if (attempts >= maxAttempts) return;
+      if (attempts >= maxAttempts) {
+        updateMessage(assistantId, (message) => ({
+          ...message,
+          meta: { ...message.meta, commandId, jobStatus: "UNKNOWN" },
+        }));
+        return;
+      }
       const timer = window.setTimeout(() => {
         externalPollTimersRef.current.delete(timer);
         void poll();
@@ -1646,7 +1668,17 @@ export default function AiCoreChat() {
                 setProgress(null);
               }
               if (typeof value.commandId === "string" && value.commandId) {
-                watchExternalWork(value.commandId, assistantId);
+                const commandId = value.commandId;
+                updateMessage(assistantId, (message) => ({
+                  ...message,
+                  meta: {
+                    ...message.meta,
+                    route: message.meta?.route === "STREAMING" ? "EXTERNAL_AGENT" : message.meta?.route,
+                    commandId,
+                    jobStatus: "QUEUED",
+                  },
+                }));
+                watchExternalWork(commandId, assistantId);
               }
             }
           },
@@ -1705,8 +1737,9 @@ export default function AiCoreChat() {
       });
 
       const spokenReply = response.reply;
+      const assistantId = messageId();
       append({
-        id: messageId(),
+        id: assistantId,
         role: "assistant",
         text: spokenReply + (response.warning ? "\n\nCatatan: " + response.warning : ""),
         createdAt: new Date().toISOString(),
@@ -1721,8 +1754,10 @@ export default function AiCoreChat() {
           estimatedCostUsd: response.estimatedCostUsd,
           ...(response.taskNumber ? { taskNumber: response.taskNumber } : {}),
           ...(response.workspaceUrl ? { workspaceUrl: response.workspaceUrl } : {}),
+          ...(response.commandId ? { commandId: response.commandId, jobStatus: "QUEUED" as const } : {}),
         },
       });
+      if (response.commandId) watchExternalWork(response.commandId, assistantId);
 
       speakReply(spokenReply, () => {
         if (handsFreeRef.current) {
@@ -2053,6 +2088,17 @@ export default function AiCoreChat() {
                               Buka Workspace <ExternalLink className="size-2.5" />
                             </span>
                           </Link>
+                        )}
+                      </div>
+                    )}
+                    {message.role === "assistant" && message.meta?.commandId && (
+                      <div className="mt-2 rounded-lg px-2.5 py-2 text-[11px] border space-y-1" style={{ borderColor: "#263765", background: "#0C152A", color: "#A4B7D6" }}>
+                        <div className="font-medium" aria-label="Status perintah AI Task">
+                          Job: {externalJobStatusLabel(message.meta.jobStatus ?? "QUEUED")}
+                        </div>
+                        <div className="break-all font-mono" title={message.meta.commandId}>Command ID: {message.meta.commandId}</div>
+                        {message.meta.responseId && (
+                          <div className="break-all font-mono" title={message.meta.responseId}>Callback ID: {message.meta.responseId}</div>
                         )}
                       </div>
                     )}

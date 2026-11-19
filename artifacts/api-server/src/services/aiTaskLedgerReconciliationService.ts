@@ -8,9 +8,12 @@ import { and, desc, gte, inArray } from "drizzle-orm";
 import {
   aiCodingTasksTable,
   aiCodingWorkstreamsTable,
+  aiCodingBridgeCommandsTable,
+  aiCodingBridgeResponsesTable,
   db,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { verifyMcpHandshakeEvidenceRow } from "./localCodingControlBridgeService.js";
 import {
   ledgerBridgeEnabled,
   mirrorAiTaskLedgerSourceState,
@@ -22,8 +25,9 @@ const MAX_PARALLEL = 2;
 const LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 15 * 60 * 1000;
 const RECONCILABLE_WORKSTREAM_STATUSES = ["COMPLETED", "FAILED", "REVIEW_REQUIRED"] as const;
+const OBSERVABLE_BRIDGE_COMMAND_STATUSES = ["RECEIVED", "PROCESSING", "COMPLETED", "FAILED"] as const;
 
-type TerminalLedgerSourceKind = "coding-task" | "coding-workstream";
+type TerminalLedgerSourceKind = "coding-task" | "coding-workstream" | "bridge-command";
 
 export interface TerminalLedgerSourceRow {
   id: string;
@@ -33,6 +37,7 @@ export interface TerminalLedgerSourceRow {
   createdAt: Date;
   updatedAt: Date;
   sourceKind?: TerminalLedgerSourceKind;
+  timeline?: import("./aiTaskLedgerBridgeService.js").AiTaskLedgerJobInput["timeline"];
   sessionId?: string | null;
 }
 
@@ -45,6 +50,7 @@ type ReconciliationDependencies = {
   load?: Load;
   loadTasks?: Load;
   loadWorkstreams?: Load;
+  loadBridgeCommands?: Load;
   publish?: Publish;
 };
 
@@ -98,6 +104,114 @@ async function loadTerminalWorkstreams(
   }));
 }
 
+async function loadTerminalBridgeCommands(
+  offset: number,
+  since: Date,
+): Promise<TerminalLedgerSourceRow[]> {
+  const rows = await db.select({
+    id: aiCodingBridgeCommandsTable.id,
+    status: aiCodingBridgeCommandsTable.status,
+    source: aiCodingBridgeCommandsTable.source,
+    commandType: aiCodingBridgeCommandsTable.commandType,
+    receivedAt: aiCodingBridgeCommandsTable.receivedAt,
+    metadataJson: aiCodingBridgeCommandsTable.metadataJson,
+    createdAt: aiCodingBridgeCommandsTable.createdAt,
+    updatedAt: aiCodingBridgeCommandsTable.updatedAt,
+  })
+    .from(aiCodingBridgeCommandsTable)
+    .where(and(
+      inArray(aiCodingBridgeCommandsTable.status, [...OBSERVABLE_BRIDGE_COMMAND_STATUSES]),
+      gte(aiCodingBridgeCommandsTable.createdAt, since),
+    ))
+    .orderBy(desc(aiCodingBridgeCommandsTable.createdAt), desc(aiCodingBridgeCommandsTable.id))
+    .limit(PAGE_SIZE)
+    .offset(offset);
+  const responses = rows.length ? await db.select({
+    id: aiCodingBridgeResponsesTable.id,
+    commandId: aiCodingBridgeResponsesTable.commandId,
+    kind: aiCodingBridgeResponsesTable.kind,
+    acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
+    metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    createdAt: aiCodingBridgeResponsesTable.createdAt,
+  }).from(aiCodingBridgeResponsesTable)
+    .where(inArray(aiCodingBridgeResponsesTable.commandId, rows.map(row => row.id)))
+    .limit(400) : [];
+  const observed = new Map<string, Set<string>>();
+  const responsesById = new Map(responses.map(response => [response.id, response]));
+  for (const response of responses) {
+    const kinds = observed.get(response.commandId) ?? new Set<string>();
+    kinds.add(response.kind);
+    observed.set(response.commandId, kinds);
+  }
+  return rows.map((row) => {
+    const metadata = row.metadataJson && typeof row.metadataJson === "object" &&
+      !Array.isArray(row.metadataJson)
+      ? row.metadataJson as Record<string, unknown> : {};
+    // This is an MCP delivery receipt only. It does not verify browser or E2E success.
+    // Require the exact response ID, durable acknowledgement, owner channel and
+    // a completed command before exposing this evidence to AI Task.
+    const linked = typeof metadata["mcpAckResponseId"] === "string"
+      ? responsesById.get(metadata["mcpAckResponseId"]) : undefined;
+    const mcpReceiptPersisted = row.status === "COMPLETED" &&
+      linked?.commandId === row.id && linked.acknowledgedAt instanceof Date &&
+      metadata["e2eCode"] === "MCP_ACK_VERIFIED" &&
+      metadata["deliveryCode"] === "DELIVERY_CONFIRMED" &&
+      typeof metadata["conversationId"] === "string" &&
+      metadata["conversationId"] === metadata["mcpAckConversationId"];
+    const verifiedFinalHandshake = Boolean(
+      mcpReceiptPersisted &&
+      row.source === "ai-core" &&
+      row.commandType === "EXTERNAL_AGENT_WORK" &&
+      typeof metadata["conversationId"] === "string" &&
+      linked &&
+      verifyMcpHandshakeEvidenceRow(metadata["conversationId"] as string, {
+        commandId: row.id,
+        commandReceivedAt: row.receivedAt,
+        commandMetadata: metadata,
+        responseId: linked.id,
+        responseMetadata: linked.metadataJson,
+        responseCreatedAt: linked.createdAt,
+        acknowledgedAt: linked.acknowledgedAt,
+      })
+    );
+    const value = metadata["operationalSop"];
+    const sop = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown> : {};
+    const sopSnapshot = typeof sop["version"] === "string" &&
+      typeof sop["title"] === "string" && Array.isArray(sop["steps"])
+      ? {
+          version: sop["version"].slice(0, 120),
+          title: sop["title"].slice(0, 300),
+          steps: sop["steps"].filter((s): s is string =>
+            typeof s === "string" && s.length <= 1500).slice(0, 5),
+        }
+      : undefined;
+    return {
+      id: row.id, status: row.status, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      taskNumber: row.id.slice(0, 8),
+      sourceKind: "bridge-command" as const,
+      timeline: {
+        commandId: row.id,
+        ackReceived: observed.get(row.id)?.has("ACK") === true,
+        callbackObserved: observed.get(row.id)?.has("COMPLETED") === true || observed.get(row.id)?.has("FAILED") === true,
+        ...(mcpReceiptPersisted ? {
+          mcpReceiptPersisted: true,
+          mcpAckAt: linked?.acknowledgedAt?.toISOString(),
+        } : {}),
+        ...(verifiedFinalHandshake && linked?.acknowledgedAt instanceof Date ? {
+          finalE2eVerified: true as const,
+          finalE2eVerifiedAt: linked.acknowledgedAt.toISOString(),
+          finalE2eMethod: "AI_CORE_VERIFIED_MCP_HANDSHAKE_V1" as const,
+        } : {}),
+        ...(typeof metadata["jobId"] === "string" ? { jobId: metadata["jobId"].slice(0, 200) } : {}),
+        ...(typeof metadata["correlationId"] === "string" ? { correlationId: metadata["correlationId"].slice(0, 200) } : {}),
+        ...(typeof metadata["assignedClientId"] === "string" ? { workerId: metadata["assignedClientId"].slice(0, 200) } : {}),
+        ...(sopSnapshot ? { sopSnapshot } : {}),
+      },
+    };
+  });
+}
+
 type RetryState = {
   signature: string;
   attempts: number;
@@ -111,11 +225,13 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
   const customLoad = deps.load;
   const loadTasks = deps.loadTasks ?? loadTerminalTasks;
   const loadWorkstreams = deps.loadWorkstreams ?? loadTerminalWorkstreams;
+  const loadBridgeCommands = deps.loadBridgeCommands ?? loadTerminalBridgeCommands;
   const publish = deps.publish ?? mirrorAiTaskLedgerSourceState;
   const attempts = new Map<string, RetryState>();
   let pageOffset = 0;
   let taskPageOffset = 0;
   let workstreamPageOffset = 0;
+  let bridgeCommandPageOffset = 0;
   let running = false;
   let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -136,15 +252,17 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
         rows = await customLoad(pageOffset, since);
         pageOffset = rows.length < PAGE_SIZE ? 0 : pageOffset + PAGE_SIZE;
       } else {
-        const [tasks, workstreams] = await Promise.all([
+        const [tasks, workstreams, bridgeCommands] = await Promise.all([
           loadTasks(taskPageOffset, since),
           loadWorkstreams(workstreamPageOffset, since),
+          loadBridgeCommands(bridgeCommandPageOffset, since),
         ]);
         taskPageOffset = tasks.length < PAGE_SIZE ? 0 : taskPageOffset + PAGE_SIZE;
         workstreamPageOffset = workstreams.length < PAGE_SIZE
           ? 0
           : workstreamPageOffset + PAGE_SIZE;
-        rows = [...tasks, ...workstreams]
+        bridgeCommandPageOffset = bridgeCommands.length < PAGE_SIZE ? 0 : bridgeCommandPageOffset + PAGE_SIZE;
+        rows = [...tasks, ...workstreams, ...bridgeCommands]
           .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
       }
 
@@ -152,8 +270,12 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
       let acknowledged = 0;
       let pending = 0;
       const eligible = rows.filter((row) => {
-        const allowed = row.sourceKind === "coding-workstream"
-          ? RECONCILABLE_WORKSTREAM_STATUSES.includes(
+        const allowed = row.sourceKind === "bridge-command"
+          ? OBSERVABLE_BRIDGE_COMMAND_STATUSES.includes(
+            row.status as (typeof OBSERVABLE_BRIDGE_COMMAND_STATUSES)[number],
+          )
+          : row.sourceKind === "coding-workstream"
+            ? RECONCILABLE_WORKSTREAM_STATUSES.includes(
             row.status as (typeof RECONCILABLE_WORKSTREAM_STATUSES)[number],
           )
           : row.status === "COMPLETED" || row.status === "FAILED";
@@ -177,20 +299,23 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
           try {
             const receipt = await publish({
               externalId: sourceKind + ":" + row.id,
-              title: sourceKind === "coding-workstream"
-                ? "AI Core workstream " + row.taskNumber
-                : "AI Core coding task " + row.taskNumber,
+              title: sourceKind === "bridge-command"
+                ? "AI Core bridge command " + row.taskNumber
+                : sourceKind === "coding-workstream"
+                  ? "AI Core workstream " + row.taskNumber
+                  : "AI Core coding task " + row.taskNumber,
               ...(sourceKind === "coding-workstream" && row.sessionId
                 ? { sessionId: row.sessionId }
                 : {}),
               status: row.status,
+              ...(row.timeline ? { timeline: row.timeline } : {}),
               // Stable across retries and restarts; the receiver verifies
               // the canonical record before accepting any state transition.
               version: row.status === "REVIEW_REQUIRED" ? "review-required" : "terminal",
             });
             const terminal = row.status === "COMPLETED" || row.status === "FAILED";
             const settled = receipt.acknowledged === true ||
-              (!terminal && receipt.synced && receipt.observedStatus === row.status);
+              (!terminal && receipt.synced && (sourceKind === "bridge-command" || receipt.observedStatus === row.status));
             if (settled) {
               if (receipt.acknowledged === true) acknowledged += 1;
               attempts.set(key, {

@@ -1,8 +1,12 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { codingBridgeCommandSchema } from "./coding-bridge-command-schema.js";
-import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
+import { getCodingTaskCompletionEvidence } from "../services/codingTaskCompletionEvidence.js";
+import { getCodingCommandLifecycleEvidence } from "../services/codingCommandLifecycleEvidence.js";
+import { getDevCommandRecoveryReview } from "../services/jobLifecycleRecoveryReview.js";
+import { getNewAttemptIdentityPreview } from "../services/jobLifecycleNewAttemptIdentityPreview.js";
+import { acknowledgeCodingBridgeResponse, appendCodingBridgeResponse, getCodingBridgeAvailability, getCodingBridgeResponseAckReadback, listPendingCodingBridgeResponses, listPendingCodingBridgeResponsesForConversation, renewCodingBridgePresence, subscribeCodingBridgeConversation, submitCodingBridgeCommand, unsubscribeCodingBridgeConversation } from "../services/localCodingControlBridgeService.js";
 import {
   getCodingWhatsappConfigStatus,
 } from "../services/codingWhatsappNotificationService.js";
@@ -24,12 +28,130 @@ import {
   dispatchExternalAgentWork,
   ExternalAgentDispatchError,
   OPENCLAW_AGENT_CLIENT_ID,
+  OPENCLAW_VPS_CLIENT_ID,
 } from "../services/externalAgentDispatchService.js";
 import { queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../services/devChatGptWakeService.js";
 import { getExternalAgentRegistrySnapshot, getCstTeamPresenceOnlyWorkerReadback } from "../services/externalAgentRegistryService.js";
 import { isCstTeamDevMode, projectCstTeamReadiness } from "../lib/cstTeamReadinessProjection.js";
 const router=Router(); const Uuid=z.string().uuid();
 
+const AI_TASK_CHATGPT_CORRELATION = /^ai-task:([A-Za-z0-9_-]{1,100}):([1-9][0-9]*):([A-Za-z0-9_-]{8,80})$/;
+
+function parseAiTaskChatGptCorrelation(correlationId: string) {
+  const match = AI_TASK_CHATGPT_CORRELATION.exec(correlationId);
+  const taskId = match ? Number(match[2]) : Number.NaN;
+  if (!match || !Number.isSafeInteger(taskId) || taskId < 1) throw new Error("AI_TASK_EXECUTION_IDENTITY_INVALID");
+  return { companyId: match[1]!, taskId, externalId: `ai-task:${match[1]}:${taskId}` };
+}
+
+async function prepareAiTaskChatGptExecution(input: {
+  correlationId: string; instruction: string; accountAlias: string; workerId: string;
+}) {
+  const identity = parseAiTaskChatGptCorrelation(input.correlationId);
+  const idempotencyKey = "ai-task-chatgpt-dispatch:" + input.correlationId;
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  return db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${idempotencyKey}))`);
+    const source = await tx.execute(sql`
+      SELECT id, company_id, title
+      FROM public.ai_tasks
+      WHERE id=${identity.taskId} AND company_id=${identity.companyId}
+      LIMIT 1
+    `);
+    const task = source.rows?.[0] as Record<string, unknown> | undefined;
+    if (!task) throw new Error("AI_TASK_EXECUTION_SOURCE_NOT_FOUND");
+
+    const existing = await tx.execute(sql`
+      SELECT id,status,task_id,company_id,idempotency_key
+      FROM public.ai_execution_jobs
+      WHERE idempotency_key=${idempotencyKey}
+         OR (source='AI_TASK' AND external_id=${identity.externalId})
+      ORDER BY CASE WHEN idempotency_key=${idempotencyKey} THEN 0 ELSE 1 END
+      LIMIT 1
+      FOR UPDATE
+    `);
+    const current = existing.rows?.[0] as Record<string, unknown> | undefined;
+    if (current) {
+      if (Number(current["task_id"]) !== identity.taskId || current["company_id"] !== identity.companyId)
+        throw new Error("AI_TASK_EXECUTION_IDENTITY_MISMATCH");
+      const status = String(current["status"] ?? "");
+      if (["failed","completed","cancelled","blocked","review_required"].includes(status))
+        throw new Error("AI_TASK_EXECUTION_TERMINAL_REVIEW_REQUIRED");
+      if (current["idempotency_key"] !== idempotencyKey && status !== "prepared")
+        throw new Error("AI_TASK_EXECUTION_ACTIVE");
+      const refreshed = await tx.execute(sql`
+        UPDATE public.ai_execution_jobs
+        SET instruction=COALESCE(instruction,${input.instruction}),
+            assigned_client_id=${input.workerId}, worker_id=${input.workerId},
+            worker_type='chatgpt_browser',
+            status=CASE WHEN status='prepared' THEN 'received' ELSE status END,
+            metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
+              'environment','development','accountAlias',${input.accountAlias}::text,
+              'executionType','chatgpt_dispatch','productionAllowed',false,
+              'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}::text
+            ),
+            updated_at=NOW()
+        WHERE id=${String(current["id"])}::uuid
+        RETURNING id,status
+      `);
+      return { executionId: String(refreshed.rows[0]?.["id"]), created: false };
+    }
+
+    const inserted = await tx.execute(sql`
+      INSERT INTO public.ai_execution_jobs
+        (company_id,task_id,source,external_id,idempotency_key,title,instruction,
+         assigned_client_id,worker_id,worker_type,status,progress,metadata)
+      VALUES (
+        ${identity.companyId},${identity.taskId},'AI_TASK',${identity.externalId},${idempotencyKey},
+        ${String(task["title"] ?? "AI Task ChatGPT dispatch")},${input.instruction},
+        ${input.workerId},${input.workerId},'chatgpt_browser','received',0,
+        jsonb_build_object(
+          'environment','development','accountAlias',${input.accountAlias}::text,
+          'executionType','chatgpt_dispatch','productionAllowed',false,
+          'dispatchStarted',false,'dispatchCorrelationId',${input.correlationId}::text
+        )
+      )
+      RETURNING id
+    `);
+    const executionId = inserted.rows?.[0]?.["id"];
+    if (typeof executionId !== "string") throw new Error("AI_TASK_EXECUTION_CREATE_FAILED");
+    return { executionId, created: true };
+  });
+}
+
+async function markAiTaskChatGptExecutionDispatched(input: {
+  executionId: string; commandId: string; workerId: string; eventId: string; correlationId: string;
+}) {
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  const result = await db.execute(sql`
+    UPDATE public.ai_execution_jobs
+    SET command_id=${input.commandId}::uuid, assigned_client_id=${input.workerId},
+        worker_id=${input.workerId}, worker_type='chatgpt_browser', status='processing',
+        progress=10, started_at=COALESCE(started_at,NOW()),
+        metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
+          'dispatchStarted',true,'commandId',${input.commandId}::text,
+          'eventId',${input.eventId}::text,'dispatchCorrelationId',${input.correlationId}::text
+        ), updated_at=NOW()
+    WHERE id=${input.executionId}::uuid AND status IN ('prepared','received','processing')
+    RETURNING id
+  `);
+  if (!result.rows?.length) throw new Error("AI_TASK_EXECUTION_DISPATCH_BIND_FAILED");
+}
+
+async function markAiTaskChatGptExecutionDispatchFailed(executionId: string, error: unknown) {
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  const code = (error instanceof Error ? error.message : "DEV_CHATGPT_WAKE_UNAVAILABLE").slice(0, 500);
+  await db.execute(sql`
+    UPDATE public.ai_execution_jobs
+    SET status='failed', progress=100, error_message=${code}, completed_at=NOW(),
+        metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object('dispatchStarted',false,'dispatchFailed',true),
+        updated_at=NOW()
+    WHERE id=${executionId}::uuid AND command_id IS NULL AND status IN ('prepared','received')
+  `);
+}
 async function resolveAiTaskGptOwnerChannel(): Promise<string | undefined> {
   try {
     const { db } = await import("@workspace/db");
@@ -75,17 +197,127 @@ router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  if(!timeline){res.status(404).json({error:"COMMAND_NOT_FOUND"});return;}
  res.json(timeline);
 });
-router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{const p=codingBridgeCommandSchema.safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await submitCodingBridgeCommand(p.data);res.status(x.created?201:200).json(x);});
+/**
+ * DEV-only HTTP handshake entry point. Uses the durable coding bridge and
+ * OpenClaw worker queue directly; no MCP tool, OAuth pairing, or browser claim.
+ * Protected by the app's adminAuthWithExceptions middleware.
+ */
+/** DEV-only read-only handshake status. Pull/DB evidence never proves ChatGPT delivery. */
+router.get("/ai/coding/bridge/sop-handshake-test/:correlationId",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){res.status(403).json({error:"DEV_ONLY_HANDSHAKE_TEST"});return;}
+ const correlationId=Uuid.safeParse(req.params["correlationId"]);
+ if(!correlationId.success){res.status(400).json({error:"INVALID_CORRELATION_ID"});return;}
+ try{
+  const {db}=await import("@workspace/db");
+  const {sql}=await import("drizzle-orm");
+  const result=await db.execute(sql`
+    SELECT c.id AS command_id,c.status,c.metadata_json->>'jobId' AS job_id,
+      r.id AS response_id,r.kind,r.message,r.created_at,r.acknowledged_at
+    FROM ai_platform.ai_coding_bridge_commands c
+    LEFT JOIN ai_platform.ai_coding_bridge_responses r ON r.command_id=c.id
+    WHERE c.source='handshake-http' AND c.command_type='HANDSHAKE_CONTINUE'
+      AND c.external_command_id=${"handshake-continue:"+correlationId.data}
+      AND c.metadata_json->>'environment'='DEV'
+    ORDER BY r.created_at ASC LIMIT 30
+  `);
+  const rows=(result.rows??[]) as Array<Record<string,unknown>>;
+  if(!rows.length){res.status(404).json({error:"HANDSHAKE_NOT_FOUND"});return;}
+  const first=rows[0];
+  res.json({correlationId:correlationId.data,jobId:first?.["job_id"],
+    commandId:first?.["command_id"],status:first?.["status"],
+    callbackStored:rows.some(r=>r["kind"]==="COMPLETED"||r["kind"]==="FAILED"),
+    chatGptDeliveryVerified:false,
+    deliveryMode:"PULL_ONLY_UNTIL_VERIFIED_CONVERSATION_BINDING",
+    responses:rows.filter(r=>r["response_id"]!=null).map(r=>({id:r["response_id"],kind:r["kind"],message:r["message"],createdAt:r["created_at"],acknowledgedAt:r["acknowledged_at"]}))});
+ }catch{res.status(503).json({error:"HANDSHAKE_STATUS_UNAVAILABLE"});}
+});
+router.post("/ai/coding/bridge/sop-handshake-test",async(req,res):Promise<void>=>{
+ const host=req.hostname.toLowerCase();
+ if(host!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY_HANDSHAKE_TEST"});return;
+ }
+ const parsed=z.object({
+  correlationId:z.string().uuid(),
+  instruction:z.literal("HANDSHAKE_CONTINUE"),
+  jobId:z.string().trim().min(1).max(160),
+  nextStep:z.string().trim().min(1).max(4000),
+ }).strict().safeParse(req.body);
+ if(!parsed.success){res.status(400).json({error:"INVALID_HANDSHAKE_REQUEST"});return;}
+ const externalCommandId="handshake-continue:"+parsed.data.correlationId;
+ try{
+  const result=await submitCodingBridgeCommand({
+   externalCommandId,
+   instruction:"HANDSHAKE_CONTINUE jobId="+parsed.data.jobId+" correlationId="+parsed.data.correlationId+"; NEXT_STEP: "+parsed.data.nextStep+"; SOP Resource-First, Human-Last: Do not stop after one failed command. Diagnose root cause. Use all authorized recovery paths. Coordinate with AI Core and OpenClaw on authorized PCs/VPS. Do not repeat identical commands without a technical reason. Retest after each fix. Never claim PASS without verification evidence. Preserve job identity and action log for resumption. Report completion or critical blockers. Return actual results and evidence through the existing authenticated HTTP bridge.",
+   source:"handshake-http",
+   commandType:"HANDSHAKE_CONTINUE",
+   assignedClientId:OPENCLAW_VPS_CLIENT_ID,
+   metadata:{correlationId:parsed.data.correlationId,jobId:parsed.data.jobId,environment:"DEV",transport:"HTTP"},
+  });
+  res.status(result.created?202:200).json({
+   commandId:result.command.id,
+   externalCommandId,
+   jobId:parsed.data.jobId,
+   correlationId:parsed.data.correlationId,
+   status:result.created?"QUEUED":"ALREADY_QUEUED",
+   transport:"HTTP",
+   workerDispatched:false,
+   callbackVerified:false,
+   e2eVerified:false,
+   verificationStatus:"UNKNOWN_UNVERIFIED",
+  });
+ }catch{
+  res.status(503).json({error:"HANDSHAKE_QUEUE_UNAVAILABLE",correlationId:parsed.data.correlationId,e2eVerified:false});
+ }
+});
+router.post("/ai/coding/bridge/commands",async(req,res):Promise<void>=>{
+ const p=codingBridgeCommandSchema.safeParse(req.body);
+ if(!p.success){res.status(400).json({error:"INVALID_BRIDGE_COMMAND",details:p.error.flatten()});return;}
+ try {
+  const x=await submitCodingBridgeCommand(p.data);
+  res.status(x.created?201:200).json(x);
+ } catch(error) {
+  const requestId=String(req.headers["x-request-id"]??res.getHeader("X-Request-Id")??"unknown");
+  console.error("[coding-bridge] command submission failed",{
+   requestId,
+   source:p.data.source??"chatgpt",
+   externalCommandId:p.data.externalCommandId,
+   error:error instanceof Error?error.message:String(error),
+  });
+  const stage = error instanceof Error && "bridgeStage" in error && typeof error.bridgeStage === "string" ? error.bridgeStage : "UNKNOWN_STAGE";
+  res.status(500).json({error:"BRIDGE_COMMAND_SUBMISSION_FAILED",stage,requestId});
+ }
+});
 
 router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<void>=>{
  const p=z.object({
   accountAlias:z.string().regex(/^GPT[0-9]{2,4}$/),
+  targetWorkerId:z.enum(["openclaw-pchp-dev", "openclaw-dell-chatgpt-wake-dev"]).optional(),
   instruction:z.string().trim().min(1).max(2000),
   jobAlias:z.string().trim().regex(/^[A-Za-z0-9_-]{1,80}$/).optional(),
   correlationId:z.string().regex(/^ai-task:[A-Za-z0-9_-]{1,100}:[1-9][0-9]*:[A-Za-z0-9_-]{8,80}$/)
  }).strict().safeParse(req.body);
  if(!p.success){res.status(400).json({error:p.error.message});return;}
+ // GPT02 identity is bound exclusively to DELL, including AI Task bridge dispatch.
+ // A requested worker change must be explicitly rejected, never treated as a retry.
+ if(p.data.accountAlias==="GPT02" && p.data.targetWorkerId!==undefined &&
+    p.data.targetWorkerId!=="openclaw-dell-chatgpt-wake-dev"){
+  res.status(409).json({error:"GPT02_DELL_EXCLUSIVE_WORKER",executed:false});return;
+ }
  try{
+  if(p.data.accountAlias==="GPT02") {
+   // Legacy commands predate the unique index. Block a live parent even if
+   // its original event targeted another worker or its lease expired.
+   const {db}=await import("@workspace/db");
+   const {sql}=await import("drizzle-orm");
+   const existing=await db.execute(sql`
+    SELECT id FROM ai_platform.ai_coding_bridge_commands
+    WHERE metadata_json->>'correlationId'=${p.data.correlationId}
+      AND metadata_json->'wakeBinding'->>'accountAlias'='GPT02'
+      AND status IN ('RECEIVED','PENDING','QUEUED','PROCESSING')
+    LIMIT 1
+   `);
+   if(existing.rows?.length){res.status(409).json({error:"GPT02_PARENT_COMMAND_ACTIVE",executed:false});return;}
+  }
   const expectedOwnerChannel=p.data.accountAlias==="GPT01"
    ? await resolveAiTaskGptOwnerChannel()
    : undefined;
@@ -93,21 +325,47 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
    p.data.accountAlias,
    req.hostname,
    expectedOwnerChannel,
+   p.data.accountAlias==="GPT02"?"openclaw-dell-chatgpt-wake-dev":p.data.targetWorkerId,
   );
-  const eventId=randomBytes(32).toString("hex");
-  const queued=await queueDevBrowserWake({
-   ownerChannel:target.ownerChannel,
-   targetConversationId:target.targetConversationId,
-   eventId,
+  // Retries of one authenticated AI Task command must map to one wake event.
+  // Random event IDs would create duplicate worker commands after lost HTTP responses.
+  const eventId=createHash("sha256").update([
+   "ai-task-chatgpt-dispatch/v1",target.ownerChannel,target.targetConversationId,p.data.correlationId
+  ].join("|")).digest("hex");
+  const execution=await prepareAiTaskChatGptExecution({
    correlationId:p.data.correlationId,
    instruction:p.data.instruction,
-   jobAlias:p.data.jobAlias??null,
-   requestHost:req.hostname,
-   expectedWorkerId:target.workerId,
-   ...(target.wakeBinding?{expectedBindingFingerprint:target.wakeBinding.bindingFingerprint}:{})
+   accountAlias:p.data.accountAlias,
+   workerId:target.workerId,
+  });
+  let queued;
+  try {
+   queued=await queueDevBrowserWake({
+    ownerChannel:target.ownerChannel,
+    targetConversationId:target.targetConversationId,
+    eventId,
+    correlationId:p.data.correlationId,
+    executionJobId:execution.executionId,
+    instruction:p.data.instruction,
+    jobAlias:p.data.jobAlias??null,
+    requestHost:req.hostname,
+    expectedWorkerId:target.workerId,
+    ...(target.wakeBinding?{expectedBindingFingerprint:target.wakeBinding.bindingFingerprint}:{})
+   });
+  } catch (error) {
+   await markAiTaskChatGptExecutionDispatchFailed(execution.executionId,error).catch(()=>undefined);
+   throw error;
+  }
+  await markAiTaskChatGptExecutionDispatched({
+   executionId:execution.executionId,
+   commandId:queued.commandId,
+   workerId:queued.clientId,
+   eventId,
+   correlationId:p.data.correlationId,
   });
   res.status(queued.created?202:200).json({
    created:queued.created,
+   executionId:execution.executionId,
    commandId:queued.commandId,
    clientId:queued.clientId,
    eventId,
@@ -117,7 +375,8 @@ router.post("/ai/coding/bridge/ai-task-chatgpt-dispatch",async(req,res):Promise<
   });
  }catch(error){
   const code=error instanceof Error?error.message:"DEV_CHATGPT_WAKE_UNAVAILABLE";
-  res.status(code.includes("UNVERIFIED")||code.includes("DENIED")||code.includes("MISMATCH")?403:503).json({
+  res.status(code.includes("unique")||code.includes("duplicate")?409:
+   code.includes("UNVERIFIED")||code.includes("DENIED")||code.includes("MISMATCH")?403:503).json({
    error:code,
    executed:false
   });
@@ -142,6 +401,19 @@ router.post("/ai/coding/bridge/ai-task-dispatch",async(req,res):Promise<void>=>{
   metadata:z.record(z.string(),z.unknown()).optional()
  }).strict().safeParse(req.body);
  if(!p.success){res.status(400).json({error:p.error.message});return;}
+ // Fail closed: model-free PC workers only accept explicitly supported operations.
+ // Reasoning requires an independent, authorized AI Core orchestration job; never
+ // forward arbitrary natural language to the bounded worker or mark it completed.
+ const normalizedInstruction=p.data.instruction.trim().replace(/\s+/g," ").toLowerCase().replace(/[.!?]+$/g,"");
+ const target=p.data.preferredClientId??OPENCLAW_AGENT_CLIENT_ID;
+ const boundedPcInstructions=new Set(["ping","status"]);
+ const primaryHostnameInstructions=new Set(["hostname","read hostname","baca hostname","cek hostname","get hostname","hostname pc travelintrips","baca hostname pc travelintrips","cek hostname pc travelintrips","read hostname pc travelintrips","jalankan hostname pada pc travelintrips"]);
+ const isModelFreePc=[OPENCLAW_AGENT_CLIENT_ID,"openclaw-pc-worker-dev","openclaw-pc-worker","openclaw-pc-worker-2","openclaw-pc-worker-3"].includes(target);
+ if(isModelFreePc && !(boundedPcInstructions.has(normalizedInstruction) || (target==="openclaw-pc-worker" && primaryHostnameInstructions.has(normalizedInstruction)))){
+  console.info("AI_CORE_DEV_INSTRUCTION_CLASSIFICATION",JSON.stringify({clientId:target,classification:"reasoning_required",dispatched:false}));
+  res.status(422).json({error:"AI_CORE_REASONING_ROUTE_REQUIRED",classification:"reasoning_required",dispatched:false,executed:false,message:"Use the authorized AI Core orchestration path for reasoning tasks; bounded PC workers cannot process this instruction."});return;
+ }
+ console.info("AI_CORE_DEV_INSTRUCTION_CLASSIFICATION",JSON.stringify({clientId:target,classification:isModelFreePc?"bounded":"policy_routed",dispatched:true}));
  try{
   const x=await dispatchExternalAgentWork({
    clientId:p.data.preferredClientId??OPENCLAW_AGENT_CLIENT_ID,
@@ -169,6 +441,20 @@ router.post("/ai/coding/bridge/ai-task-dispatch",async(req,res):Promise<void>=>{
  }
 });
 router.get("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.coerce.number().int().min(1).max(100).optional().safeParse(req.query["limit"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const responses=await listPendingCodingBridgeResponses(p.data??50);res.json({responses,total:responses.length});});
+/** DEV-only authenticated GET by exact response ID; includes already-ACKed
+ * rows but neither changes ACK state nor exposes messages/metadata.
+ */
+router.get("/ai/coding/bridge/responses/:id/readback",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY_ACK_READBACK"});return;
+ }
+ const parsed=Uuid.safeParse(req.params["id"]);
+ if(!parsed.success){res.status(400).json({error:"INVALID_BRIDGE_RESPONSE_ID"});return;}
+ const row=await getCodingBridgeResponseAckReadback(parsed.data);
+ if(!row){res.status(404).json({error:"BRIDGE_RESPONSE_NOT_FOUND"});return;}
+ res.setHeader("Cache-Control","no-store");
+ res.json({source:"DEV_DB_RESPONSE_BY_ID",...row});
+});
 router.post("/ai/coding/bridge/responses/:id/ack",async(req,res):Promise<void>=>{const p=Uuid.safeParse(req.params["id"]);if(!p.success){res.status(400).json({error:p.error.message});return;}const x=await acknowledgeCodingBridgeResponse(p.data);if(!x){res.status(404).json({error:"Bridge response not found"});return;}res.json(x);});
 router.post("/ai/coding/bridge/responses",async(req,res):Promise<void>=>{const p=z.object({commandId:Uuid,taskId:Uuid.nullish(),kind:z.enum(["ACK","PROGRESS","CHECKPOINT","BLOCKER","COMPLETED","FAILED"]),message:z.string().min(1).max(50000),checkpoint:z.record(z.string(),z.unknown()).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.message});return;}res.status(201).json(await appendCodingBridgeResponse(p.data));});
 router.post("/ai/coding/bridge/presence/:clientId/heartbeat",async(req,res):Promise<void>=>{const p=z.object({clientId:z.string().min(1).max(200),source:z.string().min(1).max(50).optional(),leaseSeconds:z.number().int().min(30).max(300).optional(),metadata:z.record(z.string(),z.unknown()).optional()}).safeParse({...req.body,clientId:req.params["clientId"]});if(!p.success){res.status(400).json({error:p.error.message});return;}res.json(await renewCodingBridgePresence(p.data));});
@@ -222,6 +508,65 @@ router.post("/ai/coding/tasks/:id/autonomous/run-once",async(req,res):Promise<vo
  if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
  const cycle=await runAutonomousCodingCycle(id.data);
  res.json(cycle);
+});
+// Read-only candidate identity snapshot. Does not reserve/issue a command.
+router.get("/ai/coding/bridge/commands/:id/new-attempt-identity-preview",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY"});return;
+ }
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"INVALID_COMMAND_ID"});return;}
+ try{
+  const preview=await getNewAttemptIdentityPreview(id.data);
+  res.setHeader("Cache-Control","no-store");
+  if(preview.reason==="ORIGINAL_NOT_FOUND"){
+   res.status(404).json({error:"DEV_COMMAND_NOT_FOUND"});return;
+  }
+  res.json(preview);
+ }catch{
+  res.status(503).json({error:"IDENTITY_PREVIEW_UNAVAILABLE"});
+ }
+});
+// Read-only recovery review: no dispatch/resume/closure and no authorization grant.
+router.get("/ai/coding/bridge/commands/:id/recovery-review",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY"});return;
+ }
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"INVALID_COMMAND_ID"});return;}
+ try {
+  const review=await getDevCommandRecoveryReview(id.data);
+  res.setHeader("Cache-Control","no-store");
+  if(!review.found){res.status(404).json({error:"DEV_COMMAND_NOT_FOUND"});return;}
+  res.json(review);
+ }catch {
+  res.status(503).json({error:"RECOVERY_REVIEW_UNAVAILABLE"});
+ }
+});
+// DEV-only native GPT02 lifecycle readback, including commands with no task_id.
+// Governed by the existing admin middleware. No secret, raw reply, or signature returned.
+router.get("/ai/coding/bridge/commands/:id/lifecycle-evidence",async(req,res):Promise<void>=>{
+ if(req.hostname.toLowerCase()!=="dev.cstlogistic.co.id"){
+  res.status(403).json({error:"DEV_ONLY"});return;
+ }
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"INVALID_COMMAND_ID"});return;}
+ try{
+  const evidence=await getCodingCommandLifecycleEvidence(id.data);
+  res.setHeader("Cache-Control","no-store");
+  if(!evidence.found){res.status(404).json({error:"DEV_COMMAND_NOT_FOUND"});return;}
+  res.json(evidence);
+ }catch{
+  res.status(503).json({error:"COMMAND_LIFECYCLE_READBACK_UNAVAILABLE"});
+ }
+});
+// Read-only persisted worker evidence. This endpoint never authorizes WhatsApp.
+router.get("/ai/coding/tasks/:id/completion-evidence",async(req,res):Promise<void>=>{
+ const id=Uuid.safeParse(req.params["id"]);
+ if(!id.success){res.status(400).json({error:"Invalid task id"});return;}
+ const evidence=await getCodingTaskCompletionEvidence(id.data);
+ if(!evidence.found){res.status(404).json({error:"Task not found"});return;}
+ res.json(evidence);
 });
 router.get("/ai/coding/tasks/:id/autonomous",async(req,res):Promise<void>=>{
  const id=Uuid.safeParse(req.params["id"]);

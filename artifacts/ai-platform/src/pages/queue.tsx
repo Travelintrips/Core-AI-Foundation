@@ -773,7 +773,7 @@ export default function QueuePage() {
   };
 
   const { data: dispatcherStatus, isLoading: dispatcherLoading } = useGetDispatcherStatus({
-    query: { queryKey: getGetDispatcherStatusQueryKey(), refetchInterval: 3000 },
+    query: { queryKey: getGetDispatcherStatusQueryKey(), refetchInterval: false },
   });
 
   const startDispatcher = useStartDispatcher({
@@ -818,16 +818,16 @@ export default function QueuePage() {
   });
 
   const { data: stats, isLoading: statsLoading } = useGetJobStats({
-    query: { queryKey: getGetJobStatsQueryKey(), refetchInterval: 5000 },
+    query: { queryKey: getGetJobStatsQueryKey(), refetchInterval: false },
   });
 
   const { data: jobPage, isLoading: jobsLoading } = useListJobs(
     jobsQueryParams,
-    { query: { queryKey: getListJobsQueryKey(jobsQueryParams), refetchInterval: 5000 } },
+    { query: { queryKey: getListJobsQueryKey(jobsQueryParams), refetchInterval: false } },
   );
 
   const { data: workers = [], isLoading: workersLoading } = useListWorkers({
-    query: { queryKey: getListWorkersQueryKey(), refetchInterval: 8000 },
+    query: { queryKey: getListWorkersQueryKey(), refetchInterval: false },
   });
 
   const cancelJob = useCancelJob({
@@ -860,11 +860,11 @@ export default function QueuePage() {
 
   // ── Phase 5.2: Cluster hooks ───────────────────────────────────────────────
   const { data: clusterStatuses = [], isLoading: clusterLoading } = useGetClusterStatus({
-    query: { queryKey: getClusterStatusQueryKey(), refetchInterval: 5000 },
+    query: { queryKey: getClusterStatusQueryKey(), refetchInterval: false },
   });
 
   const { data: clusterWorkers = [], isLoading: clusterWorkersLoading } = useGetClusterWorkers({
-    query: { queryKey: getClusterWorkersQueryKey(), refetchInterval: 5000 },
+    query: { queryKey: getClusterWorkersQueryKey(), refetchInterval: false },
   });
 
   const rebalance = useRebalanceCluster({
@@ -907,6 +907,8 @@ export default function QueuePage() {
   const total = jobPage?.total ?? 0;
 
   function handleRefresh() {
+    queryClient.invalidateQueries({ queryKey: getGetDispatcherStatusQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListWorkersQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetJobStatsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getClusterStatusQueryKey() });

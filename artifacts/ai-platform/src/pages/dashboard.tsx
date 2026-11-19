@@ -4,6 +4,7 @@ import { Activity, Box, Database, FileText, GitMerge, Layers, Cpu, Code2 } from 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { format } from "date-fns";
 import { useLang } from "@/lib/i18n";
+import UnifiedJobMonitor from "@/components/UnifiedJobMonitor";
 
 export default function Dashboard() {
   const { t } = useLang();
@@ -18,6 +19,10 @@ export default function Dashboard() {
         <h1 className="text-3xl font-bold tracking-tight">{t("pages.dashboard.title")}</h1>
         <p className="text-muted-foreground mt-1">{t("pages.dashboard.subtitle")}</p>
       </div>
+
+      {(import.meta.env.DEV || (typeof window !== "undefined" && window.location.hostname.toLowerCase().startsWith("dev."))) && (
+        <UnifiedJobMonitor />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
         <StatCard title={t("pages.dashboard.stats.providers")} value={overview?.totalProviders} icon={Layers} loading={overviewLoading} />

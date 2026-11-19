@@ -26,7 +26,7 @@ Review outputs locally and redact tokens, session IDs and private paths before s
 3. Configure a verified command delivery route from AI Core to OpenClaw and validate with a harmless browser-open operation before allowing more actions.
 4. Preserve authentication/MFA for admin actions; use expiring trusted sessions to reduce repeat prompts rather than disabling access controls.
 5. Require explicit approval for PROD, secret access, irreversible deletion, privilege escalation, and external publication.
-6. OpenClaw may assist with browser and operations; it must **not** be instructed to write code for this project.
+6. OpenClaw may execute authorized coding work delegated through AI Core, including source changes and tests, under the Resource-First, Human-Last SOP. Preserve stable job identity, scoped worker authorization, branch protections, CI evidence, and critical-action approval gates. A handshake alone does not authorize production mutation.
 
 ## Acceptance criteria
 

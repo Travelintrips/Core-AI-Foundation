@@ -4,6 +4,16 @@ Version: 1.1 (2026-10-11). Owner: Boss. Scope: GitHub, AI Core Chat/MCP, OpenCla
 
 > **Normative operating procedure, not proof of deployment or end-to-end delivery.** Implementation and actual production acceptance must be evidenced separately. This document consolidates [authority audit](AI_CORE_CHATGPT_COMMAND_AUTHORITY_AUDIT.md), [autonomous protocol](ai-core-autonomous-job-protocol-v1.md), [handoff contract](issue-980-deploy-openclaw-handoff.md), [worker guide](../scripts/windows/OPENCLAW_PC_WORKER.md), and [repository rules](../AGENTS.md). Where an implementation differs, log the discrepancy; do not silently report it as enforced.
 
+## 0. HANDSHAKE_CONTINUE over HTTP (owner instruction, 2026-10-23)
+
+The owner requests a simple delegation, **not** an MCP handshake or a new transport framework. ChatGPT sends a continuation command to AI Core over an authenticated HTTP route; AI Core durably queues the existing job and complete Resource-First, Human-Last SOP for OpenClaw; OpenClaw executes, checkpoints and reports evidence through the authenticated HTTP bridge; ChatGPT reads the verified result when available. **Do not use MCP for this flow.**
+
+DEV entry point: `POST /api/ai/coding/bridge/sop-handshake-test` (legacy path name, command is `HANDSHAKE_CONTINUE`). Required JSON fields: `instruction: "HANDSHAKE_CONTINUE"`, `jobId` (existing stable job identity), `correlationId` (UUID), and `nextStep` (specific continuation instruction). Use the existing API admin authentication; DEV hostname is enforced. Repeat the same correlation ID for safe retries; do not invent a new job identity. The response gives the durable bridge `commandId` and queue state, **not** evidence of execution.
+
+The worker must follow this complete SOP: do not stop after a single failed command; identify the cause; use authorized recovery routes and AI Core/OpenClaw on available PCs/VPS; do not retry identical commands without reason; retest each fix; never report PASS without evidence; preserve job ID and action log across timeouts; report only completion or critical blockers. Keep actual worker results and evidence linked to the command. If a lease or prior execution exists, resolve ownership before running to prevent duplicate side effects.
+
+**Acceptance:** authenticated HTTP command persisted, matching worker claim and real execution output, verified result and retrievable status. A queue ACK is not a worker PASS; a worker PASS is not a verified ChatGPT callback. `E2E_VERIFIED` remains unavailable until the same-conversation return path is independently evidenced. Existing MCP text elsewhere in this historical SOP describes legacy integration only and is **not** authorization to use MCP for HANDSHAKE_CONTINUE.
+
 ## 1. Ownership and authorization
 
 | Intent | Authorized executor | Required handling |

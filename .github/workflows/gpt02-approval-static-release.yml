@@ -1,0 +1,36 @@
+name: GPT02 DEV approval static release guard
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/vps-dev/cst-vps-dev-release.py'
+      - 'scripts/vps/test_gpt02_approval_static_release.py'
+      - '.github/workflows/gpt02-approval-static-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-static-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify safe DEV approval UI carry-forward
+        run: |
+          python3 -m py_compile deploy/vps-dev/cst-vps-dev-release.py scripts/vps/test_gpt02_approval_static_release.py
+          python3 -m unittest discover -s scripts/vps -p 'test_gpt02_approval_static_release.py' -v
+      - name: Verify scope stays in DEV
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("deploy/vps-dev/cst-vps-dev-release.py").read_text()
+          assert 'APPROVAL_LOGIN_SOURCE = Path("/opt/ai-coding-standalone-dev/admin_login.html")' in s
+          assert 'copy_gpt02_approval_static(tempstatic)' in s
+          assert 'verify_gpt02_approval_https()' in s
+          assert 'tempstatic.rename(STATIC)' in s
+          assert 'PROD = "ai-core-prod-api"' in s
+          assert 'check_prod()' in s
+          print("PASS: DEV-only static approval UI preserved, PROD checks remain")
+          PY

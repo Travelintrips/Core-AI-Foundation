@@ -65,6 +65,14 @@ function hasValidAiCoreConnectorKey(req: Request): boolean {
   return isAllowedLocalMcpServiceToken(supplied);
 }
 
+function normalizedApiPath(req: Request): string {
+  const originalUrl = typeof req.originalUrl === "string" && req.originalUrl.length
+    ? req.originalUrl
+    : req.path;
+  const originalPath = originalUrl.split("?", 1)[0] ?? originalUrl;
+  return originalPath.startsWith("/api/") ? originalPath.slice(4) : originalPath;
+}
+
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   // Short-circuit: already authenticated (e.g. by optionalSessionAuth upstream)
   if ((req as unknown as Record<string, unknown>).internalUser) {
@@ -277,15 +285,21 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
-  // This exact DEV-only route authenticates OAuth and enforces owner/allowlist
-  // inside its handler. Never let the global admin API-key gate consume its
-  // Bearer OAuth token; do not relax any other admin-protected endpoint.
-  if (process.env["APP_ENV"] === "development" && req.method === "POST" && (
-      req.path === "/ai/dev/chatgpt-wake/jobs" ||
-      req.path === "/ai/core-chat/dev/accounts/stage" ||
-      req.path === "/ai/core-chat/dev/accounts/session/challenge" ||
-      req.path === "/ai/core-chat/dev/accounts/session/activate"
-    )) {
+  // DEV-only worker routes own their authentication at route level.
+  // The ChatGPT session registration routes require a DB-backed scoped agent
+  // token with agent:work and bind that credential to the exact workerId.
+  // Skip only the global admin-key guard so it does not consume the worker
+  // Bearer token before requireAgentServiceScope() can validate it.
+  const mountedPath = req.path;
+  const normalizedPath = normalizedApiPath(req);
+  const devScopedWorkerRoutes = new Set([
+    "/ai/dev/chatgpt-wake/jobs",
+    "/ai/core-chat/dev/accounts/stage",
+    "/ai/core-chat/dev/accounts/session/challenge",
+    "/ai/core-chat/dev/accounts/session/activate",
+  ]);
+  if (process.env["APP_ENV"] === "development" && req.method === "POST" &&
+      (devScopedWorkerRoutes.has(mountedPath) || devScopedWorkerRoutes.has(normalizedPath))) {
     next();
     return;
   }
@@ -311,7 +325,7 @@ export function adminAuthWithExceptions(req: Request, res: Response, next: NextF
       process.env["APP_ENV"] === "development" &&
       !(req as Request & { internalUser?: unknown }).internalUser &&
       !req.headers["authorization"] && !req.headers["x-admin-key"] && !req.headers["x-admin-api-key"]) {
-    res.redirect(302, "/api/dev-center/login");
+    res.redirect(302, "/login");
     return;
   }
   adminAuth(req, res, next);

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { aiAgentServiceTokensTable, db } from "@workspace/db";
 import { requireAuth, requireInternalRole } from "../middleware/internalAuth.js";
 import { hashAgentServiceToken } from "../middleware/agentServiceAuth.js";
@@ -9,12 +9,14 @@ import { getProviderApiKey } from "../services/aiSecretService.js";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { logger } from "../lib/logger.js";
 import { ExternalAgentRegistryError, getExternalAgentRegistrySnapshot, heartbeatExternalAgent } from "../services/externalAgentRegistryService.js";
-import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim, getCodingBridgeCommandExecutionState } from "../services/localCodingControlBridgeService.js";
+import { claimCodingBridgeCommand, completeCodingBridgeCommand, renewCodingBridgeCommandClaim, recordClaimedCodingBridgeProgress, getCodingBridgeCommandExecutionState } from "../services/localCodingControlBridgeService.js";
 import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionService.js";
 import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
+import { acknowledgeNativeCheckpoint, readNativeCheckpointAck } from "../services/nativeCheckpointAckService.js";
 import { getExternalAgentRule } from "../services/externalAgentRegistryService.js";
 import { subscribeExternalAgentWork } from "../services/externalAgentWorkEventService.js";
+import { DEV_DELL_WAKE_CLIENT_ID, listDevDellQueuedWakeCommandIds } from "../services/gpt02DevQueuedWakeService.js";
 
 const router = Router();
 
@@ -31,7 +33,7 @@ function requireSameOrigin(req: import("express").Request, res: import("express"
 }
 const credentialAdmin = [requireAuth, requireInternalRole("owner", "admin")];
 const CredentialCreate = z.object({
-  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-travelintrips-dev|openclaw-pc-worker-dell-(?:browser|recovery|verifier)|openclaw-vps-dev-consumer|openclaw-dell-chatgpt-wake-dev)$/).max(100),
+  name: z.string().regex(/^(?:openclaw-pc-worker-[1-9][0-9]*|openclaw-pc-worker-dev|openclaw-travelintrips-dev|openclaw-pc-worker-dell-(?:browser|recovery|verifier)|openclaw-vps-dev-consumer|openclaw-dell-chatgpt-wake-dev|openclaw-vmsc-chatgpt-wake-dev|openclaw-pchp-dev)$/).max(100),
   scopes: z.array(z.enum(["agent:presence", "agent:work", "model:chat"])).min(1).max(3),
 }).strict();
 
@@ -45,7 +47,7 @@ router.get("/ai/agent-runtime/credentials", ...credentialAdmin, async (_req, res
     lastUsedAt: aiAgentServiceTokensTable.lastUsedAt,
   }).from(aiAgentServiceTokensTable).orderBy(desc(aiAgentServiceTokensTable.createdAt));
   res.setHeader("Cache-Control", "no-store");
-  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-") || row.name === "openclaw-vps-dev-consumer" || row.name === "openclaw-dell-chatgpt-wake-dev") });
+  res.json({ credentials: rows.filter(row => row.name.startsWith("openclaw-pc-worker-") || row.name === "openclaw-vps-dev-consumer" || row.name === "openclaw-dell-chatgpt-wake-dev" || row.name === "openclaw-vmsc-chatgpt-wake-dev" || row.name === "openclaw-pchp-dev") });
 });
 
 router.post("/ai/agent-runtime/credentials", ...credentialAdmin, requireSameOrigin, async (req, res): Promise<void> => {
@@ -83,7 +85,7 @@ router.post("/ai/agent-runtime/credentials/:id/revoke", ...credentialAdmin, requ
   const id = z.string().uuid().safeParse(req.params["id"]);
   if (!id.success) { res.status(400).json({ error: "Invalid credential ID" }); return; }
   const [candidate] = await db.select({ name: aiAgentServiceTokensTable.name }).from(aiAgentServiceTokensTable).where(eq(aiAgentServiceTokensTable.id, id.data)).limit(1);
-  if (!(candidate?.name.startsWith("openclaw-pc-worker-") || candidate?.name === "openclaw-vps-dev-consumer" || candidate?.name === "openclaw-dell-chatgpt-wake-dev")) { res.status(404).json({ error: "Worker credential not found" }); return; }
+  if (!(candidate?.name.startsWith("openclaw-pc-worker-") || candidate?.name === "openclaw-vps-dev-consumer" || candidate?.name === "openclaw-dell-chatgpt-wake-dev" || candidate?.name === "openclaw-vmsc-chatgpt-wake-dev" || candidate?.name === "openclaw-pchp-dev")) { res.status(404).json({ error: "Worker credential not found" }); return; }
   const [row] = await db.update(aiAgentServiceTokensTable)
     .set({ isActive: false, updatedAt: new Date() })
     .where(and(eq(aiAgentServiceTokensTable.id, id.data), eq(aiAgentServiceTokensTable.isActive, true)))
@@ -208,6 +210,7 @@ const ExternalAgentHeartbeatRequest = z.object({
 const ExternalAgentWorkClaimRequest = z.object({
   clientId: z.string().trim().min(1).max(200),
   leaseSeconds: z.number().int().min(30).max(300).optional(),
+  targetCommandId: z.string().uuid().optional(),
 }).strict();
 
 const ExternalAgentWorkResultRequest = z.object({
@@ -547,6 +550,47 @@ router.get(
   },
 );
 
+// Read-only, bounded GPT02 health snapshot. No command payloads or credentials are exposed.
+router.get(
+  "/ai/agent-runtime/monitor/gpt02-health",
+  requireAgentServiceScope("agent:presence"),
+  async (_req, res): Promise<void> => {
+    const workerId = "openclaw-dell-chatgpt-wake-dev";
+    const presence = await db.execute(sql`
+      SELECT last_seen_at, lease_expires_at,
+             (lease_expires_at > now()) AS lease_valid,
+             extract(epoch from (now() - last_seen_at))::integer AS heartbeat_age_seconds
+      FROM ai_platform.ai_coding_bridge_presence
+      WHERE client_id = ${workerId}
+      LIMIT 1
+    `);
+    const pending = await db.execute(sql`
+      SELECT count(*)::integer AS pending_ack_over_5m
+      FROM ai_platform.ai_coding_bridge_responses AS r
+      JOIN ai_platform.ai_coding_bridge_commands AS c ON c.id = r.command_id
+      WHERE c.metadata_json ->> 'assignedClientId' = ${workerId}::text
+        AND r.kind = 'COMPLETED'
+        AND r.acknowledged_at IS NULL
+        AND r.created_at < now() - interval '5 minutes'
+        AND r.created_at >= now() - interval '24 hours'
+    `);
+    const row = presence.rows[0] as Record<string, unknown> | undefined;
+    const count = Number((pending.rows[0] as Record<string, unknown> | undefined)?.pending_ack_over_5m ?? 0);
+    const heartbeatAgeSeconds = row?.heartbeat_age_seconds == null ? null : Number(row.heartbeat_age_seconds);
+    const leaseValid = row?.lease_valid === true;
+    const healthy = leaseValid && heartbeatAgeSeconds !== null && heartbeatAgeSeconds <= 120 && count === 0;
+    res.setHeader("Cache-Control", "no-store");
+    res.status(healthy ? 200 : 503).json({
+      status: healthy ? "ok" : "degraded",
+      workerId,
+      heartbeatAgeSeconds,
+      leaseValid,
+      pendingAckOver5m: count,
+      checkedAt: new Date().toISOString(),
+    });
+  },
+);
+
 router.get(
   "/ai/agent-runtime/registry/health",
   requireAgentServiceScope("agent:presence"),
@@ -595,6 +639,20 @@ router.get(
       res.setHeader("X-Accel-Buffering", "no");
       res.flushHeaders();
       res.write(`event: ready\ndata: ${JSON.stringify({ clientId, transport: "sse" })}\n\n`);
+      // DEV DELL only: a one-shot snapshot re-emits RECEIVED IDs after reconnect.
+      // Subscribe first; racing live notifications are deduplicated client-side.
+      // No periodic DB polling, no generic queue claim, no PROCESSING replay.
+      if (clientId === DEV_DELL_WAKE_CLIENT_ID &&
+          process.env["PUBLIC_APP_URL"]?.replace(/\/$/, "") === "https://dev.cstlogistic.co.id") {
+        const queuedIds = await listDevDellQueuedWakeCommandIds(clientId);
+        for (const commandId of queuedIds) {
+          if (closed) break;
+          if (!res.write(`event: work_available\nid: ${commandId}\ndata: ${JSON.stringify({ clientId, commandId })}\n\n`)) {
+            close();
+            break;
+          }
+        }
+      }
       heartbeat = setInterval(() => { if (!res.write(": keepalive\n\n")) close(); }, 20_000);
       // Reauthenticate and reconcile durable backlog every five minutes.
       lifetime = setTimeout(close, 300_000);
@@ -660,6 +718,33 @@ router.post(
   },
 );
 
+const ExternalAgentWorkProgressRequest = z.object({
+  clientId: z.string().trim().min(1).max(200),
+  claimToken: z.string().uuid(),
+  message: z.string().trim().min(1).max(1000),
+}).strict();
+
+router.post(
+  "/ai/agent-runtime/work/:commandId/progress",
+  requireAgentServiceScope("agent:work"),
+  async (req, res): Promise<void> => {
+    const commandId = z.string().uuid().safeParse(req.params["commandId"]);
+    const parsed = ExternalAgentWorkProgressRequest.safeParse(req.body ?? {});
+    if (!commandId.success || !parsed.success) {
+      res.status(400).json({ error: "Invalid progress request" });
+      return;
+    }
+    const responseId = await recordClaimedCodingBridgeProgress({
+      commandId: commandId.data, ...parsed.data,
+    });
+    if (!responseId) {
+      res.status(409).json({ error: "Work claim invalid or progress already recorded" });
+      return;
+    }
+    res.json({ commandId: commandId.data, responseId, kind: "PROGRESS" });
+  },
+);
+
 router.post(
   "/ai/agent-runtime/work/:commandId/result",
   requireAgentServiceScope("agent:work"),
@@ -686,6 +771,58 @@ router.post(
     res.json(result);
   },
 );
+
+/** Only the assigned DELL agent may submit signed native browser proof, DEV-only.
+ * Disabled by default; never reuses MCP or generic administrative ACK claims.
+ */
+const NativeAckPayload = z.object({
+  commandId:z.string().uuid(), responseId:z.string().uuid(),
+  evidence:z.object({
+    version:z.literal(1),commandId:z.string().uuid(),responseId:z.string().uuid(),
+    eventId:z.string().regex(/^[a-f0-9]{64}$/i),
+    conversationId:z.string().regex(/^ai-engine-oauth:[a-f0-9]{64}$/i),
+    workerId:z.literal("openclaw-dell-chatgpt-wake-dev"),
+    browserProfile:z.string().max(120), bindingFingerprint:z.string().regex(/^[a-f0-9]{64}$/i),
+    readerTargetId:z.string().regex(/^[a-f0-9]{32}$/i),
+    originalTargetId:z.string().regex(/^[a-f0-9]{32}$/i),
+    replySha256:z.string().regex(/^[a-f0-9]{64}$/i),
+    observedAt:z.string().datetime(),signatureBase64:z.string().min(80).max(120),
+  }).strict(),
+  readerRecord:z.object({
+    eventId:z.string(),conversationId:z.string(),originalRawTargetId:z.string(),
+    readerRawTargetId:z.string(),pageUrl:z.string(),preopenTargetIds:z.array(z.string()).max(100),
+    status:z.string(),disposition:z.string(),originalFocusRestored:z.boolean(),
+    capturedAt:z.number(),
+  }).strict(),
+  tabs:z.array(z.object({type:z.string(),url:z.string(),id:z.string()}).strict()).max(30),
+}).strict();
+router.get("/ai/agent-runtime/native-checkpoint/:commandId/:responseId/readback",
+  requireAgentServiceScope("agent:work"),async(req,res):Promise<void>=>{
+    const commandId=z.string().uuid().safeParse(req.params["commandId"]);
+    const responseId=z.string().uuid().safeParse(req.params["responseId"]);
+    if(!commandId.success||!responseId.success){res.status(400).json({nativeAckVerified:false,code:"INVALID_IDS"});return;}
+    const caller=res.locals["aiAgentService"] as {name?:string}|undefined;
+    const value=await readNativeCheckpointAck({commandId:commandId.data,responseId:responseId.data,
+      tokenOwner:caller?.name??"",requestHostname:req.hostname});
+    res.setHeader("Cache-Control","no-store");res.json(value);
+  });
+router.post("/ai/agent-runtime/native-checkpoint/:responseId/ack",
+  requireAgentServiceScope("agent:work"),async(req,res):Promise<void>=>{
+    if(req.hostname!=="dev.cstlogistic.co.id"){
+      res.status(403).json({acknowledged:false,code:"DEV_ONLY"});return;
+    }
+    const parsed=NativeAckPayload.safeParse(req.body);
+    if(!parsed.success||req.params["responseId"]!==parsed.data.responseId){
+      res.status(400).json({acknowledged:false,code:"INVALID_NATIVE_ACK"});return;
+    }
+    const caller=res.locals["aiAgentService"] as {name?:string}|undefined;
+    const result=await acknowledgeNativeCheckpoint({
+      ...parsed.data,tokenOwner:caller?.name??"",requestHostname:req.hostname,
+      enabled:process.env["AI_CORE_NATIVE_CHECKPOINT_ACK_ENABLED"]==="true",
+    });
+    res.setHeader("Cache-Control","no-store");
+    res.status(result.acknowledged?200:result.code==="NATIVE_ACK_FEATURE_OFF"?503:409).json(result);
+  });
 
 router.get(
   "/ai/agent-runtime/health",

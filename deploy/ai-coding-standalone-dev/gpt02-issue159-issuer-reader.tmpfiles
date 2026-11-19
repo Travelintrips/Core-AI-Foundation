@@ -1,0 +1,2 @@
+# Create the stable socket directory before Docker starts; API bind mount is read-only.
+d /run/gpt02-issuer-reader 0750 gpt02-issuer-reader gpt02-issue159-signers -

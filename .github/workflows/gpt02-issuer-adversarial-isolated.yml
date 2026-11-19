@@ -1,0 +1,21 @@
+name: GPT02 DEV Issuer Adversarial Fixture
+on:
+  pull_request:
+    paths:
+      - 'scripts/tests/gpt02_issuer_adversarial_isolated.sh'
+      - '.github/workflows/gpt02-issuer-adversarial-isolated.yml'
+      - 'scripts/migrations/20261108_gpt02_dev_recovery_reservations.sql'
+      - 'scripts/migrations/20261108_gpt02_dev_recovery_lineage_lease.sql'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres-negative:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: bash -n scripts/tests/gpt02_issuer_adversarial_isolated.sh
+      - name: Run disposable PostgreSQL 16 offline
+        run: bash scripts/tests/gpt02_issuer_adversarial_isolated.sh

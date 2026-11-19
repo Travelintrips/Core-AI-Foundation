@@ -1,0 +1,208 @@
+/** Read-only, server-owned DEV recovery diagnostics. Never grants dispatch authority. */
+import { sql } from "drizzle-orm";
+import { db } from "@workspace/db";
+import { parseRecoveryPolicy } from "./handshakeSopConfiguration.js";
+import { assessJobLifecycleReadiness } from "./jobLifecycleReadinessService.js";
+import { evaluateRecoveryDecision } from "./jobLifecycleRecoveryGate.js";
+import { reviewBlockerEvidence } from "./jobLifecycleBlockerEvidence.js";
+import { getCodingCommandLifecycleEvidence } from "./codingCommandLifecycleEvidence.js";
+import { evaluateNewAttemptPreflight } from "./jobLifecycleNewAttemptPreflight.js";
+import { parsePrototypeAudit, PROTOTYPE_AUDIT_ACTION } from "./gpt02PrototypeEvidenceAudit.js";
+
+const workerId = "openclaw-dell-chatgpt-wake-dev";
+const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==="object"&&!Array.isArray(v);
+const validDate=(v:unknown):Date|null=>{
+  if(v===null||v===undefined)return null;
+  const d=v instanceof Date?v:new Date(String(v));
+  return Number.isFinite(d.getTime())?d:null;
+};
+
+export type RecoveryRuntimeFacts = {
+  commandId:string; status:string; checkpointResponseId:string|null;
+  checkpointVerified:boolean; responseRows:readonly {id:string;kind:string;createdAt:Date|null;acknowledgedAt:Date|null}[];
+  presence:{workerId:string;lastSeenAt:Date|null;leaseExpiresAt:Date|null;reportedHealth:string|null}|null;
+  policy:unknown; serverFlag:boolean; now:Date;
+};
+
+/** No command-level resume authorization record or exclusive command lease is available.
+ * A worker presence lease is liveness only; it is NOT a command-execution lease. */
+export function assessReadonlyRecoveryFacts(facts:RecoveryRuntimeFacts) {
+  const p=parseRecoveryPolicy(facts.policy);
+  const rows=facts.responseRows.map(r=>({
+    id:r.id,commandId:facts.commandId,kind:r.kind,createdAt:r.createdAt,acknowledgedAt:r.acknowledgedAt,
+    checkpointAttested:r.id===facts.checkpointResponseId&&facts.checkpointVerified,
+    receiverAckVerified:r.id===facts.checkpointResponseId&&facts.checkpointVerified,
+  }));
+  const readiness=assessJobLifecycleReadiness(rows);
+  const blockerEvidence=reviewBlockerEvidence(facts.commandId,rows);
+  const heartbeat=facts.presence?.workerId===workerId&&facts.presence.reportedHealth==="healthy"
+    ?facts.presence.lastSeenAt:null;
+  const workerHeartbeatFresh=Boolean(heartbeat&&p&&
+    Number.isFinite(facts.now.getTime()) &&
+    heartbeat.getTime()<=facts.now.getTime() &&
+    facts.now.getTime()-heartbeat.getTime()<=p.heartbeatGraceMinutes*60_000);
+  const presenceLeaseActive=Boolean(facts.presence?.workerId===workerId&&
+    facts.presence.leaseExpiresAt&&facts.presence.leaseExpiresAt.getTime()>facts.now.getTime());
+  const decision=evaluateRecoveryDecision({
+    enabledByServer:facts.serverFlag,policy:p,readiness,
+    authorizedCommandId:null,blockedCommandId:facts.commandId,
+    expectedWorkerId:workerId,actualWorkerId:facts.presence?.workerId??null,
+    workerHeartbeatAt:heartbeat,now:facts.now,
+    // Explicit command-exclusive lease absent: never infer from presence lease.
+    leaseValid:false,retriesAlreadyUsed:0,retryAfterAt:null,
+    recoveryAlreadyInFlight:true,requiresHumanApproval:true,
+  });
+  return {
+    commandId:facts.commandId,commandStatus:facts.status,
+    phase:readiness.phase,checkpointResponseId:readiness.latestCheckpointResponseId,
+    checkpointAttested:readiness.latestCheckpointAttested,
+    receiverAckVerified:readiness.latestCheckpointReceiverAckVerified,
+    blockingResponseId:readiness.blockingResponseId,
+    blockerEvidenceValid:blockerEvidence.valid,
+    blockerEvidenceReason:blockerEvidence.reason,
+    workerPresenceHealthy:workerHeartbeatFresh,
+    workerPresenceLeaseActive:presenceLeaseActive,
+    recoveryPolicyEnabled:p?.enabled===true,
+    recoveryFeatureEnabled:facts.serverFlag,
+    commandResumeAuthorizationVerified:false as const,
+    commandExclusiveLeaseVerified:false as const,
+    rateLimitClearanceVerified:false as const,
+    retryBudgetVerified:false as const,
+    eligibleForAuthorizedRecoveryReview:decision.eligibleForAuthorizedRecoveryReview&&blockerEvidence.valid,
+    reviewReason:decision.reason,
+    mayDispatchWorker:false as const,mayCloseJob:false as const,
+  };
+}
+
+/** A recommendation remains advisory; it cannot grant command authorization. */
+export function parseRecoveryRecommendation(
+  raw: unknown, actor: unknown, assignedReviewer: unknown,
+  commandId: string, jobId: number|null,
+): "recommend_new_attempt"|"deny_new_attempt"|null {
+  if(typeof raw!=="string" || raw.length>4000 ||
+    typeof actor!=="string" || typeof assignedReviewer!=="string" ||
+    actor.trim().toLowerCase()!==assignedReviewer.trim().toLowerCase() ||
+    !jobId) return null;
+  try{
+    const payload:unknown=JSON.parse(raw);
+    if(!isRecord(payload) ||
+      payload.commandId!==commandId || payload.jobId!==jobId ||
+      payload.dispatchAuthorized!==false || payload.resumeAllowed!==false ||
+      payload.checkpointIssued!==false) return null;
+    const choice=payload.decision;
+    return choice==="recommend_new_attempt" || choice==="deny_new_attempt" ? choice : null;
+  }catch{return null;}
+}
+
+export async function getDevCommandRecoveryReview(commandId:string) {
+  const lifecycle=await getCodingCommandLifecycleEvidence(commandId);
+  if(!lifecycle.found)return {found:false as const,commandId};
+  const snapshot=await db.execute(sql`
+    SELECT r.id,r.kind,r.created_at,r.acknowledged_at
+    FROM ai_platform.ai_coding_bridge_responses r
+    WHERE r.command_id=${commandId}::uuid
+    ORDER BY r.created_at ASC,r.id ASC LIMIT 100
+  `);
+  const presence=await db.execute(sql`
+    SELECT client_id,last_seen_at,lease_expires_at,metadata_json->>'reportedHealth' AS reported_health
+    FROM ai_platform.ai_coding_bridge_presence
+    WHERE client_id=${workerId} LIMIT 1
+  `);
+  const settings=await db.execute(sql`
+    SELECT value FROM ai_platform.ai_settings WHERE key='handshake.sop2.policy.v1'
+      AND is_secret IS FALSE LIMIT 1
+  `);
+  // Read-only, command-bound Human Review evidence. Never trust the review
+  // status as authorization to resume and never expose raw reviewer notes.
+  const humanReview=await db.execute(sql`
+    SELECT t.id, t.status, t.completed_at,
+      t.payload_json->>'taskId' AS job_id,
+      t.assigned_user,
+      (SELECT h.notes FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action=${PROTOTYPE_AUDIT_ACTION}
+        ORDER BY h.id DESC LIMIT 1) AS integrity_notes,
+      (SELECT h.performed_by FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action=${PROTOTYPE_AUDIT_ACTION}
+        ORDER BY h.id DESC LIMIT 1) AS integrity_actor,
+      (SELECT h.notes FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action='human_recovery_recommendation'
+        ORDER BY h.id DESC LIMIT 1) AS recommendation_notes,
+      (SELECT h.performed_by FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action='human_recovery_recommendation'
+        ORDER BY h.id DESC LIMIT 1) AS recommendation_actor,
+      EXISTS (
+        SELECT 1 FROM ai_platform.ai_human_task_history h
+        WHERE h.task_id=t.id AND h.action='artifact_recovery_verified'
+      ) AS recovered_artifact_evidence_recorded
+    FROM ai_platform.ai_human_tasks t
+    WHERE t.source_module='ai_core_lifecycle'
+      AND t.payload_json->>'commandId'=${commandId}
+    ORDER BY t.created_at DESC, t.id DESC LIMIT 1
+  `);
+  const parsedSetting=(()=>{
+    const raw=settings.rows?.[0]?.["value"];
+    if(typeof raw!=="string")return null;
+    try{return JSON.parse(raw) as unknown}catch{return null}
+  })();
+  const pr=presence.rows?.[0];
+  const facts:RecoveryRuntimeFacts={
+    commandId,status:String(lifecycle.commandStatus),checkpointResponseId:lifecycle.checkpointResponseId,
+    checkpointVerified:lifecycle.checkpointAttested&&lifecycle.nativeReceiverAckVerified,
+    responseRows:(snapshot.rows??[]).filter(r=>typeof r["id"]==="string"&&typeof r["kind"]==="string")
+      .map(r=>({id:String(r["id"]),kind:String(r["kind"]),createdAt:validDate(r["created_at"]),
+        acknowledgedAt:validDate(r["acknowledged_at"])})),
+    presence:pr?{workerId:String(pr["client_id"]),lastSeenAt:validDate(pr["last_seen_at"]),
+      leaseExpiresAt:validDate(pr["lease_expires_at"]),reportedHealth:typeof pr["reported_health"]==="string"?pr["reported_health"]:null}:null,
+    policy:isRecord(parsedSetting)?parsedSetting:null,
+    // This flag can enable a *review*, never execution. OFF by default.
+    serverFlag:process.env["AI_CORE_DEV_LIFECYCLE_RECOVERY_REVIEW_ENABLED"]==="true",
+    now:new Date(),
+  };
+  const review=humanReview.rows?.[0];
+  const reviewId=Number(review?.["id"]);
+  const linkedJobId=Number(review?.["job_id"]);
+  const validJobId=Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null;
+  const recommendation=parseRecoveryRecommendation(
+    review?.["recommendation_notes"],review?.["recommendation_actor"],review?.["assigned_user"],
+    commandId,validJobId,
+  );
+  const prototypeIntegrityEvidence=parsePrototypeAudit(
+    review?.["integrity_notes"],review?.["integrity_actor"],review?.["assigned_user"],
+    commandId,validJobId,Number.isSafeInteger(reviewId)&&reviewId>0?reviewId:null,
+  );
+  const runtimeReview=assessReadonlyRecoveryFacts(facts);
+  // No new-command identity, persisted duplicate count, retry clearance or
+  // cryptographically verified artifact manifest exists in this readback.
+  // Do not infer any of those from a historical text note or worker presence.
+  const newAttemptPreflight=evaluateNewAttemptPreflight({
+    environment:process.env["APP_ENV"]==="production"?"production":"development",
+    jobId:validJobId??0,reviewJobId:validJobId,
+    originalCommandId:commandId,reviewCommandId:review?.["id"]?commandId:null,
+    proposedNewCommandId:"",
+    originalCommandStatus:String(lifecycle.commandStatus),
+    humanReviewStatus:typeof review?.["status"]==="string"?review["status"]:null,
+    recommendation,
+    evidenceVerified:prototypeIntegrityEvidence?.verified===true,
+    artifactSha256:prototypeIntegrityEvidence?.sha256??null,existingAttemptCount:-1,
+    workerHealthy:runtimeReview.workerPresenceHealthy,
+    retryAfterAt:null,now:facts.now,
+  });
+  return {
+    found:true as const,...runtimeReview,
+    humanReviewId:Number.isSafeInteger(reviewId)&&reviewId>0?reviewId:null,
+    humanReviewStatus:typeof review?.["status"]==="string"?review["status"]:null,
+    humanReviewCompleted:Boolean(review?.["completed_at"]),
+    recoveredArtifactEvidenceRecorded:review?.["recovered_artifact_evidence_recorded"]===true,
+    linkedJobId:Number.isSafeInteger(linkedJobId)&&linkedJobId>0?linkedJobId:null,
+    humanRecoveryRecommendation:recommendation,
+    prototypeIntegrityEvidence,
+    newAttemptPreflight,
+    newAttemptPreflightUnverifiedInputs:[
+      ...(!prototypeIntegrityEvidence ? ["verified_artifact_manifest"] : []),
+      "new_command_identity","duplicate_attempt_count",
+      "retry_after_clearance","command_exclusive_lease","explicit_dispatch_authorization",
+    ] as const,
+    // Accept and evidence cannot authorize a command or create a signed checkpoint.
+    humanRecoveryAuthorizationVerified:false as const,
+  };
+}

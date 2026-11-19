@@ -74,9 +74,9 @@ beforeEach(()=>{
   vi.stubEnv('AI_CORE_DEV_BROWSER_WAKE_ACCOUNT_BINDINGS_JSON', raw());
 });
 test('cross-language fingerprint and both challenge vectors',()=>{
-  assert.equal(wb.bindingFingerprint,'4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1');
-  assert.equal(attestation.deriveDevAssistantChallenge(expected),'2a4c9bcdf77cb321930750a835f29cd065d70c1ea8b20f8a4c302853b6267a2a');
-  assert.equal(attestation.deriveDevAssistantChallenge({...expected,watchCommandId:'55555555-5555-4555-8555-555555555555',jobId:'66666666-6666-4666-8666-666666666666',checkpointRevision:7}),'79960f0819bca525e9f2930fc13b4c94b538c06fc0860686b4d051f84d53feec');
+  assert.equal(wb.bindingFingerprint,'2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3');
+  assert.equal(attestation.deriveDevAssistantChallenge(expected),'668e37e7ea50f4a3fdc13b73def177651bb3b8ca12364eeb48b41a1c8e190438');
+  assert.equal(attestation.deriveDevAssistantChallenge({...expected,watchCommandId:'55555555-5555-4555-8555-555555555555',jobId:'66666666-6666-4666-8666-666666666666',checkpointRevision:7}),'34fbd3af6b9f7c4dc213a8566082e0e5df4fcc8c87f1474877f98d2276e3cc53');
 });
 test('exact pair only, dormant config and protected GPT01',async()=>{
   assert.equal(await wake.isDevBrowserWakeAllowed(entry),true);assert.equal(await wake.isDevBrowserWakeAllowed(legacy),true);

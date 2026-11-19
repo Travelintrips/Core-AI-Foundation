@@ -51,6 +51,58 @@ export const OAUTH_LOGIN_CLIENT_SCRIPT = String.raw`"use strict";
     fields.disabled = false;
     status.textContent = "";
   }
+  function bindSwitchAccount() {
+    const button = document.getElementById("mcp-switch-account");
+    const status = document.getElementById("mcp-switch-status");
+    if (!(button instanceof HTMLButtonElement) || !status) return;
+    let pending = false;
+    button.addEventListener("click", async () => {
+      if (pending) return;
+      pending = true;
+      button.disabled = true;
+      status.textContent = "Mengakhiri sesi AI Core DEV...";
+      try {
+        const endpoint = new URL("/api/internal/auth/logout", window.location.origin);
+        if (endpoint.origin !== window.location.origin) throw new Error("wrong_origin");
+        const response = await fetch(endpoint.href, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok && response.status !== 401) throw new Error("logout_failed");
+        window.location.replace("/api/ai/core-chat/oauth/login");
+      } catch {
+        button.disabled = false;
+        pending = false;
+        status.textContent = "Gagal mengganti akun. Sesi tidak diubah; coba lagi.";
+      }
+    });
+  }
+  async function loadMainClientStatus() {
+    const target = document.getElementById("mcp-main-status");
+    if (!target) return;
+    try {
+      const endpoint = new URL("/api/ai/core-chat/oauth/main-client-status", window.location.origin);
+      if (endpoint.origin !== window.location.origin) throw new Error("origin");
+      const response = await fetch(endpoint.href, {
+        method: "GET", credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error("unavailable");
+      const state = await response.json();
+      const count = Number(state.pendingTerminalCount);
+      const total = Number.isFinite(count) && count >= 0 ? count : 0;
+      target.textContent = state.receiverState === "RECENT_MCP_SUBSCRIBE"
+        ? "ChatGPT utama: subscription baru terdeteksi. Event terminal tertunda: " + total +
+          ". Final ACK harus diverifikasi terpisah."
+        : "ChatGPT utama: belum terhubung kembali melalui OAuth MCP. Event terminal tertunda: " +
+          total + ". Login browser tidak mengirim Final ACK.";
+    } catch {
+      target.textContent = "Status koneksi ChatGPT utama belum dapat diperiksa. Login saja tidak membuktikan Final ACK.";
+    }
+  }
+  void loadMainClientStatus();
+  bindSwitchAccount();
   bindForm("mcp-login-form", "mcp-login-fields", "login-status", false);
   bindForm("mcp-magic-form", "mcp-magic-fields", "magic-status", true);
 })();
@@ -74,9 +126,41 @@ function loginPage(): string {
 </body></html>`;
 }
 
+/** Only the authenticated user's own address may be displayed, and always escaped. */
+function sessionIdentityLabel(user: unknown): string {
+  if (typeof user !== "object" || user === null || !("email" in user) ||
+      typeof user.email !== "string") return "akun internal aktif";
+  const email = user.email.trim().slice(0, 254);
+  if (!email || /[\x00-\x1f\x7f]/.test(email)) return "akun internal aktif";
+  return email.replace(/[&<>"']/g, (ch) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch] ?? ch));
+}
+
 /** The parent OAuth router supplies its existing signed-session user resolver. */
 export function createAiCoreMcpOAuthLoginRouter(resolveSessionUser: (req: Request) => Promise<unknown>): Router {
   const router = Router();
+  router.get("/api/ai/core-chat/oauth/main-client-status", async (req, res): Promise<void> => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    if (process.env["APP_ENV"] !== "development" ||
+        process.env["NODE_ENV"] !== "development") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const user = await resolveSessionUser(req);
+    if (!user || typeof user !== "object" || !("id" in user) ||
+        typeof user.id !== "number") {
+      res.status(401).json({ error: "authenticated_session_required" });
+      return;
+    }
+    try {
+      const { readDevOauthMainClientReadiness } =
+        await import("../services/devOauthMainClientReadiness.js");
+      const result = await readDevOauthMainClientReadiness(user.id);
+      res.status(200).json(result);
+    } catch {
+      res.status(503).json({ error: "read_only_diagnostic_unavailable" });
+    }
+  });
   router.get(OAUTH_LOGIN_SCRIPT_PATH, (_req, res): void => {
     res.setHeader("Cache-Control", "no-store");
     res.type("application/javascript").send(OAUTH_LOGIN_CLIENT_SCRIPT);
@@ -87,7 +171,7 @@ export function createAiCoreMcpOAuthLoginRouter(resolveSessionUser: (req: Reques
     res.setHeader("Expires", "0");
     const user = await resolveSessionUser(req);
     if (user) {
-      res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif. Kembali ke tab pairing ChatGPT, lalu buka kembali halaman persetujuan pairing. Jangan login ulang.</p><p><a href="/api/ai/core-chat/oauth/pair/enter">Buka halaman pairing</a></p></body></html>`);
+      res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Engine berhasil</title></head><body style="font:16px system-ui;max-width:540px;margin:64px auto;padding:20px"><h1>Login berhasil</h1><p>Sesi AI Engine aktif sebagai <strong>${sessionIdentityLabel(user)}</strong>.</p><p><strong>Pastikan ini akun yang sama dengan pemilik job lama.</strong> Event dan Final ACK dibatasi oleh akun OAuth serta client ID ChatGPT yang sama. Login saja belum berarti ChatGPT telah tersambung atau mengirim ACK.</p><p>Jika ChatGPT sudah memulai OAuth, kembali ke halaman permintaan autentikasi tersebut. Kode pairing hanya muncul jika permintaan OAuth memang membuat pairing baru.</p><p id="mcp-main-status" role="status" aria-live="polite">Memeriksa koneksi OAuth ChatGPT utama untuk akun ini...</p><p><button type="button" id="mcp-switch-account">Ganti Akun</button></p><p>Ganti Akun akan mengakhiri sesi AI Core DEV pada browser ini, tanpa menghapus job atau subscription.</p><p id="mcp-switch-status" role="status" aria-live="polite"></p><p><a href="/api/ai/core-chat/oauth/pair/enter">Buka halaman persetujuan pairing</a></p><script src="${OAUTH_LOGIN_SCRIPT_PATH}" defer></script></body></html>`);
       return;
     }
     res.type("html").send(loginPage());

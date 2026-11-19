@@ -75,6 +75,17 @@ describe("directChatGptAccountRouterService", () => {
     ])).toBeNull();
   });
 
+  it("never silently routes explicitly named DELL wake to another account", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    await expect(dispatchDirectChatGptAccountWork({
+      target: "auto",
+      instruction: "openclaw-dell-chatgpt-wake-dev: execute read-only test",
+    })).rejects.toMatchObject({
+      code: "CAPABILITY_DENIED",
+      message: expect.stringContaining("EXPLICIT_DELL_WAKE_REQUIRED"),
+    });
+  });
+
   it("fails closed in production before any dispatch", async () => {
     vi.stubEnv("NODE_ENV", "production");
     await expect(dispatchDirectChatGptAccountWork({

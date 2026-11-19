@@ -333,6 +333,12 @@ def main():
             with open(os.path.join(os.environ["LOCALAPPDATA"], "AI-Core", "travelintrips-dev-consumer-poll.log"), "a", encoding="utf-8") as log:
                 log.write(time.strftime("%Y-%m-%dT%H:%M:%S ") + ("CLAIMED " + str(work.get("commandId", "")) if isinstance(work, dict) and work.get("commandId") else "NO_WORK") + "\n")
             if work and work.get("commandId") and work.get("claimToken"): 
+                # Acknowledged claim is not execution progress. Record when work
+                # execution actually starts, using the same scoped worker token.
+                api("/ai/agent-runtime/work/" + str(work["commandId"]) + "/progress", {
+                    "clientId": CLIENT_ID, "claimToken": work["claimToken"],
+                    "message": "Worker began executing claimed command",
+                })
                 try:
                     ok, message, details = execute(work)
                 except Exception as exc:

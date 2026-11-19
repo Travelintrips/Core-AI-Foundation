@@ -1,0 +1,49 @@
+# GPT02 DELL DEV — canonical source backport (DRAFT / NO DEPLOY)
+
+This change brings the existing proven GPT02 DELL DEV native transport and its direct CDP + local IndexedDB cache helpers into the **tracked canonical source tree**. It does not rebuild or replace an operational service. This is a **source review PR**, not a deployment or an authorization to merge.
+
+## Verified evidence
+The already deployed DEV GPT02 browser-wake / DELL / signed callback / acknowledged final ACK route had three distinct complete command IDs on 13 Nov 2026:
+- \`41eb9f27-3ab1-4a8e-9615-3cc338428af4\`
+- \`798bb8df-c380-4e00-8ec6-8bc3d176db60\`
+- \`057d9f3c-f74c-4c4c-ab51-fa43a65dea69\`
+
+One separate command \`e5e1d428-1ef1-45bb-8041-603d31ee8bf2\` remains FAILED; preserve its incident evidence. Issuer Task #166 has a separate proof-only \`NO_DISPATCH\` receipt and is **not linked to any of those three command IDs**.
+
+## Canonical source guardrails
+- Native transport from DELL was carried through using **exact LF-normalized source bytes**. Scoped \`.gitattributes\` reconstructs DELL's original Windows CRLF bytes for the Python transport and the one-shot executor. Their Windows SHA-256 and the cache JS LF SHA-256 are checked in CI. **Do not autoformat or alter their trailing newlines without updating hash pins and tests**.
+- Scoped \`package.json\` sets \`type=commonjs\` only for the existing Windows native helper directory. All existing \`.mjs\` modules retain their ESM semantics. This avoids the parent \`scripts/package.json\` ESM default breaking actual CommonJS helpers on a checkout.
+- The 35 existing Python native tests **retain the original test names/expectations**. The synthetic reader adapter uses the new \`_cdp_create_blank_target\` API and each test gets a private temp-dir 200-rate-log fixture. It does not touch actual ChatGPT, Supabase, production state, or OAuth.
+- The local cache path verifies exact GPT02 binding, one user/assistant pair, original input SHA-256, precise challenge/ACK, message UUIDs and send timestamp; duplicate/unverified reader and replay attempts remain fail-closed.
+- The legacy GET capture rate-limit circuit and history are not deleted. Do not reinterpret a local cache gate as approval to reuse a consumed issuer lease.
+- No credentials, private keys, browser profile data, token files, logs, or conversation transcripts are in this PR.
+
+## Before merge or deployment
+1. Review the changes to the canonical native transport, CJS module boundary, and exact Windows hash pins.
+2. Require Ubuntu **and Windows** CI on this branch. Check the full existing native and agent Python suite and synthetic malformed/replay cases. Verify no real ChatGPT/browser requests happen in CI.
+3. Reconcile installed DELL tasks' binary hashes and scripted installer paths with the resulting artifact before allowing a supervised DEV deploy. Do not restart the healthy listener just to mirror GitHub.
+4. An independently authorized, fresh DEV command must prove per-command callback/Final ACK after any deploy. The Task Hub/issuer to bridge-command same-ID linkage is a separate unresolved gate.
+5. **PROD must not be deployed or changed** based on this PR. Leave it Draft pending explicit release review.
+
+Historical details and source custody are recorded in PR #1723 and review-only PR #1748.
+
+## Exact DELL source parity preflight (PASS, read-only)
+- New `gpt02_dell_runtime_parity.py` compares all 24 installed GPT02 DELL source modules with canonical LF-normalized SHA-256 data. Three critical installed byte hashes are independently pinned, with CRLF/LF differences checked explicitly.
+- A live DELL read-only audit using an external manifest showed `result=PASS`, `runtime_files=24`, `critical_hashes=3`, and `changes_made=false`. No running executable, Chrome profile, credential store, Task Scheduler task, or database was modified.
+- Preflight accepts `--mode source` in GitHub/Linux and `--mode runtime` on Windows. CI runs source custody, 10 negative/positive parity test cases, and Windows installed-byte validation. Missing runtime code, altered hash, symlink or path-traversal input is refused. Git-only unit tests are not required in the DELL worker directory.
+- To audit an installed DELL runtime safely, place a *copy of this source's manifest and preflight script* in a separate audit directory and invoke `--source-root <installed AI-Core> --runtime-root <installed AI-Core> --manifest-path <audit manifest> --mode runtime`. Neither runtime app files nor configuration are changed.
+
+## Required merge/deploy safety hold
+`develop` is monitored by `scripts/vps/dev_ci_watcher.py` and `.github/workflows/hostinger-dev-deploy.yml`. Once `CI Verify` and `DEV Fast Verify` pass, a develop push can automatically trigger a **full Hostinger VPS DEV application release**, *even for Windows-only source changes*. This PR must remain Draft until a reviewed source-only release/no-restart path or a separate explicitly approved maintenance deployment gate exists. The PR itself does not deploy PROD, but do not interpret green CI alone as permission to restart the already-PASS DEV API.
+
+The verified browser-wake → DELL → callback path still does **not** prove Task Hub/issuer Task #166 → same command ID: Task #166 retains `NO_DISPATCH`, and no signed dispatch grant is inferred.
+## Source-only develop merge: no DEV runtime restart
+
+- The source-only classifier was verified against **actual GitHub REST Compare JSON**, where the exact target SHA is `commits[-1].sha`. Its tests require exact base/merge ancestry, complete commits, and the full changed-path list. A real 42-file GPT02 source-only comparison produced `SKIP_DEV_RESTART`; a real 25-file application change produced `NORMAL_DEV_RELEASE`.
+- `scripts/vps/dev_source_only_release_gate.py` verifies a **complete** GitHub Compare response from the current healthy DEV deployed commit to the exact target `develop` SHA. A SHA/name mismatch, non-descendant commit, malformed path, rename, duplicate filename, or GitHub failure is **BLOCKED**.
+- Only `scripts/windows/ai-core/**` and explicitly reviewed DEV source-only release-control files can be `SKIP_DEV_RESTART`. Any API, Dockerfile, frontend, dependency lock, unrelated workflow or runtime change remains `NORMAL_DEV_RELEASE`.
+- `.github/workflows/hostinger-dev-deploy.yml` has a read-only `source-only-scope` job before the existing `deploy` job. Source-only commits skip container deployment; application changes continue the original DEV deployment checks.
+- VPS timer runs the **installed** `/usr/local/sbin/cst-vps-dev-ci-watcher.py` every ~3 minutes. Git source alone does **not** update the installed timer script. Before merging this PR, independently verify a backed-up, tested, atomically installed watcher and gate are present in `/usr/local/sbin` and that the timer and current DEV app remain healthy. Do not merge first.
+- Workflow dispatch explicitly requested on `develop` retains the existing normal DEV deploy path. Do not enable PROD dispatch or modify approval/issuer/command history.
+- On a source-only merge, prove GitHub Actions classifies `SKIP_DEV_RESTART`, VPS watcher prints `SOURCE_ONLY_NO_RESTART`, and the runtime health SHA, Docker container ID and DELL listener PID remain unchanged. If the comparison is ambiguous, do not release.
+- The three E2E PASS callbacks remain a **separate browser-wake lane**; Task #166 is still `NO_DISPATCH` and has no same-command issuer lineage.

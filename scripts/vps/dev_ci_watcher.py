@@ -5,6 +5,9 @@ import subprocess
 import sys
 from urllib.request import Request, urlopen
 
+from dev_source_only_release_gate import (DECISION_RELEASE, DECISION_SKIP,
+                                          canonical_sha, compare_remote)
+
 REPO = "Travelintrips/Core-AI-Foundation"
 UPSTREAM = "https://github.com/" + REPO + ".git"
 API = "https://api.github.com/repos/" + REPO + "/actions/runs"
@@ -52,8 +55,10 @@ def main():
     sha = latest_sha()
     if len(sha) != 40 or any(x not in "0123456789abcdef" for x in sha):
         raise RuntimeError("remote develop SHA is invalid")
+    active_sha = None
     try:
-        if local_sha() == sha:
+        active_sha = local_sha()
+        if active_sha == sha:
             print("VPS_DEV_POLL=READY sha=" + sha)
             return
     except Exception:
@@ -62,6 +67,18 @@ def main():
     if not ready:
         print("VPS_DEV_POLL=WAITING_CI sha=" + sha + " verified=" + ",".join(workflows))
         return
+    # Source-only Windows commits must not restart the running VPS DEV app.
+    # Unknown Git ancestry or API failures are BLOCKED, not treated as a
+    # source-only pass or a reason to redeploy.
+    if isinstance(active_sha, str) and len(active_sha) == 40:
+        baseline = canonical_sha(active_sha)
+        decision = compare_remote(baseline, sha)
+        if decision["decision"] == DECISION_SKIP:
+            print("VPS_DEV_POLL=SOURCE_ONLY_NO_RESTART base=" + baseline +
+                  " target=" + sha + " reason=" + decision["reason"])
+            return
+        if decision["decision"] != DECISION_RELEASE:
+            raise RuntimeError("source-only classification did not authorize normal release")
     print("VPS_DEV_POLL=RELEASING sha=" + sha, flush=True)
     subprocess.run(
         ["/usr/bin/python3", "/usr/local/sbin/cst-vps-dev-release.py", sha],

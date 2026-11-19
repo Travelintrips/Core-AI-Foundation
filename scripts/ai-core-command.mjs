@@ -1,4 +1,5 @@
 import { readFileSync, appendFileSync } from 'node:fs';
+import { setDefaultResultOrder } from 'node:dns';
 import { pathToFileURL } from 'node:url';
 
 export const REPOSITORY = 'Travelintrips/Core-AI-Foundation';
@@ -8,6 +9,9 @@ export const ALLOWED_TARGET_REPOSITORIES = new Set([
 ]);
 const OWNER = 'Travelintrips';
 const API = 'https://aicore.cstlogistic.co.id/api';
+// GitHub-hosted runners can resolve IPv6 even when the route is unavailable.
+// Prefer the verified IPv4 route; keep TLS verification and API authentication intact.
+setDefaultResultOrder('ipv4first');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POLICY = "\n\nExecution policy: This is an owner-authorized autonomous coding task. DEV-FIRST is mandatory: implement on an isolated branch targeting develop, run regression tests and full CI, verify exact DEV deployment and smoke tests, then request a separate reviewed promotion to main. Never deploy to production from this task or bypass approvals, secrets, branch rules, or destructive-operation safeguards.";
 const AUTONOMOUS_E2E_POLICY = "\n\nExecution policy: This is an explicit owner-authorized autonomous E2E validation. Use develop and a reviewable DEV-only branch, with bounded smoke tests and CI. Do not merge or deploy to main; production promotion requires a separate reviewed release with verified live DEV evidence. Critical security controls remain mandatory.";

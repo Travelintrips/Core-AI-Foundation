@@ -11,6 +11,14 @@ const mocks = vi.hoisted(() => ({
   handshakeEvidence: vi.fn(),
   learning: vi.fn(),
 }));
+vi.mock("../services/devContinuityWatchService.js", () => ({ registerDevContinuityWatch: vi.fn(), updateDevContinuityWatch: vi.fn(), getDevContinuityWatchStatus: vi.fn() }));
+vi.mock("../services/aiCoreMcpEventWebhookService.js", () => ({ AI_CORE_TERMINAL_EVENT_NAME: "ai_core.task.terminal", McpCallbackEndpointError: class extends Error {}, subscribeAiCoreMcpEvent: vi.fn(), unsubscribeAiCoreMcpEvent: vi.fn() }));
+vi.mock("../services/externalAgentRegistryService.js", () => ({}));
+vi.mock("../services/openClawPcLeaderService.js", () => ({}));
+vi.mock("../services/aiAuditService.js", () => ({ logAudit: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../services/aiModelService.js", () => ({ getModelConfig: vi.fn(), getModelById: vi.fn(), listModels: vi.fn() }));
+vi.mock("../services/codingBridgeSubscriptionDiagnostics.js", () => ({ readCodingBridgeSubscriptionHealth: vi.fn().mockResolvedValue({ renewalRequired: false }) }));
+vi.mock("../services/handshakeSopSettingsService.js", () => ({ readHandshakeSopSettings: vi.fn().mockResolvedValue({ operationalSop: {} }) }));
 vi.mock("../services/aiCoreMcpResultEventService.js", () => ({ recordAiCoreMcpTerminalResult: mocks.record }));
 vi.mock("../services/aiCoreChatLearningService.js", () => ({ recordChatLearningEvent: mocks.learning }));
 vi.mock("../services/aiCoreMcpOAuthService.js", () => ({
@@ -112,7 +120,7 @@ describe("MCP command two-way routing", () => {
       conversationBindingStatus: "VERIFIED_DURABLE_E2E_ATTESTATION",
       verifiedWorkerId: "openclaw-dell-chatgpt-wake-dev",
     });
-    expect(mocks.handshakeEvidence).toHaveBeenCalledWith(expect.stringMatching(/^ai-engine-oauth:[a-f0-9]{64}$/));
+    expect(mocks.handshakeEvidence).toHaveBeenCalledWith(expect.stringMatching(/^ai-engine-oauth:[a-f0-9]{64}$/), { requestHost: "127.0.0.1" });
   });
 
   it("answers MCP discovery from the live tool registry without falling through to chat or database routing", async () => {
@@ -142,6 +150,24 @@ describe("MCP command two-way routing", () => {
       events: ["ai_core.task.terminal"],
     });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("advertises checkpoint opt-in through MCP tool schema without changing terminal defaults", async () => {
+    const app = express(); app.use(express.json()); app.use("/api", router);
+    const discovery = await request(app).post("/api/ai/core-chat/mcp")
+      .set("Authorization", "Bearer test-connector-key")
+      .send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const sub = discovery.body.result.tools.find((tool: { name: string }) =>
+      tool.name === "subscribe_ai_core_events");
+    expect(sub.inputSchema.properties.eventTypes.items.enum).toContain("CHECKPOINT");
+    expect(sub.inputSchema.properties.eventTypes.maxItems).toBe(6);
+    expect(sub.inputSchema.properties.eventTypes.default).not.toContain("CHECKPOINT");
+    const types = ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED", "CHECKPOINT"];
+    const accepted = await callTool("subscribe_ai_core_events", {
+      conversationId: "conversation-a", eventTypes: types,
+    });
+    expect(accepted.body.result.isError).toBeFalsy();
+    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ eventTypes: types }));
   });
 
   it("does not report a verified conversation from an unverified subscription", async () => {
@@ -339,7 +365,23 @@ describe("MCP command two-way routing", () => {
     expect(mocks.list).toHaveBeenCalledWith({
       conversationId: "conversation-a",
       limit: 25,
+      lifecycleOnly: true,
     });
+  });
+
+  it("includes checkpoints only when the exact-owner subscription opted in", async () => {
+    const { readCodingBridgeSubscriptionHealth } = await import("../services/codingBridgeSubscriptionDiagnostics.js");
+    vi.mocked(readCodingBridgeSubscriptionHealth).mockResolvedValueOnce({
+      state: "ACTIVE", renewalRequired: false, expiresAt: "2026-11-08T00:00:00.000Z",
+      pendingCount: 0, wantsSignedCheckpoints: true,
+    } as never);
+    const response = await callTool("read_ai_core_events", { conversationId: "conversation-a", limit: 25 });
+    expect(response.body.result.isError).toBeFalsy();
+    expect(mocks.list).toHaveBeenCalledWith({
+      conversationId: "conversation-a", limit: 25,
+      lifecycleOnly: true, includeSignedCheckpoints: true,
+    });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 
   it("returns autonomous blocker responses as BLOCKED lifecycle events", async () => {

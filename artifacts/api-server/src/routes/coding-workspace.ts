@@ -271,7 +271,7 @@ router.get("/ai/coding/tasks", async (_req, res): Promise<void> => {
              SELECT latest_run.status
              FROM ai_platform.ai_coding_runs AS latest_run
              WHERE latest_run.task_id = t.id
-             ORDER BY latest_run.created_at DESC
+             ORDER BY latest_run.started_at DESC NULLS LAST, latest_run.id DESC
              LIMIT 1
            ) AS latest_run_status,
            EXISTS (
@@ -425,7 +425,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
             SELECT latest_run.status
             FROM ai_platform.ai_coding_runs latest_run
             WHERE latest_run.task_id = t.id
-            ORDER BY latest_run.created_at DESC
+            ORDER BY latest_run.started_at DESC NULLS LAST, latest_run.id DESC
             LIMIT 1
           ) AS latest_run_status,
           EXISTS (
@@ -488,7 +488,7 @@ router.get("/ai/coding/monitor", async (_req, res): Promise<void> => {
             SELECT latest_run.status
             FROM ai_platform.ai_coding_runs latest_run
             WHERE latest_run.task_id = t.id
-            ORDER BY latest_run.created_at DESC
+            ORDER BY latest_run.started_at DESC NULLS LAST, latest_run.id DESC
             LIMIT 1
           ) AS latest_run_status,
           EXISTS (

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { bindingFingerprint, assistantChallenge, localBindings, resolveWorkBinding, execute, workerId,
@@ -17,7 +20,7 @@ const legacy = {
 };
 const binding = {
   version: 1, accountAlias: "GPT02", ownerChannel: ownerTwo, targetConversationId: conversationTwo,
-  workerId, browserProfile: "travelincars-dev",
+  workerId, browserProfile: "gpt02-dell-dev",
 };
 binding.bindingFingerprint = bindingFingerprint(binding);
 
@@ -71,13 +74,13 @@ function runtime(spawn, config = pairings()) {
 }
 
 test("canonical binding/challenge vectors match the cross-language protocol", () => {
-  assert.equal(bindingFingerprint(binding), "4da956549aa62bb6e42bdc4ab13390d2b137d29940e2bb6a89134dfc2f0dbec1");
+  assert.equal(bindingFingerprint(binding), "2301148ac5261d336281033efed8ea40c3f8015f1c1b4723b495f153e846d9d3");
   const metadata = work().metadata;
   assert.equal(assistantChallenge(metadata, binding.bindingFingerprint),
-    "2a4c9bcdf77cb321930750a835f29cd065d70c1ea8b20f8a4c302853b6267a2a");
+    "668e37e7ea50f4a3fdc13b73def177651bb3b8ca12364eeb48b41a1c8e190438");
   assert.equal(assistantChallenge({ ...metadata, watchCommandId: "55555555-5555-4555-8555-555555555555",
     jobId: "66666666-6666-4666-8666-666666666666", checkpointRevision: 7 }, binding.bindingFingerprint),
-  "79960f0819bca525e9f2930fc13b4c94b538c06fc0860686b4d051f84d53feec");
+  "34fbd3af6b9f7c4dc213a8566082e0e5df4fcc8c87f1474877f98d2276e3cc53");
 });
 
 test("GPT01 keeps its explicit legacy tuple and v1 attestation", () => {
@@ -178,7 +181,7 @@ test("disabled, changed, malformed and conflicting local registry is fail-closed
     configurations.push(config);
   }
   const duplicate = pairings();
-  duplicate.bindings.push({ ...binding, accountAlias: "GPT03", ownerChannel: "ai-engine-oauth:" + "e".repeat(64),
+  duplicate.bindings.push({ ...binding, accountAlias: "GPT03", ownerChannel: ownerTwo,
     targetConversationId: "33333333-3333-4333-8333-333333333333", browserProfile: "TRAVELINCARS-DEV", enabled: false });
   delete duplicate.bindings[1].bindingFingerprint;
   configurations.push(duplicate, { ...pairings(), bindings: {} });
@@ -188,8 +191,8 @@ test("disabled, changed, malformed and conflicting local registry is fail-closed
     invalid.bindings[0][field] += "\n";
     configurations.push(invalid);
   }
-  for (const config of configurations) {
-    assert.throws(() => resolveWorkBinding(work(), config));
+  for (const [index, config] of configurations.entries()) {
+    assert.throws(() => resolveWorkBinding(work(), config), undefined, "invalid_registry_case_" + index);
   }
   const aliasConflict = pairings();
   aliasConflict.bindings[0].accountAlias = "GPT01";
@@ -351,8 +354,11 @@ function committedFor(job, payload) {
       metadataJson: { ...JSON.parse(JSON.stringify(payload.details)), ...evidence } } };
 }
 
+const testTempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gpt02-dell-bound-tests-"));
+process.once("exit", () => fs.rmSync(testTempRoot, { recursive: true, force: true }));
+
 function boundRuntime(clock, child, http, presence = async () => ({})) {
-  return { ...runtime(() => assert.fail("Bound jobs must not use spawnSync")),
+  return { ...runtime(() => assert.fail("Bound jobs must not use spawnSync")), root: testTempRoot,
     spawnBound: (python, args, options) => {
       assert.deepEqual(args, ["/test-only/helper.py", "--bound-lease-v1"]);
       child.options = options;

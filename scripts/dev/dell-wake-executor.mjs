@@ -57,8 +57,8 @@ function matches(pattern, value) {
 
 export function bindingFingerprint(binding) {
   return createHash("sha256").update([
-    "dev-chatgpt-wake-binding/v1", binding.accountAlias, binding.ownerChannel,
-    binding.targetConversationId, binding.workerId, binding.browserProfile,
+    "dev-chatgpt-account-binding/v2", binding.accountAlias, binding.ownerChannel,
+    binding.targetConversationId,
   ].join("|")).digest("hex");
 }
 
@@ -257,7 +257,8 @@ function helperEnvironment(root, browserProfile) {
     AI_CORE_DEV_WAKE_KEY_ID: keyId,
     AI_CORE_DEV_WAKE_ALLOWLIST_FILE: allowlistFileName,
     AI_CORE_DEV_WAKE_PRIVATE_KEY_FILE: privateKeyFileName,
-    AI_CORE_OPENCLAW_CMD: path.join(process.env.LOCALAPPDATA || path.dirname(root), "OpenClaw", "deps", "portable-node", "openclaw.cmd"),
+    AI_CORE_OPENCLAW_CMD: process.env.AI_CORE_OPENCLAW_CMD?.trim() ||
+      path.join(process.env.LOCALAPPDATA || path.dirname(root), "OpenClaw", "deps", "portable-node", "openclaw.cmd"),
     AI_CORE_DEV_WAKE_BROWSER_PROFILE: browserProfile,
   };
 }
@@ -606,8 +607,32 @@ function runBoundChild(context, work, runtime, lease) {
   });
 }
 
+/** Only a genuinely attested, precisely bound JSON pause may close a step for auto-resume. */
+export function statusForBoundAnswer(work, answer) {
+  if (!answer?.ok) return "FAILED";
+  const meta = record(work?.metadata) ? work.metadata : {};
+  if (answer.details?.verifiedAssistantReply !== true ||
+      answer.message !== answer.details?.assistantResponseText ||
+      typeof meta.correlationId !== "string") return "COMPLETED";
+  // Preserve the exact signed native reply for attestation; only unwrap the
+  // single literal-DIL wrapper for parsing. Never trust arbitrary HTML/fences.
+  const text = answer.message;
+  const wrapped = text.startsWith("<escape>{") && text.endsWith("}</escape>") &&
+    text.indexOf("<escape>", 8) === -1 &&
+    text.indexOf("</escape>") === text.length - 9;
+  const jsonText = wrapped ? text.slice(8, -9) : text;
+  let paused;
+  try { paused = JSON.parse(jsonText); } catch { return "COMPLETED"; }
+  const id = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
+  if (record(paused) && paused.kind === "SOP_CHECKPOINT" && paused.status === "PAUSED" &&
+      paused.commandId === work.commandId && paused.correlationId === meta.correlationId &&
+      [paused.jobId, paused.checkpointId, paused.sopVersion, paused.nextStepId]
+        .every(value => typeof value === "string" && id.test(value))) return "FAILED";
+  return "COMPLETED";
+}
+
 function confirmsBoundResult(value, work, answer) {
-  const status = answer.ok ? "COMPLETED" : "FAILED";
+  const status = statusForBoundAnswer(work, answer);
   const response = value?.response;
   if (!record(value) || value.commandId !== work.commandId || value.status !== status ||
       !record(response) || !matches(UUID, response.id) || response.commandId !== work.commandId ||
@@ -629,7 +654,7 @@ async function deliverBoundAnswer(work, runtime, lease, answer) {
   for (let attempt = 1; attempt <= 8 && lease.usable(); attempt++) {
     try {
       const committed = await http(runtime, "/ai/agent-runtime/work/" + encodeURIComponent(work.commandId) + "/result", {
-        clientId: workerId, claimToken: work.claimToken, status: answer.ok ? "COMPLETED" : "FAILED",
+        clientId: workerId, claimToken: work.claimToken, status: statusForBoundAnswer(work, answer),
         message: answer.message, details: answer.details,
       });
       if (!confirmsBoundResult(committed, work, answer)) {
@@ -638,6 +663,12 @@ async function deliverBoundAnswer(work, runtime, lease, answer) {
       }
       // A concurrent renew409 can follow this exact transaction's commit.
       // Only its matching durable response resolves that ambiguity.
+      // Durable proof only after exact server receipt verification. No response text or credentials.
+      const stageRecord = JSON.stringify({stage: "RESULT_DELIVERED", commandId: work.commandId,
+        workerId, responseId: committed.response.id, at: new Date().toISOString()}) + "\n";
+      const auditFd = fs.openSync(path.join(runtime.root, "dell-wake-delivery-evidence.jsonl"), "a", 0o600);
+      try { fs.writeSync(auditFd, stageRecord); fs.fsyncSync(auditFd); }
+      finally { fs.closeSync(auditFd); }
       lease.stop();
       return true;
     } catch (error) {
@@ -674,6 +705,16 @@ export async function executeBoundClaim(work, runtime) {
         return { delivered: false, reconciliationRequired: true, reason: "helper_termination_unconfirmed" };
       }
       answer = executionAnswer(context, run);
+    if (!answer.ok) {
+      const reason = String(answer.details?.reason || 'browser_verification_failed')
+        .replace(/[^A-Za-z0-9_:\-]/g, '_').slice(0, 100);
+      const diagnostic = { commandId: work.commandId, at: new Date().toISOString(),
+        exitCode: Number.isInteger(run.status) ? run.status : null,
+        reasonCode: reason, terminationConfirmed: run.terminationConfirmed === true,
+        cancelReason: typeof run.cancelReason === 'string' ? run.cancelReason.slice(0, 80) : null };
+      fs.appendFileSync(path.join(runtime.root, 'dell-wake-failure-diagnostics.jsonl'),
+        JSON.stringify(diagnostic) + String.fromCharCode(10), { encoding: 'utf8', mode: 0o600 });
+    }
       if (run.cancelReason) {
         answer.ok = false;
         answer.message = run.cancelReason;
@@ -691,6 +732,20 @@ export async function executeBoundClaim(work, runtime) {
 
 export async function runWorker() {
   const runtime = loadRuntime();
+  const reconciliationMarker = path.join(runtime.root, 'dell-wake-reconciliation-required.json');
+  const auditLog = path.join(runtime.root, 'dell-wake-reconciliation-audit.jsonl');
+  function recordIncident(work, reason) {
+    const event = {commandId: work.commandId, workerId, reason,
+      recordedAt: new Date().toISOString(), status: "RECONCILIATION_REQUIRED"};
+    fs.appendFileSync(auditLog, JSON.stringify(event) + "\n", { encoding: "utf8" });
+    if (!fs.existsSync(reconciliationMarker)) {
+      fs.writeFileSync(reconciliationMarker, JSON.stringify(event, null, 2) + "\n", {flag: "wx"});
+    }
+  }
+  if (fs.existsSync(reconciliationMarker)) {
+    console.error('RECONCILIATION_REQUIRED: executor will not claim work until the incident is reviewed');
+    return;
+  }
   while (true) {
     try {
       await request(runtime, "/ai/agent-runtime/presence/" + encodeURIComponent(workerId) + "/heartbeat",
@@ -702,8 +757,8 @@ export async function runWorker() {
           if (outcome.delivered) console.log("reported command " + work.commandId);
           else {
             console.log("UNDELIVERED " + work.commandId + " reconciliation required");
-            // A result/termination ambiguity must not become another claim or
-            // a replay of native input. Preserve evidence and stop this loop.
+            // Persist incident independently of process lifetime; never replay uncertain input.
+            recordIncident(work, outcome.reason || "result_delivery_unconfirmed");
             return;
           }
         } else {
@@ -727,7 +782,11 @@ export async function runWorker() {
               if (attempt < 8) await new Promise(resolve => setTimeout(resolve, Math.min(attempt * 2500, 15_000)));
             }
           }
-          if (!delivered) console.log("UNDELIVERED " + work.commandId);
+          if (!delivered) {
+  console.log("UNDELIVERED " + work.commandId + " reconciliation required");
+  recordIncident(work, "generic_result_delivery_unconfirmed");
+  return;
+}
           else console.log("reported command " + work.commandId);
         }
       }

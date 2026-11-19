@@ -1,0 +1,62 @@
+name: GPT02 Issue159 DEV verifier source parity
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_staged_admission.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_readback_contract.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.sysusers'
+      - 'deploy/ai-coding-standalone-dev/gpt02-issue159-approval-reader.service'
+      - 'scripts/dev/test_gpt02_issue159_*'
+      - '.github/workflows/gpt02-issue159-verifier-source-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verifier-readonly-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned signature verification dependency
+        run: python3 -m pip install --no-cache-dir cryptography==50.0.2
+      - name: Regression of the existing non-authorizing verifier
+        env:
+          PYTHONPATH: 'deploy/ai-coding-standalone-dev:scripts/dev'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            test_gpt02_issue159_writer_broker_contract.py \
+            test_gpt02_issue159_staged_admission.py \
+            test_gpt02_issue159_lineage_readback_contract.py \
+            test_gpt02_issue159_approval_reader_runtime.py \
+            test_gpt02_issue159_writer_broker_runtime.py \
+            test_gpt02_issue159_verifier_service.py \
+            test_gpt02_issue159_approval_reader_service.py
+          do
+            python3 "scripts/dev/$f" -q
+          done
+      - name: Retain explicit no-write and no-dispatch boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_contract.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_staged_admission.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_readback_contract.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py
+          grep -Fq 'PrivateNetwork=yes' deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service
+          grep -Fq 'RestrictAddressFamilies=AF_UNIX' deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service
+          grep -Fq 'InaccessiblePaths=' deploy/ai-coding-standalone-dev/gpt02-issue159-verifier.service
+          ! grep -Eiq 'exec.*(sign|dispatch)|dispatchPermitted[[:space:]]*:[[:space:]]*True' deploy/ai-coding-standalone-dev/gpt02_issue159_writer_broker_runtime.py

@@ -5,6 +5,8 @@ import {
   DEV_ASSISTANT_ATTESTATION_KEY_ID,
   DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID,
   DEV_PC2_ASSISTANT_ATTESTATION_KEY_ID,
+  DEV_PCHP_ASSISTANT_ATTESTATION_KEY_ID,
+  DEV_BOUND_ASSISTANT_ATTESTATION_VERSION,
   DEV_ASSISTANT_ATTESTATION_VERSION,
   deriveDevAssistantChallenge,
   devAssistantAttestationPayload,
@@ -95,6 +97,43 @@ describe("PC2 DEV assistant attestation isolation", () => {
       notBefore: "2026-10-18T12:00:00.000Z", receivedAt: "2026-10-18T12:00:40.000Z", publicKeyDerBase64 };
     expect(verifyDevAssistantAttestation(args).verified).toBe(true);
     expect(verifyDevAssistantAttestation({ ...args, details: { attestation: { ...attestation, keyId: DEV_DELL_ASSISTANT_ATTESTATION_KEY_ID } } }).verified).toBe(false);
+  });
+});
+
+describe("PCHP DEV bound assistant attestation isolation", () => {
+  it("accepts PCHP Ed25519 v2 proof but rejects DELL worker identity", () => {
+    const pchp = {
+      ...expected,
+      workerId: "openclaw-pchp-dev" as const,
+      targetConversationId: "6ada4099-af8c-83ec-9fed-8626d3ac9617",
+      bindingFingerprint: "f".repeat(64),
+      browserProfile: "openclaw",
+    };
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const unsigned = {
+      version: DEV_BOUND_ASSISTANT_ATTESTATION_VERSION,
+      algorithm: DEV_ASSISTANT_ATTESTATION_ALGORITHM,
+      keyId: DEV_PCHP_ASSISTANT_ATTESTATION_KEY_ID,
+      workerId: pchp.workerId,
+      conversationId: pchp.targetConversationId,
+      eventId: pchp.eventId,
+      challenge: deriveDevAssistantChallenge(pchp),
+      assistantMessageId: "55555555-5555-4555-8555-555555555555",
+      assistantResponseHash: "a".repeat(64),
+      observedAt,
+      bindingFingerprint: pchp.bindingFingerprint,
+      browserProfile: pchp.browserProfile,
+    } as const;
+    const attestation = { ...unsigned, signature: sign(null, Buffer.from(devAssistantAttestationPayload(unsigned), "utf8"), privateKey).toString("base64") };
+    const publicKeyDerBase64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    const args = {
+      details: { attestation }, expected: pchp,
+      notBefore: "2026-10-18T12:00:00.000Z", receivedAt: "2026-10-18T12:00:40.000Z", publicKeyDerBase64,
+    };
+    expect(verifyDevAssistantAttestation(args).verified).toBe(true);
+    expect(verifyDevAssistantAttestation({ ...args, expected: {
+      ...pchp, workerId: "openclaw-dell-chatgpt-wake-dev" as const,
+    } }).verified).toBe(false);
   });
 });
 

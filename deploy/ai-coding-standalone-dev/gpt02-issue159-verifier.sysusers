@@ -1,0 +1,3 @@
+# Dedicated NOLOGIN identity for four-domain public-key verification only.
+# No access to private signer keys, issuer DB credentials, approval SQLite or network.
+u gpt02-issue159-verifier - "GPT02 Issue159 evidence verifier" /nonexistent /usr/sbin/nologin

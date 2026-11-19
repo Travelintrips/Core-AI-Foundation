@@ -14,12 +14,22 @@ import {
 } from "./codingWhatsappNotificationService.js";
 import { enqueueAiCoreChatInboxMessage } from "./aiCoreChatInboxService.js";
 import { ensureCodingControlBridgeTables } from "./codingControlBridgeSchemaService.js";
+import { toCodingBridgeAckReadback } from "./codingBridgeResponseAckReadback.js";
 import { ensureGcpCodingWorkerStarted } from "./gcpCodingWorkerLifecycleService.js";
+import { readHandshakeSopSettings } from "./handshakeSopSettingsService.js";
+import { renderReplyTemplate } from "./handshakeSopConfiguration.js";
+import { lifecycleEventBridgeEnabled, mapPersistedResponseToLifecycleEvent, signedPersistedCheckpointEvent } from "./jobLifecycleEventBridgeService.js";
 import { notifyExternalAgentWork } from "./externalAgentWorkEventService.js";
 import { devContinuityResultFromCommittedCommand, emitDevContinuityWakeResult, isDevContinuityWakeWorker } from "./devContinuityWakeEvents.js";
 import { devAssistantPublicKeyForWorker } from "./devAssistantAttestation.js";
-import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
+import { commandMatchesDevWakeTarget, DEV_WAKE_DEFAULT_WORKER, DEV_WAKE_DELL_WORKER, DEV_WAKE_PCHP_WORKER, DEV_WAKE_PC2_WORKER, DEV_WAKE_VMSC_WORKER, loadDevWakeRuntimeConfig, readDevWakeBinding, resolveConfiguredDevWakeTarget, type DevWakeBinding } from "./devChatGptWakeBindingService.js";
 import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js";
+import {genericClaimNotGpt02RecoverySql,genericClaimNotReservedCandidateSql,
+  isQuarantinedGpt02RecoveryMetadata}
+  from "./gpt02RecoveryGenericClaimQuarantine.js";
+import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent } from "./devSopCheckpointIssuer.js";
+import { assertNoSelfAttestedCheckpoint } from "./devCheckpointClaimGuard.js";
+import { codingBridgeTerminalEventPredicate, codingBridgeSignedCheckpointCandidatePredicate } from "./codingBridgeTerminalEventPredicate.js";
 
 const DEFAULT_LEASE_SECONDS = 180;
 const MAX_LEASE_SECONDS = 300;
@@ -42,7 +52,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function isIdempotentCodingBridgeLifecycleKind(
   kind: "ACK" | "PROGRESS" | "CHECKPOINT" | "BLOCKER" | "COMPLETED" | "FAILED",
 ): boolean {
-  return kind === "BLOCKER" || kind === "COMPLETED" || kind === "FAILED";
+  return kind === "CHECKPOINT" || kind === "BLOCKER" || kind === "COMPLETED" || kind === "FAILED";
 }
 
 const GITHUB_REPOSITORY = "Travelintrips/Core-AI-Foundation";
@@ -176,7 +186,16 @@ export async function submitCodingBridgeCommand(input: {
   authority?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }) {
+  // Recovery cannot be submitted or re-notified by the generic bridge.
+  // This guard runs before DB access, existing-command lookup or SSE fanout.
+  if(isQuarantinedGpt02RecoveryMetadata(input.metadata))
+    throw Object.assign(new Error("GPT02_RECOVERY_GENERIC_SUBMISSION_FORBIDDEN"),{
+      bridgeStage:"RECOVERY_ISSUER_REQUIRED",
+    });
+  let stage = "SCHEMA_CHECK_FAILED";
+  try {
   await ensureCodingControlBridgeTables();
+  stage = "COMMAND_LOOKUP_FAILED";
   const source = input.source ?? "chatgpt";
   const [existing] = await db
     .select()
@@ -189,18 +208,25 @@ export async function submitCodingBridgeCommand(input: {
     )
     .limit(1);
   if (existing) {
+    stage = "EXISTING_COMMAND_NOTIFICATION_FAILED";
     if (input.assignedClientId) await notifyExternalAgentWork(input.assignedClientId, existing.id);
     return { command: existing, created: false };
   }
 
+  const { operationalSop, operationalSopSource, replyTemplates } =
+    await readHandshakeSopSettings();
   const metadataJson = {
     ...(input.metadata ?? {}),
+    operationalSop,
+    operationalSopSource,
     ...(input.assignedClientId
       ? { assignedClientId: input.assignedClientId }
       : {}),
   };
 
-  const [command] = await db
+  const command = await db.transaction(async (tx) => {
+  stage = "COMMAND_INSERT_FAILED";
+  const [command] = await tx
     .insert(aiCodingBridgeCommandsTable)
     .values({
       taskId: input.taskId ?? null,
@@ -214,16 +240,24 @@ export async function submitCodingBridgeCommand(input: {
     .returning();
   if (!command) throw new Error("Failed to persist bridge command");
 
-  await db.insert(aiCodingBridgeResponsesTable).values({
+  stage = "ACK_INSERT_FAILED";
+  await tx.insert(aiCodingBridgeResponsesTable).values({
     commandId: command.id,
     taskId: command.taskId,
     kind: "ACK",
-    message: input.assignedClientId
+    message: renderReplyTemplate(replyTemplates,
+      input.assignedClientId ? "JOB_QUEUED" : "JOB_RECEIVED", {
+        job_id: String(command.id), status: String(command.status),
+        worker: input.assignedClientId ?? "AI Core",
+      }) ?? (input.assignedClientId
       ? `Command queued for ${input.assignedClientId} by AI Core.`
-      : "Command received by AI Core.",
+      : "Command received by AI Core."),
     checkpointJson: { status: command.status },
   });
 
+  return command;
+  });
+  stage = "EVENT_PUBLISH_FAILED";
   publishSafe({
     eventType: "coding.bridge.command.received",
     sourceModule: "coding-control-bridge",
@@ -237,12 +271,28 @@ export async function submitCodingBridgeCommand(input: {
     },
   });
 
+  stage = "WORKER_DISPATCH_FAILED";
   if (input.assignedClientId) {
-    await notifyExternalAgentWork(input.assignedClientId, command.id);
+    // Notification is an optimization: a persisted command must remain claimable
+    // even when the external event transport is temporarily unavailable.
+    try {
+      await notifyExternalAgentWork(input.assignedClientId, command.id);
+    } catch (error) {
+      console.error("[coding-bridge] work notification failed after persistence", {
+        commandId: command.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     void ensureGcpCodingWorkerStarted().catch(() => undefined);
   }
 
   return { command, created: true };
+  } catch (error) {
+    console.error("[coding-bridge] submission stage failed", { stage, error: error instanceof Error ? error.message : String(error) });
+    const wrapped = new Error("Coding bridge submission failed at " + stage);
+    Object.assign(wrapped, { bridgeStage: stage });
+    throw wrapped;
+  }
 }
 
 async function deliverCodingBridgeWhatsappNotification(input: {
@@ -305,6 +355,19 @@ export async function appendCodingBridgeResponse(input: {
   await ensureCodingControlBridgeTables();
   const checkpointJson = input.checkpoint ?? {};
   const metadataJson = input.metadata ?? {};
+  assertNoSelfAttestedCheckpoint(input.kind, metadataJson);
+
+  // Resolve task identity from the persisted command, never from worker metadata.
+  // Reject conflicting claims, and keep unbound commands unbound.
+  const [sourceCommand] = await db.select({ taskId: aiCodingBridgeCommandsTable.taskId })
+    .from(aiCodingBridgeCommandsTable)
+    .where(eq(aiCodingBridgeCommandsTable.id, input.commandId))
+    .limit(1);
+  if (!sourceCommand) throw new Error("BRIDGE_COMMAND_NOT_FOUND");
+  if (input.taskId && input.taskId !== sourceCommand.taskId)
+    throw new Error("BRIDGE_TASK_COMMAND_MISMATCH");
+  const resolvedInput = { ...input, taskId: sourceCommand.taskId ?? null };
+  input = resolvedInput;
 
   let created = true;
   let response;
@@ -401,6 +464,26 @@ async function publishPersistedCodingBridgeResponse(response: typeof aiCodingBri
     },
   });
 
+  // Informational lifecycle events are emitted only for newly persisted responses.
+  // No worker dispatch, resume, help request, verification or closure occurs here.
+  if (lifecycleEventBridgeEnabled(process.env["AI_CORE_JOB_LIFECYCLE_EVENT_BRIDGE_ENABLED"])) {
+    const lifecycleEvent = mapPersistedResponseToLifecycleEvent(input.kind);
+    if (lifecycleEvent) {
+      publishSafe({
+        eventType: `ai_core.job.lifecycle.${lifecycleEvent.toLowerCase()}`,
+        sourceModule: "coding-control-bridge",
+        sourceId: response.id,
+        correlationId: input.commandId,
+        payload: {
+          lifecycleEvent,
+          responseId: response.id,
+          commandId: input.commandId,
+          taskId: input.taskId ?? null,
+        },
+      });
+    }
+  }
+
   void deliverCodingBridgeWhatsappNotification({
     responseId: response.id,
     commandId: input.commandId,
@@ -453,17 +536,90 @@ export async function listPendingCodingBridgeResponses(limit = 50) {
     .select()
     .from(aiCodingBridgeResponsesTable)
     .where(isNull(aiCodingBridgeResponsesTable.acknowledgedAt))
-    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt))
+    .orderBy(desc(aiCodingBridgeResponsesTable.createdAt))
     .limit(Math.max(1, Math.min(100, limit)));
+}
+
+/** DEV exact acknowledgement read-back, including already-ACKed rows.
+ * This query MUST remain SELECT-only; no schema bootstrap or DDL.
+ */
+export async function getCodingBridgeResponseAckReadback(id: string) {
+  const [row] = await db
+    .select({
+      id: aiCodingBridgeResponsesTable.id,
+      commandId: aiCodingBridgeResponsesTable.commandId,
+      kind: aiCodingBridgeResponsesTable.kind,
+      acknowledgedAt: aiCodingBridgeResponsesTable.acknowledgedAt,
+      metadataJson: aiCodingBridgeResponsesTable.metadataJson,
+    })
+    .from(aiCodingBridgeResponsesTable)
+    .where(eq(aiCodingBridgeResponsesTable.id, id))
+    .limit(1);
+  return row ? toCodingBridgeAckReadback(row) : null;
 }
 
 export async function acknowledgeCodingBridgeResponse(id: string) {
   await ensureCodingControlBridgeTables();
+
+  // The browser-side DEV ACK watcher historically used this generic endpoint.
+  // Promote it to the conversation-bound final ACK path only when the persisted
+  // command and response already prove the exact verified ChatGPT wake.
+  const eligible = await db.execute(sql`
+    SELECT command.metadata_json ->> 'conversationId' AS conversation_id
+    FROM ai_platform.ai_coding_bridge_responses AS response
+    JOIN ai_platform.ai_coding_bridge_commands AS command
+      ON command.id = response.command_id
+    WHERE response.id = ${id}::uuid
+      AND response.kind = 'COMPLETED'
+      AND command.status = 'COMPLETED'
+      AND command.source = 'ai-core'
+      AND command.command_type = 'EXTERNAL_AGENT_WORK'
+      AND command.metadata_json ->> 'capability' = 'chatgpt:wake'
+      AND command.metadata_json ->> 'explicitWorkerTarget' = 'true'
+      AND command.metadata_json ->> 'deliveryCode' = 'DELIVERY_CONFIRMED'
+      AND command.metadata_json ->> 'e2eCode' IN ('E2E_VERIFIED','MCP_ACK_VERIFIED')
+      AND command.metadata_json ->> 'completedBy' = command.metadata_json ->> 'assignedClientId'
+      AND response.metadata_json ->> 'deliveryCode' = 'DELIVERY_CONFIRMED'
+      AND response.metadata_json ->> 'e2eCode' = 'E2E_VERIFIED'
+      AND response.metadata_json ->> 'verifiedAssistantReply' = 'true'
+      AND response.metadata_json ->> 'browserPairingVerified' = 'true'
+      AND response.metadata_json ->> 'chatgptSubmitted' = 'true'
+      AND response.metadata_json ->> 'exitCode' = '0'
+      AND response.metadata_json ->> 'conversationId' = command.metadata_json ->> 'targetConversationId'
+      AND response.metadata_json ->> 'eventId' = command.metadata_json ->> 'eventId'
+      AND NULLIF(command.metadata_json ->> 'conversationId','') IS NOT NULL
+    LIMIT 1
+  `);
+  const conversationId = eligible.rows?.[0]?.["conversation_id"];
+  if (typeof conversationId === "string" && conversationId.length > 0) {
+    const promoted = await acknowledgeCodingBridgeResponseForConversation({
+      responseId: id,
+      conversationId,
+    });
+    if (promoted) {
+      const [row] = await db
+        .select()
+        .from(aiCodingBridgeResponsesTable)
+        .where(eq(aiCodingBridgeResponsesTable.id, id))
+        .limit(1);
+      return row ?? null;
+    }
+  }
+
+  // Preserve generic ACK behavior for non-ChatGPT bridge responses, but make it
+  // idempotent so readback retries never rewrite the original ACK timestamp.
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_bridge_responses
+    SET acknowledged_at = COALESCE(acknowledged_at, NOW())
+    WHERE id = ${id}::uuid
+    RETURNING id
+  `);
+  if (!result.rows?.length) return null;
   const [row] = await db
-    .update(aiCodingBridgeResponsesTable)
-    .set({ acknowledgedAt: new Date() })
+    .select()
+    .from(aiCodingBridgeResponsesTable)
     .where(eq(aiCodingBridgeResponsesTable.id, id))
-    .returning();
+    .limit(1);
   return row ?? null;
 }
 
@@ -481,13 +637,12 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
     return tx.execute(sql`
     WITH acknowledged AS (
       UPDATE ai_platform.ai_coding_bridge_responses AS response
-      SET acknowledged_at = NOW()
+      SET acknowledged_at = COALESCE(response.acknowledged_at, NOW())
       FROM ai_platform.ai_coding_bridge_commands AS command
       WHERE response.command_id = command.id
         AND response.id = ${input.responseId}::uuid
         AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-        AND response.acknowledged_at IS NULL
-      RETURNING response.id, response.command_id, response.acknowledged_at
+      RETURNING response.id, response.command_id, response.kind, response.acknowledged_at
     ),
     marked AS (
       UPDATE ai_platform.ai_coding_bridge_commands AS command
@@ -503,8 +658,28 @@ export async function acknowledgeCodingBridgeResponseForConversation(input: {
       FROM acknowledged
       WHERE command.id = acknowledged.command_id
       RETURNING command.id
+    ),
+    finalized AS (
+      UPDATE public.ai_execution_jobs AS execution
+      SET final_ack_verified = TRUE,
+          status = 'completed',
+          progress = 100,
+          completed_at = COALESCE(execution.completed_at, NOW()),
+          metadata = COALESCE(execution.metadata, '{}'::jsonb) ||
+            jsonb_build_object(
+              'finalAckResponseId', acknowledged.id::text,
+              'finalAckConversationId', ${input.conversationId}::text,
+              'finalAckAt', acknowledged.acknowledged_at::text
+            ),
+          updated_at = NOW()
+      FROM acknowledged
+      WHERE execution.command_id = acknowledged.command_id
+        AND acknowledged.kind = 'COMPLETED'
+        AND execution.callback_verified IS TRUE
+        AND execution.attestation_verified IS TRUE
+      RETURNING execution.id
     )
-    SELECT id FROM marked
+    SELECT marked.id FROM marked LEFT JOIN finalized ON TRUE
     `);
   });
   return (result.rows ?? []).length > 0;
@@ -668,6 +843,10 @@ export async function getVerifiedMcpHandshakeEvidenceForConversation(
 export async function listPendingCodingBridgeResponsesForConversation(input: {
   conversationId: string;
   limit?: number;
+  /** Filter before LIMIT so transport ACK rows never crowd out terminal events. */
+  lifecycleOnly?: boolean;
+  /** Opt-in only: active owner subscription explicitly includes CHECKPOINT. */
+  includeSignedCheckpoints?: boolean;
 }) {
   await ensureCodingControlBridgeTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 50));
@@ -688,7 +867,9 @@ export async function listPendingCodingBridgeResponsesForConversation(input: {
       ON command.id = response.command_id
     WHERE response.acknowledged_at IS NULL
       AND command.metadata_json ->> 'conversationId' = ${input.conversationId}::text
-    ORDER BY response.created_at ASC
+      AND (${!input.lifecycleOnly}::boolean OR ${codingBridgeTerminalEventPredicate()}
+        OR (${input.includeSignedCheckpoints === true}::boolean AND ${codingBridgeSignedCheckpointCandidatePredicate()}))
+    ORDER BY response.created_at ASC, response.id ASC
     LIMIT ${limit}::integer
     `);
   });
@@ -721,7 +902,8 @@ export async function subscribeCodingBridgeConversation(input: {
       conversationId: input.conversationId,
       eventTypes: input.eventTypes ?? ["COMPLETED", "FAILED", "BLOCKED", "MERGED", "DEPLOYED"],
       autoRenewUntilTerminal: true,
-      leasePolicy: "chatgpt-terminal-events",
+      subscriptionLifecycle: "PERSISTENT_ACTIVE",
+      leasePolicy: "signed-final-ack-gated/v1",
     },
   });
 }
@@ -733,7 +915,11 @@ export async function unsubscribeCodingBridgeConversation(
   const result = await db.execute(sql`
     UPDATE ai_platform.ai_coding_bridge_presence
     SET lease_expires_at = NOW(),
-        metadata_json = metadata_json || jsonb_build_object('unsubscribedAt', NOW()::text),
+        metadata_json = metadata_json || jsonb_build_object(
+          'unsubscribedAt', NOW()::text,
+          'subscriptionLifecycle', 'REVOKED',
+          'closedReason', 'EXPLICIT_UNSUBSCRIBE'
+        ),
         updated_at = NOW()
     WHERE client_id = ${`chatgpt:${conversationId}`}::text
     RETURNING client_id
@@ -743,6 +929,7 @@ export async function unsubscribeCodingBridgeConversation(
 
 export async function claimCodingBridgeCommand(input: {
   clientId: string;
+  targetCommandId?: string;
   leaseSeconds?: number;
 }) {
   await ensureCodingControlBridgeTables();
@@ -756,7 +943,12 @@ export async function claimCodingBridgeCommand(input: {
       SELECT id, metadata_json ->> 'assignedClientId' AS assigned_client_id
       FROM ai_platform.ai_coding_bridge_commands
       WHERE metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+        AND (${input.targetCommandId ?? null}::uuid IS NULL OR id = ${input.targetCommandId ?? null}::uuid)
         AND command_type <> 'DEV_CONTINUITY_WATCH'
+        -- A direct UUID target, SSE or expired claim cannot bypass
+        -- the dedicated GPT02 recovery fencing issuer/worker protocol.
+        AND ${genericClaimNotGpt02RecoverySql()}
+        AND ${genericClaimNotReservedCandidateSql()}
         AND CASE WHEN command_type = 'EXTERNAL_AGENT_WORK'
           AND metadata_json ->> 'capability' = 'chatgpt:wake'
           AND metadata_json ? 'devContinuity'
@@ -796,6 +988,7 @@ export async function claimCodingBridgeCommand(input: {
       command.task_id,
       command.external_command_id,
       command.command_type,
+      command.source,
       command.instruction,
       command.authority_json,
       command.metadata_json,
@@ -818,6 +1011,7 @@ export async function claimCodingBridgeCommand(input: {
     taskId: row["task_id"] ? String(row["task_id"]) : null,
     externalCommandId: String(row["external_command_id"] ?? ""),
     commandType: String(row["command_type"] ?? "INSTRUCTION"),
+    source: String(row["source"] ?? ""),
     instruction: String(row["instruction"] ?? ""),
     authority: isRecord(row["authority_json"]) ? row["authority_json"] : {},
     metadata,
@@ -826,6 +1020,36 @@ export async function claimCodingBridgeCommand(input: {
     claimToken,
     leaseSeconds,
   };
+}
+
+// Only a worker holding the active command claim may persist execution progress.
+export async function recordClaimedCodingBridgeProgress(input: {
+  clientId: string;
+  commandId: string;
+  claimToken: string;
+  message: string;
+}): Promise<string | null> {
+  await ensureCodingControlBridgeTables();
+  const result = await db.execute(sql`
+    INSERT INTO ai_platform.ai_coding_bridge_responses
+      (command_id, task_id, kind, message, checkpoint_json, metadata_json)
+    SELECT c.id, c.task_id, 'PROGRESS', ${input.message}::text,
+           '{}'::jsonb, jsonb_build_object('workerId', ${input.clientId}::text)
+    FROM ai_platform.ai_coding_bridge_commands AS c
+    WHERE c.id = ${input.commandId}::uuid
+      AND c.status = 'PROCESSING'
+      AND c.command_type <> 'DEV_CONTINUITY_WATCH'
+      AND c.metadata_json ->> 'assignedClientId' = ${input.clientId}::text
+      AND c.metadata_json ->> 'claimToken' = ${input.claimToken}::text
+      AND (c.metadata_json ->> 'claimLeaseExpiresAt')::timestamptz > NOW()
+      AND NOT EXISTS (
+        SELECT 1 FROM ai_platform.ai_coding_bridge_responses AS r
+        WHERE r.command_id = c.id AND r.kind = 'PROGRESS'
+          AND r.message = ${input.message}::text
+      )
+    RETURNING id
+  `);
+  return (result.rows?.[0] as { id?: string } | undefined)?.id ?? null;
 }
 
 export async function renewCodingBridgeCommandClaim(input: {
@@ -941,6 +1165,7 @@ export async function completeCodingBridgeCommand(input: {
 }) {
   await ensureCodingControlBridgeTables();
   const details = input.details ?? {};
+  const sopCheckpointIntent = input.status === "FAILED" ? parseDevSopCheckpointIntent(input.message) : null;
   // Prevent a successful process exit from masquerading as a passed E2E.
   const verifiedStatus = input.status === "COMPLETED" &&
     hasUnverifiedExternalBrowserCompletion({ message: input.message, details })
@@ -951,7 +1176,7 @@ export async function completeCodingBridgeCommand(input: {
   if (encoded.length > 64_000) {
     throw new Error("Bridge command result details exceed 64000 bytes");
   }
-  const wakeConfig = (input.clientId === DEV_WAKE_DELL_WORKER || input.clientId === DEV_WAKE_DEFAULT_WORKER || input.clientId === DEV_WAKE_PC2_WORKER || input.clientId === DEV_WAKE_VMSC_WORKER)
+  const wakeConfig = (input.clientId === DEV_WAKE_DELL_WORKER || input.clientId === DEV_WAKE_DEFAULT_WORKER || input.clientId === DEV_WAKE_PCHP_WORKER || input.clientId === DEV_WAKE_PC2_WORKER || input.clientId === DEV_WAKE_VMSC_WORKER)
     ? await loadDevWakeRuntimeConfig(input.requestHost).catch(() => null) : null;
 
   // Command terminal status and durable response must commit together.
@@ -982,10 +1207,12 @@ export async function completeCodingBridgeCommand(input: {
     if (!row) return null;
     // The terminal UPDATE holds the claim row lock. Reject a forged or downgraded
     // browser receipt inside this transaction, before either completion can commit.
-    if (input.status === "COMPLETED") {
+    let verifiedCheckpointWake = false;
+    if (input.status === "COMPLETED" || sopCheckpointIntent !== null) {
       const metadata = row["metadata_json"];
       const wakeBinding = isRecord(metadata) ? readDevWakeBinding(metadata["wakeBinding"]) : null;
       const mustVerifyWake = input.clientId === DEV_WAKE_DELL_WORKER || wakeBinding !== null;
+      if (sopCheckpointIntent && !mustVerifyWake) throw new Error("DEV_SOP_CHECKPOINT_WORKER_BINDING_REQUIRED");
       if (mustVerifyWake) {
         const targetId = isRecord(metadata) ? metadata["targetConversationId"] : null;
         const owner = isRecord(metadata) ? metadata["conversationId"] : null;
@@ -1006,18 +1233,95 @@ export async function completeCodingBridgeCommand(input: {
         const receipt = verifyDevWakeCommandReceipt({ metadata, details, notBefore: receivedAt,
           receivedAt: new Date().toISOString(), publicKeyDerBase64 });
         if (!receipt.verified) throw new Error("DEV_CHATGPT_WAKE_CALLBACK_ATTESTATION_INVALID");
+        verifiedCheckpointWake = true;
       }
     }
     const taskId=row["task_id"] ? String(row["task_id"]) : null;
+    let verifiedCheckpointResponse: typeof aiCodingBridgeResponsesTable.$inferSelect | null = null;
+    if (sopCheckpointIntent) {
+      const commandMeta = isRecord(row["metadata_json"]) ? row["metadata_json"] as Record<string, unknown> : {};
+      if (row["source"] !== "ai-core" || row["command_type"] !== "EXTERNAL_AGENT_WORK" ||
+          commandMeta["devOnly"] !== true || commandMeta["capability"] !== "chatgpt:wake" ||
+          typeof commandMeta["correlationId"] !== "string") {
+        throw new Error("DEV_SOP_CHECKPOINT_SOURCE_NOT_AUTHORIZED");
+      }
+      const assistantAttestation = isRecord(details["attestation"]) ? details["attestation"] : {};
+      const checkpointReceipt = issueVerifiedDevSopCheckpoint({
+        message: input.message, intent: sopCheckpointIntent, verifiedAssistantReceipt: verifiedCheckpointWake,
+        assistantResponseHash: assistantAttestation["assistantResponseHash"],
+        commandId: input.commandId, correlationId: commandMeta["correlationId"],
+        privateKeyPkcs8DerBase64: process.env["AI_CORE_DEV_CHECKPOINT_PRIVATE_KEY_PKCS8_DER_B64"],
+      });
+      // One parent command update, checkpoint insert, and terminal insert share this transaction.
+      // A concurrent duplicate callback cannot claim the same PROCESSING command twice.
+      const [checkpointInserted] = await tx.insert(aiCodingBridgeResponsesTable).values({
+        commandId: input.commandId, taskId, kind: "CHECKPOINT", message: "Verified DEV SOP checkpoint",
+        checkpointJson: {
+          jobId: checkpointReceipt.jobId, checkpointId: checkpointReceipt.checkpointId,
+          nextStepId: checkpointReceipt.nextStepId, sopVersion: checkpointReceipt.sopVersion,
+        },
+        metadataJson: {
+          verified: true, checkpointVerified: true, verifiedAssistantReply: true,
+          jobId: checkpointReceipt.jobId, sopVersion: checkpointReceipt.sopVersion,
+          attestation: { algorithm: "Ed25519", signature: checkpointReceipt.signature },
+          checkpointReceipt,
+        },
+      }).returning();
+      if (!checkpointInserted) throw new Error("Failed to persist verified checkpoint");
+      verifiedCheckpointResponse = checkpointInserted;
+    }
     const [response]=await tx.insert(aiCodingBridgeResponsesTable).values({
       commandId:input.commandId,taskId,kind:verifiedStatus,message:input.message,
       checkpointJson:{status:verifiedStatus,statusCode:evidence.statusCode,deliveryCode:evidence.deliveryCode,e2eCode:evidence.e2eCode,clientId:input.clientId},
       metadataJson:{...details,...evidence},
     }).returning();
     if(!response)throw new Error("Failed to persist terminal bridge response");
-    return {response,taskId,command:row};
+
+    const commandMetadata = isRecord(row["metadata_json"]) ? row["metadata_json"] : {};
+    const executionJobId = typeof commandMetadata["executionJobId"] === "string" &&
+      /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(commandMetadata["executionJobId"])
+      ? commandMetadata["executionJobId"] : null;
+    if (executionJobId) {
+      const executionStatus = verifiedStatus === "FAILED" ? "failed" : "verifying";
+      const executionProgress = verifiedStatus === "FAILED" ? 100 : 90;
+      const executionAttested = verifiedStatus === "COMPLETED" && verifiedCheckpointWake &&
+        evidence.e2eCode === "E2E_VERIFIED";
+      await tx.execute(sql`
+        UPDATE public.ai_execution_jobs
+        SET command_id = ${input.commandId}::uuid,
+            assigned_client_id = ${input.clientId},
+            worker_id = ${input.clientId},
+            worker_type = 'chatgpt_browser',
+            status = ${executionStatus},
+            progress = ${executionProgress},
+            result_summary = CASE WHEN ${verifiedStatus} = 'COMPLETED' THEN ${input.message} ELSE result_summary END,
+            error_message = CASE WHEN ${verifiedStatus} = 'FAILED' THEN ${input.message} ELSE NULL END,
+            callback_verified = TRUE,
+            attestation_verified = CASE WHEN ${executionAttested} THEN TRUE ELSE attestation_verified END,
+            completed_at = CASE WHEN ${verifiedStatus} = 'FAILED' THEN COALESCE(completed_at,NOW()) ELSE completed_at END,
+            metadata = COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
+              'statusCode',${evidence.statusCode}::text,
+              'deliveryCode',${evidence.deliveryCode}::text,
+              'e2eCode',${evidence.e2eCode}::text,
+              'callbackAt',NOW()::text
+            ),
+            updated_at = NOW()
+        WHERE id = ${executionJobId}::uuid
+          AND (command_id IS NULL OR command_id = ${input.commandId}::uuid)
+          AND status <> 'cancelled'
+      `);
+    }
+    return {response,taskId,command:row,verifiedCheckpointResponse};
   });
   if(!persisted)return null;
+  // This checkpoint was issued by the trusted server inside the same committed
+  // worker callback. Emit only its passive lifecycle event, and only when the
+  // DEV feature flag is on. Do not send another WhatsApp, Inbox or worker command.
+  const checkpointEvent = signedPersistedCheckpointEvent({
+    enabled: lifecycleEventBridgeEnabled(process.env["AI_CORE_JOB_LIFECYCLE_EVENT_BRIDGE_ENABLED"]),
+    checkpoint: persisted.verifiedCheckpointResponse,
+  });
+  if (checkpointEvent) publishSafe(checkpointEvent);
   const continuityResult = devContinuityResultFromCommittedCommand({
     id: persisted.command["id"], source: persisted.command["source"],
     commandType: persisted.command["command_type"], metadata: persisted.command["metadata_json"],
@@ -1277,7 +1581,15 @@ export async function getAiTaskChatGptBridgeTimeline(commandId: string, correlat
     createdAt: aiCodingBridgeResponsesTable.createdAt,
   }).from(aiCodingBridgeResponsesTable)
     .where(eq(aiCodingBridgeResponsesTable.commandId, command.id))
-    .orderBy(asc(aiCodingBridgeResponsesTable.createdAt)).limit(100);
+    .orderBy(
+      asc(aiCodingBridgeResponsesTable.createdAt),
+      // Same-transaction checkpoint and terminal failure share the database NOW().
+      // The checkpoint must precede the FAILED response in AI Task's reducer.
+      sql`CASE WHEN ${aiCodingBridgeResponsesTable.kind} = 'CHECKPOINT' THEN 0
+               WHEN ${aiCodingBridgeResponsesTable.kind} IN ('FAILED','BLOCKER','COMPLETED') THEN 2
+               ELSE 1 END`,
+      asc(aiCodingBridgeResponsesTable.id),
+    ).limit(100);
   return {
     commandId: command.id,
     status: command.status,

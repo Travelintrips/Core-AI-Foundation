@@ -35,6 +35,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Independent, no-secret preflight so trigger diagnostics are available even
+  # when the protected dispatch environment is waiting for GitHub scheduling.
+  trigger-preflight:
+    if: >-
+      github.repository == 'Travelintrips/Core-AI-Foundation' &&
+      github.actor == 'Travelintrips' &&
+      (github.event_name == 'workflow_dispatch' ||
+       ((github.event.label.name == 'ai-task' || github.event.label.name == 'ai-audit' || github.event.label.name == 'ai-handoff-approved') &&
+        github.event.issue.user.login == 'Travelintrips'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Record non-secret trigger diagnostics
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          LABEL_NAME: ${{ github.event.label.name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "event=$EVENT_NAME issue=$ISSUE_NUMBER label=$LABEL_NAME run=$RUN_ID"
+          echo "Protected dispatch remains separately gated by environment: production."
+      - name: Probe AI Core public health from GitHub runner (no secrets)
+        shell: bash
+        run: |
+          set +e
+          getent ahosts aicore.cstlogistic.co.id | head -8
+          for family in 4 6; do
+            curl -$family --silent --show-error --connect-timeout 7 --max-time 12 \
+              -o /dev/null -w "ip$family http=%{http_code} remote=%{remote_ip} connect=%{time_connect} tls=%{time_appconnect}\\n" \
+              https://aicore.cstlogistic.co.id/api/healthz
+          done
+          exit 0
   dispatch:
     if: >-
       github.repository == 'Travelintrips/Core-AI-Foundation' &&
@@ -54,6 +86,26 @@ jobs:
           node-version: 22
       - name: Verify trigger safety tests
         run: node --test scripts/ai-core-command.test.mjs
+      - name: Diagnose AI Core endpoint reachability (no credentials)
+        shell: bash
+        run: |
+          set +e
+          echo "::group::DNS resolution"
+          getent ahosts aicore.cstlogistic.co.id | head -12
+          echo "::endgroup::"
+          echo "::group::TLS and HTTP IPv4 probe"
+          curl --ipv4 --silent --show-error --location --max-time 15 \
+            --connect-timeout 7 --output /dev/null \
+            --write-out 'ipv4_http=%{http_code} remote_ip=%{remote_ip} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\\n' \
+            https://aicore.cstlogistic.co.id/api/healthz
+          echo "::endgroup::"
+          echo "::group::TLS and HTTP IPv6 probe"
+          curl --ipv6 --silent --show-error --location --max-time 10 \
+            --connect-timeout 5 --output /dev/null \
+            --write-out 'ipv6_http=%{http_code} remote_ip=%{remote_ip} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\\n' \
+            https://aicore.cstlogistic.co.id/api/healthz
+          echo "::endgroup::"
+          exit 0
       - name: Audit or dispatch to AI Core
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}

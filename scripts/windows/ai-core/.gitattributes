@@ -1,0 +1,4 @@
+# Byte-preserving Windows runtime pins. Never rely on git core.autocrlf defaults.
+dev_chatgpt_native_transport.py text eol=crlf
+dell-wake-executor-once.mjs text eol=crlf
+gpt02-local-cache-readback.js text eol=lf
