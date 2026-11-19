@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import {
   QA_EGRESS_TABLE,QA_POOLER_PORT,
@@ -95,4 +97,29 @@ test("QA source must not change runtime firewall or authorize pilot",()=>{
  assert.doesNotMatch(source,/execFile|spawn\(|iptables -I|nft -f|docker run|child_process/);
  assert.match(source,/operationalAuthority:false/);
  assert.match(source,/independentOperationalEgressAclVerified:false/);
+});
+
+test("dynamic module import cannot trigger CLI stdin or a side effect",()=>{
+  const path=fileURLToPath(new URL("./cst-team-onejob-nft-egress-qa.mjs",import.meta.url));
+  const r=spawnSync(process.execPath,[
+    "--input-type=module","-e",
+    'await import(process.argv[1]);console.log("IMPORT_ONLY_NO_READ");',
+    path,approved,
+  ],{encoding:"utf8",input:"",timeout:2000});
+  assert.equal(r.status,0,r.stderr);
+  assert.equal(r.stdout.trim(),"IMPORT_ONLY_NO_READ");
+});
+
+test("explicit --audit-kernel-qa CLI reads only supplied kernel JSON",()=>{
+  const path=fileURLToPath(new URL("./cst-team-onejob-nft-egress-qa.mjs",import.meta.url));
+  const run=(ip)=>spawnSync(process.execPath,[path,"--audit-kernel-qa",ip],
+    {encoding:"utf8",input:JSON.stringify(sample),timeout:2000});
+  const ok=run(approved);
+  assert.equal(ok.status,0,ok.stderr);
+  const evidence=JSON.parse(ok.stdout);
+  assert.equal(evidence.qaNamespacePolicyVerified,true);
+  assert.equal(evidence.operationalAuthority,false);
+  const denied=run("198.51.100.99");
+  assert.equal(denied.status,2,denied.stderr);
+  assert.equal(JSON.parse(denied.stdout).qaNamespacePolicyVerified,false);
 });
