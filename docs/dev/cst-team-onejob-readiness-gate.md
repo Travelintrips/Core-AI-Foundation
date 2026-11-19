@@ -19,9 +19,13 @@ have **no** differences in backend runtime or the bounded pilot RLS templates.
 It checks the candidate container `cst-core-onejob-dev-candidate`, requiring
 healthy status, identical image ID, non-host/non-production Docker network and
 no ports bound publicly. The existing unified DEV endpoint
-`dev.cstlogistic.co.id` must resolve and return `x-cst-source-commit`
-matching the current source commit or an independently proven code-equivalent
-ancestral candidate. The retired `dev-aicore.cstlogistic.co.id` Nginx vhost
+`dev.cstlogistic.co.id` must resolve, but its shared `/api/` Nginx route must
+**remain on the existing healthy Core DEV container** during pilot preparation.
+The candidate must instead bind port 3000 to a distinct 127.0.0.1-only port,
+respond to a direct loopback `/api/healthz` request, and report an exact source
+commit header (`x-cst-source-commit` or `x-cst-commit-sha`) matching the candidate
+image label. This is a prelaunch provenance check, not an authorization to dispatch.
+Do not cut over the shared DEV `/api/` merely to make a readiness check pass. The retired `dev-aicore.cstlogistic.co.id` Nginx vhost
 must remain HTTP 410 (quarantined since 31 October 2026). Never re-enable
 that retired endpoint or substitute the PROD hostname merely for a pilot.
 
@@ -51,3 +55,13 @@ queued Company-1 model pilot. The retired host remains HTTP 410. Existing Core D
 untouched. **No attempt to bypass these blockers should be made.**
 
 Unit regression: `node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs`.
+
+## Shared DEV API isolation update, 19 November 2026
+
+The VPS Nginx config currently points the unified DEV `/api/` route at the
+existing healthy Core DEV runtime on loopback 18082. An initial stricter gate
+incorrectly required routing the shared API to the candidate before the pilot.
+This requirement was removed: the gate now refuses a premature shared-route
+change and requires a separate, healthy candidate loopback endpoint with source
+provenance. The retired `dev-aicore` HTTP 410 quarantine remains mandatory.
+No candidate launch or shared Nginx change was performed as part of this edit.
