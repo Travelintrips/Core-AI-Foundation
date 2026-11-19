@@ -143,7 +143,8 @@ def main():
         denied(insert_job(REQ1,"OLLAMA-11111111").replace(
             "'waiting'","'queued'"),"PREMATURE_QUEUED")
         denied(insert_job(REQ1,"OLLAMA-11111111").replace(
-            "'qwen2.5:3b'","'qwen2.5:72b'"),"WRONG_MODEL")
+            '"modelId":"qwen2.5:3b"','"modelId":"qwen2.5:72b"'),
+            "WRONG_MODEL")
         denied("""UPDATE ai_platform.internal_users SET role='owner'
           WHERE id=2;""","OWNER_PROMOTION")
         denied("""UPDATE ai_platform.ai_jobs SET status='queued'
