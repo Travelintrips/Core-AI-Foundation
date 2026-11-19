@@ -34,7 +34,7 @@ export function renderOneJobQaEgressPolicy(allowedIPv4) {
 
 const positiveInt=x=>Number.isSafeInteger(x)&&x>=0;
 function counter(expr) {
-  return expr && typeof expr==="object" && expr.counter &&
+  return expr && typeof expr==="object" && Object.keys(expr).length===1 && expr.counter &&
     positiveInt(expr.counter.packets) && positiveInt(expr.counter.bytes);
 }
 function exactAddressMatch(expr,allowed) {
@@ -78,7 +78,7 @@ export function auditOneJobQaKernelEgress(nftJson, expectedIPv4) {
     const rules=objects.filter(p=>p?.rule).map(p=>p.rule);
     if(objects.length!==4 || tables.length!==1 || chains.length!==1 ||
        rules.length!==2)throw Error("UNEXPECTED_KERNEL_OBJECTS");
-    if(!belongsTo(tables[0]) || tables[0].name!==QA_EGRESS_TABLE)
+    if(tables[0].family!=="inet" || tables[0].name!==QA_EGRESS_TABLE)
       throw Error("WRONG_TABLE");
     const chain=chains[0];
     if(!belongsTo(chain) || chain.name!=="output" ||
