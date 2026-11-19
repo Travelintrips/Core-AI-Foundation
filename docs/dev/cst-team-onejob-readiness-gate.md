@@ -953,3 +953,15 @@ receipt readback, and independent QA can later raise delivery
 evidence above the current `NO-GO` status. An approved real
 Company-1 job and its subscriber credentials/receipt do not yet
 exist; neither the templates nor this rehearsal create them.
+
+**Prelaunch gating:** the read-only `projectOneJobGate` additionally
+requires `candidateIndependentSubscriberArmed===true` before it can
+report that a new job is eligible for admission. The current live
+preflight **hardcodes this observation to false**; no environment
+flag, synthetic Ed25519 test receipt, stage role or operator label
+can set it. A future separate, independently reviewed readiness
+collector must prove the scoped consumer/role, key custody and
+persistence path before a real newly approved job starts.
+The blocker is `INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED`.
+This prevents publishing a new event into a system with no
+ready receipt consumer, without modifying the already-PASS event bus.
