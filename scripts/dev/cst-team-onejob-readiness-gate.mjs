@@ -31,8 +31,29 @@ if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
    raw.includes("nzdweipzckfszczzqtuw")){
   console.log(JSON.stringify({status:"WRONG_DB_PROJECT"}));process.exit(0)
 }
+// No unverified TLS even for this READ-ONLY catalog diagnostic. The
+// authenticated candidate must mount the exact trusted root at its fixed path.
+// Fallback to the shared Core container without this CA must remain NO-GO.
+const fs=require("node:fs"),{X509Certificate}=require("node:crypto");
+let rootCa;
+try {
+ const path="/run/cst-onejob-dev-db/ca/prod-ca-2021.crt";
+ const stat=fs.lstatSync(path);
+ if(!stat.isFile()||stat.isSymbolicLink()||stat.size<500||
+    stat.size>8192||(stat.mode&0o022)!==0)throw Error("UNTRUSTED_CA_FILE");
+ rootCa=fs.readFileSync(path);
+ const cert=new X509Certificate(rootCa);
+ const fingerprint=cert.fingerprint256.replace(/:/g,"").toUpperCase();
+ if(fingerprint!=="807025AD50D4ED219D2C9C7D299C004F824EB00CF7F65AFEF607D07B72E6CAFA"||
+    cert.ca!==true||cert.verify(cert.publicKey)!==true)
+   throw Error("PINNED_ROOT_MISMATCH");
+}catch {
+ console.log(JSON.stringify({status:"DEV_TRUSTED_CA_NOT_VERIFIED"}));
+ process.exit(0);
+}
 (async()=>{
- const c=new pg.Client({connectionString:raw,ssl:{rejectUnauthorized:false},
+ const c=new pg.Client({connectionString:raw,
+   ssl:{rejectUnauthorized:true,ca:rootCa},
    connectionTimeoutMillis:4500,query_timeout:4500});
  try{
   await c.connect();await c.query("BEGIN READ ONLY");
