@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import socket
 import sys
+import subprocess
 import tempfile
 import unittest
 
@@ -109,6 +110,23 @@ class UnixPeerCredTests(unittest.TestCase):
                 # Restore ownership for automatic tmpdir cleanup when root.
                 if os.geteuid() == 0:
                     os.chown(folder, 0, 0)
+
+    def test_inherited_fd3_without_descriptor_fails_closed(self):
+        script = str(Path(__file__).with_name("cst_team_onejob_peercred.py"))
+        for args in [
+            ["--check-accepted-fd3", "28502", "28501"],
+            ["--check-accepted-fd3", "0", "28501"],
+            ["--check-accepted-fd3", "28502", "bogus"],
+        ]:
+            proc = subprocess.run(
+                [sys.executable, "-I", script, *args],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True, timeout=3, check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("CST_ONEJOB_KERNEL_PEER_DENIED", proc.stdout)
+            self.assertNotIn("PEER_VERIFIED", proc.stdout)
 
     def test_no_runtime_launcher_is_present(self):
         with self.assertRaisesRegex(
