@@ -40,6 +40,7 @@ import {
 } from "../services/jobWorkerService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
+import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.js";
 
 const router = Router();
 
@@ -327,6 +328,14 @@ router.post("/ai/jobs", async (req, res): Promise<void> => {
   }
 
   const d = body.data;
+  // A requestId in the reserved one-job pilot namespace is NOT authorization.
+  // Never let generic enqueue create a pilot job (or a different job type
+  // impersonating it). A dedicated Owner/Super Admin approval flow must
+  // bind one immutable requestId, job and worker before any admission.
+  if (isReservedOneJobPilotRequest(d.payloadJson)) {
+    res.status(403).json({ error: "DEV_ONEJOB_OWNER_APPROVAL_REQUIRED" });
+    return;
+  }
   const job = await enqueue({
     jobType:           d.jobType,
     payloadJson:       d.payloadJson,
