@@ -44,7 +44,7 @@ test("DEV Dockerfile stamps source after COPY and before build, runtime inherits
   const runtimeCopy = docker.indexOf("COPY --from=build /workspace /app");
   assert.ok(copy >= 0 && stamp > copy && build > stamp && runtimeCopy > build);
   assert.match(docker, /ARG GITHUB_SHA=unknown/);
-  assert.match(docker, /ENV GITHUB_SHA=\\$GITHUB_SHA/);
+  assert.match(docker, /ENV GITHUB_SHA=\$GITHUB_SHA/);
   const ignore = readFileSync(new URL("../../deploy/hostinger-dev/Dockerfile.dockerignore", import.meta.url), "utf8");
-  assert.match(ignore, /^\\.cst-build-sha$/m);
+  assert.match(ignore, /^\.cst-build-sha$/m);
 });
