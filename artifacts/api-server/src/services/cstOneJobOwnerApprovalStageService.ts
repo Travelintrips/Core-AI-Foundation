@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { sql } from "drizzle-orm";
-import { db } from "@workspace/db";
+import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";\nimport {CST_ONEJOB_STAGE_LOGIN} from "../lib/cstOneJobStageDbConfig.js";
 
 const SHA = /^[a-f0-9]{40}$/;
 const WORKER = /^cst-dev-dell-onejob-[0-9]{8}-[a-f0-9]{8}$/;
@@ -57,13 +57,18 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
     responseFormat:{type:"text"},
     maxOutputTokens:24,
   };
-  return db.transaction(async tx=>{
+  const stageDb=getCstOneJobStagingDatabase(input.env);
+  return stageDb.transaction(async tx=>{
+    // SET LOCAL is valid only inside this transaction and automatically
+    // clears on COMMIT/ROLLBACK. The separate LOGIN has SET TRUE only for
+    // the NOLOGIN writer role. The common Core AI DB pool cannot SET it.
+    await tx.execute(sql`SET LOCAL ROLE cst_team_model_pilot_writer`);
     // Current shared aicore_dev_runtime RLS allows coding work only: it
     // cannot safely stage ollama_model_invocation. Require a separately
     // provisioned, exact DEV-only writer principal and reviewed RLS policies,
     // rather than broadening shared runtime grants. No such writer exists yet.
     const boundary=await tx.execute(sql`
-      SELECT current_user AS role_name,
+      SELECT current_user AS role_name, session_user AS login_role_name,
         EXISTS(
           SELECT 1 FROM pg_policies p
           WHERE p.schemaname='ai_platform' AND p.tablename='ai_jobs'
@@ -88,7 +93,7 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
         ) AS approval_insert_scoped`);
     const scope=boundary.rows[0] as Record<string,unknown> | undefined;
     if(boundary.rows.length!==1 ||
-      scope?.role_name!=='cst_team_model_pilot_writer' ||
+      scope?.role_name!=='cst_team_model_pilot_writer' ||\n      scope?.login_role_name!==CST_ONEJOB_STAGE_LOGIN ||
       scope?.job_insert_scoped!==true ||
       scope?.job_read_scoped!==true ||
       scope?.approval_insert_scoped!==true)
