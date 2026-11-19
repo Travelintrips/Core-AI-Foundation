@@ -23,6 +23,7 @@ on:
       - "docs/dev/gpt02-issue159-minimal-catalog-auditor-existing-role.REVIEW_ONLY.sql"
       - "scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py"
       - "scripts/dev/test_gpt02_issue159_existing_auditor_addonly_pg.py"
+      - "scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py"
       - "docs/dev/gpt02-issue159-store-owner-relock-helper.PROPOSED.sql"
       - "docs/dev/gpt02-issue159-store-owner-relock-helper-maintenance.REVIEW_ONLY.sql"
       - "scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py"
@@ -117,6 +118,9 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_existing_auditor_addonly_pg.py
           GPT02_ADD_ONLY_TEST_PG_IMAGE=postgres:17-alpine \
             python3 scripts/dev/test_gpt02_issue159_existing_auditor_addonly_pg.py
+          python3 scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py
+          GPT02_CHAIN_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py
           echo "PASS_SCOPED_SQL_REVOKE_ACTIVE_SESSION_RELOCK_DISPOSABLE_ONLY"
       - name: Assert no runtime deployment path
         run: |
