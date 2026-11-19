@@ -58,6 +58,42 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
     maxOutputTokens:24,
   };
   return db.transaction(async tx=>{
+    // Current shared aicore_dev_runtime RLS allows coding work only: it
+    // cannot safely stage ollama_model_invocation. Require a separately
+    // provisioned, exact DEV-only writer principal and reviewed RLS policies,
+    // rather than broadening shared runtime grants. No such writer exists yet.
+    const boundary=await tx.execute(sql`
+      SELECT current_user AS role_name,
+        EXISTS(
+          SELECT 1 FROM pg_policies p
+          WHERE p.schemaname='ai_platform' AND p.tablename='ai_jobs'
+            AND p.policyname='cst_onejob_stage_insert'
+            AND p.cmd='INSERT'
+            AND 'cst_team_model_pilot_writer'=ANY(p.roles)
+        ) AS job_insert_scoped,
+        EXISTS(
+          SELECT 1 FROM pg_policies p
+          WHERE p.schemaname='ai_platform' AND p.tablename='ai_jobs'
+            AND p.policyname='cst_onejob_stage_select'
+            AND p.cmd='SELECT'
+            AND 'cst_team_model_pilot_writer'=ANY(p.roles)
+        ) AS job_read_scoped,
+        EXISTS(
+          SELECT 1 FROM pg_policies p
+          WHERE p.schemaname='ai_platform'
+            AND p.tablename='cst_onejob_owner_approvals'
+            AND p.policyname='cst_onejob_stage_approval_insert'
+            AND p.cmd='INSERT'
+            AND 'cst_team_model_pilot_writer'=ANY(p.roles)
+        ) AS approval_insert_scoped`);
+    const scope=boundary.rows[0] as Record<string,unknown> | undefined;
+    if(boundary.rows.length!==1 ||
+      scope?.role_name!=='cst_team_model_pilot_writer' ||
+      scope?.job_insert_scoped!==true ||
+      scope?.job_read_scoped!==true ||
+      scope?.approval_insert_scoped!==true)
+      throw Error("ONEJOB_DEDICATED_WRITER_RLS_NOT_PROVISIONED");
+
     // Only a freshly DB-verified internal Owner identity is acceptable.
     // Row lock prevents a concurrent role demotion before commit.
     const actor=await tx.execute(sql`
