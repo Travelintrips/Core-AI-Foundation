@@ -94,7 +94,8 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
         ) AS approval_insert_scoped`);
     const scope=boundary.rows[0] as Record<string,unknown> | undefined;
     if(boundary.rows.length!==1 ||
-      scope?.role_name!=='cst_team_model_pilot_writer' ||\n      scope?.login_role_name!==CST_ONEJOB_STAGE_LOGIN ||
+      scope?.role_name!=='cst_team_model_pilot_writer' ||
+      scope?.login_role_name!==CST_ONEJOB_STAGE_LOGIN ||
       scope?.job_insert_scoped!==true ||
       scope?.job_read_scoped!==true ||
       scope?.approval_insert_scoped!==true)
