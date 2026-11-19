@@ -34,6 +34,8 @@ on:
       - "scripts/dev/test_gpt02_issue159_native_relock_catalog_pg.py"
       - "scripts/dev/test_gpt02_issue159_pinned_tls_ca.py"
       - "scripts/dev/test_gpt02_issue159_one_shot_reader_broker.py"
+      - "scripts/dev/gpt02_issue159_supervisor_catalog_gate.READONLY.sql"
+      - "scripts/dev/test_gpt02_issue159_supervisor_catalog_gate_pg.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_release_broker.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_bridge_handoff_preflight.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_exact_bridge_stage.py"
@@ -109,6 +111,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_ephemeral_role_revocation_pg.py
           python3 scripts/dev/test_gpt02_issue159_disposable_login_relock_pg.py
           python3 scripts/dev/test_gpt02_issue159_relock_active_session_pg.py
+          python3 scripts/dev/test_gpt02_issue159_supervisor_catalog_gate_pg.py
           echo "PASS_SCOPED_SQL_REVOKE_ACTIVE_SESSION_RELOCK_DISPOSABLE_ONLY"
       - name: Assert no runtime deployment path
         run: |
