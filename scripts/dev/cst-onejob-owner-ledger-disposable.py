@@ -377,6 +377,11 @@ def main():
         # Full atomic state-change exercise in network-none throwaway DB:
         # five injected failures must leave no consumption/job/audit residue,
         # then a synthetic success and replay must match exact row counts.
+        psql("""UPDATE ai_platform.ai_jobs SET
+           payload_json=jsonb_build_object(
+             'requestId','cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+             'modelId','qwen2.5:3b')
+           WHERE id=485 AND status='waiting';""")
         atomic_output=psql(ATOMIC_FIXTURE.read_text())
         if "DO" not in atomic_output:
             raise RuntimeError("DISPOSABLE_ATOMIC_FIXTURE_NOT_EXECUTED")
