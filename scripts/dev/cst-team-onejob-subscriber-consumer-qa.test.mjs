@@ -151,3 +151,27 @@ test("consumer is inert at import and cannot dispatch, sign or alter events",()=
   assert.ok(src.includes("subscriberDeliveryVerified:false"));
   assert.ok(src.includes("independentFinalAckVerified:false"));
 });
+
+test("network-none PG16 functional harness cannot access real Supabase",()=>{
+  const root=new URL("./",import.meta.url);
+  const read=name=>readFileSync(new URL(name,root),"utf8");
+  const driver=read("cst-team-onejob-subscriber-functional-rls-qa.py");
+  const client=read("cst-team-onejob-subscriber-functional-client-qa.mjs");
+  const reviewer=read("cst-team-onejob-subscriber-functional-review-qa.mjs");
+  assert.match(driver,/--network","none"/);
+  assert.match(driver,/POSTGRES_HOST_AUTH_METHOD=trust/);
+  assert.match(driver,/type=bind,source=/);
+  assert.match(driver,/docker","rm","-f"/);
+  assert.match(driver,/shutil\.rmtree\(temp,ignore_errors=True\)/);
+  assert.doesNotMatch(driver,/--network","host"/);
+  assert.doesNotMatch(driver,/--privileged/);
+  assert.doesNotMatch(driver,/SUPABASE_DEV_DATABASE_URL|nzdweipzckfszczzqtuw/);
+  assert.match(client,/CST_ONEJOB_PG16_DISPOSABLE_QA/);
+  assert.match(client,/cst_onejob_subscriber_functional_fixture/);
+  assert.match(client,/host:QA_HOST,port:5432,database:QA_DB,user:QA_ROLE/);
+  assert.match(client,/PG16_DUPLICATE_SIGNED_RECEIPT_REJECTED/);
+  assert.match(reviewer,/CST_ONEJOB_PG16_DISPOSABLE_QA/);
+  assert.match(reviewer,/signedReceiptConsistent,true/);
+  assert.match(reviewer,/subscriberDeliveryVerified,false/);
+  assert.match(reviewer,/independentFinalAckVerified,false/);
+});
