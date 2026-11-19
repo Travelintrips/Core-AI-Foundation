@@ -72,6 +72,8 @@ jobs:
         run: python3 scripts/dev/cst-onejob-writer-rls-disposable.py
       - name: Verify isolated staging pooler project, role and TLS configuration
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-stage-connection-config.test.mjs
+      - name: Verify onejob live readiness remains read-only and cannot issue GO
+        run: node --test scripts/dev/cst-onejob-live-readiness.test.mjs
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap
