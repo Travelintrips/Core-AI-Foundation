@@ -9,6 +9,7 @@ ROOT=Path(__file__).resolve().parents[2]
 DDL=ROOT/"docs/dev/cst-onejob-owner-approval.PROPOSED.sql"
 BROKER=ROOT/"docs/dev/cst-onejob-waiting-admission-broker.PROPOSED.sql"
 RECEIPTS=ROOT/"docs/dev/cst-onejob-independent-receipts.PROPOSED.sql"
+ATOMIC_FIXTURE=ROOT/"scripts/dev/cst-onejob-atomic-transition.TESTONLY.sql"
 NAME=f"cst-onejob-owner-ledger-qa-{os.getpid()}"
 DB="cst_onejob_owner_ledger_fixture"
 
@@ -373,10 +374,16 @@ def main():
            THEN 'REPLAY_ROLLBACK_PASS' ELSE 'REPLAY_LEFT_SIDE_EFFECTS' END;""")
         if "REPLAY_ROLLBACK_PASS" not in replay:
             raise RuntimeError("REPLAY_NONCE_CONSUMPTION_LEFT_EFFECTS")
+        # Full atomic state-change exercise in network-none throwaway DB:
+        # five injected failures must leave no consumption/job/audit residue,
+        # then a synthetic success and replay must match exact row counts.
+        atomic_output=psql(ATOMIC_FIXTURE.read_text())
+        if "DO" not in atomic_output:
+            raise RuntimeError("DISPOSABLE_ATOMIC_FIXTURE_NOT_EXECUTED")
         report.update(result="PASS",validRows=1,rlsForced=True,
           userPolicyPresent=False,duplicateRequestDenied=True,
           duplicateJobDenied=True,forgedOwnerDenied=True,excessiveTtlDenied=True,
-          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True,brokerNoLogin=True,brokerNoDirectWrites=True,brokerNoTransition=True,receiptRowNeverAuthorizes=True,receiptRlsForced=True,receiptShortTtlEnforced=True,replayNonceDenied=True,replayNoPartialConsume=True)
+          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True,brokerNoLogin=True,brokerNoDirectWrites=True,brokerNoTransition=True,receiptRowNeverAuthorizes=True,receiptRlsForced=True,receiptShortTtlEnforced=True,replayNonceDenied=True,replayNoPartialConsume=True,atomicFaultRollbacks=5,atomicSuccessFixture=True,atomicReplayDenied=True)
         print("ONEJOB_OWNER_LEDGER_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:
