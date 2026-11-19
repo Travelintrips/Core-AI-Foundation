@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";
 import { resolveDatabaseUrl } from "./env";
+import { createCstDevOneJobSocketOptions } from "./cstOneJobDevSocketTransport";
 
 const { Pool } = pg;
 
@@ -26,8 +27,13 @@ const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax >= 1
   ? Math.max(1, Math.min(10, Math.floor(configuredPoolMax)))
   : isProduction ? 10 : 5;
 
+const databaseUrl = resolveDatabaseUrl();
+// Strict opt-in for one-job CST-DEV only. Disabled for all existing pools,
+// unless an approved dedicated pilot identity and fixed Unix transport exist.
+const oneJobSocketOptions = createCstDevOneJobSocketOptions(databaseUrl);
 const poolConfig = {
-  connectionString: resolveDatabaseUrl(),
+  connectionString: databaseUrl,
+  ...(oneJobSocketOptions ?? {}),
   // Production stays at 10 application connections by default, and can opt
   // into a smaller per-process maximum (1..10). No environment may exceed 10.
   max: poolMax,
