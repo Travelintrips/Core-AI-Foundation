@@ -177,3 +177,39 @@ restore the retired DEV hostname or reuse historical job #482.
 This narrow guard is proposed separately because the previous Core PR #1763
 merged to `develop` at commit `858efc5a` before this follow-up was ready;
 it is **not** approval for DEV execution or PROD promotion.
+
+## Independent ACL and dedicated DEV database transport admission (19 November 2026)
+
+**Critical fail-closed correction:** a successful randomized TCP denial at the
+Docker host gateway does **not** demonstrate the absence of another reachable
+host port, alternative host address, IPv6 route or outbound destination. A
+valid, short-lived PostgreSQL login proves role authorization, not network
+path confinement. Neither can substitute for the other.
+
+The one-job readiness projector now requires two **separate positive proofs**:
+
+- `candidateIndependentNetworkAclVerified`: an independently reviewed,
+  candidate-identity-bound inspection and negative network challenge covering
+  host input, forwarding, IPv4/IPv6, other attached networks and unapproved
+  destinations, in addition to the existing random gateway listener challenge.
+- `candidateDedicatedDevDbTransportVerified`: a dedicated, explicitly approved
+  network route to **only** CST-DEV `xssrfshdrtdfupgqwfdw`, verified from the
+  exact candidate with the short-lived, request-bound database identity and
+  negative checks for unauthorized projects/destinations. Do not use shared
+  `aicore_dev_runtime` credentials to satisfy this check.
+
+**Both are intentionally `false` in the current live preflight entrypoint.**
+No privileged firewall inspection, complete route attestation or approved
+DB-only transport verifier has yet supplied the evidence. This is a deliberate
+operational NO-GO: neither an environment variable, a local file supplied by
+the candidate, an operator assertion, a Docker `--internal` flag, nor a
+successful PostgreSQL SELECT can turn either into `true`.
+
+Until a separately reviewed fail-closed evidence collector is implemented and
+independently tested, the preflight must report
+`CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED` and
+`DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED`. The new code is **only a safety
+barrier**: no firewall changes, Docker network changes, role/job creation,
+event replay, signer activation, DEV shared-route cutover or PROD deployment.
+Synthetic positive values in pure unit tests exercise the projector only;
+they are **not** operational acceptance evidence.
