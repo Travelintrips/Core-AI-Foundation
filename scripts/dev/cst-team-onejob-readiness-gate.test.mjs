@@ -120,6 +120,36 @@ test("loopback-only IPv6 reject routes do not appear as outbound connectivity",(
   assert.equal(probe(noDefault4,null),"ROUTE_PRESENT");
 });
 
+test("read-only preflight must reuse the existing socket transport, never unguarded TCP",()=>{
+  const source=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
+  assert.match(source,/createCstDevOneJobSocketOptions\(raw,process\.env\)/);
+  assert.match(source,/socketOptions\.ssl\?\.rejectUnauthorized!==true/);
+  assert.match(source,/socketOptions\.ssl\.ca\.equals\(rootCa\)/);
+  assert.match(source,/typeof socketOptions\.stream!=="function"/);
+  assert.match(source,/new pg\.Client\(\{connectionString:raw,\.\.\.socketOptions/);
+  assert.match(source,/DEV_PILOT_SOCKET_TRANSPORT_NOT_VERIFIED/);
+  assert.match(source,/node","--experimental-strip-types","-e",dbReadOnlyJs/);
+  assert.match(source,/isRunning==="true" \? readDevCatalog\(CANDIDATE\)/);
+  assert.doesNotMatch(source,/readDevCatalog\(isRunning==="true" \? CANDIDATE : CORE\)/);
+  assert.match(source,/u\.hostname!==target/);
+  assert.match(source,/u\.port!=="6543"/);
+  assert.match(source,/SUPABASE_URL_DEV!/);
+  assert.match(source,/cst_team_model_pilot_\[0-9\]/);
+  assert.match(source,/raw\.includes\("nzdweipzckfszczzqtuw"\)/);
+});
+test("the exact Docker read-only catalog JavaScript remains parseable",()=>{
+  const source=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
+  const match=source.match(/const dbReadOnlyJs = String\.raw`([\s\S]*?)`;/);
+  assert.ok(match && match[1],"must extract exact in-container diagnostic");
+  const script=new Script(match[1]);
+  assert.ok(script);
+  assert.match(match[1],/BEGIN READ ONLY/);
+  assert.match(match[1],/ROLLBACK/);
+  assert.match(match[1],/DEV_TRUSTED_CA_NOT_VERIFIED/);
+  assert.match(match[1],/DEV_PILOT_SOCKET_TRANSPORT_NOT_VERIFIED/);
+  assert.doesNotMatch(match[1],/rejectUnauthorized:false/);
+});
+
 test("an ancestral QA image is reusable only if runtime code and pilot RLS are unchanged",()=>{
   const oldSha="b".repeat(40);
   assert.equal(projectOneJobGate({...ready,imageSourceSha:oldSha,sourceContentEquivalent:false}).pilotAdmissionReady,false);
