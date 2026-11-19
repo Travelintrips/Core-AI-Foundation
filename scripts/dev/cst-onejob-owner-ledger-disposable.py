@@ -76,6 +76,27 @@ def main():
               END;
             END $deny$;
             RESET ROLE;""")
+        # Even different job IDs and independently random request IDs must
+        # not create a second active pilot. PostgreSQL's partial UNIQUE index
+        # enforces this across concurrent transactions, not application memory.
+        psql("""DO $single_active$
+        DECLARE failed_constraint text;
+        BEGIN
+          BEGIN
+            INSERT INTO ai_platform.cst_onejob_owner_approvals
+             (company_id,model_id,approved_by_user_id,request_id,worker_name,
+              source_sha,job_id,expires_at)
+            VALUES ('1','qwen2.5:3b',1,
+              'cst-ai-team-company1-dev:pilot-ffffffffffffffffffff',
+              'cst-dev-dell-onejob-20261119-abcdef12',
+              repeat('a',40),484,now()+interval '20 minutes');
+            RAISE EXCEPTION 'SECOND_ACTIVE_PILOT_WAS_ALLOWED';
+          EXCEPTION WHEN unique_violation THEN
+            GET STACKED DIAGNOSTICS failed_constraint=CONSTRAINT_NAME;
+            IF failed_constraint <> 'cst_onejob_one_active_approval'
+            THEN RAISE EXCEPTION 'WRONG_CONSTRAINT_BLOCKED_SECOND_PILOT: %',failed_constraint; END IF;
+          END;
+        END $single_active$;""")
         # A privileged fixture owner must also be denied duplicate request/job,
         # wrong owner, and excessive approval TTL by database constraints.
         psql(f"""DO $deny$
@@ -130,7 +151,7 @@ def main():
         report.update(result="PASS",validRows=1,rlsForced=True,
           userPolicyPresent=False,duplicateRequestDenied=True,
           duplicateJobDenied=True,forgedOwnerDenied=True,excessiveTtlDenied=True,
-          unprivilegedWriterDenied=True)
+          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True)
         print("ONEJOB_OWNER_LEDGER_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:
