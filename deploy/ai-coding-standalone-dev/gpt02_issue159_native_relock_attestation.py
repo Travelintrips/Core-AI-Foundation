@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
+from gpt02_issue159_pinned_tls_ca import require_pinned_cst_dev_tls
 
 PROJECT = "xssrfshdrtdfupgqwfdw"
 HOST = "aws-1-ap-southeast-2.pooler.supabase.com"
@@ -153,13 +154,7 @@ def _require_pinned_admin_connection(connection: Any) -> None:
         _fail("RELOCK_ADMIN_DATABASE_IDENTITY_INVALID")
     params_fn = getattr(info, "get_parameters", None)
     params = params_fn() if callable(params_fn) else None
-    if (
-        not isinstance(params, Mapping)
-        or params.get("sslmode") != "verify-full"
-        or not isinstance(params.get("sslrootcert"), str)
-        or not params["sslrootcert"]
-    ):
-        _fail("RELOCK_ADMIN_TLS_VERIFY_FULL_REQUIRED")
+    require_pinned_cst_dev_tls(params, "RELOCK_ADMIN_TLS_VERIFY_FULL_REQUIRED")
 
 
 def attest_native_relock(connection: Any, candidate: Any) -> dict[str, Any]:
@@ -236,13 +231,7 @@ def _require_pinned_minimal_auditor(connection: Any) -> None:
         _fail("RELOCK_MINIMAL_AUDITOR_DB_IDENTITY_INVALID")
     params_fn = getattr(info, "get_parameters", None)
     params = params_fn() if callable(params_fn) else None
-    if (
-        not isinstance(params, Mapping)
-        or params.get("sslmode") != "verify-full"
-        or not isinstance(params.get("sslrootcert"), str)
-        or not params["sslrootcert"]
-    ):
-        _fail("RELOCK_MINIMAL_AUDITOR_TLS_REQUIRED")
+    require_pinned_cst_dev_tls(params, "RELOCK_MINIMAL_AUDITOR_TLS_REQUIRED")
 
 
 def attest_boolean_relock(connection: Any, candidate: Any) -> dict[str, Any]:
