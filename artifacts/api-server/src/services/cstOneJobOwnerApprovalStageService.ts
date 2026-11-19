@@ -60,6 +60,9 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
   };
   const stageDb=getCstOneJobStagingDatabase(input.env);
   return stageDb.transaction(async tx=>{
+    // Explicitly request a writable transaction on DEV pooler connections.
+    // If the database is read-only or this statement fails, the stage stops.
+    await tx.execute(sql`SET TRANSACTION READ WRITE`);
     // SET LOCAL is valid only inside this transaction and automatically
     // clears on COMMIT/ROLLBACK. The separate LOGIN has SET TRUE only for
     // the NOLOGIN writer role. The common Core AI DB pool cannot SET it.
