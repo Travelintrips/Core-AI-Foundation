@@ -65,3 +65,9 @@ This requirement was removed: the gate now refuses a premature shared-route
 change and requires a separate, healthy candidate loopback endpoint with source
 provenance. The retired `dev-aicore` HTTP 410 quarantine remains mandatory.
 No candidate launch or shared Nginx change was performed as part of this edit.
+
+## Dedicated network membership (19 November 2026)
+
+The candidate must run on a Docker bridge named `cst-core-onejob-dev-net` with **exactly one member**, `cst-core-onejob-dev-candidate`. The gate verifies this via Docker network inspection, rejecting shared worker, QA and production bridges. Candidate HTTP port 3000 must bind to a distinct 127.0.0.1 host port; shared DEV Nginx continues pointing to the existing healthy Core DEV port 18082. **A dedicated bridge alone does not restrict outbound destinations**: verify approved DEV database destinations and egress controls separately before creating an authenticated pilot role or allowing job execution.
+
+Live read-only CST-DEV catalog check: database `postgres`; role anchors `dev_gpt02_relock_catalog_auditor` and `aicore_dev_runtime` exist; RLS enabled on jobs/workers/events/audit_logs, all four expected sequences exist, no `cst_team_model_pilot_%` roles or `cst_model_pilot_%` policies; historical completed job #482 is the only job matching the pilot request prefix. Therefore do **not** provision the short-lived login yet or reuse #482. No database mutations performed.
