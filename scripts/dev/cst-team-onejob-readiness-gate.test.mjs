@@ -15,7 +15,7 @@ const ready={
   candidateDirectHealthy:true,nginxApiRetainsExistingCore:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
   dbRole:"cst_team_model_pilot_20261119_abcdef12",
-  roleCount:1,safeRoleCount:1,
+  roleCount:1,safeRoleCount:1,safeScaffoldCount:0,
   jobId:483,matchingRequestCount:1,uniqueIndexPresent:true,jobQueued:true,jobCompany:"1",jobModel:"qwen2.5:3b",
   workerName:"cst-dev-dell-onejob-20261119-abcdef12",workerAlreadyRegistered:false,
   enrollmentConfigured:true,oneJobGuardConfigured:true,
@@ -134,7 +134,30 @@ test("shared login or missing short-lived role is denied",()=>{
   check({roleCount:0,safeRoleCount:0},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
   check({roleCount:2,safeRoleCount:2},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
   check({roleCount:1,safeRoleCount:0},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:0,safeScaffoldCount:2},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:1,safeScaffoldCount:1},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:4,safeRoleCount:1,safeScaffoldCount:2},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:1,safeScaffoldCount:null},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:1,safeScaffoldCount:"2"},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:1,safeRoleCount:1,safeScaffoldCount:3},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({dbRole:"cst_team_model_pilot_stage_login"},"CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
+  check({dbRole:"cst_team_model_pilot_writer"},"CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
 });
+test("two inert NOLOGIN staging roles can coexist with exactly one safe live pilot",()=>{
+  const withScaffold=projectOneJobGate({
+    ...ready,roleCount:3,safeRoleCount:1,safeScaffoldCount:2,
+  });
+  assert.equal(withScaffold.pilotAdmissionReady,true,withScaffold.blockers.join(","));
+  assert.equal(withScaffold.operationalE2EVerified,false);
+  assert.equal(withScaffold.subscriberReceiptVerified,false);
+  assert.equal(withScaffold.independentFinalAckVerified,false);
+  const noLogin=projectOneJobGate({
+    ...ready,roleCount:2,safeRoleCount:0,safeScaffoldCount:2,
+  });
+  assert.equal(noLogin.pilotAdmissionReady,false);
+  assert.ok(noLogin.blockers.includes("ONE_JOB_ROLE_MISSING_OR_UNSAFE"));
+});
+
 test("historic job, wrong company or unqueued model job cannot be admitted",()=>{
   check({jobId:482},"FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
   check({matchingRequestCount:2},"PILOT_REQUEST_ID_NOT_UNIQUE");
@@ -192,6 +215,12 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/matchingRequestCount===1/);
   assert.match(file,/uniqueIndexPresent===true/);
   assert.match(file,/ai_jobs_company1_pilot_request_unique/);
+  assert.match(file,/safe_scaffold_count/);
+  assert.match(file,/cst_team_model_pilot_stage_login/);
+  assert.match(file,/cst_team_model_pilot_writer/);
+  assert.match(file,/not p\.rolcanlogin/);
+  assert.match(file,/has_table_privilege/);
+  assert.match(file,/data\.safeScaffoldCount/);
   assert.match(file,/members\[0\]\?\.Name===CANDIDATE/);
   assert.match(file,/sites-enabled\/dev.cstlogistic.co.id/);
   assert.match(file,/RETIRED_VHOST/);
