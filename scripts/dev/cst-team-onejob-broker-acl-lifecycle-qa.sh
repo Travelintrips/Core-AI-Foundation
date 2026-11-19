@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Disposable CST-DEV one-job QA: prove the EXISTING mock broker cannot dial
 # upstream until a namespace-only kernel default-drop ACL is active.
-# No real pooler, credentials, PROD, database, service or host firewall access.
+# No real pooler, credentials, PROD or database access. Docker creates and\n# removes its normal bridge/NAT rules; no persistent host firewall policy edit.
 set -Eeuo pipefail
 if [[ "$(id -u)" != "0" ]]; then echo "QA_REQUIRES_VPS_ROOT_FOR_NAMESPACE_SETUP"; exit 3; fi
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -158,4 +158,4 @@ HITS_AFTER="$(docker logs "$ALLOW" 2>&1 | grep -c 'MOCK_UPSTREAM_CONNECTED' || t
 echo "KERNEL_PEER_DENIED_BEFORE_UPSTREAM=true"
 echo "APPROVED_PEER_FORWARDED_EXACTLY_ONCE=true"
 echo "CST_DEV_MOCK_BROKER_ACL_PEERCRED_INTEGRATION_PASS"
-echo "NO_SUPABASE_OR_DB_CREDENTIALS_NO_HOST_FIREWALL_CHANGES"
+echo "NO_SUPABASE_OR_DB_CREDENTIALS_NO_PERSISTENT_HOST_FIREWALL_CHANGE"
