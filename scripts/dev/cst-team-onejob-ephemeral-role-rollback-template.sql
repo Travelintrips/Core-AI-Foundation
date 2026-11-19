@@ -13,7 +13,6 @@ SELECT pg_terminate_backend(pid)
 FROM pg_stat_activity
 WHERE usename='{{PILOT_ROLE}}' AND pid <> pg_backend_pid();
 DROP POLICY IF EXISTS cst_model_pilot_jobs_read ON ai_platform.ai_jobs;
-DROP POLICY IF EXISTS cst_model_pilot_jobs_insert ON ai_platform.ai_jobs;
 DROP POLICY IF EXISTS cst_model_pilot_jobs_update ON ai_platform.ai_jobs;
 DROP POLICY IF EXISTS cst_model_pilot_worker_read ON ai_platform.ai_workers;
 DROP POLICY IF EXISTS cst_model_pilot_worker_insert ON ai_platform.ai_workers;
@@ -21,10 +20,11 @@ DROP POLICY IF EXISTS cst_model_pilot_worker_update ON ai_platform.ai_workers;
 DROP POLICY IF EXISTS cst_model_pilot_audit_insert ON ai_platform.ai_audit_logs;
 DROP POLICY IF EXISTS cst_model_pilot_event_read ON ai_platform.ai_events;
 DROP POLICY IF EXISTS cst_model_pilot_event_insert ON ai_platform.ai_events;
-REVOKE SELECT,INSERT,UPDATE ON TABLE ai_platform.ai_jobs,ai_platform.ai_workers FROM {{PILOT_ROLE}};
+REVOKE SELECT,UPDATE ON TABLE ai_platform.ai_jobs FROM {{PILOT_ROLE}};
+REVOKE SELECT,INSERT,UPDATE ON TABLE ai_platform.ai_workers FROM {{PILOT_ROLE}};
 REVOKE INSERT ON TABLE ai_platform.ai_audit_logs FROM {{PILOT_ROLE}};
 REVOKE SELECT,INSERT ON TABLE ai_platform.ai_events FROM {{PILOT_ROLE}};
-REVOKE USAGE ON SEQUENCE ai_platform.ai_jobs_id_seq,ai_platform.ai_workers_id_seq,ai_platform.ai_audit_logs_id_seq,ai_platform.ai_events_id_seq FROM {{PILOT_ROLE}};
+REVOKE USAGE ON SEQUENCE ai_platform.ai_workers_id_seq,ai_platform.ai_audit_logs_id_seq,ai_platform.ai_events_id_seq FROM {{PILOT_ROLE}};
 REVOKE USAGE ON SCHEMA ai_platform FROM {{PILOT_ROLE}};
 REVOKE CONNECT ON DATABASE {{EXPECTED_DATABASE}} FROM {{PILOT_ROLE}};
 DROP ROLE {{PILOT_ROLE}};
