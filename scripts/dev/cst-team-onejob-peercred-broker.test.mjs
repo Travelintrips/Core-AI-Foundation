@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { connect, createServer } from "node:net";
 import {
-  mkdtempSync, chmodSync, chownSync, rmSync, statSync,
+  mkdtempSync, chmodSync, chownSync, rmSync, statSync, existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +42,12 @@ s.on("close",()=>{console.log("CLIENT_CLOSED="+(!received))});
 `;
 async function connectAs(path,identity={}) {
   return await new Promise((resolve,reject)=>{
-    const child=spawn(process.execPath,["-e",clientCode,path],{
+    // The controlling root shell has a Node binary under /root/.nvm.
+    // Select the system Node for a deliberately dropped non-root peer;
+    // never weaken /root directory permissions to run a test.
+    const clientNode=process.getuid?.()===0 && existsSync("/usr/bin/node")
+      ? "/usr/bin/node" : process.execPath;
+    const child=spawn(clientNode,["-e",clientCode,path],{
       uid:identity.uid,gid:identity.gid,stdio:["ignore","pipe","pipe"],
     });
     let stdout="",stderr="";
