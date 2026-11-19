@@ -97,6 +97,30 @@ def main():
             THEN RAISE EXCEPTION 'WRONG_CONSTRAINT_BLOCKED_SECOND_PILOT: %',failed_constraint; END IF;
           END;
         END $single_active$;""")
+        # Simulate the same transaction shape as the staging service.
+        # The second approval must abort the transaction and roll back the
+        # newly created waiting job rather than leaving an orphan job row.
+        try:
+            psql("""BEGIN;
+              INSERT INTO ai_platform.ai_jobs(id) VALUES (486);
+              INSERT INTO ai_platform.cst_onejob_owner_approvals
+               (company_id,model_id,approved_by_user_id,request_id,worker_name,
+                source_sha,job_id,expires_at)
+              VALUES ('1','qwen2.5:3b',1,
+                'cst-ai-team-company1-dev:pilot-99999999999999999999',
+                'cst-dev-dell-onejob-20261119-abcdef12',
+                repeat('a',40),486,now()+interval '20 minutes');
+              COMMIT;""")
+            raise RuntimeError("SECOND_APPROVAL_TRANSACTION_UNEXPECTEDLY_COMMITTED")
+        except RuntimeError as e:
+            if 'duplicate key value violates unique constraint "cst_onejob_one_active_approval"' not in str(e):
+                raise
+        if "NO_ORPHAN_JOB_PASS" not in psql("""
+            SELECT CASE WHEN count(*)=0 THEN 'NO_ORPHAN_JOB_PASS'
+                   ELSE 'ORPHAN_JOB_FOUND' END
+            FROM ai_platform.ai_jobs WHERE id=486;"""):
+            raise RuntimeError("SECOND_APPROVAL_LEFT_ORPHAN_JOB")
+
         # Close the active-only fixture before testing other independent
         # constraints: otherwise the single-active unique index masks the FK
         # and TTL violations that those tests are intended to exercise.
@@ -156,7 +180,7 @@ def main():
         report.update(result="PASS",validRows=1,rlsForced=True,
           userPolicyPresent=False,duplicateRequestDenied=True,
           duplicateJobDenied=True,forgedOwnerDenied=True,excessiveTtlDenied=True,
-          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True)
+          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True)
         print("ONEJOB_OWNER_LEDGER_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:
