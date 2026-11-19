@@ -92,11 +92,29 @@ CREATE POLICY cst_onejob_subscriber_receipt_insert ON ai_platform.ai_audit_logs
 -- delivery cannot append multiple "success" evidence rows.
 -- This additive index affects only a new, exact module/action and retains
 -- original audit records. Never drop existing audit rows for cleanup.
-CREATE UNIQUE INDEX cst_onejob_subscriber_receipt_once
+CREATE UNIQUE INDEX IF NOT EXISTS cst_onejob_subscriber_receipt_once
  ON ai_platform.ai_audit_logs (resource_id,actor_id)
  WHERE module='cst-team-model-subscriber'
    AND action='job_completed_received'
    AND status='success';
+
+DO $index$
+BEGIN
+ IF NOT EXISTS(
+   SELECT 1 FROM pg_index ix
+   JOIN pg_class idx ON idx.oid=ix.indexrelid
+   JOIN pg_class tab ON tab.oid=ix.indrelid
+   JOIN pg_namespace ns ON ns.oid=tab.relnamespace
+   WHERE ns.nspname='ai_platform'
+     AND tab.relname='ai_audit_logs'
+     AND idx.relname='cst_onejob_subscriber_receipt_once'
+     AND ix.indisunique AND ix.indisvalid AND ix.indisready
+     AND position('(resource_id, actor_id)' in pg_get_indexdef(ix.indexrelid))>0
+     AND position('cst-team-model-subscriber' in pg_get_indexdef(ix.indexrelid))>0
+     AND position('job_completed_received' in pg_get_indexdef(ix.indexrelid))>0
+ )
+ THEN RAISE EXCEPTION 'CST_ONEJOB_RECEIPT_INDEX_NOT_VERIFIED'; END IF;
+END $index$;
 
 DO $guard$
 BEGIN
