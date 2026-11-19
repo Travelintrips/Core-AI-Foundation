@@ -10,7 +10,7 @@ const receipt=sql("docs/dev/cst-onejob-independent-receipts.PROPOSED.sql");
 test("proposed broker remains unconditionally non-authorizing",()=>{
   assert.match(broker,/CREATE\s+ROLE\s+cst_onejob_admission_broker\s+NOLOGIN\s+NOINHERIT/i);
   assert.match(broker,/NOBYPASSRLS/i);
-  assert.match(broker,/LANGUAGE\\s+plpgsql\\s+SECURITY\\s+INVOKER/i);
+  assert.match(broker,/LANGUAGE\s+plpgsql\s+SECURITY\s+INVOKER/i);
   assert.doesNotMatch(broker,/SECURITY\\s+DEFINER/i);
   assert.match(broker,/REVOKE\s+ALL\s+ON\s+FUNCTION\s+cst_onejob_private\.admit_waiting_job\(/i);
   assert.match(broker,/RAISE\s+EXCEPTION\s+'ONEJOB_ATOMIC_ADMISSION_NOT_YET_AUTHORIZED'\s*;/i);
