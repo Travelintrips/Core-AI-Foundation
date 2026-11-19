@@ -12,7 +12,7 @@ const ready={
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
   dbRole:"cst_team_model_pilot_20261119_abcdef12",
   roleCount:1,safeRoleCount:1,
-  jobId:483,matchingRequestCount:1,jobQueued:true,jobCompany:"1",jobModel:"qwen2.5:3b",
+  jobId:483,matchingRequestCount:1,uniqueIndexPresent:true,jobQueued:true,jobCompany:"1",jobModel:"qwen2.5:3b",
   workerName:"cst-dev-dell-onejob-20261119-abcdef12",workerAlreadyRegistered:false,
   enrollmentConfigured:true,oneJobGuardConfigured:true,
 };
@@ -64,6 +64,8 @@ test("historic job, wrong company or unqueued model job cannot be admitted",()=>
   check({jobId:482},"FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
   check({matchingRequestCount:2},"PILOT_REQUEST_ID_NOT_UNIQUE");
   check({matchingRequestCount:0},"PILOT_REQUEST_ID_NOT_UNIQUE");
+  check({uniqueIndexPresent:false},"PILOT_DB_UNIQUE_REQUEST_CONSTRAINT_MISSING");
+  check({uniqueIndexPresent:null},"PILOT_DB_UNIQUE_REQUEST_CONSTRAINT_MISSING");
   check({jobId:null},"FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
   check({jobQueued:false},"FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
   check({jobCompany:"3"},"FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
@@ -90,6 +92,8 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/members\.length===1/);
   assert.match(file,/isInternal==="true"/);
   assert.match(file,/matchingRequestCount===1/);
+  assert.match(file,/uniqueIndexPresent===true/);
+  assert.match(file,/ai_jobs_company1_pilot_request_unique/);
   assert.match(file,/members\[0\]\?\.Name===CANDIDATE/);
   assert.match(file,/sites-enabled\/dev.cstlogistic.co.id/);
   assert.match(file,/RETIRED_VHOST/);
