@@ -538,3 +538,50 @@ non-root Unix peer identity, independently reviewed egress ACL, a real
 short-lived CST-DEV-only RLS login and a fresh approved Company-1 job
 are still required. The preflight continues to fail closed, and no
 operational broker, role, subscriber, signer or PROD service was changed.
+
+## Accepted-FD SO_PEERCRED broker boundary — 20 Nov 2026
+
+**New minimal extension, not a replacement for the previously PASS broker:**
+`startOfflineMockBroker` now accepts an optional, explicit
+`peerIdentity={uid,gid}` only in offline QA. With this option:
+
+1. The exact AF_UNIX accepted socket is paused and inherited as file
+   descriptor 3 by a short-lived `/usr/bin/python3 -I` child process.
+   Its script is `scripts/dev/cst_team_onejob_peercred.py`.
+2. Python calls `getsockopt(SOL_SOCKET, SO_PEERCRED)` on that inherited
+   socket, verifies the non-root UID and GID against the *independently
+   supplied* expected identity, and prints only a bounded constant verdict.
+   Client-supplied bytes cannot claim another UID/GID.
+3. **Only** a successful Python process exit plus the exact success
+   marker permits the Node broker to call its existing `dialMock()`.
+   Any mismatch, unexpected output, failure to spawn, verifier timeout,
+   client disconnect, or invalid expected UID/GID closes the connection
+   without opening an upstream connection.
+4. The older mock-only code path remains for the already-PASS isolated
+   TLS and protocol tests. It is **never** an operational entrypoint;
+   `startOperationalCstDevBroker()` still unconditionally throws
+   `INDEPENDENT_ACL_AND_DB_TRANSPORT_NOT_VERIFIED`. A user-supplied
+   environment variable cannot enable the operational broker.
+
+On the authorized VPS, a pinned-source integration test ran an actual
+broker socket with `0660` permissions, owner/group `28500:28501`
+and a parent directory `0750`, without creating Linux accounts.
+A client with UID/GID `28503:28501` could reach the socket but was
+**rejected by SO_PEERCRED before any mock upstream dial**. A separate
+client `28502:28501` passed and received the mock upstream ACK, while
+`28504:28505` was denied by pathname DAC (`EACCES`).
+The broker/mock upstream and test paths were cleaned. All test results
+remain synthetic and no PostgreSQL credentials or events were used.
+
+The GitHub CI test on an unprivileged runner exercises the negative UID
+mismatch and all original broker regressions. The positive distinct-UID
+case is exercised on the authorized Linux VPS as root in **disposable
+test-only processes**; this does not change the UID of live Core DEV,
+and it does not make its current root-run container an approved pilot.
+
+**Operational limits remain NO-GO:** a real broker is not installed,
+the accepted-peer check is not bound to a deployed one-job container
+identity, and there is no independently enforced fixed-pooler egress ACL
+or real role-scoped CST-DEV database transport. The live preflight's
+separate Unix filesystem/kernel peer flags and ACL/DB transport flags
+remain false, as do subscriber receipt and independent Final ACK.
