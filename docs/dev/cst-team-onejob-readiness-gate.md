@@ -965,3 +965,73 @@ persistence path before a real newly approved job starts.
 The blocker is `INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED`.
 This prevents publishing a new event into a system with no
 ready receipt consumer, without modifying the already-PASS event bus.
+
+## Functional isolated subscriber: actual PG16 RLS SELECT, signed INSERT and independent readback
+
+**20 Nov 2026 — a real database round-trip, but NOT live CST-DEV.**
+The model job completion event bus, worker RLS, independent subscriber
+RLS and signed receipt verification remain separate components;
+previous PASS features were reused rather than replaced.
+
+A minimal, import-inert `cst-team-onejob-subscriber-consumer-qa.mjs`
+does precisely three database operations for a separately bound
+Company-1 job: (1) verify PostgreSQL `current_user` equals the
+approved bounded subscriber role; (2) `SELECT` at most two matching
+`job.completed` events through that role's RLS, requiring exactly
+one fresh event with matching job/worker/correlation identity;
+(3) after an **external signing callback** produces an Ed25519
+signature verified against an independently supplied public-key pin,
+`INSERT` exactly one `job_completed_received` row into the existing
+append-only `ai_audit_logs`. The consumer does **not** import a
+private key, connect to Supabase on its own, dispatch a worker,
+list subscriptions, query jobs, UPDATE events, or create tables.
+A duplicate unique-index violation is a **DENIED** result, not a
+successful receipt.
+
+The following test-only components demonstrate the path:
+- `scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py`
+- `scripts/dev/cst-team-onejob-subscriber-functional-client-qa.mjs`
+- `scripts/dev/cst-team-onejob-subscriber-functional-review-qa.mjs`
+
+An independently repeated exact-source VPS QA used a disposable
+`postgres:16-alpine` server and a separate Core Node container,
+**both started with `--network none`**. They shared only the
+temporary PostgreSQL Unix socket directory; there was no IP route
+to Supabase or PROD. The test server deliberately used
+`POSTGRES_HOST_AUTH_METHOD=trust` for **local-only fixture
+authentication**, not a real pooler or approved CST-DEV login.
+The fixture used the existing subscriber role/RLS template against
+synthetic Company-1 job #483 (never actual job #482) plus an
+unrelated Company-3 event.
+
+Test-only Ed25519 keys were generated ephemerally; the private key
+was readable only by the non-root subscriber QA client, while the
+independent reviewer received the public key from a **separate
+fixture path, never the receipt row**.
+
+**Observed functional PASS:** exact PostgreSQL role verified;
+one authorized event visible; signed `ai_audit_logs` INSERT
+returned one row; a second delivery was denied by the existing
+partial unique index; a different process performed a privileged
+fixture readback and validated the persisted signature, job,
+event, worker and publisher audit through the pure receipt
+projector. The temporary subscriber role was revoked using the
+existing rollback template, while the signed audit record and
+immutable unique index were preserved. All test processes,
+source checkout, keys, socket mounts and disposable DB were
+deleted. The independent reviewer intentionally retained
+`subscriberDeliveryVerified=false` and
+`independentFinalAckVerified=false`: synthetic key custody and
+a local trust-authenticated PG16 fixture are **not** a live receipt
+or four-agent Final ACK.
+
+**Release boundary remains unchanged:** the operational subscriber
+is still **NOT INSTALLED**, no actual CST-DEV subscriber identity,
+scoped role, secret-custody mechanism, event, ACK or job exists;
+no real pooler session was authenticated. A live release requires
+independent signer/key custody and explicit Owner/Super Admin
+approval for a newly created Company-1 job, strict project+TLS
+verification, independently controlled broker/ACL, an actual
+RLS-authenticated subscriber connection and persisted receipt
+with a separate real readback and QA/Final ACK. Existing
+Core DEV, GPT02 signers, job #482 and PROD were untouched.
