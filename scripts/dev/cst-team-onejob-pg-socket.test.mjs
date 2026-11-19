@@ -111,3 +111,25 @@ test("pg 8.22 sends SSLRequest and correct pooler TLS SNI over injected Unix soc
     rmSync(dir,{recursive:true,force:true});
   }
 });
+
+
+test("unavailable Unix broker makes the real pg Pool fail without TCP fallback",async()=>{
+  const requirePg=createRequire(new URL("../../lib/db/package.json",import.meta.url));
+  const pg=requirePg("pg");
+  const dir=mkdtempSync(join(tmpdir(),"cst-pg-no-broker-"));
+  const absent=join(dir,"does-not-exist.sock");
+  const pool=new pg.Pool({
+    connectionString:goodDsn,
+    ssl:{rejectUnauthorized:true},
+    stream:makeOneJobUnixSocketStream(absent),
+    max:1,connectionTimeoutMillis:1000,
+  });
+  try {
+    await assert.rejects(pool.query("SELECT 1"),error=>
+      error?.code==="ENOENT" || /ENOENT/.test(String(error?.message))
+    );
+  } finally {
+    await pool.end();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
