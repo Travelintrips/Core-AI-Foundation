@@ -68,6 +68,8 @@ jobs:
         run: python3 scripts/dev/cst-team-dedicated-model-role-rehearsal.py
       - name: Verify Owner approval ledger constraints with disposable PostgreSQL
         run: python3 scripts/dev/cst-onejob-owner-ledger-disposable.py
+      - name: Verify dedicated Owner staging role RLS and atomic rollback with disposable PostgreSQL
+        run: python3 scripts/dev/cst-onejob-writer-rls-disposable.py
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap
