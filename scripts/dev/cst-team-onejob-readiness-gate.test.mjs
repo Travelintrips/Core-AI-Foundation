@@ -11,6 +11,7 @@ const ready={
   candidateNetworkIsolated:true,candidateHostGatewayBlocked:true,
   candidateIndependentNetworkAclVerified:true,candidateDedicatedDevDbTransportVerified:true,
   candidateBrokerUnixFilesystemVerified:true,candidateBrokerKernelPeerCredentialsVerified:true,
+  candidateIndependentSubscriberArmed:true,
   devHostResolved:true,retiredHostQuarantined:true,
   candidateDirectHealthy:true,nginxApiRetainsExistingCore:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
@@ -60,6 +61,9 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({candidateBrokerKernelPeerCredentialsVerified:false},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
   check({candidateBrokerKernelPeerCredentialsVerified:null},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
   check({candidateBrokerKernelPeerCredentialsVerified:"true"},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
+  check({candidateIndependentSubscriberArmed:false},"INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
+  check({candidateIndependentSubscriberArmed:null},"INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
+  check({candidateIndependentSubscriberArmed:"true"},"INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
   check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
   check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
   check({candidateDirectHealthy:false},"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -244,6 +248,8 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED/);
   assert.match(file,/candidateBrokerUnixFilesystemVerified:false/);
   assert.match(file,/candidateBrokerKernelPeerCredentialsVerified:false/);
+  assert.match(file,/INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED/);
+  assert.match(file,/candidateIndependentSubscriberArmed:false/);
   // Preflight must not accept a user-supplied flag as operational proof.
   assert.match(file,/candidateIndependentNetworkAclVerified:false/);
   assert.match(file,/candidateDedicatedDevDbTransportVerified:false/);
