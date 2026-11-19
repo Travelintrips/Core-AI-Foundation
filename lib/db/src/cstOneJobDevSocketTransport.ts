@@ -8,6 +8,9 @@
  * Never enable it for the ordinary DEV runtime or any PROD runtime.
  */
 import { Socket } from "node:net";
+import {
+  loadPinnedCstDevSupabaseRootCa, CST_ONEJOB_DEV_CA_PATH,
+} from "./cstOneJobPinnedSupabaseCa";
 
 const PROJECT = "xssrfshdrtdfupgqwfdw";
 const POOLER = "aws-1-ap-southeast-2.pooler.supabase.com";
@@ -37,7 +40,8 @@ export function makeOneJobUnixSocketStream(
 export function createCstDevOneJobSocketOptions(
   connectionString: string,
   env: NodeJS.ProcessEnv = process.env,
-): { ssl: { rejectUnauthorized: true }; stream: () => Socket } | undefined {
+  pinnedCaFile: string = CST_ONEJOB_DEV_CA_PATH,
+): { ssl: { rejectUnauthorized: true; ca: Buffer }; stream: () => Socket } | undefined {
   const flag = env["CST_TEAM_DEV_DB_SOCKET_TRANSPORT_ENABLED"];
   if (flag === undefined || flag === "" || flag === "false") return undefined;
   if (flag !== "true") deny("FLAG_INVALID");
@@ -80,8 +84,12 @@ export function createCstDevOneJobSocketOptions(
   }
   // No rejectUnauthorized:false, sslmode=require/no-verify, insecure CA,
   // caller-supplied host/socket target, or implicit external network fallback.
+  // Pin the private Supabase CA used by its pooler. Without the exact root,
+  // Node's default trust store rejects the upstream chain. Never weaken TLS
+  // or trust a root copied from the unauthenticated server's handshake.
+  const trustedCa = loadPinnedCstDevSupabaseRootCa(pinnedCaFile);
   return {
-    ssl: { rejectUnauthorized: true },
+    ssl: { rejectUnauthorized: true, ca: trustedCa },
     stream: makeOneJobUnixSocketStream(),
   };
 }
