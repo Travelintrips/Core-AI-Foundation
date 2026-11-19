@@ -14,7 +14,7 @@ const sample={
   {metainfo:{version:"1.0.9",json_schema_version:1}},
   {table:{family:"inet",name:QA_EGRESS_TABLE,handle:1}},
   {chain:{family:"inet",table:QA_EGRESS_TABLE,name:"output",
-    type:"filter",hook:"output",prio:-100,policy:"drop",handle:1}},
+    type:"filter",hook:"output",prio:0,policy:"drop",handle:1}},
   {rule:{family:"inet",table:QA_EGRESS_TABLE,chain:"output",handle:2,expr:[
     {match:{op:"==",left:{payload:{protocol:"ip",field:"daddr"}},right:approved}},
     {match:{op:"==",left:{payload:{protocol:"tcp",field:"dport"}},right:6543}},
@@ -40,7 +40,7 @@ const checkBlocked=(input,expected,reason)=>{
 test("default-drop QA policy emits exactly one IPv4+port allowance",()=>{
  const rules=renderOneJobQaEgressPolicy(approved);
  assert.match(rules,/table inet cst_onejob_egress_qa/);
- assert.match(rules,/type filter hook output priority -100; policy drop/);
+ assert.match(rules,/type filter hook output priority 0; policy drop/);
  assert.match(rules,/ip daddr 203\.0\.113\.7 tcp dport 6543 counter accept/);
  assert.match(rules,/counter drop/);
  assert.doesNotMatch(rules,/ip6|established|oifname|ct state|meta mark|socket/);
@@ -73,7 +73,7 @@ test("wrong source policy and wrong destination are never trusted",()=>{
  checkBlocked(tamper(x=>{x.nftables[1].table.name="filter"}),approved,"WRONG_TABLE");
  checkBlocked(tamper(x=>{x.nftables[2].chain.policy="accept"}),approved,"OUTPUT_CHAIN_NOT_STRICT");
  checkBlocked(tamper(x=>{x.nftables[2].chain.hook="forward"}),approved,"OUTPUT_CHAIN_NOT_STRICT");
- checkBlocked(tamper(x=>{x.nftables[2].chain.prio=0}),approved,"OUTPUT_CHAIN_NOT_STRICT");
+ checkBlocked(tamper(x=>{x.nftables[2].chain.prio=-100}),approved,"OUTPUT_CHAIN_NOT_STRICT");
 });
 test("extra IPv6, host, alternate port or second allowance invalidates proof",()=>{
  checkBlocked(tamper(x=>{x.nftables.push(structuredClone(x.nftables[3]));}),approved,"UNEXPECTED_KERNEL_OBJECTS");
