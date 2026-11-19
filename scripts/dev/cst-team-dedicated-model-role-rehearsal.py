@@ -103,11 +103,27 @@ SELECT 'COMPANY3-UNRELATED-EVENT','job.completed','job-engine',id::text,
 FROM ai_platform.ai_jobs WHERE job_code='COMPANY3-UNRELATED';
 """
         psql(fixture)
+        # The migration is exercised in network-none disposable PostgreSQL,
+        # not against Supabase DEV or PROD.
+        index_sql=(ROOT/"scripts/dev/cst-team-onejob-unique-request-index.sql").read_text()
+        psql(index_sql)
         # Authorization creates the queued job before the pilot role is granted.
         psql(f"""INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,
         status,payload_json,max_retry,retry_strategy)
         VALUES ('APPROVED-ONE','ollama_model_invocation','ollama_inference','queued',
         '{{"requestId":"{REQUEST}","modelId":"qwen2.5:3b"}}',0,'immediate');""")
+        # Verify even a privileged owner cannot add a second row carrying
+        # the approved pilot request ID, regardless of job type.
+        psql(f"""DO $unique$
+        BEGIN
+          BEGIN
+            INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,status,payload_json)
+            VALUES ('DUPLICATE-PILOT-OWNER','other_job','other','queued',
+            '{{"requestId":"{REQUEST}","modelId":"qwen2.5:3b"}}');
+            RAISE EXCEPTION 'PILOT_UNIQUE_INDEX_DID_NOT_ENFORCE';
+          EXCEPTION WHEN unique_violation THEN NULL;
+          END;
+        END $unique$;""")
         psql(render(APPLY))
         # Negative checks exercise actual grants and RLS, never synthetic mocks.
         test=f"""
