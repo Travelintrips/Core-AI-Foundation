@@ -26,7 +26,8 @@ function denied(code) {
 }
 
 export function assertSafeSocketLocation(path) {
-  if (typeof path !== "string" || !isAbsolute(path) ||\n      normalize(path) !== path || path.includes("\0")) {
+  if (typeof path !== "string" || !isAbsolute(path) ||
+      normalize(path) !== path || path.includes("\0")) {
     throw denied("INVALID_SOCKET_PATH");
   }
   let parent;
