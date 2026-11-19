@@ -10,7 +10,7 @@ ROLLBACK=ROOT/"scripts/dev/cst-team-onejob-ephemeral-role-rollback-template.sql"
 NAME="cst-team-model-role-sandbox-20261119"
 DB="cst_team_model_rls_pilot_fixture"
 ROLE="cst_team_model_pilot_20261119"
-REQUEST="cst-ai-team-company1-dev:rls-sandbox-20261119"
+REQUEST="cst-ai-team-company1-dev:pilot-"+secrets.token_hex(10)
 WORKER="cst-dev-dell-onejob-20261119-"+secrets.token_hex(4)
 def run(args,stdin=None):
     p=subprocess.run(args,input=stdin,capture_output=True,text=True,timeout=30)
