@@ -8,6 +8,7 @@ const ready={
   sourceSha:sha,imageSourceSha:sha,imageBuildMarkerSha:sha,imageId,
   candidateRunning:true,candidateHealthy:true,candidateImageId:imageId,
   candidateNetworkIsolated:true,candidateHostGatewayBlocked:true,
+  candidateIndependentNetworkAclVerified:true,candidateDedicatedDevDbTransportVerified:true,
   devHostResolved:true,retiredHostQuarantined:true,
   candidateDirectHealthy:true,nginxApiRetainsExistingCore:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
@@ -45,6 +46,12 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({candidateNetworkIsolated:false},"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
   check({candidateHostGatewayBlocked:false},"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
   check({candidateHostGatewayBlocked:null},"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
+  check({candidateIndependentNetworkAclVerified:false},"CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
+  check({candidateIndependentNetworkAclVerified:null},"CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
+  check({candidateIndependentNetworkAclVerified:"true"},"CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
+  check({candidateDedicatedDevDbTransportVerified:false},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
+  check({candidateDedicatedDevDbTransportVerified:null},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
+  check({candidateDedicatedDevDbTransportVerified:"true"},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
   check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
   check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
   check({candidateDirectHealthy:false},"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -98,6 +105,13 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/cst-core-onejob-dev-net/);
   assert.match(file,/probeCstDevHostGateway/);
   assert.match(file,/HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED/);
+  assert.match(file,/CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED/);
+  assert.match(file,/DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED/);
+  // Preflight must not accept a user-supplied flag as operational proof.
+  assert.match(file,/candidateIndependentNetworkAclVerified:false/);
+  assert.match(file,/candidateDedicatedDevDbTransportVerified:false/);
+  assert.doesNotMatch(file,/candidateIndependentNetworkAclVerified:\s*process\.env/);
+  assert.doesNotMatch(file,/candidateDedicatedDevDbTransportVerified:\s*process\.env/);
   assert.match(file,/members\.length===1/);
   assert.match(file,/isInternal==="true"/);
   assert.match(file,/matchingRequestCount===1/);
