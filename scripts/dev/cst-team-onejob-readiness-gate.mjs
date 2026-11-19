@@ -85,8 +85,8 @@ export function projectOneJobGate(data) {
  deny(data.candidateNetworkIsolated===true,"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
  deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
  deny(data.retiredHostQuarantined===true,"RETIRED_DEV_HOST_NOT_QUARANTINED");
- deny(data.endpointTargetsCandidate===true,"DEV_ENDPOINT_TO_CANDIDATE_UNVERIFIED");
- deny(data.nginxApiRoutesToCandidate===true,"NGINX_API_STILL_ROUTES_TO_OLD_CORE");
+ deny(data.candidateDirectHealthy===true,"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
+ deny(data.nginxApiRetainsExistingCore===true,"SHARED_DEV_API_ROUTE_CHANGED");
  deny(data.dbStatus==="DEV_DB_READ_ONLY_PASS" && data.database==="postgres" &&
       data.dbRole?.startsWith("cst_team_model_pilot_")===true,
       "CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
@@ -136,14 +136,18 @@ async function main() {
  } catch {}
  const networkScopeSafe=Boolean(networkMode) && networkMode!=="host" &&
    networkMode!=="none" && !/prod/i.test(networkMode);
- let hostResolved=false,endpointTargetsCandidate=false,retiredHostQuarantined=false;
- let nginxApiRoutesToCandidate=false;
+ let hostResolved=false,candidateDirectHealthy=false,retiredHostQuarantined=false;
+ let nginxApiRetainsExistingCore=false;
  try {
    const active=readFileSync("/etc/nginx/sites-enabled/dev.cstlogistic.co.id","utf8");
    const exactApi=active.match(/location\s+\^~\s+\/api\/\s*\{([^}]*)\}/);
    const destination=exactApi?.[1]?.match(/proxy_pass\s+http:\/\/127\.0\.0\.1:([0-9]+)\s*;/);
-   nginxApiRoutesToCandidate=Boolean(candidateLoopbackPort &&
-     destination && Number(destination[1])===candidateLoopbackPort);
+   const existingBindings=inspect('{{json .HostConfig.PortBindings}}',CORE);
+   const existingPort=JSON.parse(existingBindings)?.["3000/tcp"]?.[0];
+   nginxApiRetainsExistingCore=Boolean(destination && existingPort &&
+     existingPort.HostIp==="127.0.0.1" &&
+     Number(destination[1])===Number(existingPort.HostPort) &&
+     Number(destination[1])!==candidateLoopbackPort);
  } catch {}
  try{const target=await lookup(HOST);hostResolved=Boolean(target?.address)}catch{}
  try {
@@ -152,19 +156,21 @@ async function main() {
      (retired.match(/return\s+410;/g)||[]).length>=2 &&
      !/proxy_pass\s+[^;]+;/.test(retired);
  } catch {}
- if(hostResolved){
+ if(candidateLoopbackPort && isRunning==="true"){
    const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),3500);
-   try {const r=await fetch("https://"+HOST+"/api/healthz",{signal:ctl.signal});
-     endpointTargetsCandidate=r.ok && sourceContentEquivalent &&
-       [sha,imageSourceSha].includes(r.headers.get("x-cst-source-commit"));
+   try {
+     const r=await fetch("http://127.0.0.1:"+candidateLoopbackPort+"/api/healthz",{signal:ctl.signal});
+     const commit=r.headers.get("x-cst-source-commit")||r.headers.get("x-cst-commit-sha");
+     candidateDirectHealthy=r.ok && Boolean(sourceContentEquivalent || imageSourceSha===sha) &&
+       commit===imageSourceSha;
    } catch {} finally {clearTimeout(t)}
  }
  const db=readDevCatalog(isRunning==="true" ? CANDIDATE : CORE);
  const facts={sourceSha:sha,imageId,imageSourceSha,sourceContentEquivalent,
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
    candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe && Boolean(candidateLoopbackPort),
-   devHostResolved:hostResolved,retiredHostQuarantined,endpointTargetsCandidate,
-   nginxApiRoutesToCandidate,
+   devHostResolved:hostResolved,retiredHostQuarantined,candidateDirectHealthy,
+   nginxApiRetainsExistingCore,
    dbStatus:db.status,database:db.database,dbRole:db.role,
    roleCount:db.roleCount,safeRoleCount:db.safeRoleCount,
    jobId:db.jobId,jobQueued:db.jobStatus==="queued" && db.jobType==="ollama_model_invocation",
