@@ -439,3 +439,51 @@ readiness gate continues to return `pilotAdmissionReady=false`.
 
 No runtime broker, host firewall change, live DB login, signer, worker,
 existing Core DEV container, job #482, or PROD resource was changed.
+
+## Non-root Unix socket filesystem identity gate — 20 Nov 2026
+
+A password-free readback of the already-running Core DEV container found
+UID `0` (Docker `Config.User` empty), even though it drops Linux
+capabilities. A mock socket with mode `0600` does **not** establish that
+the intended independent one-job worker, rather than the existing Core
+runtime, owns the connection.
+
+On the authorized VPS an ephemeral Linux/Docker permission challenge used
+no persistent Linux users and no database access:
+
+- Test broker UID `28500`, dedicated socket GID `28501`, socket
+  `0660` and parent directory `0750`.
+- A separate non-root candidate UID `28502`, GID `28501`, on a
+  no-network, no-new-privileges, cap-drop-all, read-only container read
+  a synthetic `MOCK_ACK` through a read-only mounted pathname socket.
+- A different candidate UID/GID `28503:28504` was **denied `EACCES`**
+  by the kernel. All temporary test containers and socket files were
+  destroyed; no real broker daemon was launched.
+
+The new pure read-only
+`scripts/dev/cst-team-onejob-unix-peer-boundary.mjs` and negative tests
+require **distinct numeric non-root broker and worker UIDs**, one
+dedicated shared GID, exact immutable socket path, a `0750`
+broker-owned parent, a `0660` broker-owned socket, a read-only exact
+bind mount, no privilege escalation, drop-all capabilities and no
+host PID/network mode. A positive projection means filesystem DAC
+metadata is consistent **only**; synthetic test inputs cannot authorize
+an actual runtime.
+
+Linux pathname socket permission checks and kernel `SO_PEERCRED`
+are distinct controls (see `unix(7)`):
+https://man7.org/linux/man-pages/man7/unix.7.html
+
+For that reason the operational one-job preflight now holds two independent
+flags FALSE until a deployed broker can prove them from the actual
+candidate and accepted kernel peer, respectively:
+
+- `BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED`
+- `BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED`
+
+**Do not** turn either flag on based on file modes alone, the mock ACK,
+an environment variable, or an untrusted client-provided UID. The
+dedicated egress ACL, real CST-DEV database transport, RLS role,
+new approved job, subscriber receipt and independent Final ACK are
+still separate NO-GO release requirements. Existing Core DEV remains
+untouched; this work does not require an additional Owner login.
