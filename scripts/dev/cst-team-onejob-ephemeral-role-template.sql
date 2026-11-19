@@ -2,6 +2,8 @@
 -- NOT a general production migration. Only generate after a disposable PostgreSQL rehearsal.
 -- Replace every named template placeholder with a verified literal; never execute raw template.
 -- The runtime application role aicore_dev_runtime is never changed.
+-- Pilot login cannot INSERT jobs. An already-approved queued job is provisioned
+-- through the existing authorized DEV approval workflow before this role is granted.
 DO $guard$
 BEGIN
  IF current_database() <> '{{EXPECTED_DATABASE}}'
@@ -21,23 +23,18 @@ CREATE ROLE {{PILOT_ROLE}} LOGIN PASSWORD '{{PILOT_PASSWORD}}'
   VALID UNTIL '{{PILOT_EXPIRES}}';
 GRANT CONNECT ON DATABASE {{EXPECTED_DATABASE}} TO {{PILOT_ROLE}};
 GRANT USAGE ON SCHEMA ai_platform TO {{PILOT_ROLE}};
-GRANT SELECT,INSERT,UPDATE ON TABLE ai_platform.ai_jobs,ai_platform.ai_workers TO {{PILOT_ROLE}};
+GRANT SELECT,UPDATE ON TABLE ai_platform.ai_jobs TO {{PILOT_ROLE}};
+GRANT SELECT,INSERT,UPDATE ON TABLE ai_platform.ai_workers TO {{PILOT_ROLE}};
 -- Existing event-bus publish() uses INSERT ... RETURNING, so both SELECT
 -- and INSERT are needed. No event UPDATE, subscription access or dispatch grant.
 GRANT SELECT,INSERT ON TABLE ai_platform.ai_events TO {{PILOT_ROLE}};
 GRANT INSERT ON TABLE ai_platform.ai_audit_logs TO {{PILOT_ROLE}};
-GRANT USAGE ON SEQUENCE ai_platform.ai_jobs_id_seq,ai_platform.ai_workers_id_seq,ai_platform.ai_audit_logs_id_seq,ai_platform.ai_events_id_seq TO {{PILOT_ROLE}};
+GRANT USAGE ON SEQUENCE ai_platform.ai_workers_id_seq,ai_platform.ai_audit_logs_id_seq,ai_platform.ai_events_id_seq TO {{PILOT_ROLE}};
 -- All policies expire independently of the LOGIN password/session.
 -- No DELETE grant. Only one precisely-bound model job and model-only worker.
 CREATE POLICY cst_model_pilot_jobs_read ON ai_platform.ai_jobs FOR SELECT TO {{PILOT_ROLE}}
  USING (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
    AND job_type='ollama_model_invocation' AND required_capability='ollama_inference'
-   AND payload_json->>'requestId'='{{REQUEST_ID}}'
-   AND payload_json->>'modelId'='qwen2.5:3b');
-CREATE POLICY cst_model_pilot_jobs_insert ON ai_platform.ai_jobs FOR INSERT TO {{PILOT_ROLE}}
- WITH CHECK (clock_timestamp() < '{{PILOT_EXPIRES}}'::timestamptz
-   AND job_type='ollama_model_invocation' AND required_capability='ollama_inference'
-   AND status='queued' AND max_retry=0 AND retry_strategy='immediate'
    AND payload_json->>'requestId'='{{REQUEST_ID}}'
    AND payload_json->>'modelId'='qwen2.5:3b');
 CREATE POLICY cst_model_pilot_jobs_update ON ai_platform.ai_jobs FOR UPDATE TO {{PILOT_ROLE}}
