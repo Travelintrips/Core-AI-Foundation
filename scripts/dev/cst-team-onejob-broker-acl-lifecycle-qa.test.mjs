@@ -16,7 +16,7 @@ test("QA runner installs and positively audits namespace ACL BEFORE mock broker 
   const allowDenied=source.indexOf('nsenter --target "$PID" --net /usr/bin/node -e "$CLIENT" "$IP_DENY" DENY');
   assert.ok(acl>0 && kernelRead>acl && broker>kernelRead && allowDenied>acl);
   assert.match(source,/--audit-kernel-qa "\$IP_ALLOW"/);
-  assert.match(source,/\[\[ -z "\$\(nsenter/); // No unchecked unrelated pre-existing tables.
+  assert.match(source,/UNEXPECTED_QA_NAMESPACE_TABLES_REFUSE_START/);
 });
 test("exact offline-only mock: no actual Supabase upstream or operational broker",()=>{
   assert.match(source,/--entrypoint node node:22-alpine/);
