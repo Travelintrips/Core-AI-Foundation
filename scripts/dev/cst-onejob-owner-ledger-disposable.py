@@ -265,12 +265,12 @@ def main():
            image_source_sha,image_id,isolated_network_verified,
            scoped_dev_role_verified,event_audit_path_verified,
            subscriber_path_verified,independent_qa_available,
-           proof_digest,verifier_id,verified_at,expires_at)
+           nonce,proof_digest,verifier_id,verified_at,expires_at)
           VALUES ('{approval_id}'::uuid,484,'1',
            'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
            'cst-dev-dell-onejob-20261119-abcdef12',
            repeat('a',40),'sha256:'||repeat('f',64),
-           true,true,true,true,true,repeat('e',64),
+           true,true,true,true,true,repeat('c',64),repeat('e',64),
            'cst-independent-qa-disposableonly',now(),now()+interval '4 minutes');""")
         # No broad writer grant or security-definer admission by row presence.
         psql("""DO $receipt$
@@ -317,10 +317,66 @@ def main():
            THEN 'BROKER_NO_SIDE_EFFECT_PASS' ELSE 'BROKER_MUTATED_DATA' END;""")
         if "BROKER_NO_SIDE_EFFECT_PASS" not in state_broker:
             raise RuntimeError("BROKER_UNAUTHORIZED_TRANSITION_LEFT_EFFECT")
+        # Disposable one-shot ledger test. THIS IS NOT proof of a trusted
+        # signature/issuer and NEVER authorizes a job transition.
+        psql("""INSERT INTO cst_onejob_private.admission_receipt_consumptions
+          (receipt_id,approval_id,job_id,project_id,verifier_id,nonce,proof_digest)
+          SELECT id,approval_id,job_id,'xssrfshdrtdfupgqwfdw',
+            verifier_id,nonce,proof_digest
+          FROM cst_onejob_private.verified_admission_receipts WHERE job_id=484;
+          UPDATE cst_onejob_private.verified_admission_receipts
+            SET consumed_at=clock_timestamp() WHERE job_id=484;
+          UPDATE ai_platform.cst_onejob_owner_approvals
+            SET status='EXPIRED' WHERE job_id=484;""")
+        # A fresh synthetic second job/approval/receipt may exist only after
+        # cleanup. Repeating the old nonce for a different receipt is blocked.
+        psql("""INSERT INTO ai_platform.cst_onejob_owner_approvals
+          (company_id,model_id,approved_by_user_id,request_id,worker_name,
+           source_sha,job_id,expires_at)
+          VALUES ('1','qwen2.5:3b',1,
+            'cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+            'cst-dev-dell-onejob-20261119-abcdef12',
+            repeat('a',40),485,now()+interval '20 minutes');
+          INSERT INTO cst_onejob_private.verified_admission_receipts
+          (approval_id,job_id,company_id,request_id,worker_name,
+           image_source_sha,image_id,isolated_network_verified,
+           scoped_dev_role_verified,event_audit_path_verified,
+           subscriber_path_verified,independent_qa_available,
+           nonce,proof_digest,verifier_id,verified_at,expires_at)
+          SELECT id,485,'1',
+            'cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+            worker_name,source_sha,'sha256:'||repeat('f',64),
+            true,true,true,true,true,repeat('d',64),repeat('f',64),
+            'cst-independent-qa-disposableonly',now(),now()+interval '4 minutes'
+          FROM ai_platform.cst_onejob_owner_approvals WHERE job_id=485;""")
+        psql("""DO $replay$
+          DECLARE named text;
+          BEGIN
+            BEGIN
+              INSERT INTO cst_onejob_private.admission_receipt_consumptions
+              (receipt_id,approval_id,job_id,project_id,verifier_id,nonce,proof_digest)
+              SELECT id,approval_id,job_id,'xssrfshdrtdfupgqwfdw',
+                verifier_id,repeat('c',64),proof_digest
+              FROM cst_onejob_private.verified_admission_receipts WHERE job_id=485;
+              RAISE EXCEPTION 'REPLAY_NONCE_WAS_ACCEPTED';
+            EXCEPTION WHEN unique_violation THEN
+              GET STACKED DIAGNOSTICS named=CONSTRAINT_NAME;
+              IF named NOT LIKE '%nonce_key'
+                THEN RAISE EXCEPTION 'WRONG_CONSTRAINT_BLOCKED_REPLAY: %',named; END IF;
+            END;
+          END $replay$;""")
+        replay=psql("""SELECT CASE WHEN
+           (SELECT count(*) FROM cst_onejob_private.admission_receipt_consumptions)=1
+           AND (SELECT status FROM ai_platform.ai_jobs WHERE id=485)='waiting'
+           AND (SELECT consumed_at FROM cst_onejob_private.verified_admission_receipts
+                WHERE job_id=485) IS NULL
+           THEN 'REPLAY_ROLLBACK_PASS' ELSE 'REPLAY_LEFT_SIDE_EFFECTS' END;""")
+        if "REPLAY_ROLLBACK_PASS" not in replay:
+            raise RuntimeError("REPLAY_NONCE_CONSUMPTION_LEFT_EFFECTS")
         report.update(result="PASS",validRows=1,rlsForced=True,
           userPolicyPresent=False,duplicateRequestDenied=True,
           duplicateJobDenied=True,forgedOwnerDenied=True,excessiveTtlDenied=True,
-          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True,brokerNoLogin=True,brokerNoDirectWrites=True,brokerNoTransition=True,receiptRowNeverAuthorizes=True,receiptRlsForced=True,receiptShortTtlEnforced=True)
+          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True,brokerNoLogin=True,brokerNoDirectWrites=True,brokerNoTransition=True,receiptRowNeverAuthorizes=True,receiptRlsForced=True,receiptShortTtlEnforced=True,replayNonceDenied=True,replayNoPartialConsume=True)
         print("ONEJOB_OWNER_LEDGER_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:
