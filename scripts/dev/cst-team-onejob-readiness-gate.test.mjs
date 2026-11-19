@@ -84,6 +84,9 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED/);
   assert.match(file,/SHARED_DEV_API_ROUTE_CHANGED/);
   assert.match(file,/candidateLoopbackPort/);
+  assert.match(file,/cst-core-onejob-dev-net/);
+  assert.match(file,/members\.length===1/);
+  assert.match(file,/members\[0\]\?\.Name===CANDIDATE/);
   assert.match(file,/sites-enabled\/dev.cstlogistic.co.id/);
   assert.match(file,/RETIRED_VHOST/);
   assert.match(file,/dev.cstlogistic.co.id/);
