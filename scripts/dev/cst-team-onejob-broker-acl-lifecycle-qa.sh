@@ -79,7 +79,7 @@ const finish=(value,valid)=>{if(done)return;done=true;
  console.log("EGRESS_"+mode+"="+value);s.destroy();if(!valid)process.exitCode=7;};
 s.setTimeout(1400);
 s.on("data",d=>finish(d.toString(),mode==="ALLOW"&&d.toString().startsWith("MOCK_ACK:")));
-s.on("connect",()=>{if(mode==="DENY")finish("UNEXPECTED_CONNECTION",false)});
+s.on("connect",()=>{if(mode==="DENY")finish("UNEXPECTED_CONNECTION",false);else s.write("PING")});
 s.on("timeout",()=>finish("DEFAULT_DROP",mode==="DENY"));
 s.on("error",e=>finish("ERROR_"+e.code,false));
 ';
