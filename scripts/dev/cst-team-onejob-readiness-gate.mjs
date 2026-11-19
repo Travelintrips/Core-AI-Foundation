@@ -103,6 +103,13 @@ export function projectOneJobGate(data) {
       data.candidateImageId===data.imageId,"BLUE_GREEN_RUNTIME_NOT_HEALTHY_OR_DIFFERENT_IMAGE");
  deny(data.candidateNetworkIsolated===true,"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
  deny(data.candidateHostGatewayBlocked===true,"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
+ // Gateway nonce denial alone does not validate all host/IPv6/outbound routes
+ // or the dedicated database transport. Until separate independently observed
+ // evidence exists, these remain false and no job may be admitted.
+ deny(data.candidateIndependentNetworkAclVerified===true,
+      "CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
+ deny(data.candidateDedicatedDevDbTransportVerified===true,
+      "DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
  deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
  deny(data.retiredHostQuarantined===true,"RETIRED_DEV_HOST_NOT_QUARANTINED");
  deny(data.candidateDirectHealthy===true,"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -222,6 +229,11 @@ async function main() {
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
    candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe && Boolean(candidateLoopbackPort),
    candidateHostGatewayBlocked:hostGatewayProbe.blocked,
+   // No authoritative ACL / database transport inspector is wired yet.
+   // Never infer either proof from Docker --internal, DNS, the host nonce or
+   // a successful SQL SELECT. Do not accept env flags as authorization.
+   candidateIndependentNetworkAclVerified:false,
+   candidateDedicatedDevDbTransportVerified:false,
    devHostResolved:hostResolved,retiredHostQuarantined,candidateDirectHealthy,
    nginxApiRetainsExistingCore,
    dbStatus:db.status,database:db.database,dbRole:db.role,
