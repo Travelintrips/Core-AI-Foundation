@@ -252,7 +252,8 @@ def main():
                 'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
                 'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
               RAISE EXCEPTION 'BROKER_DISPATCHED_WITHOUT_READINESS_PROOF';
-            EXCEPTION WHEN raise_exception THEN
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+                      WHEN raise_exception THEN
               IF SQLERRM <> 'ONEJOB_INDEPENDENT_READINESS_PROOF_MISSING'
               THEN RAISE; END IF;
             END;
@@ -273,6 +274,8 @@ def main():
            repeat('a',40),'sha256:'||repeat('f',64),
            true,true,true,true,true,repeat('c',64),repeat('e',64),
            'cst-independent-qa-disposableonly',now(),now()+interval '4 minutes');""")
+        # SECURITY INVOKER denies lacking direct schema/table privileges;
+        # a later internal DENY is also acceptable, but neither may authorize.
         # No broad writer grant or security-definer admission by row presence.
         psql("""DO $receipt$
         BEGIN
@@ -295,7 +298,8 @@ def main():
                 'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
                 'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
               RAISE EXCEPTION 'RECEIPT_ROW_GRANTED_DISPATCH';
-            EXCEPTION WHEN raise_exception THEN
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+                      WHEN raise_exception THEN
               IF SQLERRM <> 'ONEJOB_ATOMIC_ADMISSION_NOT_YET_AUTHORIZED'
               THEN RAISE; END IF;
             END;
