@@ -7,6 +7,7 @@ a review-only new boolean audit function install without re-creation.
 """
 from __future__ import annotations
 from pathlib import Path
+import os
 import subprocess
 import time
 import uuid
@@ -83,12 +84,15 @@ def main():
         or "GRANT EXECUTE ON FUNCTION" not in stripped
     ):
         raise AssertionError("NOT_ADD_ONLY_REVIEW_CONTRACT")
+    image = os.environ.get('GPT02_ADD_ONLY_TEST_PG_IMAGE','postgres:16-alpine')
+    if image not in ('postgres:16-alpine','postgres:17-alpine'):
+        raise AssertionError('DISPOSABLE_POSTGRES_IMAGE_ALLOWLIST_REQUIRED')
     name="gpt02-existing-auditor-"+uuid.uuid4().hex[:9]
     try:
         run([
             "docker","run","--rm","-d","--network","none",
             "--name",name,"-e","POSTGRES_USER=root_admin",
-            "-e","POSTGRES_PASSWORD=fixture_only","postgres:16-alpine",
+            "-e","POSTGRES_PASSWORD=fixture_only",image,
         ])
         for _ in range(120):
             p=run([
@@ -128,6 +132,10 @@ CREATE FUNCTION gpt02_relock_audit.relock_expired_phase_a()
 CREATE FUNCTION gpt02_relock_audit.relock_expired_phase_b()
  RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog
  AS $sql$ SELECT 0 $sql$;
+GRANT EXECUTE ON FUNCTION gpt02_relock_audit.relock_expired_phase_a()
+ TO dev_gpt02_relock_catalog_auditor;
+GRANT EXECUTE ON FUNCTION gpt02_relock_audit.relock_expired_phase_b()
+ TO dev_gpt02_relock_catalog_auditor;
 """)
         previous = catalog(name)
         # Drift: any inadvertently enabled auditor login must deny before DDL.
@@ -150,11 +158,22 @@ CREATE FUNCTION gpt02_relock_audit.relock_expired_phase_b()
         migrator(name,sql)
         if catalog(name)!=previous:
             raise AssertionError("EXISTING_SCHEMA_ROLE_OR_WRITER_CHANGED")
+        writers=admin(name,"""
+SELECT has_function_privilege('dev_gpt02_relock_catalog_auditor',
+ 'gpt02_relock_audit.relock_expired_phase_a()','EXECUTE')
+ AND has_function_privilege('dev_gpt02_relock_catalog_auditor',
+ 'gpt02_relock_audit.relock_expired_phase_b()','EXECUTE');
+""")
+        if writers.stdout.strip()!='t':
+            raise AssertionError('EXISTING_RELOCK_WRITER_GRANTS_CHANGED')
         found=admin(name,"""
 SELECT p.prosecdef AND pg_get_userbyid(p.proowner)='postgres'
 AND has_function_privilege('dev_gpt02_relock_catalog_auditor',
  p.oid,'EXECUTE')
-AND NOT has_function_privilege('PUBLIC',p.oid,'EXECUTE')
+AND NOT EXISTS (
+ SELECT 1 FROM aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) acl
+ WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE'
+)
 FROM pg_proc p WHERE p.oid='gpt02_relock_audit.scoped_reader_fully_locked(name)'::regprocedure;
 """)
         if found.stdout.strip()!="t":
@@ -167,7 +186,7 @@ WHERE rolname='dev_gpt02_relock_catalog_auditor';
 """)
         if locked.stdout.strip()!="t":
             raise AssertionError("ADD_ONLY_UNLOCKED_OR_REPLACED_AUDITOR")
-        print("PASS_EXISTING_AUDITOR_SCHEMA_ROLE_WRITER_OIDS_PRESERVED")
+        print("PASS_EXISTING_AUDITOR_SCHEMA_ROLE_WRITER_OIDS_AND_ACLS_PRESERVED")
         print("PASS_ADD_ONLY_SECURITY_DEFINER_ACL_AND_AUDITOR_NOLOGIN")
         # A second migration must not silently overwrite inspected logic.
         repeat=migrator(name,sql,check=False)
