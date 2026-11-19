@@ -42,8 +42,8 @@ test("offline verifier uses pinned public key, returns integrity but never queue
 });
 test("wrong trust pin, injected trust in expected, counterfeit proof all denied",()=>{
  deny(receipt,expected,{...trust,verifierId:"cst-independent-qa-wrong000"},"PUBLIC_TRUST_MANIFEST_INVALID");
- deny(receipt,{...expected,publicKeyPem},"EXPECTED_CANNOT_OVERRIDE_TRUST_ROOT");
- deny(receipt,{...expected,trustedFingerprint:fingerprint},"EXPECTED_CANNOT_OVERRIDE_TRUST_ROOT");
+ deny(receipt,{...expected,publicKeyPem},trust,"EXPECTED_CANNOT_OVERRIDE_TRUST_ROOT");
+ deny(receipt,{...expected,trustedFingerprint:fingerprint},trust,"EXPECTED_CANNOT_OVERRIDE_TRUST_ROOT");
  const wrongPin={...trust,publicKeyPem:wrong.publicKey.export({format:"pem",type:"spki"}).toString()};
  deny(receipt,expected,wrongPin,"PINNED_KEY_NOT_ED25519_OR_FINGERPRINT_MISMATCH");
  deny({...receipt,claims:{...claims,jobId:484}},expected,trust,"APPROVAL_OR_JOB_MISMATCH");
