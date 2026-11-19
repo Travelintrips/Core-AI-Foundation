@@ -83,3 +83,21 @@ Do not activate the role until an authorized fresh job exists and the runtime-sp
 Isolated VPS boot attempts against candidate `9fabedcd` did not reach healthy status: the first small-memory boot hit V8 OOM; after raising the memory limit, the application correctly rejected missing/unverifiable Supabase DEV configuration. The failed containers and dedicated bridge were removed. Existing Core DEV remained healthy and Nginx routing unchanged. Do not bypass `assertDevelopmentDatabaseIsolation`, inject the old shared application DSN or assert runtime readiness from this test.
 
 Read-only CST-DEV query confirms **zero queued** Company-1 pilot jobs. The readiness gate now requires exactly **one** database row per approved `requestId` (checked from the scoped connection), and Docker network inspection must prove `Internal=true`, `Driver=bridge` and exactly one candidate member. An externally routed bridge or duplicate matching job rejects admission. The original `9fabedcd` image predates the modified role SQL templates, so source equivalence must continue to fail until a fresh matching image is built and verified. This change is code-only: no DEV DB role/job creation, runtime activation, DNS/Nginx change, or PROD deployment.
+
+## Database-wide requestId uniqueness prerequisite
+
+An RLS-scoped login cannot establish uniqueness across rows it cannot see. The
+one-job gate therefore requires a **valid, ready unique PostgreSQL index**
+`ai_jobs_company1_pilot_request_unique` that covers the exact
+`cst-ai-team-company1-dev:pilot-%` requestId namespace independent of job
+type. The narrow additive index DDL is staged at
+`scripts/dev/cst-team-onejob-unique-request-index.sql` and **has not been
+applied to CST-DEV**. The disposable PostgreSQL rehearsal runs this DDL and
+tests that a privileged fixture owner cannot insert a second request with a
+different job type. Current live CST-DEV duplicate audit found no duplicate
+pilot requestId, but this alone does not substitute for an enforced index.
+
+Preflight must report `PILOT_DB_UNIQUE_REQUEST_CONSTRAINT_MISSING` until a
+separately reviewed, authorized DEV-only migration exists and PostgreSQL
+catalog readback shows the index is `indisunique`, `indisvalid`, and
+`indisready`. No PROD index is required or authorized by this work.
