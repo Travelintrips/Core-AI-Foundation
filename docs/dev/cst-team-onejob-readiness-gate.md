@@ -148,3 +148,37 @@ the shared VPS until capacity is demonstrably available; prefer an independently
 built, immutable QA image artifact with cryptographic identity verification.
 The GitHub workflow does not presently publish an artifact, so image transfer
 is still a separate unresolved step. No production promotion is authorized.
+
+## Disposable Docker host-gateway reachability discovery — 19 November 2026
+
+On the authorized DEV VPS, a **new, disposable** Docker bridge with
+`Internal=true` and one unprivileged Node container was tested against a
+**temporary TCP listener bound only to that bridge gateway**. The container
+successfully completed the exact nonce echo (`HOST_GATEWAY_CONNECTION=CST_QA_HOST_GATEWAY`).
+The temporary listener, container and network were removed. No PROD, CST-DEV
+database, public hostname or permanent network/firewall configuration was touched.
+
+**Security consequence:** Docker `Internal=true` and single-container membership
+**do not prove that the candidate cannot contact other host-side services**.
+Treat internal bridge as necessary but insufficient. A one-job pilot cannot be
+admitted until its actual candidate network denies a fresh host-gateway
+challenge, its dedicated scoped role can reach only the explicitly reviewed
+CST-DEV database transport, and the egress/host ACL is independently inspected.
+Do not widen to Docker host networking, grant the shared runtime DB role,
+open a general outbound bridge, or restore the retired DEV hostname.
+
+`scripts/dev/cst-team-host-gateway-probe.mjs` binds one ephemeral, random
+local TCP listener to the **specific candidate bridge gateway**, asks only
+`cst-core-onejob-dev-candidate` to attempt a nonce echo and immediately
+closes the listener. It does not connect to the real DEV/PROD database, query
+or change RLS, or contact another host service. The preflight fails closed with
+`HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED` unless the negative
+reachability check explicitly reports denial. A failed Docker invocation,
+missing candidate, listener failure, timeout or ambiguous result **cannot**
+count as isolation PASS. This local probe is *not sufficient* to certify
+all host paths, IPv6, DNS or all possible egress destinations; independent
+network policy review and a valid scoped DB readback remain required.
+
+The one-job role stays absent until that isolation proof, a fresh approved
+Company-1 job, an eligible subscriber/receipt route and precise rollback
+have been verified. Historical job #482 must never be replayed or backfilled.
