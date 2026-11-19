@@ -44,3 +44,29 @@ The proposed SQL receipt ledger has forced RLS and no writable policy. The
 admission broker still unconditionally denies transition. No live CST-DEV
 migration, Docker service, API route, signer or PROD change is authorized by
 this document. No second Owner/Admin approval is required.
+
+## Pinned public-root filesystem custody (host preflight only)
+
+The generic offline QA test CLI takes a trust manifest as a test input and
+cannot, by itself, prove that file's administrator-controlled origin. For a
+future independent host deployment use
+`scripts/dev/cst-onejob-independent-qa-host-preflight.mjs`, which accepts
+**only** a signed receipt and expected binding; the public trust root path
+is fixed to `/etc/cst-onejob-qa/trust/public-root.json`.
+
+The host custody preflight rejects a trust path symlink, checks
+`/etc`, `/etc/cst-onejob-qa`, and its `trust` directory are root-owned,
+not group/other-writable and not symlinks, and opens the root-owned public
+key file with `O_NOFOLLOW`. It validates that same file descriptor's type,
+owner, permissions, link count and size and checks the Ed25519 SPKI fingerprint.
+The CLI never accepts a caller-supplied public key location. These guards
+are reviewed as code and simulated in CI only; no filesystem provisioning,
+private key, service account, trust-root approval or deployment is performed.
+
+A successful host preflight remains `CRYPTOGRAPHIC_BINDING_VALID`,
+**not** `OPERATIONAL_QA_PASS`, a one-use receipt consumption or Final ACK.
+The trust file's content and fingerprint must be independently approved
+before installation. Only the public key belongs on the verification host;
+the signing private key must remain in separate QA custody. A new
+operator-controlled execution agent must not be considered independent merely
+because it runs as another process on the same writable host.
