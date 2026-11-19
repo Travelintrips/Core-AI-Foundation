@@ -8,6 +8,7 @@ import json, os, re, subprocess, sys, time
 ROOT=Path(__file__).resolve().parents[2]
 DDL=ROOT/"docs/dev/cst-onejob-owner-approval.PROPOSED.sql"
 BROKER=ROOT/"docs/dev/cst-onejob-waiting-admission-broker.PROPOSED.sql"
+RECEIPTS=ROOT/"docs/dev/cst-onejob-independent-receipts.PROPOSED.sql"
 NAME=f"cst-onejob-owner-ledger-qa-{os.getpid()}"
 DB="cst_onejob_owner_ledger_fixture"
 
@@ -256,6 +257,69 @@ def main():
             END;
           END $deny$;
           RESET ROLE;""")
+        # Create the proposal in this disposable fixture only. Even a fully
+        # populated row of boolean readiness claims is NOT an attestation.
+        psql(RECEIPTS.read_text())
+        psql(f"""INSERT INTO cst_onejob_private.verified_admission_receipts
+          (approval_id,job_id,company_id,request_id,worker_name,
+           image_source_sha,image_id,isolated_network_verified,
+           scoped_dev_role_verified,event_audit_path_verified,
+           subscriber_path_verified,independent_qa_available,
+           proof_digest,verifier_id,verified_at,expires_at)
+          VALUES ('{approval_id}'::uuid,484,'1',
+           'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+           'cst-dev-dell-onejob-20261119-abcdef12',
+           repeat('a',40),'sha256:'||repeat('f',64),
+           true,true,true,true,true,repeat('e',64),
+           'cst-independent-qa-disposableonly',now(),now()+interval '4 minutes');""")
+        # No broad writer grant or security-definer admission by row presence.
+        psql("""DO $receipt$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n
+            ON n.oid=c.relnamespace
+            WHERE n.nspname='cst_onejob_private'
+              AND c.relname='verified_admission_receipts'
+              AND c.relrowsecurity AND c.relforcerowsecurity)
+          THEN RAISE EXCEPTION 'RECEIPT_RLS_NOT_FORCED'; END IF;
+          IF has_table_privilege('cst_onejob_admission_broker',
+              'cst_onejob_private.verified_admission_receipts','INSERT')
+          THEN RAISE EXCEPTION 'BROKER_CAN_FORGE_RECEIPTS'; END IF;
+        END $receipt$;""")
+        psql(f"""SET ROLE cst_onejob_admission_broker;
+          DO $deny$
+          BEGIN
+            BEGIN
+              PERFORM cst_onejob_private.admit_waiting_job(
+                '{approval_id}'::uuid,484,
+                'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+                'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
+              RAISE EXCEPTION 'RECEIPT_ROW_GRANTED_DISPATCH';
+            EXCEPTION WHEN raise_exception THEN
+              IF SQLERRM <> 'ONEJOB_ATOMIC_ADMISSION_NOT_YET_AUTHORIZED'
+              THEN RAISE; END IF;
+            END;
+          END $deny$;
+          RESET ROLE;""")
+        psql("""DO $deny$
+          BEGIN
+            BEGIN
+              INSERT INTO cst_onejob_private.verified_admission_receipts
+                (approval_id,job_id,company_id,request_id,worker_name,
+                 image_source_sha,image_id,isolated_network_verified,
+                 scoped_dev_role_verified,event_audit_path_verified,
+                 subscriber_path_verified,independent_qa_available,
+                 proof_digest,verifier_id,verified_at,expires_at)
+              SELECT approval_id,485,'1',
+                 'cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+                 worker_name,image_source_sha,image_id,true,true,true,true,true,
+                 repeat('d',64),'cst-independent-qa-disposableonly',
+                 now(),now()+interval '6 minutes'
+              FROM (SELECT id AS approval_id,worker_name,image_source_sha,image_id
+                    FROM cst_onejob_private.verified_admission_receipts LIMIT 1) src;
+              RAISE EXCEPTION 'RECEIPT_UNBOUNDED_TTL_ALLOWED';
+            EXCEPTION WHEN check_violation THEN NULL; END;
+          END $deny$;""")
+        # Row presence, valid-looking SHA, or booleans alone do not authorize.
         state_broker=psql("""SELECT CASE WHEN
            (SELECT status FROM ai_platform.ai_jobs WHERE id=484)='waiting'
            AND (SELECT status FROM ai_platform.cst_onejob_owner_approvals
@@ -266,7 +330,7 @@ def main():
         report.update(result="PASS",validRows=1,rlsForced=True,
           userPolicyPresent=False,duplicateRequestDenied=True,
           duplicateJobDenied=True,forgedOwnerDenied=True,excessiveTtlDenied=True,
-          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True,brokerNoLogin=True,brokerNoDirectWrites=True,brokerNoTransition=True)
+          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True,brokerNoLogin=True,brokerNoDirectWrites=True,brokerNoTransition=True,receiptRowNeverAuthorizes=True,receiptRlsForced=True,receiptShortTtlEnforced=True)
         print("ONEJOB_OWNER_LEDGER_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:
