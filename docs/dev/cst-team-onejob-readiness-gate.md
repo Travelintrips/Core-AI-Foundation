@@ -487,3 +487,54 @@ dedicated egress ACL, real CST-DEV database transport, RLS role,
 new approved job, subscriber receipt and independent Final ACK are
 still separate NO-GO release requirements. Existing Core DEV remains
 untouched; this work does not require an additional Owner login.
+
+## Supabase pooler CA pinning and verified no-login TLS handshake — 20 Nov 2026
+
+The VPS's default Node.js trust store does not include the Supabase
+PostgreSQL pooler's private certificate authority. An HTTPS-independent
+read-only TLS handshake to the active `aws-1-ap-southeast-2.pooler.supabase.com:6543`
+endpoint received a certificate for `*.pooler.supabase.com`, issued by
+`Supabase Intermediate 2021 CA`, but strict verification without its
+root returned `SELF_SIGNED_CERT_IN_CHAIN`. **Do not** work around this
+using `rejectUnauthorized=false`, disabling PostgreSQL SSL verification,
+or importing a certificate taken from the unauthenticated server into
+the operating system's global trust store.
+
+Supabase's official documentation directs operators to download the
+project's server root CA in Dashboard → Database Settings → SSL
+Configuration for `verify-full` use. An offline, public-CA feasibility
+check used a publicly distributed Supabase Root 2021 CA and independently
+checked its SHA-256 X.509 fingerprint:
+
+`807025AD50D4ED219D2C9C7D299C004F824EB00CF7F65AFEF607D07B72E6CAFA`
+
+With this CA supplied **only to the test client's TLS trust context**,
+OpenSSL returned `Verification: OK`, and Node.js returned
+`authorized=true`, `hostnameValid=true`, TLSv1.3. These were
+TLS-only handshakes. **No PostgreSQL StartupMessage, credentials, jobs,
+SQL or other database transactions were transmitted.** The temporary
+download was deleted after each probe. This is proof of the public pooler
+TLS trust-chain behavior, **not** proof that a live session would belong
+to the CST-DEV project.
+
+The Draft-only `lib/db/src/cstOneJobPinnedSupabaseCa.ts` now requires
+the exact pinned root fingerprint, a valid self-signed CA certificate and
+a regular, non-symlink, non-writable certificate file. The default
+read-only mount path for an eventual candidate is fixed:
+
+`/run/cst-onejob-dev-db/ca/prod-ca-2021.crt`
+
+An unauthorized, missing, modified, symlinked or writable CA file rejects
+one-job transport activation. `lib/db/src/cstOneJobDevSocketTransport.ts`
+passes the pinned CA explicitly as `ssl.ca` with
+`rejectUnauthorized=true`; it does **not** change TLS defaults for
+ordinary Core DEV or PROD. A public CA test fixture in
+`scripts/dev/fixtures/supabase-root-2021-public-qa.crt` is used only by
+offline regression tests; its presence in the checkout does **not**
+automatically make it the trusted runtime source.
+
+**Remaining release boundary:** a separately authenticated broker, verified
+non-root Unix peer identity, independently reviewed egress ACL, a real
+short-lived CST-DEV-only RLS login and a fresh approved Company-1 job
+are still required. The preflight continues to fail closed, and no
+operational broker, role, subscriber, signer or PROD service was changed.
