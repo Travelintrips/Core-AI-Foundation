@@ -103,14 +103,19 @@ SELECT 'COMPANY3-UNRELATED-EVENT','job.completed','job-engine',id::text,
 FROM ai_platform.ai_jobs WHERE job_code='COMPANY3-UNRELATED';
 """
         psql(fixture)
+        # Authorization creates the queued job before the pilot role is granted.
+        psql(f"""INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,
+        status,payload_json,max_retry,retry_strategy)
+        VALUES ('APPROVED-ONE','ollama_model_invocation','ollama_inference','queued',
+        '{{"requestId":"{REQUEST}","modelId":"qwen2.5:3b"}}',0,'immediate');""")
         psql(render(APPLY))
         # Negative checks exercise actual grants and RLS, never synthetic mocks.
         test=f"""
 SET ROLE {ROLE};
 DO $negative$
 BEGIN
- IF (SELECT count(*) FROM ai_platform.ai_jobs) <> 0 THEN
-    RAISE EXCEPTION 'COMPANY3_ROW_VISIBLE'; END IF;
+ IF (SELECT count(*) FROM ai_platform.ai_jobs) <> 1 THEN
+    RAISE EXCEPTION 'SCOPED_APPROVED_JOB_NOT_VISIBLE'; END IF;
  BEGIN
    INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,status,payload_json,max_retry,retry_strategy)
    VALUES ('WRONG-COMPANY','ollama_model_invocation','ollama_inference','queued',
@@ -176,9 +181,18 @@ SELECT 'worker-cluster','worker_registered','ai_worker',w.id::text,'success',
   jsonb_build_object('workerName',w.worker_name,'workerType',w.worker_type,
    'capabilities',w.capabilities,'leaseOwner',w.lease_owner)
 FROM ai_platform.ai_workers w WHERE w.worker_name='{WORKER}';
-INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,status,payload_json,max_retry,retry_strategy)
-VALUES ('APPROVED-ONE','ollama_model_invocation','ollama_inference','queued',
- '{{"requestId":"{REQUEST}","modelId":"qwen2.5:3b"}}',0,'immediate');
+-- The pre-approved job was inserted by postgres before SET ROLE.
+-- The scoped pilot role must not be able to fabricate a second job.
+DO $duplicate$
+BEGIN
+ BEGIN
+  INSERT INTO ai_platform.ai_jobs(job_code,job_type,required_capability,status,payload_json,max_retry,retry_strategy)
+  VALUES ('DUPLICATE-APPROVED-ONE','ollama_model_invocation','ollama_inference','queued',
+   '{{"requestId":"{REQUEST}","modelId":"qwen2.5:3b"}}',0,'immediate');
+  RAISE EXCEPTION 'DUPLICATE_JOB_INSERT_ALLOWED';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+END $duplicate$;
 -- A completion event may not be published before the approved job finishes.
 DO $early$
 DECLARE jid integer;wid integer;
@@ -376,7 +390,7 @@ RESET ROLE;
 """)
         if " t " not in check.replace("\n"," "):
             raise RuntimeError("ROLLBACK_PROOF_NOT_CONFIRMED "+check[-300:])
-        report.update({"result":"PASS","negativeCases":3,"approvedJobTransitions":["queued","running","completed"],
+        report.update({"result":"PASS","negativeCases":4,"approvedJobTransitions":["queued","running","completed"],
             "approvedWorker":"idle","completionEventPersisted":True,"completionEventAuditPersisted":True,
             "fabricatedEventAuditRejected":True,
             "workerRegistrationAuditDenialRolledBackWorker":True,
