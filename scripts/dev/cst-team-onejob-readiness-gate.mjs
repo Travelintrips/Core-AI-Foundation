@@ -86,6 +86,7 @@ export function projectOneJobGate(data) {
  deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
  deny(data.retiredHostQuarantined===true,"RETIRED_DEV_HOST_NOT_QUARANTINED");
  deny(data.endpointTargetsCandidate===true,"DEV_ENDPOINT_TO_CANDIDATE_UNVERIFIED");
+ deny(data.nginxApiRoutesToCandidate===true,"NGINX_API_STILL_ROUTES_TO_OLD_CORE");
  deny(data.dbStatus==="DEV_DB_READ_ONLY_PASS" && data.database==="postgres" &&
       data.dbRole?.startsWith("cst_team_model_pilot_")===true,
       "CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
@@ -121,16 +122,29 @@ async function main() {
  const running=inspect("{{.State.Running}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.Image}}|{{.HostConfig.NetworkMode}}",CANDIDATE);
  const [isRunning,health,candidateImageId,networkMode]=running?.split("|")||[];
  const portBindingsRaw=inspect('{{json .HostConfig.PortBindings}}',CANDIDATE);
- let portBindingsSafe=false;
+ let candidateLoopbackPort=null,portBindingsSafe=false;
  try {
    const bindings=JSON.parse(portBindingsRaw);
-   portBindingsSafe=bindings===null || Object.values(bindings).every(v =>
+   portBindingsSafe=bindings!==null && Object.values(bindings).every(v =>
      Array.isArray(v) && v.length>0 && v.every(p =>
        ["127.0.0.1","::1"].includes(p.HostIp)));
+   const ports=bindings?.["3000/tcp"];
+   if(Array.isArray(ports) && ports.length===1 && ports[0].HostIp==="127.0.0.1" &&
+      /^[0-9]{2,5}$/.test(ports[0].HostPort) && Number(ports[0].HostPort)<=65535){
+     candidateLoopbackPort=Number(ports[0].HostPort);
+   }
  } catch {}
  const networkScopeSafe=Boolean(networkMode) && networkMode!=="host" &&
    networkMode!=="none" && !/prod/i.test(networkMode);
  let hostResolved=false,endpointTargetsCandidate=false,retiredHostQuarantined=false;
+ let nginxApiRoutesToCandidate=false;
+ try {
+   const active=readFileSync("/etc/nginx/sites-enabled/dev.cstlogistic.co.id","utf8");
+   const exactApi=active.match(/location\s+\^~\s+\/api\/\s*\{([^}]*)\}/);
+   const destination=exactApi?.[1]?.match(/proxy_pass\s+http:\/\/127\.0\.0\.1:([0-9]+)\s*;/);
+   nginxApiRoutesToCandidate=Boolean(candidateLoopbackPort &&
+     destination && Number(destination[1])===candidateLoopbackPort);
+ } catch {}
  try{const target=await lookup(HOST);hostResolved=Boolean(target?.address)}catch{}
  try {
    const retired=readFileSync(RETIRED_VHOST,"utf8");
@@ -148,8 +162,9 @@ async function main() {
  const db=readDevCatalog(isRunning==="true" ? CANDIDATE : CORE);
  const facts={sourceSha:sha,imageId,imageSourceSha,sourceContentEquivalent,
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
-   candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe,
+   candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe && Boolean(candidateLoopbackPort),
    devHostResolved:hostResolved,retiredHostQuarantined,endpointTargetsCandidate,
+   nginxApiRoutesToCandidate,
    dbStatus:db.status,database:db.database,dbRole:db.role,
    roleCount:db.roleCount,safeRoleCount:db.safeRoleCount,
    jobId:db.jobId,jobQueued:db.jobStatus==="queued" && db.jobType==="ollama_model_invocation",
