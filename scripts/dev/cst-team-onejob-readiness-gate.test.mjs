@@ -8,7 +8,7 @@ const ready={
   sourceSha:sha,imageSourceSha:sha,imageId,
   candidateRunning:true,candidateHealthy:true,candidateImageId:imageId,
   candidateNetworkIsolated:true,devHostResolved:true,retiredHostQuarantined:true,
-  endpointTargetsCandidate:true,
+  endpointTargetsCandidate:true,nginxApiRoutesToCandidate:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
   dbRole:"cst_team_model_pilot_20261119_abcdef12",
   roleCount:1,safeRoleCount:1,
@@ -43,6 +43,7 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
   check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
   check({endpointTargetsCandidate:false},"DEV_ENDPOINT_TO_CANDIDATE_UNVERIFIED");
+  check({nginxApiRoutesToCandidate:false},"NGINX_API_STILL_ROUTES_TO_OLD_CORE");
 });
 test("an ancestral QA image is reusable only if runtime code and pilot RLS are unchanged",()=>{
   const oldSha="b".repeat(40);
@@ -79,6 +80,9 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/ROLLBACK/);
   assert.match(file,/RUNNING|Running/);
   assert.match(file,/x-cst-source-commit/);
+  assert.match(file,/NGINX_API_STILL_ROUTES_TO_OLD_CORE/);
+  assert.match(file,/candidateLoopbackPort/);
+  assert.match(file,/sites-enabled\/dev.cstlogistic.co.id/);
   assert.match(file,/RETIRED_VHOST/);
   assert.match(file,/dev.cstlogistic.co.id/);
   assert.match(file,/READ_ONLY_ADVISORY_NO_DISPATCH/);
