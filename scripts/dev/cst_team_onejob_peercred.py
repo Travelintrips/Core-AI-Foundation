@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import socket
 import struct
+import sys
 from dataclasses import dataclass
 
 _CREDENTIAL_FORMAT = "3i"
@@ -61,5 +62,34 @@ def start_operational_broker():
     raise RuntimeError("CST_ONEJOB_BROKER_INDEPENDENT_EGRESS_AND_DB_NO_GO")
 
 
+def _check_inherited_accepted_fd3() -> int:
+    """Check fd3 from a bounded Node acceptor; never read client bytes.
+
+    Called with -I and numeric expected UID/GID. Only a constant verdict
+    is printed; never emit credentials, raw peer IDs or PostgreSQL traffic.
+    """
+    if len(sys.argv) != 4 or sys.argv[1] != "--check-accepted-fd3":
+        print("CST_ONEJOB_KERNEL_PEER_DENIED")
+        return 4
+    try:
+        uid_s, gid_s = sys.argv[2:]
+        if not uid_s.isdecimal() or not gid_s.isdecimal():
+            raise ValueError("non-numeric peer")
+        uid, gid = int(uid_s), int(gid_s)
+        with socket.socket(fileno=3) as accepted:
+            verdict = verify_unix_peer(
+                accepted, expected_uid=uid, expected_gid=gid
+            )
+        if verdict.accepted:
+            print("CST_ONEJOB_KERNEL_PEER_VERIFIED")
+            return 0
+    except (OSError, ValueError, TypeError):
+        pass
+    print("CST_ONEJOB_KERNEL_PEER_DENIED")
+    return 3
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        sys.exit(_check_inherited_accepted_fd3())
     print("CST_ONEJOB_PEERCRED_IMPORT_ONLY_NO_DISPATCH")
