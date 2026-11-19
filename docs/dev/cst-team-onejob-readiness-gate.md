@@ -256,3 +256,55 @@ DEV-only database transport* is still needed. Do not add a general outbound
 Docker network, host networking, shared DB login, or permissive firewall rule
 merely to bypass these blockers. The pilot remains NO-GO, and this change
 performs no PROD/DEV migration, signer activation, or job execution.
+
+## IPv6 loopback reject entries and exact-name sandbox verification
+
+The isolated-bridge sandbox exposed two `::/0` entries under interface
+`lo` with flags `00200200` in `/proc/net/ipv6_route`, although the
+container had no non-loopback IPv6 address and an outbound connection to
+`2001:db8::1` returned `ENETUNREACH`. Treating every text `::/0` row as
+a usable default route incorrectly rejected the otherwise isolated sandbox.
+
+The in-container route probe now ignores **loopback-only reject entries**
+while still failing closed for a default IPv6 route through a non-loopback
+interface, any non-loopback IPv6 address, an IPv4 default route, or an
+unreadable IPv6 routing table. The test executes the exact JavaScript
+passed to `docker exec` with synthetic positive and negative route
+tables, rather than repeating a separate parser implementation.
+
+A temporary network **with the exact preflight network and candidate names**
+(no database credentials, no signer or runtime dispatcher, only a dummy
+Node HTTP service) independently verified:
+`networkGatewayMode=isolated`, `noPublishedHostPorts=true`,
+`candidateRoutesAbsent=true`, `candidateCoreCrossNetworkDenied=true`,
+`gatewayProbeStatus=ISOLATED_GATEWAY_UNASSIGNED_NO_ROUTES`,
+`pilotAdmissionReady=false`, `exit_code=2`, `sideEffects=NONE`.
+The named container/network and temporary source checkout were removed.
+The sandbox deliberately did not impersonate an approved source image or
+database role; runtime provenance/transport/QA blockers remained active.
+
+## Mock Unix socket transport feasibility (no real database)
+
+Because the gateway-isolated candidate has no network default route,
+a normal remote PostgreSQL TCP connection cannot be made directly.
+A separate disposable feasibility check used a read-only bind mount of
+a Unix-domain socket into the isolated container. A mock broker on the
+VPS forwarded bytes **only** to a randomly bound local mock TCP server,
+never to a public endpoint, Supabase, PROD, or any real credentials.
+
+The isolated container returned:
+`CONTAINER_DEFAULT_ROUTE=false`,
+`UNIX_SOCKET_MOCK_ACK=MOCK_CST_DEV_ACK:PING_ONLY`,
+`SINGLE_FIXED_UPSTREAM_SOCKET_MECHANISM_PASS`.
+The temporary broker process, socket, container, and Docker network were
+cleaned afterward.
+
+This is **not** a real CST-DEV database transport PASS. Before any broker
+could be deployed, its design must constrain upstream destination to
+the CST-DEV project, prevent caller-supplied destinations, preserve
+the existing DEV project-ref isolation guard, authenticate the
+short-lived pilot identity, enforce TLS server verification where applicable,
+restrict filesystem socket access, and prove unauthorized company/project,
+IPv4/IPv6, and host-service traffic is denied. It must have a safe,
+auditable rollback and must not inherit the shared application DB credentials.
+The two independent ACL/transport admission fields remain `false` in code.
