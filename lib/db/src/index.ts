@@ -10,6 +10,11 @@ const { Pool } = pg;
 // unqualified table names, so every new connection must default its search
 // path to our dedicated schema instead of "public".
 //
+const databaseUrl = resolveDatabaseUrl();
+// Strict opt-in for one-job CST-DEV only. Disabled for all existing pools,
+// unless an approved dedicated pilot identity and fixed Unix transport exist.
+const oneJobSocketOptions = createCstDevOneJobSocketOptions(databaseUrl);
+
 // Do not pass search_path through libpq's startup "options" parameter here.
 // Supabase's transaction/session pooler rejects that startup parameter with
 // "unsupported startup parameter in options: search_path". pg-pool's
@@ -27,10 +32,6 @@ const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax >= 1
   ? Math.max(1, Math.min(10, Math.floor(configuredPoolMax)))
   : isProduction ? 10 : 5;
 
-const databaseUrl = resolveDatabaseUrl();
-// Strict opt-in for one-job CST-DEV only. Disabled for all existing pools,
-// unless an approved dedicated pilot identity and fixed Unix transport exist.
-const oneJobSocketOptions = createCstDevOneJobSocketOptions(databaseUrl);
 const poolConfig = {
   connectionString: databaseUrl,
   ...(oneJobSocketOptions ?? {}),
