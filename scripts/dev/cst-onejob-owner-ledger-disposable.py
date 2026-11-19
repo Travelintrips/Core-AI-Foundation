@@ -225,7 +225,7 @@ def main():
           END $assert$;""")
         approval_output=psql("""SELECT id FROM ai_platform.cst_onejob_owner_approvals
           WHERE job_id=484;""")
-        ids=re.findall(r"\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b",approval_output)
+        ids=re.findall(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",approval_output)
         if len(ids)!=1:
             raise RuntimeError("BROKER_APPROVAL_FIXTURE_ID_INVALID")
         approval_id=ids[0]
