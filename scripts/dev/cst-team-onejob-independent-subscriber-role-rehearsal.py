@@ -42,7 +42,7 @@ def psql(sql):
 def sqlquote(s):
     return "'" + s.replace("'","''") + "'"
 
-def render(path, expiry):
+def render(path, expiry, overrides=None):
     values={
         "EXPECTED_DATABASE":DATABASE,"SUBSCRIBER_ROLE":ROLE,
         "SUBSCRIBER_PASSWORD":secrets.token_hex(32),
@@ -186,6 +186,30 @@ BEGIN
  THEN RAISE EXCEPTION 'PUBLISHER_EVENTS_MODIFIED'; END IF;
 END $postcheck$;""")
         psql(render(ROLLBACK,expiry))
+        # The receipt uniqueness index is intentionally durable and must not
+        # block onboarding another separately approved job after role revocation.
+        second_role="cst_team_onejob_subscriber_20261120_deadbeef"
+        second_request="cst-ai-team-company1-dev:pilot-"+"b"*20
+        psql("INSERT INTO ai_platform.ai_jobs VALUES "+
+          "(485,'APPROVED-TWO','queued','ollama_model_invocation',"+
+          "'ollama_inference',"+sqlquote(json.dumps({
+            "requestId":second_request,"modelId":"qwen2.5:3b"
+          }))+"::jsonb);")
+        second={
+          "SUBSCRIBER_ROLE":second_role,
+          "SUBSCRIBER_ID":"cst-dev-onejob-subscriber-20261120-deadbeef",
+          "JOB_ID":"485","REQUEST_ID":second_request,"WORKER_ID":"992",
+        }
+        psql(render(APPLY,expiry,second))
+        psql(render(ROLLBACK,expiry,second))
+        psql("""DO $rotation$
+BEGIN
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='cst_team_onejob_subscriber_20261120_deadbeef')
+ THEN RAISE EXCEPTION 'SECOND_SUBSCRIBER_ROLE_REVOKE_FAILED'; END IF;
+ IF (SELECT count(*) FROM pg_indexes WHERE schemaname='ai_platform'
+    AND indexname='cst_onejob_subscriber_receipt_once')<>1
+ THEN RAISE EXCEPTION 'IMMUTABLE_RECEIPT_INDEX_NOT_REUSED'; END IF;
+END $rotation$;""")
         psql("""DO $cleanup$
 BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='cst_team_onejob_subscriber_20261120_abcdef12')
@@ -202,6 +226,7 @@ END $cleanup$;""")
           "authorizedEventVisible":True,"unrelatedEventHidden":True,
           "wrongJobAndCompanyDenied":True,"duplicateReceiptDenied":True,
           "subscriberRoleRevoked":True,"auditReceiptPreserved":True,
+          "secondRoleRotationWithoutRebuildingIndex":True,
           "signatureOnlySyntacticallyChecked":True,
           "cryptographicSignatureAndRealDeliveryVerified":False,
           "devDatabaseTouched":False,"prodDatabaseTouched":False,
