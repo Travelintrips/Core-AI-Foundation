@@ -109,7 +109,15 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/x-cst-commit-sha/);
   assert.match(file,/CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED/);
   assert.match(file,/SHARED_DEV_API_ROUTE_CHANGED/);
-  assert.match(file,/candidateLoopbackPort/);
+  assert.doesNotMatch(file,/candidateLoopbackPort/);
+  assert.match(file,/noPublishedHostPorts/);
+  assert.match(file,/gateway_mode_ipv4/);
+  assert.match(file,/network\.EnableIPv6===false/);
+  assert.match(file,/hostGatewayUnassigned/);
+  assert.match(file,/candidateRoutesAbsent/);
+  assert.match(file,/candidateCoreCrossNetworkDenied/);
+  assert.match(file,/NO_DEFAULT_ROUTE/);
+  assert.match(file,/ENETUNREACH/);
   assert.match(file,/IMAGE_BUILD_SHA_MARKER_MISMATCH/);
   assert.match(file,/\.cst-build-sha/);
   assert.match(file,/cst-core-onejob-dev-net/);
@@ -123,7 +131,7 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.doesNotMatch(file,/candidateIndependentNetworkAclVerified:\s*process\.env/);
   assert.doesNotMatch(file,/candidateDedicatedDevDbTransportVerified:\s*process\.env/);
   assert.match(file,/members\.length===1/);
-  assert.match(file,/isInternal==="true"/);
+  assert.match(file,/network\.Internal===true/);
   assert.match(file,/matchingRequestCount===1/);
   assert.match(file,/uniqueIndexPresent===true/);
   assert.match(file,/ai_jobs_company1_pilot_request_unique/);
