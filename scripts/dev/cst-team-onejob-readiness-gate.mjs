@@ -45,11 +45,15 @@ if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
   const v=r.rows[0];
   const jobId=Number(process.env.CST_TEAM_DEV_APPROVED_JOB_ID);
   const workerName=process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME||"";
-  let job=null,existingWorker=null;
+  let job=null,matchingRequestCount=null,existingWorker=null;
   if(Number.isSafeInteger(jobId)&&jobId>0&&jobId!==482){
     const j=await c.query("select id,status,job_type,payload_json->>'requestId' as request_id,"+
       "payload_json->>'modelId' as model_id from ai_platform.ai_jobs where id=$1",[jobId]);
     job=j.rows[0]||null;
+    if(job?.request_id){
+      const duplicates=await c.query("select count(*)::int as n from ai_platform.ai_jobs where payload_json->>'requestId'=$1",[job.request_id]);
+      matchingRequestCount=duplicates.rows[0]?.n??null;
+    }
   }
   if(/^cst-dev-dell-onejob-[0-9]{8}-[0-9a-f]{8}$/.test(workerName)){
     const w=await c.query("select count(*)::int as count from ai_platform.ai_workers where worker_name=$1",[workerName]);
@@ -59,6 +63,7 @@ if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
     database:v.db,role:v.role,roleCount:v.role_count,safeRoleCount:v.safe_role_count,
     jobId:job?.id??null,jobStatus:job?.status??null,jobType:job?.job_type??null,
     jobRequestId:job?.request_id??null,jobModel:job?.model_id??null,
+    matchingRequestCount,
     workerName:workerName||null,workerExistingCount:existingWorker,
     enrollmentConfigured:Boolean(process.env.OLLAMA_REMOTE_ENROLLMENT_SECRET),
     oneJobGuardConfigured:process.env.NODE_ENV==="development" &&
@@ -91,6 +96,7 @@ export function projectOneJobGate(data) {
       data.dbRole?.startsWith("cst_team_model_pilot_")===true,
       "CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
  deny(data.roleCount===1 && data.safeRoleCount===1,"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+ deny(data.matchingRequestCount===1,"PILOT_REQUEST_ID_NOT_UNIQUE");
  deny(Number.isSafeInteger(data.jobId) && data.jobId>0 && data.jobId!==482 &&
       data.jobQueued===true && data.jobCompany==="1" &&
       data.jobModel==="qwen2.5:3b","FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
@@ -139,12 +145,12 @@ async function main() {
  const pilotNet="cst-core-onejob-dev-net";
  const networkRaw=networkMode===pilotNet ?
    shell("docker",["network","inspect",pilotNet,"--format",
-     '{{.Driver}}|{{json .Containers}}']) : null;
+     '{{.Driver}}|{{.Internal}}|{{json .Containers}}']) : null;
  let networkMembersSafe=false;
  try {
-   const [driver,containersRaw]=networkRaw?.split("|")||[];
+   const [driver,isInternal,containersRaw]=networkRaw?.split("|")||[];
    const members=Object.values(JSON.parse(containersRaw)||{});
-   networkMembersSafe=driver==="bridge" && members.length===1 &&
+   networkMembersSafe=driver==="bridge" && isInternal==="true" && members.length===1 &&
      members[0]?.Name===CANDIDATE;
  } catch {}
  const networkScopeSafe=networkMode===pilotNet && networkMembersSafe;
@@ -185,7 +191,8 @@ async function main() {
    nginxApiRetainsExistingCore,
    dbStatus:db.status,database:db.database,dbRole:db.role,
    roleCount:db.roleCount,safeRoleCount:db.safeRoleCount,
-   jobId:db.jobId,jobQueued:db.jobStatus==="queued" && db.jobType==="ollama_model_invocation",
+   jobId:db.jobId,matchingRequestCount:db.matchingRequestCount,
+   jobQueued:db.jobStatus==="queued" && db.jobType==="ollama_model_invocation",
    jobCompany:typeof db.jobRequestId==="string" &&
      /^cst-ai-team-company1-dev:pilot-[a-f0-9]{20}$/.test(db.jobRequestId) ? "1" : null,
    jobModel:db.jobModel,workerName:db.workerName,
