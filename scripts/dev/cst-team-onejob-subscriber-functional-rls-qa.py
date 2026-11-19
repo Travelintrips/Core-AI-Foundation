@@ -29,8 +29,8 @@ OTHER_EVENT="25745d53-9c8d-46ae-8afc-62bfbba92712"
 CORRELATION="24a5dc22-318b-42b4-aaed-a7c84e24cd21"
 WORKER_NAME="cst-dev-dell-onejob-20261120-fedcba98"
 
-def run(args,stdin=None,timeout=35):
-    p=subprocess.run(args,input=stdin,text=True,capture_output=True,timeout=timeout)
+def run(args,stdin=None,timeout=35,env=None):
+    p=subprocess.run(args,input=stdin,text=True,capture_output=True,timeout=timeout,env=env)
     if p.returncode:
         # No DSN, password or private key values may be printed.
         raise RuntimeError(f"QA_STEP_FAILED {args[0]}: "+
@@ -212,7 +212,8 @@ ALTER TABLE ai_platform.ai_audit_logs ENABLE ROW LEVEL SECURITY;
         factsfile.write_text(json.dumps(facts),encoding="utf8")
         review=run(["/usr/bin/node",
           str(ROOT/"scripts/dev/cst-team-onejob-subscriber-functional-review-qa.mjs"),
-          str(factsfile),str(keydir/"receipt-public.pem")],timeout=6)
+          str(factsfile),str(keydir/"receipt-public.pem")],timeout=6,
+          env={**os.environ,"CST_ONEJOB_PG16_DISPOSABLE_QA":"true"})
         if "DISPOSABLE_PG16_SIGNED_RECEIPT_INDEPENDENT_READBACK_PASS" not in review:
             raise RuntimeError("SIGNATURE_AND_DB_READBACK_FAILED")
         psql(sharedmod.render(sharedmod.ROLLBACK,expiry))
