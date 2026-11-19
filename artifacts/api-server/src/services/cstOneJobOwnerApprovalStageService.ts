@@ -94,13 +94,15 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
       scope?.approval_insert_scoped!==true)
       throw Error("ONEJOB_DEDICATED_WRITER_RLS_NOT_PROVISIONED");
 
-    // Only a freshly DB-verified internal Owner identity is acceptable.
-    // Row lock prevents a concurrent role demotion before commit.
+    // Verify the active internal Owner using SELECT-only RLS. PostgreSQL
+    // FOR SHARE would require UPDATE privilege on internal_users; that is
+    // intentionally NOT granted to the limited pilot writer. This stages
+    // WAITING only: queue admission must independently revalidate the Owner
+    // under its own audited, transaction-bound permission gate.
     const actor=await tx.execute(sql`
       SELECT id FROM ai_platform.internal_users
       WHERE id=${input.ownerUserId}
-        AND role='owner' AND status='active' AND account_type='internal'
-      FOR SHARE`);
+        AND role='owner' AND status='active' AND account_type='internal'`);
     if(actor.rows.length!==1)throw Error("OWNER_NOT_ACTIVE_IN_TRANSACTION");
     const index=await tx.execute(sql`
       SELECT i.indisunique,i.indisvalid,i.indisready
