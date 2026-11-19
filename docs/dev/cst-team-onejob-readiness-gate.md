@@ -21,10 +21,12 @@ healthy status, identical image ID, non-host/non-production Docker network and
 no ports bound publicly. The existing unified DEV endpoint
 `dev.cstlogistic.co.id` must resolve, but its shared `/api/` Nginx route must
 **remain on the existing healthy Core DEV container** during pilot preparation.
-The candidate must instead bind port 3000 to a distinct 127.0.0.1-only port,
-respond to a direct loopback `/api/healthz` request, and report an exact source
-commit header (`x-cst-source-commit` or `x-cst-commit-sha`) matching the candidate
-image label. This is a prelaunch provenance check, not an authorization to dispatch.
+The candidate must use a dedicated `--internal` Docker bridge with IPv4
+gateway mode `isolated`, no host-gateway address, **no published ports**, and
+no IPv6 network. The diagnostic reads `/api/healthz` from the named candidate
+via `docker exec` at its container-local `127.0.0.1:3000` (not from a host port)
+and requires an exact source header (`x-cst-source-commit` or
+`x-cst-commit-sha`) matching the image label. This is a prelaunch provenance check, not an authorization to dispatch.
 Do not cut over the shared DEV `/api/` merely to make a readiness check pass. The retired `dev-aicore.cstlogistic.co.id` Nginx vhost
 must remain HTTP 410 (quarantined since 31 October 2026). Never re-enable
 that retired endpoint or substitute the PROD hostname merely for a pilot.
@@ -68,7 +70,9 @@ No candidate launch or shared Nginx change was performed as part of this edit.
 
 ## Dedicated network membership (19 November 2026)
 
-The candidate must run on a Docker bridge named `cst-core-onejob-dev-net` with **exactly one member**, `cst-core-onejob-dev-candidate`. The gate verifies this via Docker network inspection, rejecting shared worker, QA and production bridges. Candidate HTTP port 3000 must bind to a distinct 127.0.0.1 host port; shared DEV Nginx continues pointing to the existing healthy Core DEV port 18082. **A dedicated bridge alone does not restrict outbound destinations**: verify approved DEV database destinations and egress controls separately before creating an authenticated pilot role or allowing job execution.
+The candidate must run on a Docker bridge named `cst-core-onejob-dev-net` with **exactly one member**, `cst-core-onejob-dev-candidate`. The gate verifies this via Docker network inspection, rejecting shared worker, QA and production bridges. The new gateway-`isolated` candidate does **not** publish port 3000 to the host;
+health is read inside the exact candidate container. Shared DEV Nginx continues
+pointing to the existing healthy Core DEV port 18082. **A dedicated bridge alone does not restrict outbound destinations**: verify approved DEV database destinations and egress controls separately before creating an authenticated pilot role or allowing job execution.
 
 Live read-only CST-DEV catalog check: database `postgres`; role anchors `dev_gpt02_relock_catalog_auditor` and `aicore_dev_runtime` exist; RLS enabled on jobs/workers/events/audit_logs, all four expected sequences exist, no `cst_team_model_pilot_%` roles or `cst_model_pilot_%` policies; historical completed job #482 is the only job matching the pilot request prefix. Therefore do **not** provision the short-lived login yet or reuse #482. No database mutations performed.
 
@@ -213,3 +217,42 @@ barrier**: no firewall changes, Docker network changes, role/job creation,
 event replay, signer activation, DEV shared-route cutover or PROD deployment.
 Synthetic positive values in pure unit tests exercise the projector only;
 they are **not** operational acceptance evidence.
+
+## Gateway-isolated Docker sandbox experiment (19 November 2026)
+
+Docker Engine 29.9.3 on the authorized DEV VPS supports a bridge created with
+`--internal -o com.docker.network.bridge.gateway_mode_ipv4=isolated`.
+This is stricter than an ordinary `--internal` bridge, which still has a
+host-facing gateway address. Reference:
+https://docs.docker.com/engine/network/port-publishing/#gateway-modes
+
+A unique, disposable no-secret/no-database sandbox returned:
+
+- Network `bridge`, `Internal=true`, IPv4 gateway mode `isolated`,
+  and IPAM with a subnet but **no `Gateway` address**.
+- A no-privilege Node HTTP test process gave **HTTP 200 from within its own
+  namespace** through `127.0.0.1:3000`.
+- `/proc/net/route` had **no IPv4 default route**.
+- An outbound TCP probe to the running Core DEV private Docker address was
+  denied with **`ENETUNREACH`**.
+- Docker reported `PortBindings={}` and `3000/tcp: null` (no host-published
+  port). The entire sandbox network and container were then removed.
+
+The read-only one-job gate now requires this isolated bridge topology,
+no published ports, explicit in-container default-route and cross-network
+negative proofs, and an in-container HTTP commit-header readback. A conventional
+bridge that only sets `Internal=true` cannot satisfy the new admission shape,
+even if an ephemeral host-gateway listener happened to be denied.
+
+**This is network topology and diagnostic health evidence only, not full
+independent ACL certification.** The two stricter release blockers continue
+to be forced to `false` until independently verified:
+`CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED` and
+`DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED`.
+
+In particular, no default route also means the candidate cannot speak directly
+to the remote Supabase CST-DEV pooler, so an independently reviewed *dedicated
+DEV-only database transport* is still needed. Do not add a general outbound
+Docker network, host networking, shared DB login, or permissive firewall rule
+merely to bypass these blockers. The pilot remains NO-GO, and this change
+performs no PROD/DEV migration, signer activation, or job execution.
