@@ -3,7 +3,7 @@
 Never connects to CST-DEV or PROD, exposes no ports, uses --network none.
 """
 from pathlib import Path
-import json, os, subprocess, sys, time
+import json, os, re, subprocess, sys, time
 
 ROOT=Path(__file__).resolve().parents[2]
 DDL=ROOT/"docs/dev/cst-onejob-owner-approval.PROPOSED.sql"
@@ -223,10 +223,12 @@ def main():
                'ai_platform.cst_onejob_owner_approvals','UPDATE')
             THEN RAISE EXCEPTION 'BROKER_HAS_DIRECT_WRITES'; END IF;
           END $assert$;""")
-        approval_id=psql("""SELECT id FROM ai_platform.cst_onejob_owner_approvals
-          WHERE job_id=484;""").strip().splitlines()[-1].strip()
-        if len(approval_id)!=36:
+        approval_output=psql("""SELECT id FROM ai_platform.cst_onejob_owner_approvals
+          WHERE job_id=484;""")
+        ids=re.findall(r"\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b",approval_output)
+        if len(ids)!=1:
             raise RuntimeError("BROKER_APPROVAL_FIXTURE_ID_INVALID")
+        approval_id=ids[0]
         psql(f"""SET ROLE cst_onejob_unprivileged;
           DO $deny$
           BEGIN
