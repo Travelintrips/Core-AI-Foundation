@@ -303,19 +303,9 @@ def main():
         psql("""DO $deny$
           BEGIN
             BEGIN
-              INSERT INTO cst_onejob_private.verified_admission_receipts
-                (approval_id,job_id,company_id,request_id,worker_name,
-                 image_source_sha,image_id,isolated_network_verified,
-                 scoped_dev_role_verified,event_audit_path_verified,
-                 subscriber_path_verified,independent_qa_available,
-                 proof_digest,verifier_id,verified_at,expires_at)
-              SELECT approval_id,485,'1',
-                 'cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
-                 worker_name,image_source_sha,image_id,true,true,true,true,true,
-                 repeat('d',64),'cst-independent-qa-disposableonly',
-                 now(),now()+interval '6 minutes'
-              FROM (SELECT id AS approval_id,worker_name,image_source_sha,image_id
-                    FROM cst_onejob_private.verified_admission_receipts LIMIT 1) src;
+              UPDATE cst_onejob_private.verified_admission_receipts
+              SET expires_at=verified_at+interval '6 minutes'
+              WHERE job_id=484;
               RAISE EXCEPTION 'RECEIPT_UNBOUNDED_TTL_ALLOWED';
             EXCEPTION WHEN check_violation THEN NULL; END;
           END $deny$;""")
