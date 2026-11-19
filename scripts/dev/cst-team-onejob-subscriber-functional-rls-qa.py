@@ -234,7 +234,7 @@ END $postcheck$;""")
         print(json.dumps({
           "result":"PASS",
           "mode":"DISPOSABLE_PG16_AND_NODE_BOTH_NETWORK_NONE",
-          "consumerAuthenticatedAsSeparatePgRole":True,
+          "subscriberRoleVerifiedUnderDisposableLocalTrustAuth":True,
           "oneScopedEventSelected":True,
           "signedReceiptInsertedOnce":True,
           "duplicateReceiptRejected":True,
