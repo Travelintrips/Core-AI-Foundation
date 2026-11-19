@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Disposable CST-DEV one-job QA: prove the EXISTING mock broker cannot dial
 # upstream until a namespace-only kernel default-drop ACL is active.
-# No real pooler, credentials, PROD or database access. Docker creates and\n# removes its normal bridge/NAT rules; no persistent host firewall policy edit.
+# No real pooler, credentials, PROD or database access. Docker creates and
+# removes its normal bridge/NAT rules; no persistent host firewall policy edit.
 set -Eeuo pipefail
 if [[ "$(id -u)" != "0" ]]; then echo "QA_REQUIRES_VPS_ROOT_FOR_NAMESPACE_SETUP"; exit 3; fi
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
