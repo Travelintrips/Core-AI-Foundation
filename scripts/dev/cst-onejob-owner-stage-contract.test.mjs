@@ -51,3 +51,18 @@ test("proposal is not migration-applied; forced-RLS approval row binds exactly o
  assert.match(ddl,/Intentionally no GRANT or policy/);
  assert.doesNotMatch(ddl,/GRANT\s+(?:ALL|INSERT|UPDATE)|DISABLE ROW LEVEL SECURITY/i);
 });
+
+test("owner stage rejects shared runtime DB role before any job writes",()=>{
+ const tx=service.indexOf("return db.transaction(async tx=>");
+ const gate=service.indexOf("ONEJOB_DEDICATED_WRITER_RLS_NOT_PROVISIONED",tx);
+ const owner=service.indexOf("OWNER_NOT_ACTIVE_IN_TRANSACTION",gate);
+ const insert=service.indexOf("INSERT INTO ai_platform.ai_jobs",owner);
+ assert.ok(tx>=0 && gate>tx && owner>gate && insert>owner);
+ assert.match(service,/current_user AS role_name/);
+ assert.match(service,/scope\?\.role_name!=='cst_team_model_pilot_writer'/);
+ for(const policy of ["cst_onejob_stage_insert","cst_onejob_stage_select",
+   "cst_onejob_stage_approval_insert"]){
+   assert.ok(service.includes(policy));
+ }
+ assert.doesNotMatch(service,/SET ROLE cst_team_model_pilot_writer|GRANT ALL/);
+});
