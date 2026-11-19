@@ -189,24 +189,24 @@ async function main() {
  // ENETUNREACH/EHOSTUNREACH count as denial, never refused or timed out.
  let candidateRoutesAbsent=false,candidateCoreCrossNetworkDenied=false;
  if(networkScopeSafe && isRunning==="true"){
-   const routeJs=String.raw\`
+   const routeJs=String.raw`
 const fs=require("node:fs");
-const v4=fs.readFileSync("/proc/net/route","utf8").split("\\n").slice(1);
-const has4=v4.some(x=>x.trim().split(/\\s+/)[1]==="00000000");
+const v4=fs.readFileSync("/proc/net/route","utf8").split("\n").slice(1);
+const has4=v4.some(x=>x.trim().split(/\s+/)[1]==="00000000");
 let has6=true;
 try { const v6=fs.readFileSync("/proc/net/ipv6_route","utf8");
-  has6=v6.split("\\n").some(x=>/^0{32}\\s+00\\s+/.test(x)); } catch {}
-console.log(!has4&&!has6?"NO_DEFAULT_ROUTE":"ROUTE_PRESENT");\`;
+  has6=v6.split("\n").some(x=>/^0{32}\s+00\s+/.test(x)); } catch {}
+console.log(!has4&&!has6?"NO_DEFAULT_ROUTE":"ROUTE_PRESENT");`;
    candidateRoutesAbsent=shell("docker",["exec",CANDIDATE,"node","-e",routeJs],4500)==="NO_DEFAULT_ROUTE";
    const coreIp=inspect('{{(index .NetworkSettings.Networks "ai-core-workers_control").IPAddress}}',CORE);
-   if(/^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$/.test(coreIp||"")){
-     const tcpJs=String.raw\`
+   if(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(coreIp||"")){
+     const tcpJs=String.raw`
 const net=require("node:net");
 const s=net.connect({host:process.argv[1],port:3000});
 s.setTimeout(1800);
 s.on("connect",()=>{console.log("REACHABLE");s.destroy()});
 s.on("error",e=>console.log(e.code||"UNVERIFIED"));
-s.on("timeout",()=>{console.log("UNVERIFIED");s.destroy()});\`;
+s.on("timeout",()=>{console.log("UNVERIFIED");s.destroy()});`;
      const outcome=shell("docker",["exec",CANDIDATE,"node","-e",tcpJs,coreIp],4500);
      candidateCoreCrossNetworkDenied=["ENETUNREACH","EHOSTUNREACH"].includes(outcome);
    }
@@ -245,11 +245,11 @@ s.on("timeout",()=>{console.log("UNVERIFIED");s.destroy()});\`;
  // For gateway_mode=isolated there is no published host port. Read
  // liveness and source header from inside the named container only.
  if(networkScopeSafe && isRunning==="true"){
-   const healthJs=String.raw\`
+   const healthJs=String.raw`
 fetch("http://127.0.0.1:3000/api/healthz",{signal:AbortSignal.timeout(2500)})
 .then(r=>console.log(JSON.stringify({status:r.status,
   commit:r.headers.get("x-cst-source-commit")||r.headers.get("x-cst-commit-sha")})))
-.catch(()=>{process.exitCode=2});\`;
+.catch(()=>{process.exitCode=2});`;
    const raw=shell("docker",["exec",CANDIDATE,"node","-e",healthJs],4700);
    try {
      const health=JSON.parse(raw);
