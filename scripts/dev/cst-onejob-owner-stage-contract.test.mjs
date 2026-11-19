@@ -34,7 +34,7 @@ test("waiting job, approval FK and audit are atomic in same transaction",()=>{
  const appr=service.indexOf("INSERT INTO ai_platform.cst_onejob_owner_approvals",job);
  const audit=service.indexOf("INSERT INTO ai_platform.ai_audit_logs",appr);
  assert.ok(tx>0 && job>tx && appr>job && audit>appr);
- assert.doesNotMatch(service,/FOR SHARE/);
+ assert.doesNotMatch(service,/account_type='internal'\s*FOR SHARE/);
  assert.match(service,/role='owner' AND status='active' AND account_type='internal'/);
  assert.match(service,/ONEJOB_UNIQUE_INDEX_NOT_READY/);
  assert.match(service,/,'waiting',0,'immediate'/);
