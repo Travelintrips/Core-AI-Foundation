@@ -3,8 +3,8 @@
  * This check never reads a private key and never grants operational authority.
  * No caller-selected trust root is accepted for production-shaped checks.
  */
-import {lstatSync,realpathSync,readFileSync} from "node:fs";
-import {dirname,resolve} from "node:path";
+import {lstatSync,realpathSync,readFileSync,openSync,closeSync,fstatSync,constants} from "node:fs";
+import {dirname} from "node:path";
 import {createHash,createPublicKey} from "node:crypto";
 
 export const CST_QA_PINNED_TRUST_PATH="/etc/cst-onejob-qa/trust/public-root.json";
@@ -48,18 +48,26 @@ export function reviewQaTrustCustody(
     dispatchPermitted:false,finalAckVerified:false};
 }
 export function readRootOwnedQaPublicTrust(){
-  // File and directory custody are checked before opening. A production
-  // verifier should additionally use openat/O_NOFOLLOW + fstat on the same fd
-  // to close pathname races; this read-only preflight is not that verifier.
+  // Open the immutable trust root using O_NOFOLLOW and inspect the SAME fd.
+  // Parents must be root-owned and not writable by group/others.
   const path=CST_QA_PINNED_TRUST_PATH;
-  const file=lstatSync(path),dir=lstatSync(dirname(path));
-  const real=realpathSync(path);
-  if(file.isSymbolicLink()||dir.isSymbolicLink()||real!==path)
-    throw Error("QA_TRUST_SYMLINK_OR_PATH");
-  if(file.uid!==0||dir.uid!==0||(file.mode&0o022)!==0||
-    (dir.mode&0o022)!==0||!file.isFile()||!dir.isDirectory())
-    throw Error("QA_TRUST_UNSAFE_OWNERSHIP");
-  if(file.size>8192||file.size<1)throw Error("QA_TRUST_INVALID_SIZE");
-  const document=JSON.parse(readFileSync(path,"utf8"));
-  return reviewQaTrustCustody(file,dir,real,path,document);
+  for(const dir of ["/etc","/etc/cst-onejob-qa",CST_QA_TRUST_DIR]){
+    const st=lstatSync(dir);
+    if(st.uid!==0 || (st.mode&0o022)!==0 || !st.isDirectory() ||
+       st.isSymbolicLink() || realpathSync(dir)!==dir)
+      throw Error("QA_TRUST_PARENT_UNSAFE");
+  }
+  const fd=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+  try {
+    const file=fstatSync(fd),dir=lstatSync(CST_QA_TRUST_DIR);
+    if(!file.isFile() || file.uid!==0 || (file.mode&0o022)!==0 ||
+       file.nlink!==1 || file.size<1 || file.size>8192)
+      throw Error("QA_TRUST_FILE_CUSTODY_INVALID");
+    const raw=readFileSync(fd,{encoding:"utf8"});
+    const document=JSON.parse(raw);
+    const report=reviewQaTrustCustody(file,dir,realpathSync(path),path,document);
+    if(report.status!=="CUSTODY_CHECK_ONLY")
+      throw Error("QA_TRUST_MANIFEST_OR_PIN_DENIED");
+    return {report,document};
+  }finally{closeSync(fd)}
 }
