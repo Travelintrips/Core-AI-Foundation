@@ -70,3 +70,29 @@ before installation. Only the public key belongs on the verification host;
 the signing private key must remain in separate QA custody. A new
 operator-controlled execution agent must not be considered independent merely
 because it runs as another process on the same writable host.
+
+## 20 Nov — live CST-DEV RLS admission blocker (read-only audit)
+
+CST-DEV project's current `aicore_dev_runtime` role has RLS policies for
+coding jobs, not for `ollama_model_invocation`. Its existing INSERT policies
+restrict `job_type` and do not permit a fresh pilot `waiting` row, and its
+SELECT policies also exclude this job type. Therefore a synthetically passing
+transaction fixture **does not establish that the live app can stage a job**.
+
+The staging service now fails before any job INSERT unless `current_user`
+is **exactly** `cst_team_model_pilot_writer` and independently reviewed,
+dedicated RLS policies `cst_onejob_stage_insert`,
+`cst_onejob_stage_select` and
+`cst_onejob_stage_approval_insert` exist. These policy *names* are only
+preflight identifiers, not proof of narrow policy predicates; their SQL
+expressions and role memberships must also be reviewed before provisioning.
+The global `db` pool currently uses a shared role and has **no separately
+wired writer pool**, so the staging endpoint remains NO-GO even if its feature
+flag is turned on.
+
+Do not grant generic `aicore_dev_runtime` INSERT/UPDATE on pilot jobs, do not
+`SET ROLE` using user-supplied identifiers, and do not create a writer login
+or secret within this PR. The next safe work item is a specifically scoped
+DEV connection principal and verified RLS predicates, plus isolated
+application-transaction QA that uses the correct role. Never apply this
+proposal to PROD or interpret pure unit/fixture CI as a live pilot PASS.
