@@ -891,3 +891,65 @@ job, PROD object or existing API route is modified by this change.
 Live CST-DEV still reports zero active completion subscribers,
 zero dedicated login roles and no new queued model job. Keep
 PR #1765 Draft / operational NO-GO until genuine delivery evidence.
+
+## Independent subscriber receipt RLS in network-none PostgreSQL
+
+**Separate role/template only, NOT applied to CST-DEV.**
+`scripts/dev/cst-team-onejob-independent-subscriber-role-template.sql`
+and its matching rollback template stage an **independent**
+`cst_team_onejob_subscriber_YYYYMMDD_8hex` login, intentionally
+outside the pilot model-worker role prefix. Its issuance is blocked
+unless one **new, approved queued** Company-1 Ollama job exists and
+the trusted CST-DEV connection/project, subscriber identity,
+independent public-key fingerprint and short expiry are reviewed.
+
+The template grants only:
+- `SELECT` on `ai_platform.ai_events` with RLS restricting
+  `job.completed` to one exact job id and worker id;
+- `INSERT` on the append-only `ai_platform.ai_audit_logs` table
+  with RLS requiring one exact independent subscriber and bounded
+  receipt payload for that event, Company 1 and CST-DEV;
+- `USAGE` of only the existing audit log sequence, plus database
+  `CONNECT` and schema `USAGE`.
+
+It does **not** grant `SELECT` on `ai_jobs` or
+`ai_event_subscriptions`, does not modify `ai_events`,
+does not dispatch model jobs, and has no access to the protected
+GPT02 signers. The original one-job model role's privileges remain
+unchanged.
+
+A dedicated **partial unique index** on
+`ai_audit_logs(resource_id,actor_id)` for only the
+`cst-team-model-subscriber/job_completed_received` success action
+prevents duplicate receipt audit rows. Index existence and
+definition are verified; on subsequent isolated subscriber role
+rotations the same index is reused, not rebuilt. Rollback
+disables the temporary subscriber login, terminates only its own
+sessions, removes its RLS policies and grants, and retains all
+historical audit receipt rows and the uniqueness index.
+
+**Verified on the authorized VPS, with an entirely disposable
+`postgres:16-alpine` server using `--network none`:**
+`scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py`
+successfully created the restricted role for a synthetic approved
+Company-1 job, showed only its authorized completion event was
+visible, denied unrelated events and wrong-company receipts,
+accepted exactly one audit receipt, rejected a duplicate,
+and revoked the role while preserving its audit record.
+A **second** synthetic job/subscriber identity was then
+successfully provisioned and revoked against the same retained
+unique index. This proof never contacted a Supabase endpoint,
+created a real credential, or touched PROD. It is wired into
+Core CI alongside the already-PASS one-job worker RLS rehearsal.
+
+**Important distinction:** the disposable SQL test intentionally
+checks the signature field's format and the public-key pin's
+value, **not Ed25519 signature authenticity**. Signature and
+job/worker/event lineage must be validated through the separate
+`cst-team-onejob-subscriber-receipt.mjs` pure projector
+using a public key pinned by an independent custodian.
+Only a real authorized subscriber read/ACK, durable role-bound
+receipt readback, and independent QA can later raise delivery
+evidence above the current `NO-GO` status. An approved real
+Company-1 job and its subscriber credentials/receipt do not yet
+exist; neither the templates nor this rehearsal create them.
