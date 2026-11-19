@@ -52,8 +52,8 @@ def main():
         for _ in range(120):
             ready = run([
                 "docker", "exec", name,
-                "psql", "-X", "-U", "postgres", "-d", "postgres",
-                "-Atc", "SELECT 1",
+                "psql", "-X", "-h", "127.0.0.1", "-U", "postgres",
+                "-d", "postgres", "-Atc", "SELECT 1",
             ], check=False)
             if ready.returncode == 0:
                 break
