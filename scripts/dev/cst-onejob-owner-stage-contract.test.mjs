@@ -29,7 +29,7 @@ test("stage refuses unpinned runtime and all dispatching by default",()=>{
  assert.match(service,/DEV_SOURCE_SHA_NOT_PINNED/);
 });
 test("waiting job, approval FK and audit are atomic in same transaction",()=>{
- const tx=service.indexOf("return db.transaction(async tx=>");
+ const tx=service.indexOf("return stageDb.transaction(async tx=>");
  const job=service.indexOf("INSERT INTO ai_platform.ai_jobs",tx);
  const appr=service.indexOf("INSERT INTO ai_platform.cst_onejob_owner_approvals",job);
  const audit=service.indexOf("INSERT INTO ai_platform.ai_audit_logs",appr);
@@ -53,7 +53,7 @@ test("proposal is not migration-applied; forced-RLS approval row binds exactly o
 });
 
 test("owner stage rejects shared runtime DB role before any job writes",()=>{
- const tx=service.indexOf("return db.transaction(async tx=>");
+ const tx=service.indexOf("return stageDb.transaction(async tx=>");
  const gate=service.indexOf("ONEJOB_DEDICATED_WRITER_RLS_NOT_PROVISIONED",tx);
  const owner=service.indexOf("OWNER_NOT_ACTIVE_IN_TRANSACTION",gate);
  const insert=service.indexOf("INSERT INTO ai_platform.ai_jobs",owner);
@@ -65,4 +65,12 @@ test("owner stage rejects shared runtime DB role before any job writes",()=>{
    assert.ok(service.includes(policy));
  }
  assert.doesNotMatch(service,/SET ROLE cst_team_model_pilot_writer|GRANT ALL/);
+});
+
+test("owner staging uses only the dedicated login via transaction-local writer",()=>{
+ assert.match(service,/getCstOneJobStagingDatabase\(input.env\)/);
+ assert.match(service,/SET LOCAL ROLE cst_team_model_pilot_writer/);
+ assert.match(service,/session_user AS login_role_name/);
+ assert.match(service,/scope\?\.login_role_name!==CST_ONEJOB_STAGE_LOGIN/);
+ assert.doesNotMatch(service,/return db.transaction\(|SET SESSION ROLE/);
 });
