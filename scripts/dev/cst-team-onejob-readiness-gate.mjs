@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { probeCstDevHostGateway } from "./cst-team-host-gateway-probe.mjs";
 
 const PROJECT = "xssrfshdrtdfupgqwfdw";
 const HOST = "dev.cstlogistic.co.id";
@@ -101,6 +102,7 @@ export function projectOneJobGate(data) {
  deny(data.candidateRunning===true && data.candidateHealthy===true &&
       data.candidateImageId===data.imageId,"BLUE_GREEN_RUNTIME_NOT_HEALTHY_OR_DIFFERENT_IMAGE");
  deny(data.candidateNetworkIsolated===true,"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
+ deny(data.candidateHostGatewayBlocked===true,"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
  deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
  deny(data.retiredHostQuarantined===true,"RETIRED_DEV_HOST_NOT_QUARANTINED");
  deny(data.candidateDirectHealthy===true,"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -173,6 +175,20 @@ async function main() {
      members[0]?.Name===CANDIDATE;
  } catch {}
  const networkScopeSafe=networkMode===pilotNet && networkMembersSafe;
+ // An internal bridge is NOT a complete egress boundary: Docker containers
+ // can still reach a host service bound to the bridge gateway. Before any
+ // pilot admission, prove an ephemeral unprivileged host-gateway listener is
+ // inaccessible to the exact already-running candidate. No DB/PROD contact.
+ let hostGatewayProbe={blocked:false,status:"NOT_PROBED"};
+ if(networkScopeSafe && isRunning==="true"){
+   const ipamRaw=shell("docker",["network","inspect",pilotNet,"--format",
+     '{{json .IPAM.Config}}']);
+   let gateway=null;
+   try { gateway=JSON.parse(ipamRaw)?.[0]?.Gateway??null; } catch {}
+   if(gateway) hostGatewayProbe=await probeCstDevHostGateway({
+     gateway,candidate:CANDIDATE,
+   });
+ }
  let hostResolved=false,candidateDirectHealthy=false,retiredHostQuarantined=false;
  let nginxApiRetainsExistingCore=false;
  try {
@@ -206,6 +222,7 @@ async function main() {
  const facts={sourceSha:sha,imageId,imageSourceSha,imageBuildMarkerSha,sourceContentEquivalent,
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
    candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe && Boolean(candidateLoopbackPort),
+   candidateHostGatewayBlocked:hostGatewayProbe.blocked,
    devHostResolved:hostResolved,retiredHostQuarantined,candidateDirectHealthy,
    nginxApiRetainsExistingCore,
    dbStatus:db.status,database:db.database,dbRole:db.role,
@@ -222,6 +239,7 @@ async function main() {
  console.log(JSON.stringify({...verdict,observedAt:new Date().toISOString(),
    project:PROJECT,devHost:HOST,sourceSha:sha,imageSourceSha:imageSourceSha||null,
    imageBuildMarkerMatchesLabel:imageBuildMarkerSha===imageSourceSha,
+   gatewayProbeStatus:hostGatewayProbe.status,
    sourceContentEquivalent,imagePresent:Boolean(imageId),candidateRunning:facts.candidateRunning,
    devHostResolved:hostResolved,retiredHostQuarantined,dbReadStatus:db.status,
    roleCount:db.roleCount??null},null,2));
