@@ -27,9 +27,20 @@ const pg=require("/app/lib/db/node_modules/pg");
 const raw=process.env.SUPABASE_DATABASE_URL_DEV||process.env.SUPABASE_DEV_DATABASE_URL||"";
 let u;try{u=new URL(raw)}catch{console.log(JSON.stringify({status:"NO_DEV_DB_CONFIG"}));process.exit(0)}
 const expected="xssrfshdrtdfupgqwfdw";
-if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
+const target="aws-1-ap-southeast-2.pooler.supabase.com";
+// Project identity is NOT inferred solely from the username suffix:
+// the pooler can be shared across Supabase projects. Require the exact
+// destination, dedicated role and configured CST-DEV project jointly.
+let login;
+try{login=decodeURIComponent(u.username)}catch{login=""}
+if(!["postgres:","postgresql:"].includes(u.protocol) ||
+   u.hostname!==target || u.port!=="6543" || u.pathname!=="/postgres" ||
+   u.search!=="" || u.hash!=="" ||
+   !/^cst_team_model_pilot_[0-9]{8}_[a-f0-9]{8}\.xssrfshdrtdfupgqwfdw$/.test(login) ||
+   process.env.SUPABASE_URL_DEV!=="https://"+expected+".supabase.co" ||
+   Boolean(process.env.SUPABASE_PROD_DATABASE_URL) ||
    raw.includes("nzdweipzckfszczzqtuw")){
-  console.log(JSON.stringify({status:"WRONG_DB_PROJECT"}));process.exit(0)
+  console.log(JSON.stringify({status:"WRONG_DB_PROJECT_OR_LOGIN"}));process.exit(0)
 }
 // No unverified TLS even for this READ-ONLY catalog diagnostic. The
 // authenticated candidate must mount the exact trusted root at its fixed path.
@@ -52,8 +63,24 @@ try {
  process.exit(0);
 }
 (async()=>{
- const c=new pg.Client({connectionString:raw,
-   ssl:{rejectUnauthorized:true,ca:rootCa},
+ // The one-job candidate has NO general egress. Invoke the previously tested
+ // socket adapter instead of accidentally attempting direct pooler TCP.
+ // A missing module, disabled flag, mismatched job or missing UDS is NO-GO.
+ let socketOptions;
+ try {
+   const module=await import("/app/lib/db/src/cstOneJobDevSocketTransport.ts");
+   socketOptions=module.createCstDevOneJobSocketOptions(raw,process.env);
+   if(!socketOptions || socketOptions.ssl?.rejectUnauthorized!==true ||
+      !Buffer.isBuffer(socketOptions.ssl.ca) ||
+      !socketOptions.ssl.ca.equals(rootCa) ||
+      typeof socketOptions.stream!=="function"){
+     throw Error("SOCKET_OPTIONS_NOT_VERIFIED");
+   }
+ } catch {
+   console.log(JSON.stringify({status:"DEV_PILOT_SOCKET_TRANSPORT_NOT_VERIFIED"}));
+   return;
+ }
+ const c=new pg.Client({connectionString:raw,...socketOptions,
    connectionTimeoutMillis:4500,query_timeout:4500});
  try{
   await c.connect();await c.query("BEGIN READ ONLY");
@@ -124,7 +151,9 @@ try {
  finally{await c.query("ROLLBACK").catch(()=>{});await c.end().catch(()=>{})}
 })()`;
 function readDevCatalog(containerName) {
- const raw = shell("docker",["exec",containerName,"node","-e",dbReadOnlyJs],12000);
+ // Native Node 22 TypeScript stripping is required to import the exact
+ // existing CST-DEV socket adapter in the QA source image.
+ const raw = shell("docker",["exec",containerName,"node","--experimental-strip-types","-e",dbReadOnlyJs],12000);
  try { return JSON.parse(raw); } catch { return {status:"DEV_CATALOG_UNAVAILABLE"}; }
 }
 /** An advisory report only. Even a clear report grants no dispatch or Final ACK. */
@@ -322,7 +351,10 @@ fetch("http://127.0.0.1:3000/api/healthz",{signal:AbortSignal.timeout(2500)})
        health.commit===imageSourceSha;
    } catch {}
  }
- const db=readDevCatalog(isRunning==="true" ? CANDIDATE : CORE);
+ // Never query using shared Core DEV credentials when no isolated pilot
+ // candidate exists. A missing candidate is a negative observation only.
+ const db=isRunning==="true" ? readDevCatalog(CANDIDATE) :
+   {status:"CANDIDATE_NOT_RUNNING"};
  const facts={sourceSha:sha,imageId,imageSourceSha,imageBuildMarkerSha,sourceContentEquivalent,
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
    candidateImageId,candidateNetworkIsolated:networkScopeSafe && candidateRoutesAbsent && candidateCoreCrossNetworkDenied,
