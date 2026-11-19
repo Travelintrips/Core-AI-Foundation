@@ -23,6 +23,14 @@ CREATE TABLE IF NOT EXISTS ai_platform.cst_onejob_owner_approvals (
   CHECK (expires_at>approved_at AND expires_at<=approved_at+interval '30 minutes'),
   CHECK ((status='CONSUMED') = (consumed_at IS NOT NULL))
 );
+-- Exactly one active Company-1 pilot at a time. Unique request and job IDs
+-- alone do not prevent parallel requests with different randomly generated IDs.
+-- A completed/expired pilot needs an explicitly audited transition to EXPIRED
+-- before any next pilot can be staged; the expiry timestamp is NOT automatic.
+CREATE UNIQUE INDEX IF NOT EXISTS cst_onejob_one_active_approval
+ ON ai_platform.cst_onejob_owner_approvals (company_id)
+ WHERE status IN ('APPROVED','CONSUMED');
+
 ALTER TABLE ai_platform.cst_onejob_owner_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_platform.cst_onejob_owner_approvals FORCE ROW LEVEL SECURITY;
 -- Intentionally no GRANT or policy in this proposal. Deployment must provide
