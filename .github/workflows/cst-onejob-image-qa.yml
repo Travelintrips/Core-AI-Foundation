@@ -70,6 +70,25 @@ jobs:
           echo "CST_DEV_QA_IMAGE_SOURCE_PROVENANCE_PASS"
           echo "Image digest: $IMAGE_ID"
           echo "Source: $QA_SOURCE_SHA"
+      - name: Package verified QA image as immutable short-lived artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-image
+          IMAGE=cst-core-onejob-pr1763-image-qa:local
+          docker save "$IMAGE" | zstd -T2 -3 -q -o qa-image/cst-onejob-image.tar.zst
+          sha256sum qa-image/cst-onejob-image.tar.zst > qa-image/cst-onejob-image.tar.zst.sha256
+          printf '%s\\n' "$QA_SOURCE_SHA" > qa-image/source-sha.txt
+          test "$(cat qa-image/source-sha.txt)" = "$QA_SOURCE_SHA"
+          echo "CST_DEV_IMAGE_ARCHIVE_SHA256_CREATED"
+      - name: Upload restricted QA image for controlled VPS import
+        uses: actions/upload-artifact@v4
+        with:
+          name: cst-onejob-image-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa-image/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
       - name: Prevent accidental QA image deployment
         shell: bash
         run: |
