@@ -57,6 +57,16 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({candidateDirectHealthy:false},"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
   check({nginxApiRetainsExistingCore:false},"SHARED_DEV_API_ROUTE_CHANGED");
 });
+test("gateway denial and scoped SQL cannot imply independent ACL or DB route proof",()=>{
+  const evidence={...ready, candidateIndependentNetworkAclVerified:undefined,
+    candidateDedicatedDevDbTransportVerified:undefined};
+  const verdict=projectOneJobGate(evidence);
+  assert.equal(verdict.pilotAdmissionReady,false);
+  assert.ok(verdict.blockers.includes("CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED"));
+  assert.ok(verdict.blockers.includes("DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED"));
+  assert.equal(verdict.sideEffects,"NONE");
+  assert.equal(verdict.independentFinalAckVerified,false);
+});
 test("an ancestral QA image is reusable only if runtime code and pilot RLS are unchanged",()=>{
   const oldSha="b".repeat(40);
   assert.equal(projectOneJobGate({...ready,imageSourceSha:oldSha,sourceContentEquivalent:false}).pilotAdmissionReady,false);
