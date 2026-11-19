@@ -42,5 +42,5 @@ test("QA always cleans local mock containers/networks/socket on failure",()=>{
   assert.match(source,/docker rm -f "\$name"/);
   assert.match(source,/docker network rm "\$NET"/);
   assert.match(source,/rm -rf "\$DIR"/);
-  assert.match(source,/NO_SUPABASE_OR_DB_CREDENTIALS_NO_HOST_FIREWALL_CHANGES/);
+  assert.match(source,/NO_SUPABASE_OR_DB_CREDENTIALS_NO_PERSISTENT_HOST_FIREWALL_CHANGE/);
 });
