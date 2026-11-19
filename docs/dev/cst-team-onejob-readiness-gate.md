@@ -121,3 +121,30 @@ the image label. Missing, malformed, or stale marker fails with
 used in a **fresh candidate image** and independently verified before
 introducing a short-lived CST-DEV database role. This change does not start
 workers or authorize job execution.
+
+## Portable prelaunch Docker provenance verification
+
+The GitHub QA image job from exact commit `fb1a6f258c87335d038e40e10ee4a6503b8eddab`
+passed label/embedded source-marker readback on the hosted runner, with no deploy.
+That image was not uploaded to the VPS. Historical VPS candidates `9fabedcd`
+and `f9c3b61f` both retain old internal marker `c2692147` and are ineligible.
+
+Once an exact-source image has been transferred by an authorized immutable
+artifact mechanism, run the new non-deploy check before any boot:
+
+```bash
+node scripts/dev/cst-team-onejob-image-provenance.mjs \
+  core-ai-dev:cst-onejob-<source8>-qa <40-character-source-sha>
+```
+
+The command reads Docker labels and an embedded marker via a throwaway
+`--network none --entrypoint cat` container. It will not start the Core
+application, connect to a database, issue a credential or alter services.
+Never tag an old image as a new source to pass this test.
+
+VPS capacity during audit: filesystem free approximately 38 GiB; system swap
+approximately 6053/6143 MiB used. Avoid resource-heavy source/image builds on
+the shared VPS until capacity is demonstrably available; prefer an independently
+built, immutable QA image artifact with cryptographic identity verification.
+The GitHub workflow does not presently publish an artifact, so image transfer
+is still a separate unresolved step. No production promotion is authorized.
