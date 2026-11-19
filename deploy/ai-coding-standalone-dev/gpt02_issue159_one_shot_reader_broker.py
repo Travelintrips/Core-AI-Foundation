@@ -31,6 +31,7 @@ from gpt02_issue159_writer_broker_runtime import (
     _load_public_roots, DEFAULT_FINGERPRINT_MANIFEST,
 )
 from gpt02_issue159_writer_broker_contract import BrokerAdmissionError
+from gpt02_issue159_pinned_tls_ca import require_pinned_cst_dev_tls
 
 PROJECT = "xssrfshdrtdfupgqwfdw"
 POOLER_USER_SUFFIX = "." + PROJECT
@@ -150,13 +151,7 @@ def attest_current_approval_held(
         _fail("ONE_SHOT_CANONICAL_GUARD_NATIVE_IDENTITY_INVALID")
     params_fn = getattr(info, "get_parameters", None)
     params = params_fn() if callable(params_fn) else None
-    if (
-        not isinstance(params, Mapping)
-        or params.get("sslmode") != "verify-full"
-        or not isinstance(params.get("sslrootcert"), str)
-        or not params["sslrootcert"]
-    ):
-        _fail("ONE_SHOT_CANONICAL_GUARD_TLS_VERIFY_FULL_REQUIRED")
+    require_pinned_cst_dev_tls(params, "ONE_SHOT_CANONICAL_GUARD_TLS_VERIFY_FULL_REQUIRED")
     scope = candidate["scope"]
     bind = {
         "role": role,
@@ -221,13 +216,7 @@ def consume_once_via_pinned_connection(
         _fail("ONE_READ_CONSUMER_NATIVE_DB_IDENTITY_INVALID")
     parameters = getattr(info, "get_parameters", None)
     params = parameters() if callable(parameters) else None
-    if (
-        not isinstance(params, Mapping)
-        or params.get("sslmode") != "verify-full"
-        or not isinstance(params.get("sslrootcert"), str)
-        or not params["sslrootcert"]
-    ):
-        _fail("ONE_READ_CONSUMER_TLS_VERIFY_FULL_REQUIRED")
+    require_pinned_cst_dev_tls(params, "ONE_READ_CONSUMER_TLS_VERIFY_FULL_REQUIRED")
     scope = candidate["scope"]
     query_args = {
         "role": role,
@@ -386,13 +375,7 @@ def review_one_shot_reader_readback(packet: dict, supervisor: Any) -> dict:
                     # boolean. No secrets or connection strings are returned.
                     get_params = getattr(info, "get_parameters", None)
                     params = get_params() if callable(get_params) else None
-                    if (
-                        not isinstance(params, Mapping)
-                        or params.get("sslmode") != "verify-full"
-                        or not isinstance(params.get("sslrootcert"), str)
-                        or not params["sslrootcert"]
-                    ):
-                        _fail("ONE_SHOT_TLS_VERIFY_FULL_REQUIRED")
+                    require_pinned_cst_dev_tls(params, "ONE_SHOT_TLS_VERIFY_FULL_REQUIRED")
                     rows = read_lineage_once(conn, lookup)
                     if int(time.time() * 1000) >= candidate["expiresAt"]:
                         _fail("ONE_SHOT_SIGNED_LEASE_EXPIRED_DURING_READ")
