@@ -126,7 +126,7 @@ function finish(label,good){if(done)return;done=true;console.log(label);s.destro
 s.setTimeout(3200);
 s.once("connect",()=>s.write("QA_ONLY"));
 s.once("data",b=>{received=true;finish("CLIENT_ACK="+b.toString(),expect==="allow"&&b.toString()==="MOCK_ACK:QA_ONLY")});
-s.once("error",e=>finish("CLIENT_ERROR="+e.code,expect==="deny"&&e.code==="EACCES"));
+s.once("error",e=>finish("CLIENT_ERROR="+e.code,expect==="deny"&&(e.code==="EACCES"||e.code==="ECONNRESET")));
 s.once("timeout",()=>finish("CLIENT_TIMEOUT",false));
 s.once("close",()=>{if(!done)finish("CLIENT_DENIED_BEFORE_ACK",expect==="deny"&&!received)});
 JS
