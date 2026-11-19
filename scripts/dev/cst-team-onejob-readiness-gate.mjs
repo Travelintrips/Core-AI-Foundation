@@ -134,8 +134,20 @@ async function main() {
      candidateLoopbackPort=Number(ports[0].HostPort);
    }
  } catch {}
- const networkScopeSafe=Boolean(networkMode) && networkMode!=="host" &&
-   networkMode!=="none" && !/prod/i.test(networkMode);
+ // A separate named bridge must contain only this candidate. This proves
+ // network membership isolation, not unrestricted outbound egress safety.
+ const pilotNet="cst-core-onejob-dev-net";
+ const networkRaw=networkMode===pilotNet ?
+   shell("docker",["network","inspect",pilotNet,"--format",
+     '{{.Driver}}|{{json .Containers}}']) : null;
+ let networkMembersSafe=false;
+ try {
+   const [driver,containersRaw]=networkRaw?.split("|")||[];
+   const members=Object.values(JSON.parse(containersRaw)||{});
+   networkMembersSafe=driver==="bridge" && members.length===1 &&
+     members[0]?.Name===CANDIDATE;
+ } catch {}
+ const networkScopeSafe=networkMode===pilotNet && networkMembersSafe;
  let hostResolved=false,candidateDirectHealthy=false,retiredHostQuarantined=false;
  let nginxApiRetainsExistingCore=false;
  try {
