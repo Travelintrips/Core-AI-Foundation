@@ -24,9 +24,9 @@ def command(args, script=None, fail_ok=False):
         raise RuntimeError("COMMAND_ERROR:"+args[0]+" "+(p.stderr[-1500:] or p.stdout[-800:]))
     return p
 
-def psql(query,fail_ok=False):
+def psql(query,fail_ok=False,dbuser="postgres"):
     return command(["docker","exec","-i",NAME,"psql","-qAt","-v","ON_ERROR_STOP=1",
-                    "-U","postgres","-d",DB],query,fail_ok)
+                    "-U",dbuser,"-d",DB],query,fail_ok)
 
 def denied(query,tag):
     p=psql("SET ROLE cst_team_model_pilot_writer;\n"+query,True)
@@ -134,14 +134,17 @@ def main():
 
         # Without a dedicated role, the shared runtime's existing coding
         # policy must not be enough to INSERT a pilot.
-        shared=psql("SET ROLE aicore_dev_runtime;\n"+insert_job(REQ1,"OLLAMA-11111111"),True)
+        # Connect as the actual unprivileged LOGIN role, not as postgres
+        # followed by SET ROLE (which retains a superuser session_user).
+        shared=psql(insert_job(REQ1,"OLLAMA-11111111"),
+          True,"aicore_dev_runtime")
         if shared.returncode==0 or "row-level security" not in shared.stderr.lower():
             raise RuntimeError("SHARED_RUNTIME_NOT_PROVEN_RLS_DENIED:"+
               shared.stderr[-400:])
 
         # Generic runtime cannot SET ROLE into the NOLOGIN writer.
-        escalation=psql("""SET ROLE aicore_dev_runtime;
-          SET ROLE cst_team_model_pilot_writer;""",True)
+        escalation=psql("SET ROLE cst_team_model_pilot_writer;",
+          True,"aicore_dev_runtime")
         if escalation.returncode==0 or "permission denied" not in escalation.stderr.lower():
             raise RuntimeError("SHARED_RUNTIME_CAN_IMPERSONATE_PILOT_WRITER")
         denied(insert_job(REQ1,"OLLAMA-11111111").replace(
