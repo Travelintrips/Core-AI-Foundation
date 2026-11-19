@@ -76,6 +76,9 @@ def fixture():
         (3,'owner','inactive','internal');
       GRANT USAGE ON SCHEMA ai_platform TO aicore_dev_runtime;
       GRANT INSERT ON ai_platform.ai_jobs TO aicore_dev_runtime;
+      -- Give generic runtime sequence access in this *disposable test only*,
+      -- so it must fail because of RLS, not merely missing sequence grants.
+      GRANT USAGE ON SEQUENCE ai_platform.ai_jobs_id_seq TO aicore_dev_runtime;
       CREATE POLICY existing_coding_insert ON ai_platform.ai_jobs
         FOR INSERT TO aicore_dev_runtime
         WITH CHECK (job_type='coding_repository_analyzer');
@@ -132,11 +135,15 @@ def main():
         # Without a dedicated role, the shared runtime's existing coding
         # policy must not be enough to INSERT a pilot.
         shared=psql("SET ROLE aicore_dev_runtime;\n"+insert_job(REQ1,"OLLAMA-11111111"),True)
-        if shared.returncode==0 or not any(x in shared.stderr.lower()
-            for x in ("row-level security","permission denied")):
-            raise RuntimeError("SHARED_RUNTIME_NOT_PROVEN_DENIED:"+
+        if shared.returncode==0 or "row-level security" not in shared.stderr.lower():
+            raise RuntimeError("SHARED_RUNTIME_NOT_PROVEN_RLS_DENIED:"+
               shared.stderr[-400:])
 
+        # Generic runtime cannot SET ROLE into the NOLOGIN writer.
+        escalation=psql("""SET ROLE aicore_dev_runtime;
+          SET ROLE cst_team_model_pilot_writer;""",True)
+        if escalation.returncode==0 or "permission denied" not in escalation.stderr.lower():
+            raise RuntimeError("SHARED_RUNTIME_CAN_IMPERSONATE_PILOT_WRITER")
         denied(insert_job(REQ1,"OLLAMA-11111111").replace(
             "'ollama_inference'","'unsafe_arbitrary_capability'"),
             "WRONG_CAPABILITY")
@@ -210,7 +217,7 @@ def main():
 
         report.update(result="PASS",dedicatedRoleNoLogin=True,
             scopeNoTableUpdates=True,ownerReadOnlyActive=True,
-            sharedRuntimePilotDenied=True,badCapabilityDenied=True,
+            sharedRuntimePilotRlsDenied=True,sharedRoleEscalationDenied=True,badCapabilityDenied=True,
             prematureQueuedDenied=True,wrongModelDenied=True,
             ownerPromotionDenied=True,atomicWaitingStage=True,
             distinctSecondStageRollback=True,auditBoundToApproval=True)
