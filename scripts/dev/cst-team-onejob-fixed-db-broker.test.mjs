@@ -118,7 +118,7 @@ test("socket path collision, symlink, world-writable parent and bad args fail cl
   const fakeUpstream=()=>{throw Error("NEVER_DIAL");};
   try {
     assert.throws(()=>assertSafeSocketLocation("relative.sock"),/INVALID_SOCKET_PATH/);
-    assert.throws(()=>assertSafeSocketLocation(join(loc.dir,"..","x.sock")),/INVALID_SOCKET_PATH|SOCKET_PARENT_UNAVAILABLE/);
+    assert.throws(()=>assertSafeSocketLocation(loc.dir+"/../x.sock"),/INVALID_SOCKET_PATH/);
     await assert.rejects(startOfflineMockBroker({
       socketPath:occupied,dialMock:fakeUpstream,
     }),/SOCKET_ALREADY_OCCUPIED/);
