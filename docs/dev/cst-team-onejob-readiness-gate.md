@@ -324,7 +324,7 @@ connection string against:
 
 - Exact project `xssrfshdrtdfupgqwfdw`, via canonical
   `SUPABASE_URL_DEV` and the username suffix.
-- Exact pooler host `aws-0-ap-southeast-2.pooler.supabase.com`, port
+- Exact pooler host `aws-1-ap-southeast-2.pooler.supabase.com`, port
   `6543`, database `postgres`, and a dedicated short-lived
   `cst_team_model_pilot_YYYYMMDD_8hex` role. Any other host, port, role,
   username, or connection-string query parameter is rejected.
