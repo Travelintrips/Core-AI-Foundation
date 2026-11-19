@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
 import test from "node:test";
 import { projectOneJobGate } from "./cst-team-onejob-readiness-gate.mjs";
 
@@ -67,6 +68,51 @@ test("gateway denial and scoped SQL cannot imply independent ACL or DB route pro
   assert.equal(verdict.sideEffects,"NONE");
   assert.equal(verdict.independentFinalAckVerified,false);
 });
+
+/** Exercise the exact Node code sent through docker exec, not a reimplementation. */
+test("loopback-only IPv6 reject routes do not appear as outbound connectivity",()=>{
+  const gate=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
+  const extracted=gate.match(/const routeJs=String\.raw\`([\s\S]*?)\`;/);
+  assert.ok(extracted && extracted[1],"in-container route probe script must be present");
+  const vmScript=new Script(extracted[1]);
+  const zeros="0".repeat(32);
+  const v4header="Iface\tDestination\tGateway\tFlags\n";
+  const noDefault4=v4header+"eth0\t0040A8C0\t00000000\t0001\n";
+  const hasDefault4=v4header+"eth0\t00000000\t01020304\t0003\n";
+  const v6lo=zeros+" 00 "+zeros+" 00 00000000000000000000000000000000 00000000 00200200 lo\n";
+  const v6eth=zeros+" 00 "+zeros+" 00 00000000000000000000000000000000 00000000 00000003 eth0\n";
+  function probe(v4,v6,externalIPv6=false){
+    const recorded=[];
+    const fs={readFileSync:(path)=>{
+      if(path==="/proc/net/route")return v4;
+      if(path==="/proc/net/ipv6_route"){
+        if(v6===null)throw Object.assign(new Error("not found"),{code:"ENOENT"});
+        return v6;
+      }
+      throw Error("UNEXPECTED_PATH");
+    }};
+    const os={networkInterfaces:()=>({
+      lo:[{family:"IPv6",address:"::1",internal:true}],
+      eth0:externalIPv6?[{family:"IPv6",address:"fe80::1",internal:false}]:
+        [{family:"IPv4",address:"192.0.2.25",internal:false}],
+    })};
+    vmScript.runInNewContext({
+      require:(name)=>{
+        if(name==="node:fs")return fs;
+        if(name==="node:os")return os;
+        throw Error("UNEXPECTED_MODULE");
+      },
+      console:{log:(message)=>recorded.push(message)},
+    },{timeout:1000});
+    return recorded[0];
+  }
+  assert.equal(probe(noDefault4,v6lo),"NO_DEFAULT_ROUTE");
+  assert.equal(probe(hasDefault4,v6lo),"ROUTE_PRESENT");
+  assert.equal(probe(noDefault4,v6eth),"ROUTE_PRESENT");
+  assert.equal(probe(noDefault4,v6lo,true),"ROUTE_PRESENT");
+  assert.equal(probe(noDefault4,null),"ROUTE_PRESENT");
+});
+
 test("an ancestral QA image is reusable only if runtime code and pilot RLS are unchanged",()=>{
   const oldSha="b".repeat(40);
   assert.equal(projectOneJobGate({...ready,imageSourceSha:oldSha,sourceContentEquivalent:false}).pilotAdmissionReady,false);
