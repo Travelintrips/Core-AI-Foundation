@@ -44,6 +44,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
       - name: Verify read-only CST-DEV one-job pilot preflight cannot execute or sign
         run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
+      - name: Verify QA image marker readback rejects stale or privileged image
+        run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
       - name: Verify DEV QA image source marker is never stale
         run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
       - name: Verify scoped pilot RLS and rollback in disposable PostgreSQL
