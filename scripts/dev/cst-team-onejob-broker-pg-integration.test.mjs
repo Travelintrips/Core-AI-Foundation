@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   CST_DEV_FIXED_POOLER,startOfflineMockBroker,
@@ -12,6 +13,7 @@ import {
   makeOneJobUnixSocketStream, createCstDevOneJobSocketOptions,
 } from "../../lib/db/src/cstOneJobDevSocketTransport.ts";
 
+const CA_FIXTURE=fileURLToPath(new URL("./fixtures/supabase-root-2021-public-qa.crt",import.meta.url));
 const REF="xssrfshdrtdfupgqwfdw";
 const POOLER=CST_DEV_FIXED_POOLER.host;
 const USER="cst_team_model_pilot_20261120_abcdef12."+REF;
@@ -60,7 +62,7 @@ test("Postgres SSLRequest/TLS SNI cross the fixed offline UDS broker without aut
       socketPath:socket,
       dialMock:()=>connect({host:"127.0.0.1",port}),
     });
-    const opts=createCstDevOneJobSocketOptions(DSN,environment);
+    const opts=createCstDevOneJobSocketOptions(DSN,environment,CA_FIXTURE);
     assert.equal(opts.ssl.rejectUnauthorized,true);
     // The production fixed path is deliberately replaced ONLY in this test.
     const client=new pg.Client({
