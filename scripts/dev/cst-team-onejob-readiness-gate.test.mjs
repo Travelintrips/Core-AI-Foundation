@@ -213,7 +213,10 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.ok(file.includes("prod-ca-2021.crt"));
   assert.ok(file.includes("cert.fingerprint256"));
   assert.ok(file.includes("cert.verify(cert.publicKey)"));
-  assert.match(file,/rejectUnauthorized:true,ca:rootCa/);
+  // The existing adapter owns the pinned CA and rejectUnauthorized=true.
+  assert.match(file,/socketOptions\.ssl\?\.rejectUnauthorized!==true/);
+  assert.match(file,/socketOptions\.ssl\.ca\.equals\(rootCa\)/);
+  assert.match(file,/connectionString:raw,\.\.\.socketOptions/);
   assert.doesNotMatch(file,/rejectUnauthorized:false/);
   assert.match(file,/ROLLBACK/);
   assert.match(file,/RUNNING|Running/);
