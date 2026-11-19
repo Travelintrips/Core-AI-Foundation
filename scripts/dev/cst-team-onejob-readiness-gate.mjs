@@ -186,6 +186,10 @@ export function projectOneJobGate(data) {
       "BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
  deny(data.candidateBrokerKernelPeerCredentialsVerified===true,
       "BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
+ // Job emission must not precede an independently authenticated, scoped
+ // subscriber path: an atomic event publish is NOT a delivered receipt.
+ deny(data.candidateIndependentSubscriberArmed===true,
+      "INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
  deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
  deny(data.retiredHostQuarantined===true,"RETIRED_DEV_HOST_NOT_QUARANTINED");
  deny(data.candidateDirectHealthy===true,"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -368,6 +372,8 @@ fetch("http://127.0.0.1:3000/api/healthz",{signal:AbortSignal.timeout(2500)})
    // Pure QA filesystem tests cannot promote live pilot authority.
    candidateBrokerUnixFilesystemVerified:false,
    candidateBrokerKernelPeerCredentialsVerified:false,
+   // Role/receipt templates and offline signatures cannot arm a live consumer.
+   candidateIndependentSubscriberArmed:false,
    devHostResolved:hostResolved,retiredHostQuarantined,candidateDirectHealthy,
    nginxApiRetainsExistingCore,
    dbStatus:db.status,database:db.database,dbRole:db.role,
