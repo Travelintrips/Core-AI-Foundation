@@ -48,6 +48,8 @@ jobs:
         run: node --test scripts/dev/cst-team-host-gateway-probe.test.mjs
       - name: Verify QA kernel nftables allow-deny evidence cannot promote live pilot
         run: node --test scripts/dev/cst-team-onejob-nft-egress-qa.test.mjs
+      - name: Verify mock broker ACL-before-start lifecycle cannot touch live services
+        run: node --test scripts/dev/cst-team-onejob-broker-acl-lifecycle-qa.test.mjs
       - name: Verify default-off CST-DEV Unix socket PG TLS/SNI contract
         run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-pg-socket.test.mjs
       - name: Verify pinned Supabase Root CA fingerprint and strict TLS
