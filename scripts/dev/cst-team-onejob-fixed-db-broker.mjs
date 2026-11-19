@@ -12,7 +12,7 @@
  */
 import { createServer } from "node:net";
 import { lstatSync, chmodSync } from "node:fs";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, normalize } from "node:path";
 
 export const CST_DEV_FIXED_POOLER = Object.freeze({
   host: "aws-1-ap-southeast-2.pooler.supabase.com",
@@ -26,7 +26,7 @@ function denied(code) {
 }
 
 export function assertSafeSocketLocation(path) {
-  if (typeof path !== "string" || !isAbsolute(path) || path.includes("\0")) {
+  if (typeof path !== "string" || !isAbsolute(path) ||\n      normalize(path) !== path || path.includes("\0")) {
     throw denied("INVALID_SOCKET_PATH");
   }
   let parent;
