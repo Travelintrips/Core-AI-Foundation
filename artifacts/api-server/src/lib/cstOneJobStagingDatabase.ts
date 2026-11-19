@@ -32,6 +32,8 @@ export function getCstOneJobStagingDatabase(env:NodeJS.ProcessEnv) {
   }
   // sslmode=verify-full is REQUIRED in the already validated connection URL.
   // No search_path startup option: the Supabase transaction pooler rejects it.
+  // Staging sets TRANSACTION READ WRITE explicitly after BEGIN, avoiding any
+  // driver-specific, unsupported connection 'verify' callback.
   const pool=new PostgresPool({
     connectionString:url,
     max:1,
@@ -39,13 +41,6 @@ export function getCstOneJobStagingDatabase(env:NodeJS.ProcessEnv) {
     idleTimeoutMillis:5_000,
     connectionTimeoutMillis:3_500,
     application_name:"cst-dev-onejob-staging-only",
-    verify:(client,done)=>{
-      // Shared DEV uses this same pooler-compatible session initialization.
-      // The role itself has no UPDATE/DELETE grant. Any failure aborts reuse.
-      client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
-        .then(()=>done())
-        .catch((error:unknown)=>done(error instanceof Error?error:Error(String(error))));
-    },
   });
   const database=drizzle(pool);
   holder={urlDigest,database};
