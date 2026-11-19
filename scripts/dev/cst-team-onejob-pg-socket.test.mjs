@@ -11,7 +11,7 @@ import {
 } from "../../lib/db/src/cstOneJobDevSocketTransport.ts";
 
 const DEV_REF = "xssrfshdrtdfupgqwfdw";
-const POOLER = "aws-0-ap-southeast-2.pooler.supabase.com";
+const POOLER = "aws-1-ap-southeast-2.pooler.supabase.com";
 const USER = "cst_team_model_pilot_20261119_abcdef12." + DEV_REF;
 const FAKE_PASSWORD = "synthetic-no-secret-test-password-only";
 const goodDsn = "postgresql://" + USER + ":" + FAKE_PASSWORD + "@" +
@@ -54,10 +54,11 @@ test("only exact Company-1 DEV model job and dedicated role can opt in",()=>{
 
 test("pooler hostname, port, login, query TLS overrides all fail closed",()=>{
   const wrongHost=goodDsn.replace(POOLER,"db."+DEV_REF+".supabase.co");
+  const retiredPoolerHost=goodDsn.replace(POOLER,"aws-0-ap-southeast-2.pooler.supabase.com");
   const wrongProject=goodDsn.replaceAll(DEV_REF,"nzdweipzckfszczzqtuw");
   const wrongRole=goodDsn.replace("cst_team_model_pilot_20261119_abcdef12","postgres");
   const wrongPort=goodDsn.replace(":6543",":5432");
-  for(const dsn of [wrongHost,wrongPort,
+  for(const dsn of [wrongHost,retiredPoolerHost,wrongPort,
     goodDsn+"?sslmode=disable",goodDsn+"?sslmode=require",
     goodDsn+"?sslmode=no-verify",goodDsn+"#wrong"]) {
     checkRejected(dsn,{},"POOLER_DESTINATION_DENIED");
