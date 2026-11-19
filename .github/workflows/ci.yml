@@ -54,6 +54,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-waiting-admission-review.test.mjs
       - name: Verify independent QA Ed25519 receipt binding is non-authorizing
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-independent-qa-verifier.test.mjs
+      - name: Verify signed QA claims against locked DEV onejob rows and independent evidence bytes
+        run: node --experimental-strip-types --test scripts/dev/cst-onejob-signed-handoff-review.test.mjs
       - name: Verify isolated independent QA CLI and pinned trust fail-closed
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-independent-qa-offline.test.mjs
       - name: Verify root-owned pinned public QA trust custody policy
