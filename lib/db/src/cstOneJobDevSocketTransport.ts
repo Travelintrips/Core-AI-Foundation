@@ -10,7 +10,7 @@
 import { Socket } from "node:net";
 import {
   loadPinnedCstDevSupabaseRootCa, CST_ONEJOB_DEV_CA_PATH,
-} from "./cstOneJobPinnedSupabaseCa";
+} from "./cstOneJobPinnedSupabaseCa.ts";
 
 const PROJECT = "xssrfshdrtdfupgqwfdw";
 const POOLER = "aws-1-ap-southeast-2.pooler.supabase.com";
@@ -82,7 +82,7 @@ export function createCstDevOneJobSocketOptions(
   if (env["PGSSLMODE"] || env["PGSSLKEY"] || env["PGSSLCERT"]) {
     deny("TLS_OVERRIDE_DENIED");
   }
-  // No rejectUnauthorized:false, sslmode=require/no-verify, insecure CA,
+  // Mandatory strict TLS: forbid sslmode=require/no-verify, insecure CA,
   // caller-supplied host/socket target, or implicit external network fallback.
   // Pin the private Supabase CA used by its pooler. Without the exact root,
   // Node's default trust store rejects the upstream chain. Never weaken TLS
