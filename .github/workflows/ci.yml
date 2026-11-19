@@ -52,6 +52,8 @@ jobs:
         run: node --test scripts/dev/cst-onejob-owner-stage-contract.test.mjs
       - name: Verify waiting-to-queued admission evidence cannot authorize dispatch
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-waiting-admission-review.test.mjs
+      - name: Verify independent QA Ed25519 receipt binding is non-authorizing
+        run: node --experimental-strip-types --test scripts/dev/cst-onejob-independent-qa-verifier.test.mjs
       - name: Verify QA image marker readback rejects stale or privileged image
         run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
       - name: Verify DEV QA image source marker is never stale
