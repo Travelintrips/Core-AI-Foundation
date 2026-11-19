@@ -148,3 +148,32 @@ the shared VPS until capacity is demonstrably available; prefer an independently
 built, immutable QA image artifact with cryptographic identity verification.
 The GitHub workflow does not presently publish an artifact, so image transfer
 is still a separate unresolved step. No production promotion is authorized.
+
+## Verified Docker bridge host-gateway escape — 19 November 2026
+
+A temporary `--internal` Docker bridge on the DEV VPS was tested against a
+temporary listener bound **only to that bridge's host gateway**. An unprivileged
+test container returned `HOST_GATEWAY_CONNECTION=CST_QA_HOST_GATEWAY`:
+host gateway access still worked with `Internal=true`. The temporary listener,
+container and network were removed. No real CST-DEV/PROD database or public
+service was accessed, and the shared Core DEV runtime remains unchanged.
+
+This reveals a release-safety gap in the original one-job admission check:
+`Internal=true` and exact-one-container membership do not prove host service
+isolation. The new `cst-team-host-gateway-probe.mjs` binds a random, short-lived
+local-only TCP port at the candidate bridge gateway and asks **only**
+`cst-core-onejob-dev-candidate` to perform a nonce challenge. If reachable
+or the check fails, one-job admission is **blocked** with
+`HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED`. Timeout and missing/ambiguous
+Docker execution are also non-success. No database credential, RLS mutation,
+signer, event or dispatch is involved in this negative test.
+
+A denied gateway nonce is necessary but **not sufficient** for safe deployment:
+verify IPv6/other routes and independent outbound ACL enforcement, plus successful
+role-scoped read-only access to exactly CST-DEV through its approved transport.
+Do not weaken the common `aicore_dev_runtime` role, grant host networking,
+restore the retired DEV hostname or reuse historical job #482.
+
+This narrow guard is proposed separately because the previous Core PR #1763
+merged to `develop` at commit `858efc5a` before this follow-up was ready;
+it is **not** approval for DEV execution or PROD promotion.
