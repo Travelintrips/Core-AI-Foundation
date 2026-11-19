@@ -97,6 +97,11 @@ def main():
             THEN RAISE EXCEPTION 'WRONG_CONSTRAINT_BLOCKED_SECOND_PILOT: %',failed_constraint; END IF;
           END;
         END $single_active$;""")
+        # Close the active-only fixture before testing other independent
+        # constraints: otherwise the single-active unique index masks the FK
+        # and TTL violations that those tests are intended to exercise.
+        psql("""UPDATE ai_platform.cst_onejob_owner_approvals
+                SET status='EXPIRED' WHERE job_id=483;""")
         # A privileged fixture owner must also be denied duplicate request/job,
         # wrong owner, and excessive approval TTL by database constraints.
         psql(f"""DO $deny$
