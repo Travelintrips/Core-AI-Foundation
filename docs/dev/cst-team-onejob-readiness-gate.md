@@ -760,3 +760,64 @@ scaffold coexistence, extra/unsafe role rejection and strict TLS
 source guards. A real VPS read-only preflight exited 2 with
 `pilotAdmissionReady=false`, `sideEffects=NONE`.
 The test checkout and temporary report were cleaned afterward.
+
+## Read-only preflight now uses the exact one-job socket adapter — 20 Nov 2026
+
+**Root cause closed in Draft source:** the prelaunch diagnostic in
+`scripts/dev/cst-team-onejob-readiness-gate.mjs` previously constructed
+`new pg.Client({connectionString:raw,...})` with a *direct TCP*
+transport. But the approved candidate topology has no general IP
+route and must reach PostgreSQL through the one-job Unix socket broker.
+A secure broker could therefore have been running correctly while
+preflight still failed with an unrouteable direct connection.
+
+The diagnostic now imports the **existing**, already tested
+`/app/lib/db/src/cstOneJobDevSocketTransport.ts` using Node 22
+`--experimental-strip-types`. It retains the exact project-bound
+pooler hostname `aws-1-ap-southeast-2.pooler.supabase.com:6543`,
+dedicated `cst_team_model_pilot_YYYYMMDD_8hex.xssrfshdrtdfupgqwfdw`
+DB username, approved Company-1 job identity and matching worker name;
+it also requires the fingerprint-pinned Root 2021 CA with verified
+`rejectUnauthorized=true` and passes `...socketOptions` to the real
+`pg.Client` object.
+
+The diagnostic **never** silently falls back to direct TCP if the
+module, socket, bound job identity or CA is missing:
+`DEV_PILOT_SOCKET_TRANSPORT_NOT_VERIFIED` is an explicit NO-GO
+observation. It also never queries the existing shared Core DEV
+container as a substitute when the exact candidate is not running:
+`CANDIDATE_NOT_RUNNING` is reported instead.
+
+**Independent VPS offline integration, pinned to source commit
+`791a4cbd`:** a no-network, read-only, non-root container reused the
+existing Core DEV QA image solely as a runtime dependency bundle,
+mounting the *exact* new TypeScript adapter, its pinned CA and the exact
+read-only diagnostic code extracted from the current PR source.
+A fixed local Unix socket mock received a PostgreSQL SSLRequest and
+a TLS ClientHello with **aws-1 SNI**, then intentionally disconnected
+*before any database authentication*. The diagnostic reported a
+controlled read error; the test required absence of any successful
+database read, real password, PostgreSQL StartupMessage, SQL, or
+external TCP network. It **PASSed**, and the mock process, temporary
+socket, container and source checkout were removed. The remaining
+original unit regressions passed 12/12.
+
+**Still NO-GO for production or real E2E:** this is a network-none
+source path verification, not a real CST-DEV login or RLS role proof.
+CST-DEV retains 2 safe NOLOGIN scaffolds, 0 active pilot logins,
+0 pilot RLS policies, 0 active completion subscribers and 0 approved
+new model job. No operational broker or candidate was deployed, no
+signer/dispatch authority or PROD connection changed, and job #482
+was not replayed. An independent subscriber delivery/receipt path
+must be implemented and reviewed before claiming E2E PASS.
+
+**Additional observed boundary:** the current
+`aiEventBusService.dispatch()` selects active
+`ai_event_subscriptions`, invokes a configured handler, and for
+nonempty delivery attempts updates the source `ai_events` status
+and writes an audit. The dedicated one-job role template intentionally
+does **not** grant subscription reads, event updates or generic
+handler audit writes. Accordingly, event+audit atomic persistence
+must NOT be represented as subscriber delivery. A separately
+authorized, scoped **independent subscriber/receipt process** is
+needed rather than granting the pilot worker blanket event-bus rights.
