@@ -155,45 +155,73 @@ async function main() {
  const imageBuildMarkerSha=isRunning==="true" ?
    shell("docker",["exec",CANDIDATE,"node","-e",
      "try{process.stdout.write(require('node:fs').readFileSync('/app/.cst-build-sha','utf8').trim())}catch{process.exit(2)}"]) : null;
+ // The candidate should run without ANY published host ports on an
+ // --internal bridge with gateway_mode_ipv4=isolated. This avoids assigning
+ // a host-gateway IP, unlike an ordinary internal Docker bridge.
  const portBindingsRaw=inspect('{{json .HostConfig.PortBindings}}',CANDIDATE);
- let candidateLoopbackPort=null,portBindingsSafe=false;
+ let noPublishedHostPorts=false;
  try {
    const bindings=JSON.parse(portBindingsRaw);
-   portBindingsSafe=bindings!==null && Object.values(bindings).every(v =>
-     Array.isArray(v) && v.length>0 && v.every(p =>
-       ["127.0.0.1","::1"].includes(p.HostIp)));
-   const ports=bindings?.["3000/tcp"];
-   if(Array.isArray(ports) && ports.length===1 && ports[0].HostIp==="127.0.0.1" &&
-      /^[0-9]{2,5}$/.test(ports[0].HostPort) && Number(ports[0].HostPort)<=65535){
-     candidateLoopbackPort=Number(ports[0].HostPort);
-   }
+   noPublishedHostPorts=bindings===null ||
+     (bindings && typeof bindings==="object" && !Array.isArray(bindings) &&
+      Object.keys(bindings).length===0);
  } catch {}
- // A separate named bridge must contain only this candidate. This proves
- // network membership isolation, not unrestricted outbound egress safety.
  const pilotNet="cst-core-onejob-dev-net";
  const networkRaw=networkMode===pilotNet ?
-   shell("docker",["network","inspect",pilotNet,"--format",
-     '{{.Driver}}|{{.Internal}}|{{json .Containers}}']) : null;
- let networkMembersSafe=false;
+   shell("docker",["network","inspect",pilotNet,"--format",'{{json .}}']):null;
+ let networkMembersSafe=false,hostGatewayUnassigned=false;
  try {
-   const [driver,isInternal,containersRaw]=networkRaw?.split("|")||[];
-   const members=Object.values(JSON.parse(containersRaw)||{});
-   networkMembersSafe=driver==="bridge" && isInternal==="true" && members.length===1 &&
-     members[0]?.Name===CANDIDATE;
+   const network=JSON.parse(networkRaw);
+   const members=Object.values(network.Containers||{});
+   const options=network.Options||{};
+   const ipam=network.IPAM?.Config;
+   hostGatewayUnassigned=Array.isArray(ipam) && ipam.length>0 &&
+     ipam.every(x=>!x?.Gateway);
+   networkMembersSafe=network.Driver==="bridge" && network.Internal===true &&
+     network.EnableIPv6===false &&
+     options["com.docker.network.bridge.gateway_mode_ipv4"]==="isolated" &&
+     members.length===1 && members[0]?.Name===CANDIDATE;
  } catch {}
- const networkScopeSafe=networkMode===pilotNet && networkMembersSafe;
- // An internal bridge is insufficient: it can still reach host services
- // bound on its gateway. This bounded local-only negative probe must prove
- // that the existing candidate cannot answer an ephemeral gateway challenge.
- let hostGatewayProbe={blocked:false,status:"NOT_PROBED"};
+ const networkScopeSafe=networkMode===pilotNet && networkMembersSafe &&
+   hostGatewayUnassigned && noPublishedHostPorts;
+ // Exact-candidate namespace probes: no IPv4/IPv6 default route, and no
+ // connectivity to the current healthy Core DEV private Docker IP. Only
+ // ENETUNREACH/EHOSTUNREACH count as denial, never refused or timed out.
+ let candidateRoutesAbsent=false,candidateCoreCrossNetworkDenied=false;
  if(networkScopeSafe && isRunning==="true"){
-   const ipamRaw=shell("docker",["network","inspect",pilotNet,"--format",
-     '{{json .IPAM.Config}}']);
+   const routeJs=String.raw\`
+const fs=require("node:fs");
+const v4=fs.readFileSync("/proc/net/route","utf8").split("\\n").slice(1);
+const has4=v4.some(x=>x.trim().split(/\\s+/)[1]==="00000000");
+let has6=true;
+try { const v6=fs.readFileSync("/proc/net/ipv6_route","utf8");
+  has6=v6.split("\\n").some(x=>/^0{32}\\s+00\\s+/.test(x)); } catch {}
+console.log(!has4&&!has6?"NO_DEFAULT_ROUTE":"ROUTE_PRESENT");\`;
+   candidateRoutesAbsent=shell("docker",["exec",CANDIDATE,"node","-e",routeJs],4500)==="NO_DEFAULT_ROUTE";
+   const coreIp=inspect('{{(index .NetworkSettings.Networks "ai-core-workers_control").IPAddress}}',CORE);
+   if(/^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$/.test(coreIp||"")){
+     const tcpJs=String.raw\`
+const net=require("node:net");
+const s=net.connect({host:process.argv[1],port:3000});
+s.setTimeout(1800);
+s.on("connect",()=>{console.log("REACHABLE");s.destroy()});
+s.on("error",e=>console.log(e.code||"UNVERIFIED"));
+s.on("timeout",()=>{console.log("UNVERIFIED");s.destroy()});\`;
+     const outcome=shell("docker",["exec",CANDIDATE,"node","-e",tcpJs,coreIp],4500);
+     candidateCoreCrossNetworkDenied=["ENETUNREACH","EHOSTUNREACH"].includes(outcome);
+   }
+ }
+ // No host gateway exists for the isolated bridge. This is a necessary
+ // topology check only: the independent ACL and DEV DB transport gates remain
+ // false, regardless of a successful local namespace probe.
+ let hostGatewayProbe={blocked:false,status:"NOT_PROBED"};
+ if(networkScopeSafe && candidateRoutesAbsent && candidateCoreCrossNetworkDenied){
+   hostGatewayProbe={blocked:true,status:"ISOLATED_GATEWAY_UNASSIGNED_NO_ROUTES"};
+ } else if(networkMode===pilotNet && isRunning==="true" && !hostGatewayUnassigned){
+   const raw=shell("docker",["network","inspect",pilotNet,"--format",'{{json .IPAM.Config}}']);
    let gateway=null;
-   try { gateway=JSON.parse(ipamRaw)?.[0]?.Gateway??null; } catch {}
-   if(gateway) hostGatewayProbe=await probeCstDevHostGateway({
-     gateway,candidate:CANDIDATE,
-   });
+   try { gateway=JSON.parse(raw)?.[0]?.Gateway??null; } catch {}
+   if(gateway) hostGatewayProbe=await probeCstDevHostGateway({gateway,candidate:CANDIDATE});
  }
  let hostResolved=false,candidateDirectHealthy=false,retiredHostQuarantined=false;
  let nginxApiRetainsExistingCore=false;
@@ -205,8 +233,7 @@ async function main() {
    const existingPort=JSON.parse(existingBindings)?.["3000/tcp"]?.[0];
    nginxApiRetainsExistingCore=Boolean(destination && existingPort &&
      existingPort.HostIp==="127.0.0.1" &&
-     Number(destination[1])===Number(existingPort.HostPort) &&
-     Number(destination[1])!==candidateLoopbackPort);
+     Number(destination[1])===Number(existingPort.HostPort));
  } catch {}
  try{const target=await lookup(HOST);hostResolved=Boolean(target?.address)}catch{}
  try {
@@ -215,19 +242,26 @@ async function main() {
      (retired.match(/return\s+410;/g)||[]).length>=2 &&
      !/proxy_pass\s+[^;]+;/.test(retired);
  } catch {}
- if(candidateLoopbackPort && isRunning==="true"){
-   const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),3500);
+ // For gateway_mode=isolated there is no published host port. Read
+ // liveness and source header from inside the named container only.
+ if(networkScopeSafe && isRunning==="true"){
+   const healthJs=String.raw\`
+fetch("http://127.0.0.1:3000/api/healthz",{signal:AbortSignal.timeout(2500)})
+.then(r=>console.log(JSON.stringify({status:r.status,
+  commit:r.headers.get("x-cst-source-commit")||r.headers.get("x-cst-commit-sha")})))
+.catch(()=>{process.exitCode=2});\`;
+   const raw=shell("docker",["exec",CANDIDATE,"node","-e",healthJs],4700);
    try {
-     const r=await fetch("http://127.0.0.1:"+candidateLoopbackPort+"/api/healthz",{signal:ctl.signal});
-     const commit=r.headers.get("x-cst-source-commit")||r.headers.get("x-cst-commit-sha");
-     candidateDirectHealthy=r.ok && Boolean(sourceContentEquivalent || imageSourceSha===sha) &&
-       commit===imageSourceSha;
-   } catch {} finally {clearTimeout(t)}
+     const health=JSON.parse(raw);
+     candidateDirectHealthy=health.status===200 &&
+       Boolean(sourceContentEquivalent || imageSourceSha===sha) &&
+       health.commit===imageSourceSha;
+   } catch {}
  }
  const db=readDevCatalog(isRunning==="true" ? CANDIDATE : CORE);
  const facts={sourceSha:sha,imageId,imageSourceSha,imageBuildMarkerSha,sourceContentEquivalent,
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
-   candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe && Boolean(candidateLoopbackPort),
+   candidateImageId,candidateNetworkIsolated:networkScopeSafe && candidateRoutesAbsent && candidateCoreCrossNetworkDenied,
    candidateHostGatewayBlocked:hostGatewayProbe.blocked,
    // No authoritative ACL / database transport inspector is wired yet.
    // Never infer either proof from Docker --internal, DNS, the host nonce or
@@ -251,6 +285,8 @@ async function main() {
    project:PROJECT,devHost:HOST,sourceSha:sha,imageSourceSha:imageSourceSha||null,
    imageBuildMarkerMatchesLabel:imageBuildMarkerSha===imageSourceSha,
    gatewayProbeStatus:hostGatewayProbe.status,
+   networkGatewayMode:"isolated", noPublishedHostPorts,
+   candidateRoutesAbsent,candidateCoreCrossNetworkDenied,
    sourceContentEquivalent,imagePresent:Boolean(imageId),candidateRunning:facts.candidateRunning,
    devHostResolved:hostResolved,retiredHostQuarantined,dbReadStatus:db.status,
    roleCount:db.roleCount??null},null,2));
