@@ -596,7 +596,7 @@ firewall, launches a broker, or authorizes a pilot**. An explicit
 Linux `nft -j list table inet cst_onejob_egress_qa` and verifies the
 actual kernel rule shape:
 
-- `inet`/`output` chain, filter priority `-100`, **policy drop**;
+- `inet`/`output` chain, filter priority `0`, **policy drop**;
 - exactly **one** IPv4 destination + TCP destination port `6543` accept;
 - exactly one unconditional terminal **drop** rule;
 - no additional chain, IPv6 exception, host-address exception, alternative
@@ -645,3 +645,11 @@ pooler identity/CA, non-root accepted-peer `SO_PEERCRED`, and an actual
 dedicated short-lived RLS login to **only CST-DEV**. Job receipt and
 independent Final ACK remain separate release gates. PROD remains
 untouched and job #482 is never replayed.
+
+**Filter-priority correction:** the first disposable rules used priority
+`-100`, which is commonly assigned to destination NAT. The source policy
+and exact JSON auditor now require output **filter priority `0`**,
+so ordinary destination NAT is evaluated first. Priorities with the same
+numeric value can have undefined ordering, so this still requires
+independent namespace-wide policy inspection before operational use.
+Source: https://www.netfilter.org/projects/nftables/manpage.html
