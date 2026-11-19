@@ -1,0 +1,50 @@
+{
+  "title": "CST AI Team — read-only model completion evidence RLS rehearsal",
+  "date": "2026-11-19",
+  "environment": "DISPOSABLE_POSTGRES16_ONLY",
+  "databaseName": "cst_team_evidence_reader_rehearsal",
+  "source": "scripts/dev/cst-team-readonly-evidence-rls-disposable.sql",
+  "isolation": {
+    "network": "none",
+    "exposedPorts": 0,
+    "role": "aicore_dev_runtime (fixture only)",
+    "dbGuard": true
+  },
+  "testResults": {
+    "status": "CST_EVIDENCE_READER_DISPOSABLE_PASS",
+    "targetJob482Visible": true,
+    "targetWorker3628Visible": true,
+    "targetCompletedEventVisible": true,
+    "matchingEventAuditVisible": true,
+    "matchingJobAuditVisible": true,
+    "company3JobHidden": true,
+    "unrelatedCompany1JobHidden": true,
+    "unrelatedEventAuditHidden": true,
+    "preexistingCodingBaselineStillVisible": true,
+    "insertPrivilegeGranted": false,
+    "updatePrivilegeGranted": false,
+    "deletePrivilegeGranted": false,
+    "additionalReaderPoliciesDropped": true,
+    "fixtureRoleDropped": true,
+    "sandboxDestroyed": true
+  },
+  "realDevObservedState": {
+    "project": "xssrfshdrtdfupgqwfdw",
+    "privilegedReaderJob482Status": "completed",
+    "privilegedReaderJob482CompletionEvents": 0,
+    "applicationRole": "aicore_dev_runtime",
+    "applicationRoleJob482Visibility": "source_not_visible",
+    "outcome": "READ_ONLY_VISIBILITY_BLOCKED_BY_EXISTING_RLS",
+    "newPoliciesApplied": false,
+    "newRolesApplied": false,
+    "eventBackfillPerformed": false,
+    "prodTouched": false
+  },
+  "releaseGate": {
+    "scopedReadPolicyRehearsal": "PASS",
+    "actualDevReaderVisibility": "NOT_PASS",
+    "actualDevCompletionEventPersistence": "NOT_RETESTED",
+    "independentQaAndFinalAck": "NOT_PASS",
+    "recommendedNextStep": "Security-review a temporary exact requestId/job-bound SELECT-only evidence-reader policy; do not grant broad ai_jobs/ai_events/audit visibility."
+  }
+}

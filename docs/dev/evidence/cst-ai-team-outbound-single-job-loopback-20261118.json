@@ -1,0 +1,44 @@
+{
+  "evidenceType": "CST_AI_TEAM_DEV_SINGLE_JOB_SYNTHETIC_MODEL_WORKER_E2E",
+  "testedOn": "2026-11-18",
+  "sourceCommit": "b2addb81b89d7d7ec2b45d2539617bcbb22b5722",
+  "worker": "artifacts/api-server/src/scripts/remoteOllamaWorker.ts",
+  "claimRoute": "artifacts/api-server/src/routes/remote-ollama-worker.ts",
+  "claimService": "artifacts/api-server/src/services/remoteOllamaWorkerService.ts",
+  "reusableTestHarness": "scripts/dev/cst-ai-team-remote-ollama-loopback-e2e.mjs",
+  "devMode": {
+    "explicitDevCoreRequired": true,
+    "localModelEndpointOnly": true,
+    "serverDevScopedClaimFlagRequired": true,
+    "expectedJobId": 421,
+    "modelOnly": true,
+    "oneShotWorkerExit": true
+  },
+  "observed": {
+    "status": "PASS",
+    "model": "qwen2.5:3b",
+    "workerId": 777,
+    "jobId": 421,
+    "registered": 1,
+    "claimed": 1,
+    "completed": 1,
+    "heartbeats": 0,
+    "answer": "CST_DEV_OUTBOUND_READY",
+    "outputTokens": 7,
+    "durationSec": 5,
+    "evidence": "synthetic_loopback_api_and_real_ollama_inference",
+    "environment": "DELL_LOCAL_ONLY",
+    "externalCore": false,
+    "companyDbWrites": false,
+    "publicPortsOpened": false,
+    "attestationVerified": false,
+    "finalAckVerified": false
+  },
+  "limitations": [
+    "Synthetic localhost mock API; not connected to CST-DEV Core database",
+    "No real company task or independent multi-agent workstream",
+    "No remote enrollment secret configured in actual CST-DEV runtime",
+    "No cryptographic attestation or independent QA Final ACK",
+    "Specialized coding quality of qwen2.5:3b not established"
+  ]
+}

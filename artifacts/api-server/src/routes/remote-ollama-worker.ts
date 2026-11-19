@@ -88,6 +88,21 @@ router.post("/ai/ollama-workers/register", async (req, res): Promise<void> => {
     return;
   }
 
+  if (process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true") {
+    // The DEV-only pilot can enroll exactly one model-only DELL worker.
+    // Never turn enrollment into a general-purpose PowerShell executor.
+    if (process.env.APP_ENV !== "development" ||
+        process.env.NODE_ENV !== "development" ||
+        !process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+        body.data.workerName !== process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+        body.data.nodeId !== process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+        body.data.modelId !== "qwen2.5:3b" ||
+        body.data.maxConcurrentJobs !== 1) {
+      res.status(403).json({ error: "DEV_MODEL_PILOT_WORKER_NOT_APPROVED" });
+      return;
+    }
+  }
+
   try {
     const worker = await registerRemoteOllamaWorker(body.data);
     res.status(201).json({
@@ -105,6 +120,10 @@ router.post("/ai/ollama-workers/register", async (req, res): Promise<void> => {
 
 
 router.post("/ai/ollama-workers/:id/self-test", requireWorker, async (req, res): Promise<void> => {
+  if (process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true") {
+    res.status(403).json({ error: "DEV_MODEL_PILOT_POWERSHELL_SELF_TEST_DISABLED" });
+    return;
+  }
   const workerId = Number.parseInt(routeParam(req, "id"), 10);
   try {
     const job = await enqueueRemotePowerShellSelfTest(workerId);
@@ -134,8 +153,44 @@ router.post("/ai/ollama-workers/:id/heartbeat", requireWorker, async (req, res):
 router.post("/ai/ollama-workers/:id/claim", requireWorker, async (req, res): Promise<void> => {
   const workerId = Number.parseInt(routeParam(req, "id"), 10);
   const worker = res.locals["remoteOllamaWorker"] as AiWorker;
+  // Optional DEV-only one-job claim for an explicitly admitted model-worker
+  // pilot. This is not a general scheduler and does not grant new capabilities.
+  const requestedJobId = (req.body as Record<string, unknown> | undefined)?.devExpectedJobId;
+  const hasJobScope = requestedJobId !== undefined;
+  const pilotEnabled = process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true";
+  const isDev = process.env.APP_ENV === "development" && process.env.NODE_ENV === "development";
+  // With the DEV pilot flag on, no authenticated worker can fall back to
+  // the legacy shared-queue claim by omitting devExpectedJobId.
+  if (pilotEnabled && (!isDev || !hasJobScope)) {
+    res.status(403).json({ error: "DEV_SCOPED_MODEL_JOB_REQUIRED" });
+    return;
+  }
+  if (hasJobScope && (!isDev || !pilotEnabled)) {
+    res.status(403).json({ error: "DEV_SCOPED_MODEL_CLAIM_DISABLED" });
+    return;
+  }
+  const parsedJobId = hasJobScope ? z.number().int().min(1).max(2147483647).safeParse(requestedJobId) : null;
+  if (parsedJobId && !parsedJobId.success) {
+    res.status(400).json({ error: "INVALID_DEV_EXPECTED_JOB_ID" });
+    return;
+  }
+  if (pilotEnabled) {
+    const approvedId = z.coerce.number().int().min(1).max(2147483647).safeParse(
+      process.env.CST_TEAM_DEV_APPROVED_JOB_ID ?? "",
+    );
+    const approvedWorkerName = process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME?.trim();
+    if (!approvedId.success || !approvedWorkerName ||
+        approvedWorkerName !== worker.workerName ||
+        parsedJobId?.data !== approvedId.data) {
+      res.status(403).json({ error: "DEV_SCOPED_MODEL_JOB_OR_WORKER_NOT_APPROVED" });
+      return;
+    }
+  }
   try {
-    const job = await claimRemoteOllamaInvocation(worker);
+    const job = await claimRemoteOllamaInvocation(
+      worker,
+      parsedJobId?.success ? { devExpectedJobId: parsedJobId.data } : undefined,
+    );
     if (!job) {
       res.status(204).end();
       return;

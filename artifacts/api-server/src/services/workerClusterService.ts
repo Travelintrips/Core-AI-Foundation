@@ -13,7 +13,7 @@
 
 import { eq, and, inArray, sql, ne, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { db, aiWorkersTable, aiJobsTable, withTransientDatabaseRetry } from "@workspace/db";
+import { db, aiWorkersTable, aiJobsTable, aiAuditLogsTable, withTransientDatabaseRetry } from "@workspace/db";
 import type { AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { failRepositoryAnalyzerRun } from "./repositoryAnalyzerService.js";
@@ -66,6 +66,8 @@ export interface RegisterWorkerInput {
   maxConcurrentJobs?: number;
   leaseOwner: string;
   heartbeatToken?: string;
+  /** DEV one-job model only: require worker and audit INSERT in one transaction. */
+  requireAtomicRegistrationAudit?: boolean;
   leaseTtlMs?: number;
   providerSlug?: string | null;
   modelId?: string | null;
@@ -131,6 +133,25 @@ export function registerNode(input: {
  * Create or upsert a worker with cluster identity and fresh lease.
  */
 export async function registerWorker(input: RegisterWorkerInput): Promise<AiWorker> {
+  const atomicPilotAudit = input.requireAtomicRegistrationAudit === true;
+  if (atomicPilotAudit &&
+      (process.env.APP_ENV !== "development" ||
+       process.env.NODE_ENV !== "development" ||
+       process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED !== "true" ||
+       !process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+       input.workerName !== process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME ||
+       input.nodeId !== input.workerName ||
+       input.leaseOwner !== "ollama-remote:" + input.workerName ||
+       input.workerType !== "coding_worker" ||
+       input.providerSlug !== "ollama" ||
+       input.runtimeKind !== "ollama_remote_pull" ||
+       input.modelId !== "qwen2.5:3b" ||
+       input.endpointUrl != null ||
+       input.capabilities.length !== 1 ||
+       input.capabilities[0] !== "ollama_inference" ||
+       (input.maxConcurrentJobs ?? 1) !== 1)) {
+    throw new Error("CST_DEV_MODEL_WORKER_ATOMIC_AUDIT_SCOPE_DENIED");
+  }
   const now = new Date();
   const token = input.heartbeatToken ?? randomUUID();
   const leaseExpires = new Date(
@@ -162,6 +183,7 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
           !["offline", "stale"].includes(existing!.status);
 
         if (existing && heldByAnotherLiveOwner) {
+          if (atomicPilotAudit) throw new Error("CST_DEV_MODEL_WORKER_LEASE_CONFLICT");
           return { worker: existing, acquired: false };
         }
 
@@ -185,6 +207,22 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
           updatedAt: now,
         };
 
+        // For the exact one-job DEV pilot, any failed audit RLS must undo
+        // the worker/heartbeat lease write as well. The global/PROD path
+        // retains its previous best-effort logAudit behavior.
+        const auditPilotWorker = async (worker: AiWorker | undefined) => {
+          if (!atomicPilotAudit) return;
+          if (!worker) throw new Error("CST_DEV_MODEL_WORKER_REGISTRATION_ROW_MISSING");
+          await tx.insert(aiAuditLogsTable).values({
+            module: "worker-cluster", action: "worker_registered",
+            resourceId: String(worker.id), resourceType: "ai_worker",
+            status: "success",
+            details: {
+              workerName: worker.workerName, workerType: worker.workerType,
+              capabilities: input.capabilities, leaseOwner: input.leaseOwner,
+            },
+          });
+        };
         if (existing) {
           const [worker] = await tx
             .update(aiWorkersTable)
@@ -194,6 +232,7 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
             })
             .where(eq(aiWorkersTable.id, existing.id))
             .returning();
+          await auditPilotWorker(worker);
           return { worker, acquired: true };
         }
 
@@ -205,6 +244,7 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
             lockVersion: 0,
           })
           .returning();
+        await auditPilotWorker(worker);
         return { worker, acquired: true };
       }),
     { attempts: 3, baseDelayMs: 250 },
@@ -229,19 +269,21 @@ export async function registerWorker(input: RegisterWorkerInput): Promise<AiWork
     return worker;
   }
 
-  await logAudit(
-    "worker-cluster",
-    "worker_registered",
-    String(worker.id),
-    "ai_worker",
-    "success",
-    {
-      workerName: worker.workerName,
-      workerType: worker.workerType,
-      capabilities: input.capabilities,
-      leaseOwner: input.leaseOwner,
-    },
-  );
+  if (!atomicPilotAudit) {
+    await logAudit(
+      "worker-cluster",
+      "worker_registered",
+      String(worker.id),
+      "ai_worker",
+      "success",
+      {
+        workerName: worker.workerName,
+        workerType: worker.workerType,
+        capabilities: input.capabilities,
+        leaseOwner: input.leaseOwner,
+      },
+    );
+  }
 
   logger.info(
     {

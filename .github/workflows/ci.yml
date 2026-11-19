@@ -40,6 +40,16 @@ jobs:
         run: node --test scripts/github-event-correlation.test.mjs scripts/github-ci-handoff-decision.test.mjs
       - name: Verify serialized GitHub CI quorum transitions
         run: node --test scripts/ci-quorum-row-lock.test.mjs
+      - name: Verify scoped CST team DEV readiness is non-authorizing
+        run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
+      - name: Verify read-only CST-DEV one-job pilot preflight cannot execute or sign
+        run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
+      - name: Verify QA image marker readback rejects stale or privileged image
+        run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
+      - name: Verify DEV QA image source marker is never stale
+        run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
+      - name: Verify scoped pilot RLS and rollback in disposable PostgreSQL
+        run: python3 scripts/dev/cst-team-dedicated-model-role-rehearsal.py
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap

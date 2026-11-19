@@ -1,0 +1,46 @@
+{
+  "title": "CST AI Team — read-only completion evidence visibility (real CST-DEV)",
+  "capturedAtUtc": "2026-11-18T19:56:52.605Z",
+  "project": "CST-DEV",
+  "supabaseProjectRef": "xssrfshdrtdfupgqwfdw",
+  "jobId": 482,
+  "readOnlyAudit": {
+    "source": "artifacts/api-server/src/scripts/cstTeamCompletionEvidenceAudit.ts",
+    "runtimeRole": "aicore_dev_runtime",
+    "transaction": "BEGIN READ ONLY ... ROLLBACK",
+    "sourceJobRowsVisible": 0,
+    "jobAuditRowsVisible": 0,
+    "completionEventsVisible": 0,
+    "completionEventAuditRowsVisible": 0,
+    "status": "source_not_visible",
+    "jobCompleted": false,
+    "eventPersisted": false,
+    "eventAuditPersisted": false,
+    "subscriberDeliveryVerified": false,
+    "independentQaVerified": false,
+    "cryptographicAttestationVerified": false,
+    "finalAckVerified": false,
+    "blockers": [
+      "JOB_NOT_VISIBLE_TO_READER_OR_NOT_FOUND"
+    ]
+  },
+  "independentPrivilegedReadOnlyVerification": {
+    "role": "Supabase Dashboard/SQL read view",
+    "jobId": 482,
+    "jobCode": "OLLAMA-B7F9B5E2",
+    "status": "completed",
+    "modelResult": "CST_AI_TEAM_DELL_MODEL_DEV_OK",
+    "completionEventRows": 0,
+    "observedExplanation": "PostgreSQL RLS permits application reader only selected coding job types; it does not grant SELECT visibility for ollama_model_invocation under aicore_dev_runtime."
+  },
+  "integrity": {
+    "applicationRolePrivilegesModified": false,
+    "newDatabaseRoles": false,
+    "newRlsPolicies": false,
+    "replayOrBackfill": false,
+    "productionModified": false,
+    "mainDevRuntimeRestarted": false
+  },
+  "releaseMeaning": "NOT_PASS: application reader cannot independently reconcile this row, even though privileged read confirms the historical job completed. Do not infer that an invisible job is absent; no subscriber delivery, independent QA or Final ACK is proven.",
+  "nextCheck": "Define a separately reviewed, least-privilege read-only evidence projection or reader policy for exact future Company1 pilot job IDs; do not grant general ai_jobs SELECT, bypass RLS or backfill job 482."
+}

@@ -1,0 +1,64 @@
+{
+  "title": "CST AI Team DEV: atomic model completion job-worker-event-audit",
+  "evidenceDate": "2026-11-19",
+  "codeBranch": "feat/cst-ai-team-scoped-readiness-20261118",
+  "sourceHeadBeforeEvidence": "911941476dcd50d0703e43df1ba9dea801b63916",
+  "scope": "ONLY bounded Company1 CST-DEV remote Ollama one-job pilot; no PROD writer or GPT02 signing",
+  "implementation": {
+    "service": "artifacts/api-server/src/services/jobWorkerService.ts",
+    "eventDraft": "artifacts/api-server/src/services/aiEventBusService.ts",
+    "identityGuard": "artifacts/api-server/src/lib/cstTeamModelCompletionGuard.ts",
+    "atomicUnit": [
+      "job status/result update",
+      "worker lease/slot release",
+      "job_completed audit",
+      "job.completed event",
+      "event_published audit"
+    ],
+    "lockStrategy": "SELECT FOR UPDATE job and worker, then guarded status-running and claimed-worker SQL UPDATE",
+    "failClosed": "Any DB/audit/event failure before COMMIT rolls back all five changes; terminal job is not replayed",
+    "afterCommitOnly": "subscriber dispatch is triggered only after commit and is not an independent delivery receipt",
+    "ordinaryJobBehavior": "Existing ordinary completion and publishSafe path unchanged"
+  },
+  "verified": {
+    "targetedSecuritySourceTests": 25,
+    "affectedApiVitestTests": 46,
+    "apiTypecheck": "PASS",
+    "apiBuild": "PASS",
+    "disposablePostgres16": {
+      "database": "cst_team_atomic_job_fixture",
+      "network": "none",
+      "publicPorts": 0,
+      "result": "CST_MODEL_ATOMIC_JOB_WORKER_EVENTS_AUDITS_DISPOSABLE_PASS",
+      "eventAuditRlsDeniedRolledBackJob": true,
+      "eventAuditRlsDeniedRolledBackWorker": true,
+      "eventAuditRlsDeniedRolledBackJobAudit": true,
+      "eventAuditRlsDeniedRolledBackEvent": true,
+      "acceptedFiveRecordCommit": true,
+      "terminalReplayRejected": true,
+      "company3RecordsHiddenAndUnchanged": true,
+      "temporaryRoleAndPoliciesDropped": true,
+      "disposableContainerRemoved": true,
+      "fixtureFile": "scripts/dev/cst-team-atomic-full-job-rls-disposable.sql"
+    }
+  },
+  "realCstDev": {
+    "project": "xssrfshdrtdfupgqwfdw",
+    "historicalModelJobId": 482,
+    "historicalJobStatus": "completed",
+    "historicalCompletionEventCount": 0,
+    "temporaryPilotRoles": 0,
+    "newRealJobCreatedByThisChange": false,
+    "RlsChangedByThisChange": false,
+    "mainRuntimeDeployed": false,
+    "prodChanged": false
+  },
+  "remaining": {
+    "exactHeadGithubCi": "PENDING_CONFIRMATION",
+    "realNewJobWithAtomicWriter": "NOT_TESTED",
+    "activeEventSubscriber": "NOT_CONFIGURED",
+    "independentQaAndFinalAck": "NOT_VERIFIED",
+    "fourIndependentAgents": "NOT_VERIFIED"
+  },
+  "releaseDecision": "DRAFT_NO_GO_FOR_PROD"
+}

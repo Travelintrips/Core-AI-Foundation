@@ -13,6 +13,8 @@ ENV GITHUB_SHA=$GITHUB_SHA \
 RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
 COPY . .
+# Refuse an inherited .cst-build-sha; stamp only the trusted build SHA.
+RUN node scripts/dev/stamp-dev-build-sha.mjs
 RUN pnpm install --frozen-lockfile
 RUN pnpm run build
 

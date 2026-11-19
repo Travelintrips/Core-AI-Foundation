@@ -58,6 +58,13 @@ export async function registerRemoteOllamaWorker(input: {
   region?: string;
   version?: string;
 }): Promise<AiWorker> {
+  const devModelOnly = process.env.APP_ENV === "development" &&
+    process.env.NODE_ENV === "development" &&
+    process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED === "true";
+  // The one-job DEV worker never advertises PowerShell execution capability.
+  const remoteCapabilities = devModelOnly
+    ? [REMOTE_OLLAMA_CAPABILITY]
+    : [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY];
   // Re-enrollment must be idempotent. A second copy of the same outbound
   // agent can overlap briefly during restart/reconnect; rotating the shared
   // heartbeat token on every registration makes both copies invalidate each
@@ -73,6 +80,11 @@ export async function registerRemoteOllamaWorker(input: {
 
     if (!sameIdentity) throw new Error("REMOTE_OLLAMA_IDENTITY_CONFLICT");
 
+    // This DEV pilot is a single authorized registration; never reuse a
+    // surviving heartbeat token from a previous run to skip atomic audit.
+    if (devModelOnly && existing.heartbeatToken) {
+      throw new Error("CST_DEV_MODEL_PILOT_ACTIVE_WORKER_REUSE_DENIED");
+    }
     if (existing.heartbeatToken) {
       const renewed = await renewLease(existing.id, existing.heartbeatToken, DEFAULT_LEASE_TTL_MS);
       if (renewed) {
@@ -81,7 +93,7 @@ export async function registerRemoteOllamaWorker(input: {
           status: sql`CASE WHEN running_jobs > 0 THEN 'busy' ELSE 'online' END`,
           region: input.region ?? "remote",
           version: input.version ?? "1.0.0",
-          capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
+          capabilities: remoteCapabilities,
           maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
           leaseOwner: "ollama-remote:" + input.nodeId,
           updatedAt: new Date(),
@@ -98,8 +110,9 @@ export async function registerRemoteOllamaWorker(input: {
     nodeId: input.nodeId,
     region: input.region ?? "remote",
     version: input.version ?? "1.0.0",
-    capabilities: [REMOTE_OLLAMA_CAPABILITY, REMOTE_OLLAMA_POWERSHELL_CAPABILITY],
+    capabilities: remoteCapabilities,
     maxConcurrentJobs: MAX_ACTIVE_JOBS_PER_WORKER,
+    requireAtomicRegistrationAudit: devModelOnly,
     leaseOwner: "ollama-remote:" + input.nodeId,
     leaseTtlMs: DEFAULT_LEASE_TTL_MS,
     providerSlug: PROVIDER,
@@ -258,9 +271,17 @@ export async function enqueueRemoteOllamaInvocation(
 
 export async function claimRemoteOllamaInvocation(
   worker: Pick<AiWorker, "id" | "modelId">,
+  scope: { devExpectedJobId?: number } = {},
 ): Promise<AiJob | null> {
   const workerId = worker.id;
-  if (worker.modelId) {
+  const scopedJobId = scope.devExpectedJobId;
+  if (scopedJobId !== undefined &&
+      (!Number.isSafeInteger(scopedJobId) || scopedJobId < 1 ||
+       (process.env.APP_ENV !== "development" || process.env.NODE_ENV !== "development"))) {
+    throw new Error("REMOTE_OLLAMA_DEV_JOB_SCOPE_INVALID");
+  }
+  // A one-job DEV pilot cannot reconcile or requeue unrelated stale work.
+  if (worker.modelId && scopedJobId === undefined) {
     await maybeRecoverStaleRemoteOllamaCapacity(worker.modelId).catch(() => 0);
   }
 
@@ -269,6 +290,11 @@ export async function claimRemoteOllamaInvocation(
       SELECT * FROM ai_platform.ai_jobs
       WHERE job_type IN (${REMOTE_OLLAMA_JOB_TYPE}, ${REMOTE_OLLAMA_POWERSHELL_JOB_TYPE})
         AND required_capability IN (${REMOTE_OLLAMA_CAPABILITY}, ${REMOTE_OLLAMA_POWERSHELL_CAPABILITY})
+        ${scopedJobId !== undefined
+          ? sql`AND id = ${scopedJobId}
+                  AND job_type = ${REMOTE_OLLAMA_JOB_TYPE}
+                  AND payload_json->>'requestId' LIKE 'cst-ai-team-company1-dev:%'`
+          : sql``}
         AND (
           (status = 'queued' AND (scheduled_at IS NULL OR scheduled_at <= NOW()))
           OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at <= NOW())
