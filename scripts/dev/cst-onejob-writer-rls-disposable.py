@@ -176,6 +176,7 @@ def main():
         if before.returncode==0:
             raise RuntimeError("STAGE_LOGIN_INHERITED_TABLE_PRIVILEGES")
         local=psql("""BEGIN;
+          SET TRANSACTION READ WRITE;
           SET LOCAL ROLE cst_team_model_pilot_writer;
           SELECT current_user||'|'||session_user;
           COMMIT;
@@ -186,6 +187,14 @@ def main():
             "cst_team_model_pilot_stage_login"
         ]:
             raise RuntimeError("TRANSACTION_LOCAL_WRITER_ROLE_NOT_RESET:"+str(lines))
+        after_rollback=psql("""BEGIN;
+          SET TRANSACTION READ WRITE;
+          SET LOCAL ROLE cst_team_model_pilot_writer;
+          ROLLBACK;
+          SELECT current_user;""",
+          False,"cst_team_model_pilot_stage_login").stdout.strip()
+        if after_rollback!="cst_team_model_pilot_stage_login":
+            raise RuntimeError("WRITER_ROLE_NOT_RESET_AFTER_ROLLBACK")
         for actor,target in [
           ("aicore_dev_runtime","cst_team_model_pilot_writer"),
           ("aicore_dev_runtime","cst_team_model_pilot_stage_login"),
@@ -199,6 +208,7 @@ def main():
         # service, now issued by a real unprivileged LOGIN inside SET LOCAL.
         # Any failure means PostgreSQL rolls back the whole txn.
         positive=f"""BEGIN;
+          SET TRANSACTION READ WRITE;
           SET LOCAL ROLE cst_team_model_pilot_writer;
           DO $stage$
           DECLARE j_id integer; a_id uuid;
@@ -236,6 +246,7 @@ def main():
         # A separate active request with a unique ID must roll back the new
         # WAITING job after the second approval fails the single-active index.
         duplicate=f"""BEGIN;
+          SET TRANSACTION READ WRITE;
           SET LOCAL ROLE cst_team_model_pilot_writer;
           {insert_job(REQ2,"OLLAMA-B1B2C3D4")}
           INSERT INTO ai_platform.cst_onejob_owner_approvals
@@ -258,7 +269,7 @@ def main():
             scopeNoTableUpdates=True,ownerReadOnlyActive=True,
             sharedRuntimePilotRlsDenied=True,sharedRoleEscalationDenied=True,badCapabilityDenied=True,
             prematureQueuedDenied=True,wrongModelDenied=True,
-            ownerPromotionDenied=True,atomicWaitingStage=True,isolatedLoginSetLocalRole=True,autoResetAfterCommit=True,
+            ownerPromotionDenied=True,atomicWaitingStage=True,isolatedLoginSetLocalRole=True,autoResetAfterCommit=True,autoResetAfterRollback=True,
             distinctSecondStageRollback=True,auditBoundToApproval=True)
         print("ONEJOB_WRITER_RLS_DISPOSABLE_PASS",json.dumps(report))
         return 0
