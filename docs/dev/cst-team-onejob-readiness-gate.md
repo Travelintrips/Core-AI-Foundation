@@ -653,3 +653,64 @@ so ordinary destination NAT is evaluated first. Priorities with the same
 numeric value can have undefined ordering, so this still requires
 independent namespace-wide policy inspection before operational use.
 Source: https://www.netfilter.org/projects/nftables/manpage.html
+
+## Combined pre-traffic ACL + accepted-peer broker lifecycle (QA only)
+
+The separate nftables and Unix `SO_PEERCRED` proofs have now been combined
+into one **disposable mock-only** regression workflow:
+`scripts/dev/cst-team-onejob-broker-acl-lifecycle-qa.sh`. This script is
+**not** a deployer and never opens a connection to Supabase.
+
+On the authorized VPS it:
+
+1. Starts two local mock TCP servers on port `6543` plus a non-root
+   **idle** Docker namespace holder, with no real broker running.
+2. Inspects the namespace to exclude unrelated pre-existing tables
+   (Docker may create its normal private `ip nat` table), installs the
+   existing one-IP `nftables` output policy with priority 0 and default
+   DROP **before** starting the broker, and proves one mock destination
+   allowed while a different destination is blocked.
+3. Reads the real kernel JSON counters using the already-PASS strict
+   `--audit-kernel-qa` source. Only a positive namespace QA result
+   allows the next **mock** process to start.
+4. Launches the existing `startOfflineMockBroker` in that already-filtered
+   network namespace as an independent UID/GID `28500:28501` with
+   `setpriv --no-new-privs --bounding-set=-all`. The broker's accepted
+   Unix socket uses the existing FD3 `SO_PEERCRED` verifier and a
+   separate approved test client `28502:28501`.
+5. Proves the wrong test UID `28503:28501` is denied with
+   `ECONNRESET` or no ACK **without increasing the upstream mock's
+   connection counter**; the authorized test UID receives exactly
+   one mock ACK and increments the mock connection counter by one.
+6. Cleans up the mock process, Docker containers, transient bridge,
+   Unix socket and QA directory regardless of success/failure.
+   The separate Git detached QA worktree is removed by the outer test.
+
+**Observed result on VPS:** `ACL_INSTALLED_BEFORE_BROKER_START=true`,
+`KERNEL_QA_ALLOW_DENY_EVIDENCE_PASS`,
+`MOCK_BROKER_STARTED_AFTER_ACL=true`,
+`KERNEL_PEER_DENIED_BEFORE_UPSTREAM=true`,
+`APPROVED_PEER_FORWARDED_EXACTLY_ONCE=true`,
+and `CST_DEV_MOCK_BROKER_ACL_PEERCRED_INTEGRATION_PASS`.
+
+When the QA runner creates a temporary Docker bridge, Docker itself can
+add/remove transient host NAT/forwarding rules as part of normal network
+creation. The test does **not** edit any permanent host firewall policy,
+existing Nginx routing, Core DEV runtime, Supabase role or PROD service.
+The QA namespace's nftables table is destroyed on cleanup.
+
+**This remains a mock bridge, not the operational broker.** Successful
+combined QA does not establish the true Supabase tenant identity,
+DNS/IP-rotation handling, independent host-level ACL attestation,
+a production-safe no-traffic-before-ACL deployment controller, a real
+short-lived CST-DEV-only RLS role, database credentials, or delivered
+subscriber/QA receipts. The broker's operational starter continues to
+throw, the live one-job preflight's independent release flags remain
+false, and no job can be run based on this result.
+
+A dedicated CI regression now checks that the script remains
+syntax-valid, contains only mock endpoints, enforces ACL installation
+and readback before startup, uses distinct non-root broker/client
+identities, and cleans all local resources. The **privileged**
+namespace integration itself is run only in controlled VPS QA, never as
+an unreviewed deployment or GitHub runner background service.
