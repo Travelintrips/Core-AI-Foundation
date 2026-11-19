@@ -50,6 +50,12 @@ def render(path, expiry, overrides=None):
         "JOB_ID":JOB,"WORKER_ID":WORKER,
         "EXPECTED_PUBLIC_KEY_SHA256":PIN,"EXPIRES":expiry,
     }
+    # Second-job rehearsal must render the independently selected subscriber
+    # identity rather than accidentally reusing the first role/job placeholders.
+    if overrides:
+        unknown=set(overrides)-set(values)
+        if unknown: raise RuntimeError("UNKNOWN_SUBSCRIBER_TEMPLATE_OVERRIDE")
+        values.update(overrides)
     s=path.read_text()
     for key,value in values.items():
         s=s.replace("{{"+key+"}}",value)
