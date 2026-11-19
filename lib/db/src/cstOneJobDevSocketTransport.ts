@@ -23,12 +23,13 @@ export function makeOneJobUnixSocketStream(
 ): () => Socket {
   return () => {
     const socket = new Socket();
-    // node-postgres calls connect(port, host) on a custom stream. Rebind only
-    // the underlying raw TCP transport; keep its original host for TLS SNI.
-    socket.connect = ((_port: number, _host: string) => {
-      Socket.prototype.connect.call(socket, { path });
-      return socket;
-    }) as typeof socket.connect;
+    // Capture the real overloaded connect() before replacing the method that
+    // node-postgres calls with (port, host). The physical stream is always UDS;
+    // the original approved pooler host remains in the PG config for TLS SNI.
+    const connectUnix = socket.connect.bind(socket) as
+      (options: { path: string }) => Socket;
+    socket.connect = ((_port: number, _host: string) =>
+      connectUnix({ path })) as typeof socket.connect;
     return socket;
   };
 }
