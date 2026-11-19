@@ -110,6 +110,14 @@ export function projectOneJobGate(data) {
       "CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
  deny(data.candidateDedicatedDevDbTransportVerified===true,
       "DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
+ // Socket mode 0600 (as in the test-only mock) does not establish
+ // a dedicated non-root worker identity. Require observed DAC isolation
+ // AND kernel-authenticated per-connection peer identity, independently
+ // from network and database authorization checks.
+ deny(data.candidateBrokerUnixFilesystemVerified===true,
+      "BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
+ deny(data.candidateBrokerKernelPeerCredentialsVerified===true,
+      "BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
  deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
  deny(data.retiredHostQuarantined===true,"RETIRED_DEV_HOST_NOT_QUARANTINED");
  deny(data.candidateDirectHealthy===true,"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -278,6 +286,10 @@ fetch("http://127.0.0.1:3000/api/healthz",{signal:AbortSignal.timeout(2500)})
    // a successful SQL SELECT. Do not accept env flags as authorization.
    candidateIndependentNetworkAclVerified:false,
    candidateDedicatedDevDbTransportVerified:false,
+   // No approved operational broker or SO_PEERCRED verifier exists.
+   // Pure QA filesystem tests cannot promote live pilot authority.
+   candidateBrokerUnixFilesystemVerified:false,
+   candidateBrokerKernelPeerCredentialsVerified:false,
    devHostResolved:hostResolved,retiredHostQuarantined,candidateDirectHealthy,
    nginxApiRetainsExistingCore,
    dbStatus:db.status,database:db.database,dbRole:db.role,
