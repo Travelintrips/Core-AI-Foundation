@@ -7,7 +7,8 @@ const sha="a".repeat(40), imageId="sha256:"+"f".repeat(64);
 const ready={
   sourceSha:sha,imageSourceSha:sha,imageBuildMarkerSha:sha,imageId,
   candidateRunning:true,candidateHealthy:true,candidateImageId:imageId,
-  candidateNetworkIsolated:true,devHostResolved:true,retiredHostQuarantined:true,
+  candidateNetworkIsolated:true,candidateHostGatewayBlocked:true,
+  devHostResolved:true,retiredHostQuarantined:true,
   candidateDirectHealthy:true,nginxApiRetainsExistingCore:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
   dbRole:"cst_team_model_pilot_20261119_abcdef12",
@@ -42,6 +43,8 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({imageBuildMarkerSha:"b".repeat(40)},"IMAGE_BUILD_SHA_MARKER_MISMATCH");
   check({imageBuildMarkerSha:null},"IMAGE_BUILD_SHA_MARKER_MISMATCH");
   check({candidateNetworkIsolated:false},"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
+  check({candidateHostGatewayBlocked:false},"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
+  check({candidateHostGatewayBlocked:null},"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
   check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
   check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
   check({candidateDirectHealthy:false},"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
@@ -93,6 +96,8 @@ test("diagnostic implementation cannot start jobs, manage services or change dat
   assert.match(file,/IMAGE_BUILD_SHA_MARKER_MISMATCH/);
   assert.match(file,/\.cst-build-sha/);
   assert.match(file,/cst-core-onejob-dev-net/);
+  assert.match(file,/probeCstDevHostGateway/);
+  assert.match(file,/HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED/);
   assert.match(file,/members\.length===1/);
   assert.match(file,/isInternal==="true"/);
   assert.match(file,/matchingRequestCount===1/);
