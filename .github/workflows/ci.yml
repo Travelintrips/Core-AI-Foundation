@@ -50,6 +50,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-pg-socket.test.mjs
       - name: Verify inert fixed-destination broker rejects unsafe sockets and concurrency
         run: node --test scripts/dev/cst-team-onejob-fixed-db-broker.test.mjs
+      - name: Verify offline PostgreSQL TLS passes through fixed broker
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-broker-pg-integration.test.mjs
       - name: Verify QA image marker readback rejects stale or privileged image
         run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
       - name: Verify DEV QA image source marker is never stale
