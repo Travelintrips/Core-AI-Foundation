@@ -585,3 +585,63 @@ identity, and there is no independently enforced fixed-pooler egress ACL
 or real role-scoped CST-DEV database transport. The live preflight's
 separate Unix filesystem/kernel peer flags and ACL/DB transport flags
 remain false, as do subscriber receipt and independent Final ACK.
+
+## Kernel nftables destination ACL: real TLS-only proof and reproducible QA auditor
+
+A new read-only, **QA-only** source module
+`scripts/dev/cst-team-onejob-nft-egress-qa.mjs` describes the minimum
+destination-scoped outbound policy. It **never runs nftables, modifies a
+firewall, launches a broker, or authorizes a pilot**. An explicit
+`--audit-kernel-qa <trusted-test-IPv4>` command accepts JSON read back from
+Linux `nft -j list table inet cst_onejob_egress_qa` and verifies the
+actual kernel rule shape:
+
+- `inet`/`output` chain, filter priority `-100`, **policy drop**;
+- exactly **one** IPv4 destination + TCP destination port `6543` accept;
+- exactly one unconditional terminal **drop** rule;
+- no additional chain, IPv6 exception, host-address exception, alternative
+  destination, broader port or `ct established` bypass;
+- packet counters must show both permitted and denied traffic.
+
+The CLI requires `--audit-kernel-qa` to avoid a dynamic-import edge case
+that would otherwise wait for stdin. Its output explicitly records
+`qaNamespacePolicyVerified`, while permanently leaving
+`operationalAuthority`, `realDevDatabaseTransportVerified`,
+`independentOperationalEgressAclVerified` and tenant attestation **false**.
+A user-selected expected IP is not an authenticated DNS proof.
+
+On the authorized VPS a disposable non-root, cap-drop-all QA namespace
+received `nft` rules from outside its namespace, without host firewall
+changes. A test with two separate local mock servers on TCP 6543 showed
+an allowed ACK from the permitted IP, denial of the other IP, and an
+exact-source kernel JSON readback:
+`qaNamespacePolicyVerified=true`, `allowPackets=4`,
+`denyPackets=2`, `operationalAuthority=false`.
+The test source was pinned to Core PR #1765, all 8 QA policy/unit tests
+PASS, and all temporary networks/containers/worktrees were deleted.
+
+A **separate** disposable namespace tested a real **TLS-only**
+connection to the active
+`aws-1-ap-southeast-2.pooler.supabase.com:6543` endpoint.
+The outbound nftables policy was installed from the VPS host into the
+non-root QA namespace **before any network probe**. It allowed only
+one externally resolved pooler IPv4 and TCP port 6543. TLS 1.3
+completed with the fingerprint-verified public Supabase CA:
+`authorized=true`, `hostnameVerified=true`.
+Attempts to reach the other pooler IPv4 at the same port and the
+Docker host gateway were blocked by kernel default drop.
+The kernel counters were `10` accepted, `4` denied. No PostgreSQL
+StartupMessage, username, password, SQL, job or RLS mutation was sent.
+
+**Important limits:** the real TLS probe did not originate from the
+operational broker, and the test namespace was idle before ACL
+installation. This does NOT establish a race-free production broker
+lifecycle, an independently attested DNS resolution or fixed
+destination set through IP rotation, nor project identity in
+Supavisor's shared infrastructure. No real broker or pilot candidate
+is approved. Future operation must prove an independent namespace,
+ACL installed and validated **before broker traffic starts**, pinned
+pooler identity/CA, non-root accepted-peer `SO_PEERCRED`, and an actual
+dedicated short-lived RLS login to **only CST-DEV**. Job receipt and
+independent Final ACK remain separate release gates. PROD remains
+untouched and job #482 is never replayed.
