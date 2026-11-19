@@ -162,10 +162,44 @@ def main():
         denied("""DELETE FROM ai_platform.ai_jobs WHERE id=1;""",
           "PILOT_DELETE")
 
+        # Exercise the *real* separated login using PostgreSQL 16 role
+        # membership SET TRUE, INHERIT FALSE. This credentialless fixture
+        # uses --network none and trust auth; no live password is created.
+        psql("""CREATE ROLE cst_team_model_pilot_stage_login LOGIN NOINHERIT
+          NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+          CONNECTION LIMIT 1;
+          GRANT cst_team_model_pilot_writer
+            TO cst_team_model_pilot_stage_login
+            WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;""")
+        before=psql("SELECT id FROM ai_platform.internal_users;",
+          True,"cst_team_model_pilot_stage_login")
+        if before.returncode==0:
+            raise RuntimeError("STAGE_LOGIN_INHERITED_TABLE_PRIVILEGES")
+        local=psql("""BEGIN;
+          SET LOCAL ROLE cst_team_model_pilot_writer;
+          SELECT current_user||'|'||session_user;
+          COMMIT;
+          SELECT current_user;""",False,"cst_team_model_pilot_stage_login")
+        lines=local.stdout.strip().splitlines()
+        if lines != [
+            "cst_team_model_pilot_writer|cst_team_model_pilot_stage_login",
+            "cst_team_model_pilot_stage_login"
+        ]:
+            raise RuntimeError("TRANSACTION_LOCAL_WRITER_ROLE_NOT_RESET:"+str(lines))
+        for actor,target in [
+          ("aicore_dev_runtime","cst_team_model_pilot_writer"),
+          ("aicore_dev_runtime","cst_team_model_pilot_stage_login"),
+          ("cst_team_model_pilot_stage_login","aicore_dev_runtime"),
+        ]:
+            attempt=psql("SET ROLE "+target+";",True,actor)
+            if attempt.returncode==0 or "permission denied" not in attempt.stderr.lower():
+                raise RuntimeError("FORBIDDEN_ROLE_SWITCH_ALLOWED_"+actor+"_"+target)
+
         # This is the same INSERT -> approval -> audit order as the stage
-        # service. Any failure means PostgreSQL rolls back the whole txn.
+        # service, now issued by a real unprivileged LOGIN inside SET LOCAL.
+        # Any failure means PostgreSQL rolls back the whole txn.
         positive=f"""BEGIN;
-          SET ROLE cst_team_model_pilot_writer;
+          SET LOCAL ROLE cst_team_model_pilot_writer;
           DO $stage$
           DECLARE j_id integer; a_id uuid;
           BEGIN
@@ -184,9 +218,11 @@ def main():
                   'requestId','{REQ1}','workerName','{WORKER}',
                   'sourceSha','{SHA}','dispatchPermitted',false));
           END $stage$;
-          RESET ROLE;
-          COMMIT;"""
-        psql(positive)
+          COMMIT;
+          SELECT current_user;"""
+        staged=psql(positive,False,"cst_team_model_pilot_stage_login")
+        if staged.stdout.strip()!="cst_team_model_pilot_stage_login":
+            raise RuntimeError("STAGE_ROLE_NOT_RESET_AFTER_COMMIT")
 
         state=psql("""SELECT
           (SELECT count(*) FROM ai_platform.ai_jobs
@@ -200,7 +236,7 @@ def main():
         # A separate active request with a unique ID must roll back the new
         # WAITING job after the second approval fails the single-active index.
         duplicate=f"""BEGIN;
-          SET ROLE cst_team_model_pilot_writer;
+          SET LOCAL ROLE cst_team_model_pilot_writer;
           {insert_job(REQ2,"OLLAMA-B1B2C3D4")}
           INSERT INTO ai_platform.cst_onejob_owner_approvals
               (purpose,status,company_id,model_id,approved_by_user_id,
@@ -209,7 +245,7 @@ def main():
              1,'{REQ2}','{WORKER}','{SHA}',currval('ai_platform.ai_jobs_id_seq'),
              now()+interval '20 minutes');
           COMMIT;"""
-        failed=psql(duplicate,True)
+        failed=psql(duplicate,True,"cst_team_model_pilot_stage_login")
         if failed.returncode==0 or "cst_onejob_one_active_approval" not in failed.stderr:
             raise RuntimeError("SECOND_ACTIVE_APPROVAL_NOT_DENIED")
         rolled=psql("""SELECT
@@ -222,7 +258,7 @@ def main():
             scopeNoTableUpdates=True,ownerReadOnlyActive=True,
             sharedRuntimePilotRlsDenied=True,sharedRoleEscalationDenied=True,badCapabilityDenied=True,
             prematureQueuedDenied=True,wrongModelDenied=True,
-            ownerPromotionDenied=True,atomicWaitingStage=True,
+            ownerPromotionDenied=True,atomicWaitingStage=True,isolatedLoginSetLocalRole=True,autoResetAfterCommit=True,
             distinctSecondStageRollback=True,auditBoundToApproval=True)
         print("ONEJOB_WRITER_RLS_DISPOSABLE_PASS",json.dumps(report))
         return 0
