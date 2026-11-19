@@ -116,11 +116,14 @@ export function auditOneJobQaKernelEgress(nftJson, expectedIPv4) {
   };
 }
 
-if(process.argv[1] && fileURLToPath(import.meta.url)===process.argv[1]){
+// Explicit opt-in prevents a dynamic import from unexpectedly waiting for
+// standard input when a node -e test passes this file as process.argv[1].
+if(process.argv[1] && fileURLToPath(import.meta.url)===process.argv[1] &&
+   process.argv[2]==="--audit-kernel-qa"){
   let source;
   try { source=JSON.parse(readFileSync(0,"utf8")); }
   catch { source=null; }
-  const verdict=auditOneJobQaKernelEgress(source,process.argv[2]);
+  const verdict=auditOneJobQaKernelEgress(source,process.argv[3]);
   console.log(JSON.stringify(verdict,null,2));
   if(!verdict.qaNamespacePolicyVerified)process.exitCode=2;
 }
