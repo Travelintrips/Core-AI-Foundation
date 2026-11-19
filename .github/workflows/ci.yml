@@ -48,6 +48,8 @@ jobs:
         run: node --test scripts/dev/cst-team-host-gateway-probe.test.mjs
       - name: Verify default-off CST-DEV Unix socket PG TLS/SNI contract
         run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-pg-socket.test.mjs
+      - name: Verify inert fixed-destination broker rejects unsafe sockets and concurrency
+        run: node --test scripts/dev/cst-team-onejob-fixed-db-broker.test.mjs
       - name: Verify QA image marker readback rejects stale or privileged image
         run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
       - name: Verify DEV QA image source marker is never stale
