@@ -11,7 +11,7 @@
  * reads credentials, chooses an endpoint from client data or stores packets.
  */
 import { createServer } from "node:net";
-import { lstatSync, chmodSync, existsSync, unlinkSync } from "node:fs";
+import { lstatSync, chmodSync } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
 
 export const CST_DEV_FIXED_POOLER = Object.freeze({
@@ -36,9 +36,11 @@ export function assertSafeSocketLocation(path) {
       (parent.mode & 0o022) !== 0) {
     throw denied("INSECURE_SOCKET_PARENT");
   }
-  if (existsSync(path)) {
-    // Never unlink another process's socket or a preexisting file.
+  try {
+    lstatSync(path); // Also detects dangling symlinks (existsSync would miss).
     throw denied("SOCKET_ALREADY_OCCUPIED");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
   }
 }
 
@@ -117,12 +119,10 @@ export async function startOfflineMockBroker({
     });
     chmodSync(socketPath, 0o600);
   } catch {
-    try { server.close(); } catch {}
-    if (existsSync(socketPath)) {
-      // Only remove after we successfully created our own socket below;
-      // an occupied path is rejected before server.listen().
-      try { unlinkSync(socketPath); } catch {}
-    }
+    // Do not unlink anything explicitly on a failed bind: it might be an
+    // existing socket/symlink from another process. close() cleans up only
+    // a listener that this process successfully created.
+    if (server.listening) await new Promise(resolve => server.close(resolve));
     throw denied("SOCKET_BIND_FAILED");
   }
   let closed = false;
