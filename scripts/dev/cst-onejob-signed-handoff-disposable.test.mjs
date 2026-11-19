@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {readFileSync} from "node:fs";
-import {spawnSync} from "node:child_process";
+import {spawn,spawnSync} from "node:child_process";
 import {setTimeout as delay} from "node:timers/promises";
 import {
   QA_DOMAIN,qaCanonicalBytes
@@ -26,6 +26,22 @@ function exec(args,input,allowFailure=false){
 function sql(query,allowFailure=false) {
   return exec(["docker","exec","-i",name,"psql","-X","-qAt",
     "-v","ON_ERROR_STOP=1","-U","postgres","-d",fixtureDb],query,allowFailure);
+}
+function sqlAsync(query) {
+  return new Promise((resolve,reject)=>{
+    const child=spawn("docker",["exec","-i",name,"psql","-X","-qAt",
+      "-v","ON_ERROR_STOP=1","-U","postgres","-d",fixtureDb],
+      {stdio:["pipe","pipe","pipe"]});
+    let out="",err="";
+    const timer=setTimeout(()=>child.kill("SIGKILL"),25_000);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data",chunk=>{out+=chunk});
+    child.stderr.on("data",chunk=>{err+=chunk});
+    child.on("error",e=>{clearTimeout(timer);reject(e)});
+    child.on("close",code=>{clearTimeout(timer);resolve({status:code,stdout:out,stderr:err})});
+    child.stdin.end(query);
+  });
 }
 const Q=(v)=>"'"+String(v).replaceAll("'","''")+"'";
 function sha256(b){return createHash("sha256").update(b).digest("hex")}
@@ -176,8 +192,15 @@ test("synthetic signed QA evidence -> one atomic PostgreSQL admission, injection
     // The positive branch is a synthetic TESTONLY function, not the real
     // broker. Its exact nonce and proof digest came from the verified
     // signature + independently rehashed evidence bytes above.
-    sql(`SELECT cst_onejob_private.fixture_signed_handoff_admit(
-      483,${Q(claims.nonce)},${Q(receiptRow.proofDigest)});`);
+    // Two independent PostgreSQL sessions race to consume the exact same
+    // signed nonce. Row locks/one-use constraints must allow one winner only.
+    const admit=`SELECT cst_onejob_private.fixture_signed_handoff_admit(
+      483,${Q(claims.nonce)},${Q(receiptRow.proofDigest)});`;
+    const attempts=await Promise.all([sqlAsync(admit),sqlAsync(admit)]);
+    assert.deepEqual(attempts.map(x=>x.status===0).sort(),[false,true],
+      "CONCURRENT_DOUBLE_ADMISSION_OR_DOUBLE_DENIAL");
+    assert.match(attempts.find(x=>x.status!==0).stderr,
+      /FIXTURE_SIGNED_BINDING_NOT_ADMISSIBLE|FIXTURE_RECEIPT_ALREADY_CONSUMED|FIXTURE_JOB_NOT_WAITING/);
     assert.equal(state(),"queued|CONSUMED|1|1|f");
     expectSqlDenied(`SELECT cst_onejob_private.fixture_signed_handoff_admit(
       483,${Q(claims.nonce)},${Q(receiptRow.proofDigest)});`,
