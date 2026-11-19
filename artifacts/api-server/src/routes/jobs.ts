@@ -41,6 +41,8 @@ import {
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.js";
+import { requireAuth, requireInternalRole } from "../middleware/internalAuth.js";
+import { stageCstDevOneJobForVerifiedOwner } from "../services/cstOneJobOwnerApprovalStageService.js";
 
 const router = Router();
 
@@ -317,6 +319,48 @@ router.get("/ai/jobs", async (req, res): Promise<void> => {
     offset,
   });
 });
+
+// Dedicated one-use DEV Owner approval: stages a WAITING job only.
+// No generic API key, machine identity or body-provided actor can authorize it.
+// Deliberately disabled unless the exact deployment explicitly enables it.
+router.post("/ai/dev/onejob/owner-approve-and-stage",
+  requireAuth,
+  requireInternalRole("owner"),
+  async (req,res):Promise<void>=>{
+    const host=req.hostname.toLowerCase();
+    const origin=req.get("origin");
+    const site=req.get("sec-fetch-site");
+    if(host!=="dev.cstlogistic.co.id" ||
+       origin!=="https://dev.cstlogistic.co.id" ||
+       (site && site!=="same-origin") ||
+       !req.is("application/json")){
+      res.status(403).json({error:"DEV_OWNER_ORIGIN_REQUIRED"});return;
+    }
+    if(!req.body || typeof req.body!=="object" ||
+       Array.isArray(req.body) || Object.keys(req.body).length!==0){
+      res.status(400).json({error:"ONEJOB_APPROVAL_BODY_MUST_BE_EMPTY"});return;
+    }
+    const actor=req.internalUser;
+    if(!actor || actor.role!=="owner" || actor.status!=="active" ||
+       actor.accountType!=="internal"){
+      res.status(403).json({error:"VERIFIED_OWNER_SESSION_REQUIRED"});return;
+    }
+    try{
+      const staged=await stageCstDevOneJobForVerifiedOwner({
+        ownerUserId:actor.id,env:process.env,
+      });
+      res.setHeader("Cache-Control","no-store");
+      res.status(201).json(staged);
+    }catch(error){
+      const code=error instanceof Error ? error.message.split(":")[0]:"ONEJOB_STAGE_FAILED";
+      // Never include DB error messages or credentials in an HTTP response.
+      res.status(code==="ONEJOB_STAGE_NOT_READY"?403:503).json({
+        error:code==="ONEJOB_STAGE_NOT_READY"?"ONEJOB_STAGE_NOT_READY":"ONEJOB_STAGE_UNAVAILABLE",
+        dispatchPermitted:false,
+      });
+    }
+  }
+);
 
 // ── Enqueue Job ───────────────────────────────────────────────────────────────
 
