@@ -95,6 +95,9 @@ export function projectOneJobGate(data) {
       (data.imageSourceSha===data.sourceSha || data.sourceContentEquivalent===true),
       "SOURCE_IMAGE_COMMIT_MISMATCH");
  deny(/^sha256:[0-9a-f]{64}$/.test(data.imageId||""),"CANDIDATE_IMAGE_MISSING");
+ deny(/^[0-9a-f]{40}$/.test(data.imageBuildMarkerSha||"") &&
+      data.imageBuildMarkerSha===data.imageSourceSha,
+      "IMAGE_BUILD_SHA_MARKER_MISMATCH");
  deny(data.candidateRunning===true && data.candidateHealthy===true &&
       data.candidateImageId===data.imageId,"BLUE_GREEN_RUNTIME_NOT_HEALTHY_OR_DIFFERENT_IMAGE");
  deny(data.candidateNetworkIsolated===true,"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
@@ -138,6 +141,11 @@ async function main() {
  const sourceContentEquivalent=ancestor && runtimeChanges==="";
  const running=inspect("{{.State.Running}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.Image}}|{{.HostConfig.NetworkMode}}",CANDIDATE);
  const [isRunning,health,candidateImageId,networkMode]=running?.split("|")||[];
+ // Read the marker from the running, isolated QA candidate. Never execute the
+ // application entrypoint or read any environment/secret values here.
+ const imageBuildMarkerSha=isRunning==="true" ?
+   shell("docker",["exec",CANDIDATE,"node","-e",
+     "try{process.stdout.write(require('node:fs').readFileSync('/app/.cst-build-sha','utf8').trim())}catch{process.exit(2)}"]) : null;
  const portBindingsRaw=inspect('{{json .HostConfig.PortBindings}}',CANDIDATE);
  let candidateLoopbackPort=null,portBindingsSafe=false;
  try {
@@ -195,7 +203,7 @@ async function main() {
    } catch {} finally {clearTimeout(t)}
  }
  const db=readDevCatalog(isRunning==="true" ? CANDIDATE : CORE);
- const facts={sourceSha:sha,imageId,imageSourceSha,sourceContentEquivalent,
+ const facts={sourceSha:sha,imageId,imageSourceSha,imageBuildMarkerSha,sourceContentEquivalent,
    candidateRunning:isRunning==="true",candidateHealthy:health==="healthy",
    candidateImageId,candidateNetworkIsolated:networkScopeSafe && portBindingsSafe && Boolean(candidateLoopbackPort),
    devHostResolved:hostResolved,retiredHostQuarantined,candidateDirectHealthy,
@@ -213,6 +221,7 @@ async function main() {
  const verdict=projectOneJobGate(facts);
  console.log(JSON.stringify({...verdict,observedAt:new Date().toISOString(),
    project:PROJECT,devHost:HOST,sourceSha:sha,imageSourceSha:imageSourceSha||null,
+   imageBuildMarkerMatchesLabel:imageBuildMarkerSha===imageSourceSha,
    sourceContentEquivalent,imagePresent:Boolean(imageId),candidateRunning:facts.candidateRunning,
    devHostResolved:hostResolved,retiredHostQuarantined,dbReadStatus:db.status,
    roleCount:db.roleCount??null},null,2));
