@@ -3,6 +3,8 @@
 -- The grant goes only to a NOLOGIN role with no members. Authorization and
 -- runtime/evidence verification must be independently established before any
 -- separate rollout can make this role assumable.
+-- SECURITY INVOKER is mandatory: no privileged function-owner bypass of RLS.
+-- The NOLOGIN broker has no direct table grants, so this proposal stays denied.
 CREATE ROLE cst_onejob_admission_broker NOLOGIN NOINHERIT
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE SCHEMA IF NOT EXISTS cst_onejob_private;
@@ -17,7 +19,7 @@ CREATE OR REPLACE FUNCTION cst_onejob_private.admit_waiting_job(
   p_expected_source_sha text
 ) RETURNS integer
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog
 AS $$
 DECLARE
