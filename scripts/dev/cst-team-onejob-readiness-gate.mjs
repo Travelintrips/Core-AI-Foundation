@@ -194,8 +194,18 @@ const fs=require("node:fs");
 const v4=fs.readFileSync("/proc/net/route","utf8").split("\n").slice(1);
 const has4=v4.some(x=>x.trim().split(/\s+/)[1]==="00000000");
 let has6=true;
-try { const v6=fs.readFileSync("/proc/net/ipv6_route","utf8");
-  has6=v6.split("\n").some(x=>/^0{32}\s+00\s+/.test(x)); } catch {}
+try {
+  const v6=fs.readFileSync("/proc/net/ipv6_route","utf8");
+  const routes=v6.split("\n").map(x=>x.trim().split(/\s+/));
+  // The kernel may expose ::/0 reject entries on lo with flags 00200200.
+  // Loopback reject routes cannot provide a path out of the namespace.
+  const nonLoopbackDefault=routes.some(p=>p[0]==="0".repeat(32) &&
+    p[1]==="00" && p.at(-1)!=="lo");
+  const interfaces=require("node:os").networkInterfaces();
+  const externalIpv6=Object.values(interfaces).flat().some(a=>
+    a.family==="IPv6" && a.internal!==true);
+  has6=nonLoopbackDefault || externalIpv6;
+} catch {}
 console.log(!has4&&!has6?"NO_DEFAULT_ROUTE":"ROUTE_PRESENT");`;
    candidateRoutesAbsent=shell("docker",["exec",CANDIDATE,"node","-e",routeJs],4500)==="NO_DEFAULT_ROUTE";
    const coreIp=inspect('{{(index .NetworkSettings.Networks "ai-core-workers_control").IPAddress}}',CORE);
