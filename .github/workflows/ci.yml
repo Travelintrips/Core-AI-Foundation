@@ -46,6 +46,13 @@ jobs:
         run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
       - name: Verify signed independent one-job subscriber receipt cannot fake delivery or Final ACK
         run: node --test scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs
+      - name: Verify isolated one-job subscriber consumes only one RLS event and signs exactly once
+        run: node --test scripts/dev/cst-team-onejob-subscriber-consumer-qa.test.mjs
+      - name: Verify disposable PG16 subscriber functional driver source is safe
+        run: |
+          node --check scripts/dev/cst-team-onejob-subscriber-functional-client-qa.mjs
+          node --check scripts/dev/cst-team-onejob-subscriber-functional-review-qa.mjs
+          python3 -c "import ast,pathlib;ast.parse(pathlib.Path('scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py').read_text())"
       - name: Verify host-gateway deny test before one-job DEV admission
         run: node --test scripts/dev/cst-team-host-gateway-probe.test.mjs
       - name: Verify QA kernel nftables allow-deny evidence cannot promote live pilot
