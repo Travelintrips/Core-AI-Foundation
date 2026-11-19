@@ -10,7 +10,7 @@
 import { Socket } from "node:net";
 
 const PROJECT = "xssrfshdrtdfupgqwfdw";
-const POOLER = "aws-0-ap-southeast-2.pooler.supabase.com";
+const POOLER = "aws-1-ap-southeast-2.pooler.supabase.com";
 export const CST_ONEJOB_DEV_SOCKET_PATH = "/run/cst-onejob-dev-db/pg-pooler.sock";
 
 function deny(code: string): never {
