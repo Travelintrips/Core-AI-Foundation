@@ -32,7 +32,7 @@ class NativeConnection:
             "port": 5432,
             "get_parameters": lambda _self: {
                 "sslmode": "verify-full",
-                "sslrootcert": "/synthetic/ca.pem",
+                "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt",
             },
         })()
         self.autocommit = False
@@ -95,7 +95,7 @@ class FakeMinimalAuditConnection:
             "port": 5432,
             "get_parameters": lambda _self: {
                 "sslmode": "verify-full",
-                "sslrootcert": "/synthetic/root.pem",
+                "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt",
             },
         })()
         self.autocommit = False
@@ -175,7 +175,7 @@ class FakeCanonicalGuardConnection:
             "port": 5432,
             "get_parameters": lambda _self: {
                 "sslmode": "verify-full",
-                "sslrootcert": "/synthetic/ca.pem",
+                "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt",
             },
         })()
         self.autocommit = False
@@ -298,6 +298,14 @@ class FakeSupervisor:
 
 class ScopedReaderBrokerTest(unittest.TestCase):
     def setUp(self):
+        # Public CA bytes are tested independently in the pinned-CA suite.
+        # Here retain native verify-full/path checks with fixture metadata.
+        ca_check = patch(
+            'gpt02_issue159_pinned_tls_ca._public_ca_fingerprint_matches',
+            return_value=True,
+        )
+        ca_check.start()
+        self.addCleanup(ca_check.stop)
         fixture = PostlineageReaderScopeOfflineTest()
         fixture.setUp()
         self.packet = fixture.fixture.packet
@@ -483,7 +491,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                 self.assertEqual(len(self.supervisor.relock_calls), 1)
         self.setUp()
         self.supervisor.guard_connection.info.get_parameters = lambda: {
-            "sslmode": "require", "sslrootcert": "/synthetic/ca.pem",
+            "sslmode": "require", "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt",
         }
         with self.assertRaisesRegex(
             BrokerAdmissionError,
@@ -640,9 +648,10 @@ class ScopedReaderBrokerTest(unittest.TestCase):
 
     def test_weak_or_unverified_tls_denied_before_query_and_relocked(self):
         for params in (
-            {"sslmode": "require", "sslrootcert": "/synthetic/ca.pem"},
+            {"sslmode": "require", "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt"},
             {"sslmode": "verify-full", "sslrootcert": ""},
             {"sslmode": "verify-full"},
+            {"sslmode": "verify-full", "sslrootcert": "/tmp/untrusted-ca.pem"},
         ):
             with self.subTest(params=params):
                 self.setUp()
@@ -717,7 +726,7 @@ class ScopedReaderBrokerTest(unittest.TestCase):
                     conn.info.port = 5433
                 else:
                     conn.info.get_parameters = lambda: {
-                        "sslmode": "require", "sslrootcert": "/synthetic/root.pem"
+                        "sslmode": "require", "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt"
                     }
                 with self.assertRaises(BrokerAdmissionError):
                     self.call()
@@ -880,7 +889,7 @@ class _ClaimConnection:
             user=broker.READER_CONSUMER_USER,
             dbname="postgres", host=broker.POOLER_HOST, port=5432,
             get_parameters=lambda: {
-                "sslmode": "verify-full", "sslrootcert": "/synthetic/ca.pem",
+                "sslmode": "verify-full", "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt",
             },
         )
         self.autocommit = False
@@ -907,6 +916,14 @@ class NativeClaimConsumerAdapterTest(unittest.TestCase):
     """No real DB or credentials: native writer adapter source contract."""
 
     def setUp(self):
+        # Public CA bytes are tested independently in the pinned-CA suite.
+        # Here retain native verify-full/path checks with fixture metadata.
+        ca_check = patch(
+            'gpt02_issue159_pinned_tls_ca._public_ca_fingerprint_matches',
+            return_value=True,
+        )
+        ca_check.start()
+        self.addCleanup(ca_check.stop)
         fixture = PostlineageReaderScopeOfflineTest()
         fixture.setUp()
         self.candidate = fixture.check()
@@ -995,9 +1012,10 @@ class NativeClaimConsumerAdapterTest(unittest.TestCase):
 
     def test_tls_downgrade_and_missing_ca_denied(self):
         for parameters in (
-            {"sslmode": "require", "sslrootcert": "/synthetic/ca.pem"},
+            {"sslmode": "require", "sslrootcert": "/etc/gpt02-dev/supabase-root-ca-2021.crt"},
             {"sslmode": "verify-full", "sslrootcert": ""},
             {"sslmode": "verify-full"},
+            {"sslmode": "verify-full", "sslrootcert": "/tmp/untrusted-ca.pem"},
         ):
             with self.subTest(parameters=parameters):
                 self.setUp()
