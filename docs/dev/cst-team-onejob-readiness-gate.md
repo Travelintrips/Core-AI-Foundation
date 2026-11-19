@@ -714,3 +714,49 @@ and readback before startup, uses distinct non-root broker/client
 identities, and cleans all local resources. The **privileged**
 namespace integration itself is run only in controlled VPS QA, never as
 an unreviewed deployment or GitHub runner background service.
+
+## Inert staging roles and strict TLS in the preflight catalog
+
+**20 Nov 2026, read-only CST-DEV catalog:** existing role names
+`cst_team_model_pilot_stage_login` and `cst_team_model_pilot_writer`
+are both `NOLOGIN`, `NOSUPERUSER`, `NOBYPASSRLS`, `NOINHERIT`,
+without direct `ai_platform` table privileges or active sessions.
+The staged role has a restricted membership in the inert writer role.
+These were created outside this PR workflow; **do not delete or duplicate
+them** merely to make a count equal to one.
+
+The former preflight gate counted every name beginning
+`cst_team_model_pilot_` and required exactly one role total.
+That would have failed permanently once a new one-job login was
+approved while the two safe NOLOGIN scaffolds remained. The read-only
+catalog query now distinguishes the only login allowed for this job
+from **0–2 known safe scaffolds**, requiring:
+
+- An authenticated short-lived login whose name and lifetime match
+  exactly the intended bounded pilot pattern, without privilege
+  escalation or RLS bypass;
+- Zero unexpected additional prefixed roles, unsafe scaffolds or
+  extra active logins. A count of `1 login + 2 verified scaffolds`
+  is admissible **only after all other release gates are satisfied**;
+- `0 login + 2 NOLOGIN scaffolds` remains **NO-GO**, never an
+  implicit permission to submit or execute a job.
+
+The read-only gate also no longer connects to PostgreSQL with
+`ssl.rejectUnauthorized=false`. Any SQL diagnostic it initiates
+requires the exact fingerprint-pinned Supabase Root 2021 CA at
+`/run/cst-onejob-dev-db/ca/prod-ca-2021.crt`,
+a regular non-symlink, non-writable file, and an authenticated
+strict TLS context with `rejectUnauthorized=true`.
+
+Without a properly provisioned candidate/CA, the current shared Core
+DEV container reports `DEV_TRUSTED_CA_NOT_VERIFIED` instead of
+falling back to insecure database access. This makes the report
+**NO-GO**, while catalog facts can still be independently verified by
+the connected Supabase DEV read-only tool. No new role, subscriber,
+job or credential was provisioned in these checks.
+
+**Exact-head tests:** 23 focused Node tests PASS including safe
+scaffold coexistence, extra/unsafe role rejection and strict TLS
+source guards. A real VPS read-only preflight exited 2 with
+`pilotAdmissionReady=false`, `sideEffects=NONE`.
+The test checkout and temporary report were cleaned afterward.
