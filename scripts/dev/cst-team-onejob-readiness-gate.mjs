@@ -43,6 +43,13 @@ if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
    " and rolvaliduntil > now() + interval '2 minutes'"+
    " and rolvaliduntil < now() + interval '45 minutes') as safe_role_count");
   const v=r.rows[0];
+  const uniqueIndex=await c.query("select count(*)::int as n from pg_indexes "+
+    "where schemaname='ai_platform' and tablename='ai_jobs' "+
+    "and indexname='ai_jobs_company1_pilot_request_unique' "+
+    "and indexdef ilike 'CREATE UNIQUE INDEX%' "+
+    "and indexdef like '%payload_json%requestId%' "+
+    "and indexdef like '%cst-ai-team-company1-dev:pilot-%'");
+  const uniqueIndexPresent=uniqueIndex.rows[0]?.n===1;
   const jobId=Number(process.env.CST_TEAM_DEV_APPROVED_JOB_ID);
   const workerName=process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME||"";
   let job=null,matchingRequestCount=null,existingWorker=null;
@@ -63,7 +70,7 @@ if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
     database:v.db,role:v.role,roleCount:v.role_count,safeRoleCount:v.safe_role_count,
     jobId:job?.id??null,jobStatus:job?.status??null,jobType:job?.job_type??null,
     jobRequestId:job?.request_id??null,jobModel:job?.model_id??null,
-    matchingRequestCount,
+    matchingRequestCount,uniqueIndexPresent,
     workerName:workerName||null,workerExistingCount:existingWorker,
     enrollmentConfigured:Boolean(process.env.OLLAMA_REMOTE_ENROLLMENT_SECRET),
     oneJobGuardConfigured:process.env.NODE_ENV==="development" &&
@@ -97,6 +104,7 @@ export function projectOneJobGate(data) {
       "CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
  deny(data.roleCount===1 && data.safeRoleCount===1,"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
  deny(data.matchingRequestCount===1,"PILOT_REQUEST_ID_NOT_UNIQUE");
+ deny(data.uniqueIndexPresent===true,"PILOT_DB_UNIQUE_REQUEST_CONSTRAINT_MISSING");
  deny(Number.isSafeInteger(data.jobId) && data.jobId>0 && data.jobId!==482 &&
       data.jobQueued===true && data.jobCompany==="1" &&
       data.jobModel==="qwen2.5:3b","FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
@@ -192,6 +200,7 @@ async function main() {
    dbStatus:db.status,database:db.database,dbRole:db.role,
    roleCount:db.roleCount,safeRoleCount:db.safeRoleCount,
    jobId:db.jobId,matchingRequestCount:db.matchingRequestCount,
+   uniqueIndexPresent:db.uniqueIndexPresent,
    jobQueued:db.jobStatus==="queued" && db.jobType==="ollama_model_invocation",
    jobCompany:typeof db.jobRequestId==="string" &&
      /^cst-ai-team-company1-dev:pilot-[a-f0-9]{20}$/.test(db.jobRequestId) ? "1" : null,
