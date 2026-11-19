@@ -308,3 +308,55 @@ restrict filesystem socket access, and prove unauthorized company/project,
 IPv4/IPv6, and host-service traffic is denied. It must have a safe,
 auditable rollback and must not inherit the shared application DB credentials.
 The two independent ACL/transport admission fields remain `false` in code.
+
+## Default-OFF CST-DEV model pilot Unix socket PostgreSQL transport
+
+The production/ordinary-DEV `@workspace/db` connection logic is preserved.
+The new small adapter in `lib/db/src/cstOneJobDevSocketTransport.ts` activates
+**only** when `CST_TEAM_DEV_DB_SOCKET_TRANSPORT_ENABLED=true`, both
+`APP_ENV` and `NODE_ENV` are `development`, the existing bounded model
+claim gate is explicitly enabled, and the approved job and new bounded
+worker identities are supplied. Otherwise the existing direct pool
+configuration is unchanged.
+
+Before creating a PostgreSQL socket, the adapter checks the **original**
+connection string against:
+
+- Exact project `xssrfshdrtdfupgqwfdw`, via canonical
+  `SUPABASE_URL_DEV` and the username suffix.
+- Exact pooler host `aws-0-ap-southeast-2.pooler.supabase.com`, port
+  `6543`, database `postgres`, and a dedicated short-lived
+  `cst_team_model_pilot_YYYYMMDD_8hex` role. Any other host, port, role,
+  username, or connection-string query parameter is rejected.
+- `ssl.rejectUnauthorized=true`; `PGSSLMODE`, `PGSSLKEY`, and
+  `PGSSLCERT` overrides are rejected. Passwords never appear in output.
+- A **fixed** local Unix socket destination
+  `/run/cst-onejob-dev-db/pg-pooler.sock`. The application does not
+  accept a caller-supplied host/socket path, and does not fall back to
+  general TCP egress if the socket is unavailable.
+
+The `pg` 8.22.0 driver derives TLS SNI from its configured PostgreSQL
+hostname. A normal `host=/path/to/socket` connection would lose that
+hostname. The transport instead keeps the original host for TLS
+certificate validation and redirects only the low-level `Socket.connect`
+call to the fixed Unix-domain socket via `stream()`.
+
+**Offline verification:** `scripts/dev/cst-team-onejob-pg-socket.test.mjs`
+exercises the exact adapter and the installed PostgreSQL driver with an
+ephemeral local Unix socket and a server that accepts the PostgreSQL
+`SSLRequest`, then inspects TLS `ClientHello` before closing. It verifies
+the expected pooler hostname in SNI and refuses wrong projects, roles,
+pooler ports, modes, unauthorized job/worker identities, and insecure TLS
+options. No real database password, handshake completion, subscriber,
+event or signer is involved. The existing PostgreSQL pool-size regression
+must also remain PASS.
+
+**Operational NO-GO:** this is an opt-in *client transport*, not a broker,
+network ACL, trusted certificate validation against Supabase, real role
+provisioning, or E2E execution. An independently secured fixed-destination
+broker and its external firewall/ACL and credential isolation remain
+unproven. `candidateIndependentNetworkAclVerified` and
+`candidateDedicatedDevDbTransportVerified` remain forced to false in
+the live one-job preflight. Do not launch the client using shared
+`aicore_dev_runtime` credentials. Do not promote the PR, dispatch,
+write CST-DEV jobs or touch PROD based on this offline proof.
