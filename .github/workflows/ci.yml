@@ -50,6 +50,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-owner-approval-review.test.mjs
       - name: Verify one-use Owner approval staging remains waiting and fail closed
         run: node --test scripts/dev/cst-onejob-owner-stage-contract.test.mjs
+      - name: Verify waiting-to-queued admission evidence cannot authorize dispatch
+        run: node --experimental-strip-types --test scripts/dev/cst-onejob-waiting-admission-review.test.mjs
       - name: Verify QA image marker readback rejects stale or privileged image
         run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
       - name: Verify DEV QA image source marker is never stale
