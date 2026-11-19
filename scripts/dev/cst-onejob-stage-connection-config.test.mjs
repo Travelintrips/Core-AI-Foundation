@@ -75,12 +75,17 @@ test("stage only uses dedicated lazy connection and SET LOCAL inside transaction
  assert.match(source,/getCstOneJobStagingDatabase\(input.env\)/);
  assert.match(source,/stageDb.transaction\(async tx=>/);
  assert.match(source,/SET LOCAL ROLE cst_team_model_pilot_writer/);
+ const readWrite=source.indexOf("SET TRANSACTION READ WRITE");
+ const writerRole=source.indexOf("SET LOCAL ROLE cst_team_model_pilot_writer");
+ assert.ok(readWrite>0&&writerRole>readWrite,
+   "read-write transaction must be declared before writer role/queries");
  assert.match(source,/session_user AS login_role_name/);
  assert.match(source,/scope\?\.login_role_name!==CST_ONEJOB_STAGE_LOGIN/);
  assert.doesNotMatch(source,/return db.transaction\(/);
  assert.doesNotMatch(source,/SET SESSION ROLE/);
  assert.match(pool,/max:1/);
  assert.match(pool,/connectionTimeoutMillis:3_500/);
+ assert.doesNotMatch(pool,/verify:\s*\(/);
  assert.match(pool,/reviewCstOneJobStageDatabaseConfig\(env\)/);
  assert.match(pool,/ONEJOB_STAGING_DATABASE_CREDENTIAL_CHANGED_RESTART_REQUIRED/);
  assert.doesNotMatch(pool,/resolveDatabaseUrl\(|SUPABASE_DEV_DATABASE_URL|SUPABASE_PROD_DATABASE_URL|from "@workspace\/db";\s*const \{\s*db\s*\}/);
