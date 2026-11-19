@@ -58,6 +58,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-independent-qa-offline.test.mjs
       - name: Verify root-owned pinned public QA trust custody policy
         run: node --test scripts/dev/cst-onejob-qa-trust-custody.test.mjs
+      - name: Verify QA host preflight cannot accept caller trust root
+        run: node --test scripts/dev/cst-onejob-independent-qa-host-preflight.test.mjs
       - name: Verify QA image marker readback rejects stale or privileged image
         run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
       - name: Verify DEV QA image source marker is never stale
