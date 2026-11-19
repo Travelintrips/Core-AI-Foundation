@@ -101,3 +101,23 @@ Preflight must report `PILOT_DB_UNIQUE_REQUEST_CONSTRAINT_MISSING` until a
 separately reviewed, authorized DEV-only migration exists and PostgreSQL
 catalog readback shows the index is `indisunique`, `indisvalid`, and
 `indisready`. No PROD index is required or authorized by this work.
+
+## Image provenance mismatch discovered in VPS QA image (19 November 2026)
+
+A no-network, no-credential one-shot inspection of image
+`core-ai-dev:cst-onejob-9fabedcd-qa` found **different** provenance:
+the Docker image label `cst.qa.source_commit` was
+`9fabedcd4c10644d589e880cb62f583561c89a1c`, but its embedded
+`/app/.cst-build-sha` was the old Core DEV SHA
+`c26921475bf947614dd27f8e3e94720931942877`.
+The image must **not** be admitted for a one-job pilot. Its API health
+header can legitimately report the embedded older SHA, which is why label
+verification alone was insufficient.
+
+The read-only gate now reads `/app/.cst-build-sha` only from an already
+running isolated candidate and requires exactly the same 40-character SHA as
+the image label. Missing, malformed, or stale marker fails with
+`IMAGE_BUILD_SHA_MARKER_MISMATCH`. The new Dockerfile stamping logic must be
+used in a **fresh candidate image** and independently verified before
+introducing a short-lived CST-DEV database role. This change does not start
+workers or authorize job execution.
