@@ -44,6 +44,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
       - name: Verify read-only CST-DEV one-job pilot preflight cannot execute or sign
         run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
+      - name: Verify signed independent one-job subscriber receipt cannot fake delivery or Final ACK
+        run: node --test scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs
       - name: Verify host-gateway deny test before one-job DEV admission
         run: node --test scripts/dev/cst-team-host-gateway-probe.test.mjs
       - name: Verify QA kernel nftables allow-deny evidence cannot promote live pilot
