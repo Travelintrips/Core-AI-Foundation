@@ -39,7 +39,27 @@ if(!(u.hostname.includes(expected)||u.username.endsWith("."+expected))||
   const r=await c.query("select current_database() as db,current_user as role,"+
    " (select count(*)::int from pg_roles where rolname like 'cst_team_model_pilot_%') as role_count,"+
    " (select count(*)::int from pg_roles where rolname=current_user"+
-   " and rolname ~ '^cst_team_model_pilot_[0-9]{8}_[a-f0-9]{8}
+   " and rolname ~ '^cst_team_model_pilot_[0-9]{8}_[a-f0-9]{8}'"+
+   " and char_length(rolname)=char_length('cst_team_model_pilot_')+16"+
+   " and rolcanlogin and not rolsuper and not rolbypassrls and not rolinherit"+
+   " and not rolcreaterole and not rolcreatedb"+
+   " and rolvaliduntil > now() + interval '2 minutes'"+
+   " and rolvaliduntil < now() + interval '45 minutes') as safe_role_count,"+
+   " (select count(*)::int from pg_roles p where p.rolname in"+
+   " ('cst_team_model_pilot_stage_login','cst_team_model_pilot_writer')"+
+   " and not p.rolcanlogin and not p.rolsuper and not p.rolbypassrls"+
+   " and not p.rolinherit and not p.rolcreaterole and not p.rolcreatedb"+
+   " and not exists (select 1 from pg_auth_members m"+
+   " join pg_roles parent on parent.oid=m.roleid where m.member=p.oid"+
+   " and parent.rolname<>'cst_team_model_pilot_writer')"+
+   " and not exists (select 1 from pg_class cl"+
+   " join pg_namespace ns on ns.oid=cl.relnamespace"+
+   " where ns.nspname='ai_platform' and cl.relkind in ('r','p','v','m')"+
+   " and (has_table_privilege(p.oid,cl.oid,'SELECT')"+
+   " or has_table_privilege(p.oid,cl.oid,'INSERT')"+
+   " or has_table_privilege(p.oid,cl.oid,'UPDATE')"+
+   " or has_table_privilege(p.oid,cl.oid,'DELETE')))"+
+   " ) as safe_scaffold_count");
   const v=r.rows[0];
   const uniqueIndex=await c.query("select count(*)::int as n from pg_index i "+
     "join pg_class idx on idx.oid=i.indexrelid "+
