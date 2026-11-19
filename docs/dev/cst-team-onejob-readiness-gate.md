@@ -821,3 +821,73 @@ handler audit writes. Accordingly, event+audit atomic persistence
 must NOT be represented as subscriber delivery. A separately
 authorized, scoped **independent subscriber/receipt process** is
 needed rather than granting the pilot worker blanket event-bus rights.
+
+## Signed independent subscriber receipt gate (contract-only)
+
+The scoped Core one-job worker may atomically persist one
+`ai_platform.ai_events` `job.completed` row plus its corresponding
+`event_published` audit. This **does not** imply a subscriber received
+the event. The existing generic `aiEventBusService.dispatch()`
+queries `ai_event_subscriptions` and can UPDATE event status, audit
+generic handlers, create other jobs or call webhooks, depending on
+subscription configuration. The deliberately restricted pilot role
+has **no** corresponding broad subscription SELECT, event UPDATE or
+handler-dispatch privileges and must not be granted these merely to
+make a post-commit callback pass.
+
+The separate `scripts/dev/cst-team-onejob-subscriber-receipt.mjs`
+is a **pure, read-only cryptographic evidence projector**, not a
+subscriber process. It checks a receipt only when all of the
+following data are consistent:
+
+- One **fresh** completed Company-1 model job, never historical job
+  #482; the canonical `cst-ai-team-company1-dev:pilot-...` requestId,
+  `qwen2.5:3b` model and exact `ollama_inference` capability.
+- Its bounded, separate Ollama worker and persisted
+  `job.completed` event, with source id, event UUID, job code,
+  worker id and correlation id matching the job; plus the existing
+  matching atomic `event_published` audit.
+- A separately supplied independent subscriber identity and pinned
+  Ed25519 public-key fingerprint; the receipt must be exactly the
+  versioned `CST_DEV_JOB_COMPLETED_SUBSCRIBER_RECEIPT` envelope for
+  CST-DEV project `xssrfshdrtdfupgqwfdw`, Company 1, that one
+  event/job/worker, with a canonical signed payload, an independent
+  subscriber id and a bounded receive timestamp. Unknown fields,
+  unsigned/malformed/replayed receipts, stale/future timestamps,
+  incorrect project/Company/job/worker/correlation and a mismatched
+  public key or signature fail closed.
+
+No private signing key is generated, distributed or saved by the
+projector. Unit tests use **ephemeral in-memory Ed25519 test keys**.
+An untrusted receipt may never supply its own accepted trust root.
+
+**Crucial distinction:** `signedReceiptConsistent=true` means the
+given *synthetic or externally supplied* objects have consistent
+lineage and a valid signature under an independently pinned public
+key. This does **not** establish that a real subscriber authenticated
+to CST-DEV, durably committed one unique ACK, or that another system
+independently read that ACK. Therefore the projector deliberately
+returns these values **false even for a positive unit test**:
+`durableReceiptReadbackVerified`,
+`authenticatedSubscriberSessionVerified`,
+`subscriberDeliveryVerified`, `operationalE2EVerified`,
+`independentQaVerified`, and `independentFinalAckVerified`.
+
+For operational E2E, an independently approved consumer must later:
+(1) authenticate as a **different dedicated, least-privilege CST-DEV
+subscriber identity**, (2) read only the approved, already committed
+`job.completed` event under RLS, (3) process exactly that event
+and persist an **idempotent, immutable** receipt bound to its
+event_id and subscriber id, (4) have the true independent
+subscription/DB session and pinned verification key read back by a
+separate reviewer, and (5) supply independent QA and four-agent
+Final ACK as distinct later authority steps.
+
+Do **not** activate the generic event bus from the restricted pilot
+role; do **not** equate generic `processed` status or
+`event_published` audit with subscriber receipt. No
+`ai_event_subscriptions` row, receipt table, database role, signer,
+job, PROD object or existing API route is modified by this change.
+Live CST-DEV still reports zero active completion subscribers,
+zero dedicated login roles and no new queued model job. Keep
+PR #1765 Draft / operational NO-GO until genuine delivery evidence.
