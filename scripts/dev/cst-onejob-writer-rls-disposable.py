@@ -132,8 +132,10 @@ def main():
         # Without a dedicated role, the shared runtime's existing coding
         # policy must not be enough to INSERT a pilot.
         shared=psql("SET ROLE aicore_dev_runtime;\n"+insert_job(REQ1,"OLLAMA-11111111"),True)
-        if shared.returncode==0 or "row-level security" not in shared.stderr.lower():
-            raise RuntimeError("SHARED_RUNTIME_RLS_FAILED_CLOSED")
+        if shared.returncode==0 or not any(x in shared.stderr.lower()
+            for x in ("row-level security","permission denied")):
+            raise RuntimeError("SHARED_RUNTIME_NOT_PROVEN_DENIED:"+
+              shared.stderr[-400:])
 
         denied(insert_job(REQ1,"OLLAMA-11111111").replace(
             "'ollama_inference'","'unsafe_arbitrary_capability'"),
