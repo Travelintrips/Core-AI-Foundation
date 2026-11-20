@@ -44,6 +44,8 @@ on:
       - "scripts/dev/gpt02_issue159_approval_intent_reader.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_owner_source_relay_review.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_owner_pg_bridge.py"
+      - "scripts/dev/test_gpt02_issue159_owner_pg_bridge.py"
       - "scripts/dev/test_gpt02_issue159_owner_atomic_outbox.py"
       - "scripts/dev/test_gpt02_issue159_owner_source_relay_review.py"
       - "docs/dev/gpt02-issue159-owner-source-fence-binding.REVIEW_ONLY.sql"
@@ -178,7 +180,7 @@ jobs:
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_native_one_shot_supervisor
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_systemd_native_factories scripts.dev.test_gpt02_issue159_one_shot_native_runtime
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_one_pass_candidate
-          python3 -m unittest -q scripts.dev.test_gpt02_issue159_owner_atomic_outbox scripts.dev.test_gpt02_issue159_owner_source_relay_review scripts.dev.test_gpt02_issue159_approval_reader_runtime scripts.dev.test_gpt02_issue159_approval_intent_reader scripts.dev.test_gpt02_issue159_approval_intent_writer
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_owner_atomic_outbox scripts.dev.test_gpt02_issue159_owner_source_relay_review scripts.dev.test_gpt02_issue159_owner_pg_bridge scripts.dev.test_gpt02_issue159_approval_reader_runtime scripts.dev.test_gpt02_issue159_approval_intent_reader scripts.dev.test_gpt02_issue159_approval_intent_writer
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_preissuer_signer_bootstrap scripts.dev.test_gpt02_issue159_issuer_reader_sysusers scripts.dev.test_gpt02_issue159_operational_signer
           python3 scripts/dev/test_gpt02_issue159_native_relock_catalog_pg.py
           python3 scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py
