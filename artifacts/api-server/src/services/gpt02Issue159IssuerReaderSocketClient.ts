@@ -113,13 +113,15 @@ export async function readGpt02Issue159IssuerReaderSocketHealth(options: {
   if (response.status !== 200 ||
       !exactObject(b, [
         "ok", "environment", "readerReady", "issuerRole", "tlsVerified",
+        "clientTlsVerified", "backendTlsVerified",
         "readOnly", "signingPermitted", "authorizationGranted",
         "dispatchPermitted", "releaseDecision",
       ]) ||
       b.ok !== true || b.environment !== "DEV" ||
       b.readerReady !== true ||
       b.issuerRole !== "gpt02_issuer_evidence_reader" ||
-      b.tlsVerified !== true || b.readOnly !== true ||
+      b.tlsVerified !== true || b.clientTlsVerified !== true ||
+      typeof b.backendTlsVerified !== "boolean" || b.readOnly !== true ||
       b.signingPermitted !== false || b.authorizationGranted !== false ||
       b.dispatchPermitted !== false || b.releaseDecision !== "NO_GO") {
     fail("GPT02_ISSUER_READER_SOCKET_HEALTH_NOT_TRUSTED");
@@ -128,6 +130,8 @@ export async function readGpt02Issue159IssuerReaderSocketHealth(options: {
     environment: "DEV" as const,
     nativeRoleAuthenticated: true as const,
     tlsVerified: true as const,
+    clientTlsVerified: true as const,
+    backendTlsVerified: b.backendTlsVerified as boolean,
     readOnlySessionVerified: true as const,
     businessEvidenceRead: false as const,
     persistedTrustedReadProven: false as const,
@@ -173,6 +177,8 @@ export async function readGpt02Issue159IssuerReaderSocket(input: unknown, option
       typeof result.readOnlySessionVerified !== "boolean" ||
       typeof result.issuerLedgerMatched !== "boolean" ||
       typeof result.persistedTrustedReadProven !== "boolean" ||
+      typeof result.clientTlsVerified !== "boolean" ||
+      typeof result.backendTlsVerified !== "boolean" ||
       result.signingPermitted !== false ||
       result.authorizationGranted !== false ||
       result.dispatchPermitted !== false ||
@@ -186,6 +192,8 @@ export async function readGpt02Issue159IssuerReaderSocket(input: unknown, option
     reason: result.reason,
     readOnlySessionVerified: result.readOnlySessionVerified,
     issuerLedgerMatched: result.issuerLedgerMatched,
+    clientTlsVerified: result.clientTlsVerified,
+    backendTlsVerified: result.backendTlsVerified,
     persistedTrustedReadProven: result.persistedTrustedReadProven,
     trustedReadProof: result.trustedReadProof ?? null,
     signingPermitted: false as const,
