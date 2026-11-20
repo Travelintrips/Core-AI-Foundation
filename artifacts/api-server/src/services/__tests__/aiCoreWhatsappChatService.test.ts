@@ -9,9 +9,43 @@ vi.mock("../aiSecretService.js", () => ({
 }));
 
 import {
+  requestAiCoreWhatsappChat,
   sendAiCoreWhatsappReply,
   shouldRetryAiCoreWhatsappGatewayStatus,
 } from "../aiCoreWhatsappChatService.js";
+
+describe("AI Core WhatsApp kasbon deterministic replies", () => {
+  it("returns the kasbon format without invoking an LLM", async () => {
+    const result = await requestAiCoreWhatsappChat({
+      message: "Mau kasbon",
+      conversationId: "wa:test",
+    });
+
+    expect(result.route).toBe("NO_LLM");
+    expect(result.reply).toContain("Pengajuan kasbon 500.000 20-11-2026");
+  });
+
+  it("tells the employee when the nominal is missing", async () => {
+    const result = await requestAiCoreWhatsappChat({
+      message: "Pengajuan kasbon 20-11-2026",
+      conversationId: "wa:test",
+    });
+
+    expect(result.route).toBe("NO_LLM");
+    expect(result.reply.toLowerCase()).toContain("nominal");
+    expect(result.reply).toContain("Pengajuan kasbon 500.000 20-11-2026");
+  });
+
+  it("tells the employee when the date is missing", async () => {
+    const result = await requestAiCoreWhatsappChat({
+      message: "Pengajuan kasbon 500.000",
+      conversationId: "wa:test",
+    });
+
+    expect(result.route).toBe("NO_LLM");
+    expect(result.reply.toLowerCase()).toContain("tanggal");
+  });
+});
 
 describe("AI Core WhatsApp gateway delivery", () => {
   afterEach(() => {
