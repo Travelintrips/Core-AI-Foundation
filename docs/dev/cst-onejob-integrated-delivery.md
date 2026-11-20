@@ -37,3 +37,7 @@ The Owner's business approval remains **one approval only**. Independent QA is a
 ## Integrated POST_EXECUTION evidence candidate (not deployed)
 
 The package now includes `scripts/dev/cst-onejob-postexecution-review.mjs`, tests, and `docs/dev/cst-onejob-postexecution-ledgers.PROPOSED.sql`. It requires a persisted completion event and audit, **a real subscriber acknowledgement from the pinned recipient**, exact independently captured model response and evidence bytes signed as `POST_EXECUTION` by the independent QA key. It never issues Final ACK or authorizes dispatch, and the new private RLS ledgers have no live grants or deployments. A valid `PRE_ADMISSION` proof cannot substitute. These are implementation candidates pending audited custody and approved DEV execution.
+
+## Verified-admission broker candidate (unapplied)
+
+`docs/dev/cst-onejob-broker-operational.CANDIDATE.sql` and its network-none PostgreSQL test add row-locked one-use admission, atomic `waiting` to `queued`, approval/receipt consumption, audit and durable admission-event outbox, with concurrency/replay/error-rollback checks. The SQL remains `SECURITY INVOKER`, revokes PUBLIC EXECUTE, and grants no runtime role permission. It does not verify Ed25519 internally; a separately approved, independent QA process must verify the detached signature and external evidence bytes before broker use. Synthetic PASS cannot unlock operational dispatch.
