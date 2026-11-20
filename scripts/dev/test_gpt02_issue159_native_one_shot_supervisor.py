@@ -85,6 +85,7 @@ class SupervisorTest(unittest.TestCase):
         self.relock=Connection(
             native.RELOCK_NATIVE_ROLE,self.events,
             phases={native.PHASE_A:[1],native.PHASE_B:[1]},
+            host=native.RELOCK_DIRECT_HOST,
         )
         self.consumer=Connection(
             "dev_gpt02_reader_claim_consumer"+native.POOLER_USER_SUFFIX,
@@ -201,6 +202,23 @@ class SupervisorTest(unittest.TestCase):
         with self.assertRaisesRegex(BrokerAdmissionError,"RELOCK_DEADLINE_EXCEEDED"):
             self.supervisor.relock_and_verify(self.candidate)
         self.assertTrue(self.relock.commits>=2)
+
+    def test_relock_cannot_reuse_pooler_scoped_or_admin_identity(self):
+        for wrong_user,wrong_host in [
+            (native.AUDITOR_DB_USER,native.POOLER_HOST),
+            (native.RELOCK_NATIVE_ROLE,native.POOLER_HOST),
+            ("postgres",native.RELOCK_DIRECT_HOST),
+        ]:
+            with self.subTest(user=wrong_user,host=wrong_host):
+                self.setUp()
+                self.relock.info.user=wrong_user
+                self.relock.info.host=wrong_host
+                with self.assertRaisesRegex(
+                    BrokerAdmissionError,
+                    "NATIVE_SCOPED_SUPERVISOR_SESSION_IDENTITY_INVALID",
+                ):
+                    self.supervisor.relock_and_verify(self.candidate)
+                self.assertNotIn(native.PHASE_A,self.events)
 
     def test_phase_a_failure_cannot_attempt_phase_b(self):
         self.relock.failure=native.PHASE_A
