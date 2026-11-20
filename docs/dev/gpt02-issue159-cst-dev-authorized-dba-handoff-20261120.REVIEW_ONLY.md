@@ -44,6 +44,25 @@ Only after that approval and independent code review may the custodian consider 
 
 **Do not apply six migrations merely because their isolated test passes.** Their owner/SECURITY DEFINER review and production-compatible signer/approval provenance remain independent gates. The owner-held private revocation helper from `docs/dev/gpt02-issue159-store-owner-relock-helper-maintenance.REVIEW_ONLY.sql` requires a **separately authenticated and precisely audited** maintenance identity; it cannot be applied by silently broadening the current `postgres` SET privilege.
 
+## 3A. Supabase-supported temporary SET route: **preserve the actual TWO grants**
+
+**New evidence, 20 Nov 2026:** Supabase's official role-membership guidance explains a bounded `SET ROLE` grant on a custom role can be made by a holder of ADMIN OPTION and then undone. Supabase does **not** give the ordinary `postgres` user superuser permission. Official reference: https://supabase.com/kb/troubleshooting/cant-revoke-a-role-membership-granted-by-supabase_admin-d08922 .
+
+**Important current CST-DEV difference from earlier synthetic fixtures:** READ ONLY `pg_auth_members` confirmed **TWO existing rows** for `gpt02_store_owner → postgres`:
+
+| Grantor | ADMIN | INHERIT | SET |
+| --- | --- | --- | --- |
+| `supabase_admin` | TRUE | FALSE | FALSE |
+| `postgres` | FALSE | FALSE | FALSE |
+
+The latter is **already present** in CST-DEV. A `REVOKE gpt02_store_owner FROM postgres GRANTED BY postgres` would delete that pre-existing second row. Consequently **do not copy the older one-grantor cleanup procedure or casually REVOKE** just because it passed a fixture with no original self-grant.
+
+A SOURCE-ONLY isolated regression `scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py` was added to Core AI PR1754. It verifies that a separate custom-role membership can be temporarily given SET=TRUE in one transaction, used for an exact owner-context protected function, and restored to SET=FALSE before COMMIT, preserving **both** original grantor records; faults roll back completely and restore the baseline; the old REVOKE would remove the existing self-grant. It has no hosted DB connection. CI PG16/PG17 must succeed independently before any use.
+
+**Release policy is unchanged:** official Supabase functionality is not independently authorized custody by itself. A deliberately appointed DBA/security custodian must review and approve the exact CST-DEV source, scope, scheduled window, SQL, role baselines, and postflight session termination. No assistant self-grant, live DB mutation, new password, or transaction carrying a temporarily usable SET on the shared management connection may be inferred from generic `lanjut`. A hosted trial is still **NO-GO** without that authorization.
+
+**Postflight for an authorized future change must independently verify** both original grantor rows including `admin_option`, `inherit_option`, `set_option`, `pg_has_role('postgres','gpt02_store_owner','SET')=false`, owner remains NOLOGIN, zero privileged maintenance sessions, exact helper OID/owner/SECURITY DEFINER/path/ACL, and no unrelated member. If any value drifts, stop the release and perform a reviewed rollback/relock.
+
 ## 4. Operational broker and runtime acceptance — separate from installation
 
 A native supervisor, currently uninstalled, must provide all of the following **before any per-task role LOGIN**:
