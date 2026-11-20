@@ -40,6 +40,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"cst_onejob_live_readiness",argv:[node,"--test","scripts/dev/cst-onejob-live-readiness.test.mjs"]},
   {id:"post_execution_subscriber_final_ack",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-postexecution-review.test.mjs"]},
   {id:"atomic_broker_event_outbox_candidate",argv:[node,"--test","scripts/dev/cst-onejob-broker-operational-disposable.test.mjs"]},
+  {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",
