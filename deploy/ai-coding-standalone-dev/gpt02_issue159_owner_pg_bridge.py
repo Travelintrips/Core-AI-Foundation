@@ -132,7 +132,8 @@ def _postgres(conn:Any) -> None:
     )
 
 def _execute(conn:Any, insert:str, read:str, params:dict,
-             fields:tuple[str,...]) -> dict:
+             fields:tuple[str,...], expected:dict,
+             required_true:tuple[str,...]) -> dict:
     """One exact idempotent transaction with fresh DB-owned readback.
 
     The caller MUST not retry after an uncertain COMMIT: use independently
@@ -150,6 +151,11 @@ def _execute(conn:Any, insert:str, read:str, params:dict,
             if names!=fields or len(found)!=1 or len(found[0])!=len(fields):
                 _deny("OWNER_BRIDGE_DATABASE_ROW_NOT_UNIQUE")
             row=dict(zip(names,found[0]))
+            if (any(row.get(k)!=value for k,value in expected.items())
+                or any(row.get(k) is not True for k in required_true)):
+                _deny("OWNER_BRIDGE_NATIVE_DATABASE_BINDING_MISMATCH")
+            # COMMIT only after the exact original record and remaining
+            # active/fresh database locks are verified. Rollback on mismatch.
             conn.commit()
             return row
     except Exception:
@@ -196,7 +202,8 @@ def import_existing_owner_decision(
         "expires_at_ms":review["expiresAtMs"],
     }
     row=_execute(postgres,SOURCE_INSERT,SOURCE_READ,params,
-                 SRC_FIELDS+("active","fresh"))
+                 SRC_FIELDS+("active","fresh"),
+                 params,("active","fresh"))
     if any(row.get(key)!=value for key,value in params.items()) or (
         row.get("active") is not True or row.get("fresh") is not True
     ):
@@ -261,6 +268,7 @@ def bind_existing_issuer_packet(
         postgres,LINK_INSERT,LINK_READ,params,
         LINK_FIELDS+("claims_sha256","task_id","command_id","attempt_id",
                      "source_active","fence_active","source_fresh"),
+        params,("source_active","fence_active","source_fresh"),
     )
     if (
         any(row.get(key)!=params[key] for key in (
