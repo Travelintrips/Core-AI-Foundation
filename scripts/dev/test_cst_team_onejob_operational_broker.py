@@ -32,10 +32,15 @@ class OneJobSignedBrokerContract(unittest.TestCase):
             123456789,timestamp(self.now-timedelta(seconds=10)),
             timestamp(self.now+timedelta(minutes=10)),"e"*32
         ]))
+        real_stat=os.stat
+        def stat_only_ns(path,*args,**kwargs):
+            if path=="/proc/self/ns/net":
+                return SimpleNamespace(st_ino=123456789)
+            return real_stat(path,*args,**kwargs)
         self.mocked=[
             patch.object(broker.os,"geteuid",return_value=28500),
             patch.object(broker.os,"getegid",return_value=28501),
-            patch.object(broker.os,"stat",return_value=SimpleNamespace(st_ino=123456789)),
+            patch.object(broker.os,"stat",side_effect=stat_only_ns),
         ]
         for x in self.mocked:x.start()
         self.addCleanup(lambda:[x.stop() for x in reversed(self.mocked)])
