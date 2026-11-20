@@ -10,6 +10,7 @@ BEGIN
  IF current_user <> 'postgres'
  OR NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='postgres'
    AND rolcreaterole AND NOT rolsuper)
+ OR NOT pg_has_role('postgres','pg_signal_backend','USAGE')
  OR NOT EXISTS(SELECT 1 FROM pg_namespace
    WHERE nspname='gpt02_relock_audit'
     AND nspowner='postgres'::regrole)
