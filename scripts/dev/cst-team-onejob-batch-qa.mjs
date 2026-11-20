@@ -95,6 +95,8 @@ if(!["--plan","--offline-full"].includes(MODE) || process.argv.length>3) {
    ["isolated-model-role-rls","python3",["-B","scripts/dev/cst-team-dedicated-model-role-rehearsal.py"],70000],
    ["isolated-subscriber-role-rotation","python3",["-B","scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py"],70000],
    ["isolated-scram-signer-receipt","python3",["-B","scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py"],70000],
+   ["operational-broker-signed-manifest","python3",["-B","scripts/dev/test_cst_team_onejob_operational_broker.py"],12000],
+   ["operational-broker-network-none","bash",["scripts/dev/cst-team-onejob-operational-broker-no-network-qa.sh"],35000],
    ["db-typescript",existsSync(resolve(ROOT,"node_modules/.bin/tsc")) ?
      "node_modules/.bin/tsc" : "lib/db/node_modules/.bin/tsc",
      ["--noEmit","-p","lib/db/tsconfig.json"],70000],
