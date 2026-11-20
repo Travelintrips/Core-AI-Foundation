@@ -107,7 +107,11 @@ nsenter --target "$PID" --net -- \
 RC=$?
 set -e
 [[ "$RC" == 2 ]]
-grep -q "CST_ONEJOB_BROKER_MANIFEST_SIGNATURE_INVALID" "$EVIDENCE/forged.log"
+if ! grep -q "CST_ONEJOB_BROKER_MANIFEST_SIGNATURE_INVALID" "$EVIDENCE/forged.log";then
+  echo "FORGED_MANIFEST_FAILED_BEFORE_EXPECTED_SIGNATURE_GATE"
+  sed -n '1,8p' "$EVIDENCE/forged.log"
+  exit 7
+fi
 [[ ! -e "$SOCK" ]]
 echo "FORGED_SCOPE_DENIED_BEFORE_SOCKET_BIND=true"
 
