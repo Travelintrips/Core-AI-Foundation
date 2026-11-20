@@ -186,7 +186,7 @@ test("postexecution ledgers enforce FORCE RLS and separate signed final ACK evid
     assert.match(src,new RegExp("REVOKE ALL ON cst_onejob_private\\."+table+
       " FROM PUBLIC;"));
   }
-  assert.match(src,/reconciliation_signature_base64/);
+  assert.match(src,/ack_signature_base64/);
   assert.match(src,/reconciliation_claims_digest/);
   assert.match(src,/ack_nonce text NOT NULL UNIQUE/);
   const code=src.replace(/--[^\n]*/g,"");

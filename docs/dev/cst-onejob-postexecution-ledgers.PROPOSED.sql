@@ -20,8 +20,8 @@ CREATE TABLE cst_onejob_private.subscriber_delivery_receipts (
   delivery_digest text NOT NULL UNIQUE CHECK (delivery_digest ~ '^[a-f0-9]{64}$'),
   status text NOT NULL CHECK (status='ACKNOWLEDGED'),
   ack_nonce text NOT NULL UNIQUE CHECK (ack_nonce ~ '^[a-f0-9]{64}$'),
-  reconciliation_signature_base64 text NOT NULL
-    CHECK (length(reconciliation_signature_base64) BETWEEN 84 AND 92),
+  ack_signature_base64 text NOT NULL
+    CHECK (length(ack_signature_base64) BETWEEN 84 AND 92),
   ack_issuer_fingerprint text NOT NULL
     CHECK (ack_issuer_fingerprint ~ '^[a-f0-9]{64}$'),
   received_at timestamptz NOT NULL,
@@ -68,8 +68,8 @@ CREATE TABLE cst_onejob_private.core_signed_reconciliations (
   independently_verified_by text NOT NULL,
   issued_at timestamptz NOT NULL,
   source_digest text NOT NULL CHECK (source_digest ~ '^[a-f0-9]{64}$'),
-  reconciliation_signature_base64 text NOT NULL
-    CHECK (length(reconciliation_signature_base64) BETWEEN 84 AND 92),
+  ack_signature_base64 text NOT NULL
+    CHECK (length(ack_signature_base64) BETWEEN 84 AND 92),
   issuer_public_fingerprint text NOT NULL
     CHECK (issuer_public_fingerprint ~ '^[a-f0-9]{64}$'),
   reconciliation_claims_digest text NOT NULL UNIQUE CHECK (reconciliation_claims_digest ~ '^[a-f0-9]{64}$')

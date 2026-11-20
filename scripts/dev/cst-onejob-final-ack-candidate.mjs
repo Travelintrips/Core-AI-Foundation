@@ -50,7 +50,7 @@ export const SOURCE_SNAPSHOT_SQL=[
  "jsonb_build_object('eventId',s.event_id,'jobId',s.job_id,'subscriberId',s.subscriber_id,",
  "'deliveryId',s.delivery_id,'correlationId',s.correlation_id,'status',s.status,",
  "'receivedAt',s.received_at,'deliveryDigest',s.delivery_digest,",
- "'ackNonce',s.ack_nonce,'ackSignatureBase64',s.reconciliation_signature_base64,",
+ "'ackNonce',s.ack_nonce,'ackSignatureBase64',s.ack_signature_base64,",
  "'ackIssuerFingerprint',s.ack_issuer_fingerprint) subscriber",
  "FROM ai_platform.cst_onejob_owner_approvals a",
  "JOIN ai_platform.ai_jobs j ON j.id=a.job_id",
@@ -168,7 +168,7 @@ export async function executeCoreReconciliationCandidate({
     const second=await client.query(
       "INSERT INTO cst_onejob_private.core_signed_reconciliations "+
       "(approval_id,job_id,delivery_id,post_receipt_id,reconciliation_id,"+
-      "independently_verified_by,issued_at,source_digest,reconciliation_signature_base64,"+
+      "independently_verified_by,issued_at,source_digest,ack_signature_base64,"+
       "issuer_public_fingerprint,reconciliation_claims_digest) "+
       "VALUES($1::uuid,$2::int,$3::uuid,$4::uuid,$5::uuid,$6,$7::timestamptz,$8,$9,$10,$11) "+
       "RETURNING reconciliation_id",
