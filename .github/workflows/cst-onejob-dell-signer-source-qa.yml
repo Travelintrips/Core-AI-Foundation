@@ -1,0 +1,42 @@
+name: CST DEV DELL Signer Source QA
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cst-onejob-dell-signer-source-qa.yml"
+      - "scripts/dev/cst-onejob-dell-signer-*"
+      - "docs/dev/cst-onejob-dell-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-source-qa:
+    if: github.repository == 'Travelintrips/Core-AI-Foundation'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Independent signed-release evidence tests with in-memory keys
+        shell: pwsh
+        run: |
+          node --test scripts/dev/cst-onejob-dell-signer-release.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Real Windows kernel named-pipe source and negative tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\dev\cst-onejob-dell-signer-source-ci.ps1
+      - name: Default-deny QA scope
+        shell: pwsh
+        run: |
+          Write-Output "CST_DEV_WINDOWS_SOURCE_QA_ONLY"
+          Write-Output "NO USER PROVISIONING, NO CREDENTIALS, NO SIGNATURES"
+          Write-Output "NO DEV/PROD DEPLOY, NO OWNER JOB, NO FINAL ACK"
+          Write-Output "RELEASE_DECISION=NO_GO"

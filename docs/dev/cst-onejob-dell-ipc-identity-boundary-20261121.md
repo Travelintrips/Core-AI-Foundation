@@ -44,3 +44,22 @@ Those are synthetic/disposable QA proofs only; not actual Supabase CST-DEV opera
 4. Post-run rollback/relock and independently captured receipts.
 
 Until then: releaseDecision NO_GO; never claim operational PASS.
+
+## Independently signed signer release (source-only extension)
+
+The new `scripts/dev/cst-onejob-dell-signer-release.mjs` performs pure Ed25519
+cryptographic verification of an exact and short-lived, single-Company-1-job
+release envelope. It validates the separate QA public trust fingerprint,
+source SHA, role, signer/client Windows SID binding, approval/event IDs,
+payload digest, five-minute TTL and change record. Independent facts must be
+loaded by a separately reviewed caller from protected configuration and
+trusted DB readback, never supplied by the inbound request. It does not load
+or store keys, write database rows, start a service or authorize a signature.
+A valid release is only `SIGNED_RELEASE_EVIDENCE_VALID_ONLY` and always returns
+`signingPermitted:false`, `signatureIssued:false`, `releaseDecision:NO_GO`.
+
+Local verification on DELL: 38/38 synthetic Ed25519 negative/positive tests
+and 12/12 portable Windows kernel/IPC source tests PASS. A separate
+GitHub Windows-hosted source QA workflow is proposed for future regressions.
+The existing five-account DELL negative QA remains separate (29/29 PASS).
+A GitHub-hosted runner **does not** attest service RunAs or key custody on DELL.
