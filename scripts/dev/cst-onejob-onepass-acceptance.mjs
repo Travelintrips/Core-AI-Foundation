@@ -23,6 +23,24 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"owner_approval",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-owner-approval-review.test.mjs"]},
   {id:"owner_stage",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-contract.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
+  {id:"one_canonical_owner_path",argv:[node,"--test","scripts/dev/cst-onejob-integrated-single-owner.test.mjs"]},
+  {id:"owner_receipt_trust",argv:[node,"--test","scripts/dev/cst-team-onejob-owner-approval-receipt.test.mjs"]},
+  {id:"host_gateway_denial",argv:[node,"--test","scripts/dev/cst-team-host-gateway-probe.test.mjs"]},
+  {id:"nft_egress_acl",argv:[node,"--test","scripts/dev/cst-team-onejob-nft-egress-qa.test.mjs"]},
+  {id:"broker_acl_lifecycle",argv:[node,"--test","scripts/dev/cst-team-onejob-broker-acl-lifecycle-qa.test.mjs"]},
+  {id:"broker_unix_socket_transport",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-team-onejob-pg-socket.test.mjs"]},
+  {id:"broker_pinned_ca",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-team-onejob-ca-pin.test.mjs"]},
+  {id:"broker_fixed_destination",argv:[node,"--test","scripts/dev/cst-team-onejob-fixed-db-broker.test.mjs"]},
+  {id:"broker_peer_credential",argv:[node,"--test","scripts/dev/cst-team-onejob-peercred-broker.test.mjs"]},
+  {id:"broker_unix_peer_boundary",argv:[node,"--test","scripts/dev/cst-team-onejob-unix-peer-boundary.test.mjs"]},
+  {id:"broker_postgres_tunnel",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-team-onejob-broker-pg-integration.test.mjs"]},
+  {id:"broker_tls_denial",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-team-onejob-broker-tls-negative.test.mjs"]},
+  {id:"kernel_peer_credential",argv:["python3","scripts/dev/test_cst_team_onejob_peercred.py","-q"]},
+  {id:"signed_subscriber_receipt",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs"]},
+  {id:"subscriber_one_event_consumer",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-consumer-qa.test.mjs"]},
+  {id:"subscriber_rls_isolated_pg",argv:["python3","scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py"]},
+  {id:"subscriber_functional_isolated_pg",argv:["python3","scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py"]},
+  {id:"operational_broker_signed_manifest",argv:["/tmp/cst-onejob-broker-ci-venv/bin/python","scripts/dev/test_cst_team_onejob_operational_broker.py"]},
   {id:"admission_review",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-waiting-admission-review.test.mjs"]},
   {id:"cst_onejob_onepass_acceptance",argv:[node,"--test","scripts/dev/cst-onejob-onepass-acceptance.test.mjs"]},
   {id:"broker_fail_closed",argv:[node,"--test","scripts/dev/cst-onejob-broker-proposal-failclosed.test.mjs"]},
@@ -65,7 +83,10 @@ export function verifyManifest(exists=existsSync) {
       file.includes("..")||!exists(resolve(ROOT,file)))
       problems.push("MISSING_TEST:"+test.id);
   }
-  for(const mandatory of ["owner_stage","fresh_owner_consent","stage_pooler_tls","qa_signature",
+  for(const mandatory of ["owner_stage","fresh_owner_consent","one_canonical_owner_path",
+    "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
+    "signed_subscriber_receipt","subscriber_rls_isolated_pg",
+    "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",
     "signed_locked_binding","broker_fail_closed","owner_ledger_pg",
     "writer_rls_pg","signed_concurrency_pg"])
     if(!ids.has(mandatory))problems.push("REQUIRED_GATE_MISSING:"+mandatory);
