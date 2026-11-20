@@ -133,7 +133,7 @@ CREATE ROLE authenticated NOLOGIN;
               ",'supabase_admin_session',"+str(p["task_id"])+","+
               quote(p["command_id"])+"::uuid,"+
               quote(p["attempt_id"])+"::uuid,"+
-              str(now-1000)+","+str(now+30000)+")")
+              str(now-1000)+","+str(now+60000)+")")
             return login(name,IMPORTER,IMPORT_PASSWORD,sql)
         def import_link(p,decision_id):
             sql=("SELECT gpt02_relock_audit.register_owner_scope_once("+
