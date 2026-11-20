@@ -17,6 +17,7 @@ const DOC="docs/dev/cst-team-onejob-single-batch-closeout.md";
 const tests=[
  "scripts/dev/cst-team-onejob-owner-approval-receipt.test.mjs",
  "scripts/dev/cst-team-onejob-owner-session-intent.test.mjs",
+ "scripts/dev/cst-team-onejob-prestage-once.test.mjs",
  "scripts/dev/cst-team-onejob-subscriber-consumer-qa.test.mjs",
  "scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs",
  "scripts/dev/cst-team-onejob-broker-acl-lifecycle-qa.test.mjs",
