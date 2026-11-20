@@ -25,15 +25,7 @@ BEGIN
  OR current_user <> 'gpt02_store_owner'
  THEN RAISE EXCEPTION 'RELOCK_OWNER_HELPER_CALLER_DENIED'
    USING ERRCODE='42501'; END IF;
- IF p_role::text !~ '^dev_gpt02_task_[1-9][0-9]*_[0-9a-f]{12}
-REVOKE ALL ON FUNCTION gpt02_private.revoke_expired_scoped_reader_grants(name)
- FROM PUBLIC;
--- postgres can invoke ONLY this narrow owner helper as nested definer.
-GRANT EXECUTE ON FUNCTION gpt02_private.revoke_expired_scoped_reader_grants(name)
- TO postgres;
-COMMIT;
--- No grant to auditor, anon, authenticated, issuer or signer.
-
+ IF p_role::text !~ '^dev_gpt02_task_[1-9][0-9]*_[0-9a-f]{12}$'
  THEN RAISE EXCEPTION 'RELOCK_SCOPE_INVALID' USING ERRCODE='22023'; END IF;
  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=p_role)
  THEN RAISE EXCEPTION 'RELOCK_SCOPE_ROLE_MISSING' USING ERRCODE='22023'; END IF;
