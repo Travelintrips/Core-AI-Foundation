@@ -27,9 +27,11 @@ jobs:
       github.repository == 'Travelintrips/Core-AI-Foundation' &&
       ((github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
-        github.head_ref == 'feat/cst-ai-team-scoped-readiness-20261118') ||
+        (github.head_ref == 'feat/cst-ai-team-scoped-readiness-20261118' ||
+         github.head_ref == 'integration/cst-dev-onejob-one-batch-20261120')) ||
        (github.event_name == 'workflow_dispatch' &&
-        github.ref == 'refs/heads/feat/cst-ai-team-scoped-readiness-20261118'))
+        (github.ref == 'refs/heads/feat/cst-ai-team-scoped-readiness-20261118' ||
+         github.ref == 'refs/heads/integration/cst-dev-onejob-one-batch-20261120')))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -54,13 +56,13 @@ jobs:
             --label "cst.qa.source_commit=$SOURCE_SHA" \
             --label "cst.qa.scope=DEV_ONEJOB_IMAGE_PROVENANCE_ONLY" \
             --label "cst.qa.prod_deploy=false" \
-            --tag cst-core-onejob-pr1763-image-qa:local \
+            --tag cst-core-onejob-dev-image-qa:local \
             .
       - name: Readback embedded SHA and image label without network
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE=cst-core-onejob-pr1763-image-qa:local
+          IMAGE=cst-core-onejob-dev-image-qa:local
           IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
           ACTUAL_MARKER="$(docker run --rm --network none --entrypoint cat "$IMAGE" /app/.cst-build-sha)"
           ACTUAL_LABEL="$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "cst.qa.source_commit"}}')"
