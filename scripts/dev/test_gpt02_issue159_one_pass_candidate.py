@@ -36,6 +36,7 @@ class OnePassCandidateContract(unittest.TestCase):
         for name in (
             "CORE_FOUR_SIGNED_VERIFIER",
             "CORE_PINNED_ONESHOT_BROKER",
+            "CORE_THREE_DOMAIN_ISSUER_STARTUP",
             "HUB_ONE_OWNER_PREISSUER",
             "HUB_GUARDED_OWNER_HTTP",
             "ORIGINAL_FINAL_ACK_CONTRACT",
@@ -52,7 +53,7 @@ class OnePassCandidateContract(unittest.TestCase):
             "DB_FINALLY_RELOCK",
         ):
             self.assertIn(name,names)
-        self.assertEqual(len(qa.tests(root,root,root,full=False)),5)
+        self.assertEqual(len(qa.tests(root,root,root,full=False)),6)
 
     def test_no_dsn_or_private_keys_in_child_process(self):
         fake={
