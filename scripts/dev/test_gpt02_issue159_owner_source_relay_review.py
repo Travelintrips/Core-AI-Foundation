@@ -19,6 +19,11 @@ class SourceBridgeReviewTest(unittest.TestCase):
         base=PostlineageReaderScopeOfflineTest()
         base.setUp()
         self.packet=copy.deepcopy(base.fixture.packet)
+        # Legacy four-root fixture originated at Task140. Source import
+        # deliberately rejects those historical tasks; resign only the
+        # synthetic approval to represent the new Task183 namespace.
+        self.packet["approval"]["claims"]["taskId"]=183
+        base.fixture._resign_valid_packet(self.packet)
         self.roots=base.fixture.roots
         self.now=base.fixture.now
         self.claims=self.packet["approval"]["claims"]
