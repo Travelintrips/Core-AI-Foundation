@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import jwt from "jsonwebtoken";
+import {createRequire} from "node:module";
+// jsonwebtoken belongs to the API workspace, not the monorepo root.
+const jwt=createRequire(new URL("../../artifacts/api-server/package.json",import.meta.url))("jsonwebtoken");
 import {
  verifyFreshOneJobStageConsent,ONE_JOB_OWNER_STAGE_INTENT
 } from "../../artifacts/api-server/src/lib/cstOneJobFreshStageConsent.ts";
