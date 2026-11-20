@@ -52,6 +52,8 @@ jobs:
         run: node --test scripts/dev/cst-onejob-owner-stage-contract.test.mjs
       - name: Verify waiting-to-queued admission evidence cannot authorize dispatch
         run: node --experimental-strip-types --test scripts/dev/cst-onejob-waiting-admission-review.test.mjs
+      - name: Verify integrated one-pass DEV one-job acceptance inventory stays fail closed
+        run: node --test scripts/dev/cst-onejob-onepass-acceptance.test.mjs
       - name: Verify proposed one-job broker and receipt schema stay fail closed
         run: node --test scripts/dev/cst-onejob-broker-proposal-failclosed.test.mjs
       - name: Verify independent QA Ed25519 receipt binding is non-authorizing
