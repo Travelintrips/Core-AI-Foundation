@@ -1,7 +1,8 @@
 /**
  * Disposable PG16 network-none functional consumer test driver, NEVER an
- * operational CST-DEV subscriber or credential custodian. Local PG trust auth
- * is a QA fixture only; real Supabase needs the pinned TLS + dedicated login.
+ * operational CST-DEV subscriber or credential custodian. Local PG16 uses
+ * ephemeral SCRAM-SHA-256 auth inside network-none QA. Real Supabase requires
+ * pinned TLS, a dedicated login and separate operational authorization.
  */
 import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -28,12 +29,26 @@ const pin=createHash("sha256").update(
   key.export({type:"spki",format:"der"})).digest("hex");
 const signer=createPrivateKey(readFileSync("/qa-secrets/receipt-private.pem"));
 const pg=createRequire("/app/lib/db/package.json")("pg");
-const client=new pg.Client({
-  host:QA_HOST,port:5432,database:QA_DB,user:QA_ROLE,
+const password=readFileSync("/qa-secrets/subscriber-password","utf8");
+if(!/^[a-f0-9]{64}$/.test(password))throw Error("QA_SCRAM_PASSWORD_INVALID");
+const connection={
+  host:QA_HOST,port:5432,database:QA_DB,user:QA_ROLE,password,
   connectionTimeoutMillis:1800,query_timeout:2400,
-  // This is a socket inside disposable --network none PG16 only.
+  // Test-only Unix socket inside --network none PG16; not Supabase TLS.
   ssl:false,
-});
+};
+// Prove the database rejects a bad password BEFORE using the true ephemeral
+// credential. A Unix socket with permissive filesystem mode is not auth proof.
+const wrong=new pg.Client({...connection,password:password+"BAD"});
+try {
+  await wrong.connect();
+  throw Error("QA_WRONG_SCRAM_PASSWORD_ACCEPTED");
+} catch(error) {
+  if(error?.message==="QA_WRONG_SCRAM_PASSWORD_ACCEPTED" || error?.code!=="28P01")
+    throw error;
+  console.log("PG16_WRONG_SCRAM_PASSWORD_REJECTED");
+} finally {await wrong.end().catch(()=>{});}
+const client=new pg.Client(connection);
 try {
   await client.connect();
   const database=await client.query("SELECT current_database() AS database_name");
