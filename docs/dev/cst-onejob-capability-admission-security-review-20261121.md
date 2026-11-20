@@ -93,3 +93,30 @@ check proves executor cannot read `password_hash`. This is a
 **source/fixture change only**, not a migration on the live Owner table.
 The actual production privilege policy remains subject to independent
 security review.
+
+
+## QA-signed receipt and PostgreSQL issuer separation — 21 November 2026
+The PostgreSQL16 `--network none` acceptance fixture now reuses the actual
+`signIndependentQaEvidence` cryptographic code (ephemeral in-memory test-only
+Ed25519 key) before a PRE receipt is issued. A forged signature is rejected
+**before** any DB writer operation; the verified canonical digest and nonce
+then enter the disposable DB through a **different** NOLOGIN QA writer role.
+
+Negative readbacks prove the broker cannot INSERT QA PRE receipts, SELECT the
+QA nonce/digest from the receipt table, modify the original job directly,
+impersonate the executor or mint a consumption ledger. The QA writer itself
+cannot UPDATE a PRE receipt. Without a QA row, a guessed nonce/digest cannot
+admit the job. When the simulated QA-issued row exists, the original atomic
+admission function still rejects bad nonces, audit rollback failures and replay;
+one of two concurrent attempts succeeds. All containers are removed.
+
+**Security boundary, not an operational claim:** The database does **not**
+verify Ed25519 signatures itself. It relies on independently authenticated,
+limited, protected QA writer access and signed-proof validation **before**
+the append-only PRE receipt is created. This fixture imitates that separation
+with synthetic keys, not real independent key custody or a real Supabase login.
+Neither a boolean evidence field nor the nonce/digest by itself proves a
+signature. If custody of the QA writer is compromised, the DB cannot distinguish
+a fabricated row from an authorized one. Security review must explicitly
+accept or harden that trust model before approving any change to live DEV.
+Operational release remains `NO_GO`; this document is NOT a migration.
