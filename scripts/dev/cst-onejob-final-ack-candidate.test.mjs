@@ -32,7 +32,7 @@ const pinned=(pair,use,idField,idValue)=>({
 });
 const qaTrust=pinned(qa,"CST_DEV_ONEJOB_QA_PUBLIC_PIN","verifierId",verifierId);
 const subTrust=pinned(sub,"CST_DEV_ONEJOB_SUBSCRIBER_PUBLIC_PIN","subscriberId",subscriberId);
-const finalTrust=pinned(final,"CST_DEV_ONEJOB_FINAL_ACK_PUBLIC_PIN","issuerId","cst-final-reconciler-dev");
+const finalTrust=pinned(final,"CST_DEV_ONEJOB_CORE_RECONCILIATION_PUBLIC_PIN","issuerId","cst-final-reconciler-dev");
 const response=Buffer.from("CST_DEV_ONEJOB_PROBE_OK");
 const delivery=Buffer.from("independently-captured-subscriber-delivery-event");
 const finalSigner=async bytes=>sign(null,bytes,final.privateKey).toString("base64");
@@ -167,6 +167,7 @@ test("wrong signer, forged subscriber, wrong role, audit failure all roll back; 
   for(const changes of [
     {signer:async bytes=>sign(null,bytes,f.privateKey).toString("base64")},
     {signedSubscriberAck:forged},
+    {finalIssuerTrust:{...finalTrust,use:"CST_DEV_ONEJOB_FINAL_ACK_PUBLIC_PIN"}},
     {client:new Client(p.facts,{wrongRole:true})},
     {client:new Client(p.facts,{failWrite:true})}
   ]){
