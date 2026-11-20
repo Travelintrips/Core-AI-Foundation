@@ -38,6 +38,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"writer_rls_pg",argv:["python3","scripts/dev/cst-onejob-writer-rls-disposable.py"]},
   {id:"stage_pooler_tls",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-connection-config.test.mjs"]},
   {id:"cst_onejob_live_readiness",argv:[node,"--test","scripts/dev/cst-onejob-live-readiness.test.mjs"]},
+  {id:"post_execution_subscriber_final_ack",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-postexecution-review.test.mjs"]},
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",

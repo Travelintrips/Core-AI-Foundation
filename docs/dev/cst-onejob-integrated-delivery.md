@@ -33,3 +33,7 @@ A previously blocked credential-bootstrap attempt is **not permission to try oth
 
 ## Technical authority boundary
 The Owner's business approval remains **one approval only**. Independent QA is an automated technical evidence validator. The staged job is not claimable; a PRE_ADMISSION receipt is not a queue permit; queue acceptance is not dispatch; a subscriber receipt is not Final ACK. Every transition requires its own cryptographically/transactionally grounded evidence. The acceptance runner intentionally cannot return operational GO.
+
+## Integrated POST_EXECUTION evidence candidate (not deployed)
+
+The package now includes `scripts/dev/cst-onejob-postexecution-review.mjs`, tests, and `docs/dev/cst-onejob-postexecution-ledgers.PROPOSED.sql`. It requires a persisted completion event and audit, **a real subscriber acknowledgement from the pinned recipient**, exact independently captured model response and evidence bytes signed as `POST_EXECUTION` by the independent QA key. It never issues Final ACK or authorizes dispatch, and the new private RLS ledgers have no live grants or deployments. A valid `PRE_ADMISSION` proof cannot substitute. These are implementation candidates pending audited custody and approved DEV execution.
