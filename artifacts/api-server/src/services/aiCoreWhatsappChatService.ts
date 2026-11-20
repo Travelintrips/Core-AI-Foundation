@@ -293,6 +293,43 @@ function fastWhatsappDeterministicReply(message: string): AiCoreWhatsappChatResu
     .trim()
     .replace(/\s+/g, " ");
 
+  if (/^mau\s+kasbon$/.test(command)) {
+    return {
+      reply:
+        "Silakan kirim pengajuan dengan format:\n\n" +
+        "*Pengajuan kasbon [nominal] [DD-MM-YYYY]*\n\n" +
+        "Contoh:\n*Pengajuan kasbon 500.000 20-11-2026*",
+      route: "NO_LLM",
+      provider: null,
+      model: null,
+    };
+  }
+
+  if (/^pengajuan\s+kasbon\b/.test(command)) {
+    const dateMatch = command.match(/\b(\d{2})-(\d{2})-(\d{4})\b/);
+    const withoutDate = dateMatch ? command.replace(dateMatch[0], " ") : command;
+    const amountMatch = withoutDate.match(/\b\d[\d.,]*\b/);
+    const amountDigits = amountMatch?.[0]?.replace(/\D/g, "") ?? "";
+    const hasAmount = amountDigits.length > 0 && Number(amountDigits) > 0;
+    const hasDate = Boolean(dateMatch);
+    if (!hasAmount || !hasDate) {
+      const missing =
+        !hasAmount && !hasDate
+          ? "nominal dan tanggal"
+          : !hasAmount
+            ? "nominal"
+            : "tanggal";
+      return {
+        reply:
+          `Pengajuan belum lengkap. Mohon cantumkan ${missing} kasbon.\n\n` +
+          "Contoh: *Pengajuan kasbon 500.000 20-11-2026*",
+        route: "NO_LLM",
+        provider: null,
+        model: null,
+      };
+    }
+  }
+
   if (/^(?:hello|hi|halo|hai|hey)(?:\s+(?:hello|hi|halo|hai|hey))*$/.test(command)) {
     return {
       reply: "Halo. AI Core Chat aktif. Ada yang bisa saya bantu?",
