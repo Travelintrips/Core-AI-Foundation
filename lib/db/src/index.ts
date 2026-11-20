@@ -2,8 +2,14 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";
 import { resolveDatabaseUrl } from "./env";
+import { createCstDevOneJobSocketOptions } from "./cstOneJobDevSocketTransport";
 
 const { Pool } = pg;
+
+// Default OFF: non-pilot runtimes retain their original DB transport.
+// Explicitly gated pilot use requires the pinned, dedicated DEV-only socket.
+const databaseUrl = resolveDatabaseUrl();
+const oneJobSocketOptions = createCstDevOneJobSocketOptions(databaseUrl);
 
 // Raw SQL in the app (outside Drizzle's schema-qualified query builder) uses
 // unqualified table names, so every new connection must default its search
@@ -27,7 +33,8 @@ const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax >= 1
   : isProduction ? 10 : 5;
 
 const poolConfig = {
-  connectionString: resolveDatabaseUrl(),
+  connectionString: databaseUrl,
+  ...(oneJobSocketOptions ?? {}),
   // Production stays at 10 application connections by default, and can opt
   // into a smaller per-process maximum (1..10). No environment may exceed 10.
   max: poolMax,
