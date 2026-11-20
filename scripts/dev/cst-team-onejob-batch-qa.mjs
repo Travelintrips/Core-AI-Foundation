@@ -94,6 +94,7 @@ if(!["--plan","--offline-full"].includes(MODE) || process.argv.length>3) {
    ["source-regression",process.execPath,["--experimental-strip-types","--test",...tests],30000],
    ["kernel-peer-credentials","python3",["scripts/dev/test_cst_team_onejob_peercred.py","-q"],12000],
    ["isolated-model-role-rls","python3",["-B","scripts/dev/cst-team-dedicated-model-role-rehearsal.py"],70000],
+   ["isolated-prestage-waiting-only","python3",["-B","scripts/dev/cst-team-onejob-prestage-rls-pg16-qa.py"],70000],
    ["isolated-subscriber-role-rotation","python3",["-B","scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py"],70000],
    ["isolated-scram-signer-receipt","python3",["-B","scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py"],70000],
    ["operational-broker-signed-manifest","python3",["-B","scripts/dev/test_cst_team_onejob_operational_broker.py"],12000],
