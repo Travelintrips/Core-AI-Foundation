@@ -82,6 +82,17 @@ class RefreshRequestTest(unittest.TestCase):
              fact_reader=lambda query: copy.deepcopy(evidence or facts(now=now)),
              now_fn=lambda:now, operational=False)
 
+    def test_reader_delay_uses_post_io_clock_without_widening_trust_window(self):
+        clock = iter((NOW, NOW + 8000))
+        evidence = facts(now=NOW + 8000)
+        result = mod.refresh_pending(str(self.db), str(self.pending), ADMIN,
+            fact_reader=lambda query: copy.deepcopy(evidence),
+            now_fn=lambda: next(clock), operational=False)
+        self.assertTrue(result["requestRefreshed"])
+        newest = json.loads(self.pending.read_text())["claims"]
+        self.assertEqual(newest["issuedAt"], NOW + 8000)
+        self.assertEqual(newest["expiresAt"], NOW + 248000)
+
     def test_rotates_only_expired_nonce_on_same_preparation_without_approval(self):
         result=self.refresh()
         self.assertTrue(result["requestRefreshed"])

@@ -22,6 +22,7 @@ def handle_issue159_approval_intent(
     *,
     enabled=False,
     now_ms=None,
+    readiness_gate=None,
 ):
     if enabled is not True:
         return _response(404, {"error": "not_found"})
@@ -45,6 +46,7 @@ def handle_issue159_approval_intent(
         data["claims"],
         identity_verifier=identity_verifier,
         now_ms=now_ms,
+        readiness_gate=readiness_gate,
     )
     if result.get("ok") is True:
         return _response(201, {
@@ -69,6 +71,11 @@ def handle_issue159_approval_intent(
         "ADMIN_IDENTITY_VERIFICATION_FAILED",
     }:
         return _response(403, {"error": "active_super_admin_required"})
+    if reason == "AUTO_CHAIN_PREREQUISITES_NOT_READY":
+        return _response(409, {
+            "error": "issue159_auto_chain_not_ready",
+            "signingPermitted": False, "authorizationGranted": False,
+            "dispatchPermitted": False, "releaseDecision": "NO_GO"})
     if reason == "APPROVAL_INTENT_REPLAY_OR_CONFLICT":
         return _response(409, {"error": "approval_intent_conflict"})
     if reason in {"APPROVAL_CLAIMS_INVALID", "APPROVAL_TIME_INVALID"}:
