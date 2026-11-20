@@ -6,7 +6,7 @@ import {QA_DOMAIN,qaCanonicalBytes}
   from "../../artifacts/api-server/src/lib/cstOneJobIndependentQaVerifier.ts";
 import {ACK_DOMAIN,subscriberAckCanonicalBytes,reviewSignedSubscriberAck}
   from "./cst-onejob-subscriber-ack-review.mjs";
-import {executeFinalAckCandidate,reviewFinalEvidence,LOCK_POST_SQL,
+import {executeFinalAckCandidate,reviewFinalEvidence,SOURCE_SNAPSHOT_SQL,
   FINAL_DOMAIN,finalAckCanonicalBytes}
   from "./cst-onejob-final-ack-candidate.mjs";
 
@@ -90,7 +90,7 @@ class Client{
     if(sql.includes("SELECT current_user AS role_name"))
       return {rows:[{role_name:this.wrongRole?"aicore_dev_runtime":
         "cst_onejob_finalack_writer",login_name:"cst_onejob_finalack_login",db:"postgres"}]};
-    if(sql===LOCK_POST_SQL)return {rows:[this.facts]};
+    if(sql===SOURCE_SNAPSHOT_SQL)return {rows:[this.facts]};
     if(sql.includes("INSERT INTO cst_onejob_private.post_execution_qa_receipts"))
       return {rows:[{id:postId}]};
     if(sql.includes("INSERT INTO cst_onejob_private.final_ack_reconciliations"))
@@ -146,10 +146,12 @@ test("atomic Final ACK candidate only returns success after post-QA, final ledge
   assert.equal(v.status,"FINAL_ACK_COMMITTED");
   assert.equal(v.finalAckIssued,true);
   assert.equal(v.dispatchPermitted,false);
-  assert.equal(a.client.calls[0].sql,"BEGIN");
+  assert.equal(a.client.calls[0].sql,"BEGIN ISOLATION LEVEL SERIALIZABLE");
   assert.equal(a.client.calls.at(-1).sql,"COMMIT");
   const stmts=a.client.calls.map(c=>c.sql);
-  const lock=stmts.indexOf(LOCK_POST_SQL);
+  const lock=stmts.indexOf(SOURCE_SNAPSHOT_SQL);
+  const advisory=stmts.findIndex(q=>q.includes("pg_advisory_xact_lock"));
+  assert.ok(advisory>0&&advisory<lock,"FINAL_ACK_LOCK_ORDER_INVALID");
   const insert=stmts.findIndex(q=>q.includes("INSERT INTO cst_onejob_private.post_execution_qa_receipts"));
   const finalIx=stmts.findIndex(q=>q.includes("INSERT INTO cst_onejob_private.final_ack_reconciliations"));
   assert.ok(lock>0&&insert>lock&&finalIx>insert);

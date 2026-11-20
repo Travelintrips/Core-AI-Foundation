@@ -53,3 +53,7 @@ The candidate now cryptographically verifies an Ed25519 subscriber-delivery ackn
 ## Clean schema compilation gate
 
 An audit discovered repeated CREATE TABLE fragments in the post-execution SQL proposal that were not caught by regex-only tests. The proposal has been consolidated to exactly three table definitions. New network-none PostgreSQL 16 integration tests actually execute the complete SQL, prove FORCE RLS, no anon INSERT privileges, reject subscriber nonce replay, reject >5-minute QA receipts, and reject duplicate Final ACK rows. This is a candidate schema test only; it does not apply or authorize any live CST-DEV migration.
+
+## Final ACK least-privilege correction (PostgreSQL 16)
+
+The prior Final ACK source query used `FOR UPDATE OF a,j,r,e,al,s` across six source tables. PostgreSQL requires UPDATE privilege for this locking mode, even when the intent is read-only verification. The revised candidate uses a SERIALIZABLE transaction, a scoped transaction advisory lock for cooperating Final ACK writers, a consistent read of source data and existing UNIQUE ledger constraints. It does not grant UPDATE on source tables. A network-none PostgreSQL integration test runs this exact snapshot query as a SELECT-only role with RLS-scoped subscriber visibility and confirms source UPDATE is denied. Source data must remain immutable after terminal status and all non-cooperating writers must honor the existing lifecycle contract; this change does not itself prove operational custody or allow live release.

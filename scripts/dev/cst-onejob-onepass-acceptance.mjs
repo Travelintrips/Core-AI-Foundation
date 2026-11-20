@@ -44,6 +44,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
   {id:"signed_subscriber_and_independent_final_ack",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-final-ack-candidate.test.mjs"]},
   {id:"postexecution_schema_real_postgresql",argv:[node,"--test","scripts/dev/cst-onejob-postexecution-ledgers-disposable.test.mjs"]},
+  {id:"final_ack_readonly_serializable_postgres",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-finalack-readonly-disposable.test.mjs"]},
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",

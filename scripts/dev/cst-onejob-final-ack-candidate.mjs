@@ -24,8 +24,12 @@ export function finalAckCanonicalBytes(c){
   return Buffer.from(JSON.stringify(out),"utf8");
 }
 // Query uses only real catalog column names verified against CST-DEV.
-// All evidence is acquired under locks, never taken from caller JSON.
-export const LOCK_POST_SQL=[
+// Read source rows under one SERIALIZABLE snapshot, with a per-job
+// transaction advisory lock for cooperating Final ACK issuers.
+// Unlike SELECT FOR UPDATE, this needs no UPDATE grant on source tables.
+// Immutable terminal evidence + UNIQUE job/approval/delivery ledger constraints
+// are separately required; this is NOT proof of live role provisioning.
+export const SOURCE_SNAPSHOT_SQL=[
  "SELECT",
  "jsonb_build_object('id',a.id,'jobId',a.job_id,'companyId',a.company_id,",
  "'modelId',a.model_id,'requestId',a.request_id,'workerName',a.worker_name,",
@@ -55,8 +59,7 @@ export const LOCK_POST_SQL=[
  "AND al.module='event-bus' AND al.action='event_published'",
  "JOIN cst_onejob_private.subscriber_delivery_receipts s ON s.job_id=j.id",
  "AND s.event_id::text=e.event_id AND s.approval_id=a.id",
- "WHERE j.id=$1",
- "FOR UPDATE OF a,j,r,e,al,s"
+ "WHERE j.id=$1"
 ].join(" ");
 export function reviewFinalEvidence({
   facts,signedSubscriberAck,subscriberTrust,deliveryBytes,
@@ -106,7 +109,7 @@ export async function executeFinalAckCandidate({
     throw Error("INVALID_FINAL_JOB_OR_EVENT");
   let started=false;
   try{
-    await client.query("BEGIN");started=true;
+    await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");started=true;
     await client.query("SET TRANSACTION READ WRITE");
     await client.query("SET LOCAL ROLE "+FINAL_ROLE);
     const ident=await client.query(
@@ -115,7 +118,11 @@ export async function executeFinalAckCandidate({
        ident.rows[0].role_name!==FINAL_ROLE||
        ident.rows[0].login_name!==FINAL_LOGIN||ident.rows[0].db!=="postgres")
       throw Error("DEDICATED_FINAL_ACK_ROLE_NOT_VERIFIED");
-    const locked=await client.query(LOCK_POST_SQL,[jobId,eventId]);
+    // Advisory locks coordinate only participating issuers. SERIALIZABLE
+    // supplies consistency checks, while unique constraints reject replay.
+    await client.query(
+      "SELECT pg_advisory_xact_lock($1::integer,$2::integer)",[20261120,jobId]);
+    const locked=await client.query(SOURCE_SNAPSHOT_SQL,[jobId,eventId]);
     if(locked.rows?.length!==1)throw Error("AUTHORITATIVE_FINAL_ROWS_MISSING");
     const facts=locked.rows[0];
     const review=reviewFinalEvidence({facts,signedSubscriberAck,
