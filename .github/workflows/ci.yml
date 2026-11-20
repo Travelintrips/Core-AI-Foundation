@@ -42,7 +42,14 @@ jobs:
         run: node --test scripts/ci-quorum-row-lock.test.mjs
       - name: Verify scoped CST team DEV readiness is non-authorizing
         run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
-      # One command runs all 20 existing one-job fixtures and emits one matrix.
+      # Broker test uses the same pinned public-key verification library as
+      # the independent, disposable source QA. No private keys or live creds.
+      - name: Prepare isolated one-job broker QA dependency
+        run: |
+          python3 -m venv /tmp/cst-onejob-broker-ci-venv
+          /tmp/cst-onejob-broker-ci-venv/bin/python -m pip install --disable-pip-version-check cryptography==41.0.7
+      # All Owner, broker, RLS, subscriber and negative tests report as ONE
+      # fail-closed matrix. A green CI never authorizes actual DEV dispatch.
       - name: Single-pass CST-DEV one-job offline acceptance (NO-GO operational)
         run: node scripts/dev/cst-onejob-onepass-acceptance.mjs --offline
       - name: Verify host executor private runtime directory
