@@ -92,9 +92,9 @@ test("forged post-QA key and replayed pre-admission nonce deny",()=>{
     publicKeyFingerprint:fingerprint};
   assert.equal(reviewCstOneJobPostExecution({...p,postExecutionSignedReceipt:reused}).status,"DENIED");
 });
-test("proposed subscriber and final ACK ledgers stay private with forced RLS, no broad grants",()=>{
+test("subscriber and Core reconciliation ledgers stay private with forced RLS, no broad grants",()=>{
   const text=readFileSync(new URL("../../docs/dev/cst-onejob-postexecution-ledgers.PROPOSED.sql",import.meta.url),"utf8");
-  for(const table of ["subscriber_delivery_receipts","post_execution_qa_receipts","final_ack_reconciliations"]){
+  for(const table of ["subscriber_delivery_receipts","post_execution_qa_receipts","core_signed_reconciliations"]){
     assert.match(text,new RegExp("ALTER TABLE cst_onejob_private\\."+table+" ENABLE ROW LEVEL SECURITY;"));
     assert.match(text,new RegExp("ALTER TABLE cst_onejob_private\\."+table+" FORCE ROW LEVEL SECURITY;"));
     assert.match(text,new RegExp("REVOKE ALL ON cst_onejob_private\\."+table+" FROM PUBLIC;"));
