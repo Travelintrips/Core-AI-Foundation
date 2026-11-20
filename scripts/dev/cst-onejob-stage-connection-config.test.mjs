@@ -9,7 +9,7 @@ import {
 const ref="xssrfshdrtdfupgqwfdw";
 const devUrl="https://"+ref+".supabase.co";
 const url="postgresql://cst_team_model_pilot_stage_login."+ref+
- ":synthetic-test-password-never-deploy@aws-0-ap-southeast-1.pooler.supabase.com"+
+ ":synthetic-test-password-never-deploy@aws-1-ap-southeast-2.pooler.supabase.com"+
  ":6543/postgres?sslmode=verify-full";
 const good={APP_ENV:"development",NODE_ENV:"development",
   SUPABASE_URL_DEV:devUrl,[CST_ONEJOB_STAGE_URL_KEY]:url};
@@ -42,11 +42,13 @@ test("reject role impersonation, project mixing and unsafe database destinations
  denied(replace("cst_team_model_pilot_stage_login."+ref,
    "cst_team_model_pilot_stage_login.nzdweipzckfszczzqtuw"),
    "STAGING_LOGIN_OR_PROJECT_MISMATCH");
- denied(replace("aws-0-ap-southeast-1.pooler.supabase.com",
-   "aws-0-ap-southeast-1.pooler.supabase.com.evil.invalid"),
+ denied(replace("aws-1-ap-southeast-2.pooler.supabase.com",
+   "aws-1-ap-southeast-2.pooler.supabase.com.evil.invalid"),
    "STAGING_DATABASE_NOT_SUPABASE_POOLER");
- denied(replace("aws-0-ap-southeast-1.pooler.supabase.com",
+ denied(replace("aws-1-ap-southeast-2.pooler.supabase.com",
    "db."+ref+".supabase.co"),"STAGING_DATABASE_NOT_SUPABASE_POOLER");
+ denied(replace("aws-1-ap-southeast-2.pooler.supabase.com",
+   "aws-0-ap-southeast-1.pooler.supabase.com"),"STAGING_DATABASE_NOT_SUPABASE_POOLER");
  denied(replace(":6543/postgres",":5432/postgres"),
    "STAGING_TRANSACTION_POOLER_REQUIRED");
  denied(replace("/postgres?","/production?"),"STAGING_DATABASE_NAME_INVALID");
