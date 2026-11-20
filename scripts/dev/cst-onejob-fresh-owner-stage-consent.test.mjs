@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import jwt from "jsonwebtoken";
 import {
  verifyFreshOneJobStageConsent,ONE_JOB_OWNER_STAGE_INTENT
@@ -46,7 +47,6 @@ test("only the exact one-job business intent is accepted, never an implicit empt
  }
 });
 test("pure helper grants no DB role, OTP bypass, worker dispatch or Final ACK",()=>{
- const {readFileSync}=await import("node:fs");
  const source=readFileSync(new URL("../../artifacts/api-server/src/lib/cstOneJobFreshStageConsent.ts",import.meta.url),"utf8");
  assert.doesNotMatch(source,/INSERT INTO|UPDATE ai_platform|CREATE ROLE|SET ROLE|dispatchPermitted:\s*true/);
 });
