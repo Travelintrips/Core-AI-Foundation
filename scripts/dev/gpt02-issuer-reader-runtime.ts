@@ -88,13 +88,29 @@ export function createIssuerReaderServer({
     return result;
   };
   let healthInFlight: Promise<Awaited<ReturnType<typeof reader.health>>> | null = null;
+  // Cache only successful native health checks. Issuer evidence is always
+  // re-read and independently verified through the existing serialized path.
+  let lastHealthy: Awaited<ReturnType<typeof reader.health>> | null = null;
+  let lastHealthyAt = 0;
+  const HEALTH_CACHE_MS = 5_000;
   const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       try {
-        const healthPromise = healthInFlight ??= runSerialized(() => reader.health()).finally(() => {
-          healthInFlight = null;
-        });
-        const health = await healthPromise;
+        const now = Date.now();
+        const health = await (lastHealthy && now - lastHealthyAt < HEALTH_CACHE_MS
+          ? Promise.resolve(lastHealthy)
+          : healthInFlight ??= runSerialized(() => reader.health()).then((result) => {
+              if (nativeHealthIsTrusted(result)) {
+                lastHealthy = result;
+                lastHealthyAt = Date.now();
+              } else {
+                lastHealthy = null;
+                lastHealthyAt = 0;
+              }
+              return result;
+            }).finally(() => {
+              healthInFlight = null;
+            }));
         const ok = nativeHealthIsTrusted(health);
         respond(res, ok ? 200 : 503, {
           ok,
