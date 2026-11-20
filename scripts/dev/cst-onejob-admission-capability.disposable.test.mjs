@@ -62,7 +62,7 @@ test("network-none PostgreSQL: non-bypassable narrow executor capability, truste
   const req="cst-ai-team-company1-dev:pilot-"+"b".repeat(20);
   const worker="cst-dev-dell-onejob-20261119-abcdef12";
   sql("CREATE SCHEMA ai_platform; CREATE SCHEMA cst_onejob_private;"+
-    "CREATE TABLE ai_platform.internal_users(id int PRIMARY KEY,role text,status text,account_type text);"+
+    "CREATE TABLE ai_platform.internal_users(id int PRIMARY KEY,role text,status text,account_type text,password_hash text);"+
     "CREATE TABLE ai_platform.ai_jobs(id int PRIMARY KEY,status text,job_type text,required_capability text,max_retry int,payload_json jsonb);"+
     "CREATE TABLE ai_platform.ai_audit_logs(id bigserial PRIMARY KEY,module text,action text,resource_type text,resource_id text,status text,details jsonb);"+
     "INSERT INTO ai_platform.internal_users VALUES(1,'owner','active','internal');"+
@@ -93,6 +93,15 @@ test("network-none PostgreSQL: non-bypassable narrow executor capability, truste
     "'cst_onejob_private.admit_verified_onejob_capability(integer,text,text)',"+
     "'EXECUTE');").stdout.trim();
   assert.equal(separation,"f|f|t","EXECUTOR_MEMBERSHIP_OR_RAW_DML_LEAK");
+  const secretRead=sql("SET ROLE cst_onejob_admission_executor; "+
+    "SELECT password_hash FROM ai_platform.internal_users WHERE id=1;",true);
+  assert.notEqual(secretRead.status,0,"EXECUTOR_COULD_READ_PASSWORD_HASH");
+  assert.match(secretRead.stderr,/permission denied/i);
+  const scopedOwners=sql("SET ROLE cst_onejob_admission_executor; "+
+    "SELECT count(*) FROM ai_platform.internal_users "+
+    "WHERE role='owner' AND status='active';").stdout.trim();
+  assert.equal(scopedOwners,"1","EXECUTOR_OWNER_SCOPE_NOT_VISIBLE");
+
   const wrongSessionUser=sql("SET ROLE cst_onejob_admission_broker;"+
     " SELECT cst_onejob_private.admit_verified_onejob_capability(483,"+
     Q(nonce)+","+Q(digest)+");",true);
@@ -169,6 +178,8 @@ test("capability wrapper is disposable-only and denies raw updates to broker",()
   assert.match(sqlSource,/CAPABILITY_FIXTURE_DISPOSABLE_ONLY/);
   assert.match(sqlSource,/SECURITY DEFINER/);
   assert.match(sqlSource,/cst_onejob_admission_executor NOLOGIN/);
+  assert.match(sqlSource,/CREATE POLICY cst_capability_owner_read ON ai_platform.internal_users/);
+  assert.match(sqlSource,/GRANT SELECT\(id,account_type,role,status\) ON ai_platform.internal_users/);
   assert.match(sqlSource,/REVOKE ALL ON FUNCTION[\s\S]*?admit_verified_onejob\(integer,text,text\)/);
   assert.match(sqlSource,/GRANT EXECUTE ON FUNCTION[\s\S]*?admit_verified_onejob_capability/);
   assert.doesNotMatch(sqlSource,/GRANT UPDATE[^;]+cst_onejob_admission_broker/s);

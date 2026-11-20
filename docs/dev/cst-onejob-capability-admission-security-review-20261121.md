@@ -72,3 +72,24 @@ These are **synthetic** source tests, NOT real credential, signer or E2E proof.
    Final ACK, then relock and verify no unexpected job. PROD untouched.
 
 **Until steps 1–5 are independently evidenced: `releaseDecision=NO_GO`.**
+
+
+### 21 November 2026 — live RLS compatibility gap closed in disposable fixture
+
+Direct read-only catalog review of CST-DEV confirmed that
+`ai_platform.internal_users` has **RLS enabled**, has no policy
+for the proposed `cst_onejob_admission_executor`, and already
+exposes `password_hash` as a separate column. The earlier
+disposable test never enabled RLS on this table, which could create
+a false PASS when admission checks the active Owner relationship.
+
+The fixture now simulates enabled/FORCE RLS and grants exactly
+`SELECT(id,account_type,role,status)` with an executor-only
+`USING (account_type='internal' AND role='owner' AND status='active')`
+policy. Negative tests drop the policy, change Owner to Admin,
+and mark the Owner inactive: each scenario denies admission with
+no queue, receipt, audit or outbox mutation. A separate negative
+check proves executor cannot read `password_hash`. This is a
+**source/fixture change only**, not a migration on the live Owner table.
+The actual production privilege policy remains subject to independent
+security review.

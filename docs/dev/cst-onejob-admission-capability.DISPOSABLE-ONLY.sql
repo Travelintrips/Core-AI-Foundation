@@ -44,6 +44,14 @@ ALTER TABLE ai_platform.ai_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_platform.ai_jobs FORCE ROW LEVEL SECURITY;
 ALTER TABLE ai_platform.ai_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_platform.ai_audit_logs FORCE ROW LEVEL SECURITY;
+-- Mirror the ACTUAL CST-DEV internal_users RLS baseline. Column SELECT alone
+-- is not enough: a non-owner SECURITY DEFINER executor needs a SELECT policy.
+-- FORCE RLS is used here ONLY in the disposable fixture (not live migration).
+ALTER TABLE ai_platform.internal_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_platform.internal_users FORCE ROW LEVEL SECURITY;
+CREATE POLICY cst_capability_owner_read ON ai_platform.internal_users
+  FOR SELECT TO cst_onejob_admission_executor
+  USING (account_type='internal' AND role='owner' AND status='active');
 -- Existing owner and receipt tables already have FORCE RLS.
 CREATE POLICY cst_capability_job_read ON ai_platform.ai_jobs FOR SELECT
   TO cst_onejob_admission_executor
