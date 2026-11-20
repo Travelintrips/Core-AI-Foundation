@@ -133,9 +133,14 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
       SELECT i.indisunique,i.indisvalid,i.indisready
       FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
       JOIN pg_namespace n ON n.oid=c.relnamespace
+      JOIN pg_attribute a
+        ON a.attrelid=i.indrelid AND a.attnum=i.indkey[0]
       WHERE n.nspname='ai_platform'
         AND c.relname='cst_onejob_one_active_approval'
-        AND i.indpred IS NOT NULL`);
+        AND i.indrelid='ai_platform.cst_onejob_owner_approvals'::regclass
+        AND i.indnkeyatts=1 AND a.attname='company_id'
+        AND pg_get_expr(i.indpred,i.indrelid)=
+          '(status = ANY (ARRAY[''APPROVED''::text, ''CONSUMED''::text]))'`);
     const one=singleton.rows[0] as Record<string,unknown>|undefined;
     if(singleton.rows.length!==1 || one?.indisunique!==true ||
       one?.indisvalid!==true || one?.indisready!==true)
