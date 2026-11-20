@@ -51,7 +51,8 @@ export const SOURCE_SNAPSHOT_SQL=[
  "'deliveryId',s.delivery_id,'correlationId',s.correlation_id,'status',s.status,",
  "'receivedAt',s.received_at,'deliveryDigest',s.delivery_digest,",
  "'ackNonce',s.ack_nonce,'ackSignatureBase64',s.ack_signature_base64,",
- "'ackIssuerFingerprint',s.ack_issuer_fingerprint) subscriber",
+ "'ackIssuerFingerprint',s.ack_issuer_fingerprint,",
+ "'ackExpiresAt',s.ack_expires_at) subscriber",
  "FROM ai_platform.cst_onejob_owner_approvals a",
  "JOIN ai_platform.ai_jobs j ON j.id=a.job_id",
  "JOIN cst_onejob_private.verified_admission_receipts r ON r.job_id=j.id AND r.approval_id=a.id",
@@ -91,7 +92,9 @@ export function reviewCoreReconciliationEvidence({
     s?.ackSignatureBase64===signedSubscriberAck?.signatureBase64&&
     s?.ackIssuerFingerprint===signedSubscriberAck?.publicKeyFingerprint&&
     Number.isFinite(Date.parse(s?.receivedAt))&&
-    Date.parse(s.receivedAt)===Date.parse(signedSubscriberAck?.claims?.acknowledgedAt),
+    Date.parse(s.receivedAt)===Date.parse(signedSubscriberAck?.claims?.acknowledgedAt)&&
+    Number.isFinite(Date.parse(s?.ackExpiresAt))&&
+    Date.parse(s.ackExpiresAt)===Date.parse(signedSubscriberAck?.claims?.expiresAt),
     "PERSISTED_SUBSCRIBER_ACK_NOT_BOUND");
   check(j?.resultJson?.output?.type==="text"&&
     j.resultJson.output.text==="CST_DEV_ONEJOB_PROBE_OK"&&

@@ -82,11 +82,11 @@ test("real final ACK source snapshot works under SELECT-only privileges without 
       "'correlationId',"+Q(correlation)+"));"+
     "INSERT INTO cst_onejob_private.subscriber_delivery_receipts"+
     "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
-    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at)"+
+    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at,ack_expires_at)"+
     "VALUES("+Q(approval)+",483,"+Q(event)+","+Q(delivery)+","+
       "'cst-onejob-subscriber-pilot',"+Q(correlation)+","+
       "repeat('e',64),'ACKNOWLEDGED',repeat('f',64),"+
-      Q(Buffer.alloc(64,11).toString("base64"))+",repeat('a',64),now());");
+      Q(Buffer.alloc(64,11).toString("base64"))+",repeat('a',64),now(),now()+interval '3 minutes');");
   sql("CREATE ROLE cst_onejob_finalack_readonly NOLOGIN NOINHERIT;"+
     "GRANT USAGE ON SCHEMA ai_platform,cst_onejob_private TO cst_onejob_finalack_readonly;"+
     "GRANT SELECT ON ALL TABLES IN SCHEMA ai_platform TO cst_onejob_finalack_readonly;"+
