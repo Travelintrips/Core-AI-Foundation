@@ -46,6 +46,8 @@ SQL_REQUIRED = (
 CORE_COMPONENTS = (
     "deploy/ai-coding-standalone-dev/gpt02_issue159_one_shot_reader_broker.py",
     "deploy/ai-coding-standalone-dev/gpt02_issue159_native_relock_attestation.py",
+    "deploy/ai-coding-standalone-dev/gpt02_issue159_native_one_shot_supervisor.py",
+    "scripts/dev/test_gpt02_issue159_native_one_shot_supervisor.py",
     "deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs",
     "docs/dev/gpt02-issue159-scoped-reader-relock-add-only.REVIEW_ONLY.sql",
     "scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py",
@@ -169,7 +171,8 @@ def tests(core: Path,hub: Path,pr196: Path,*, full=True):
           "scripts.dev.test_gpt02_issue159_positive_permit_handoff"]),
         ("CORE_PINNED_ONESHOT_BROKER",core,
          [python,"-m","unittest","-q",
-          "scripts.dev.test_gpt02_issue159_one_shot_reader_broker"]),
+          "scripts.dev.test_gpt02_issue159_one_shot_reader_broker",
+          "scripts.dev.test_gpt02_issue159_native_one_shot_supervisor"]),
         ("CORE_SHARED_RELOCK_TIMER",core,
          ["node","--test","scripts/dev/test_gpt02_issue159_relock_shared_timer.mjs"]),
         ("CORE_THREE_DOMAIN_ISSUER_STARTUP",core,
