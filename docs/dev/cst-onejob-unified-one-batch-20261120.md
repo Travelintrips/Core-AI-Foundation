@@ -63,3 +63,63 @@ Owner session, and relock evidence are verified. No new Owner action is added.
 The canonical Draft Core PR #1769 now **reuses**, instead of rebuilding, the independent PRE/POST QA evidence issuance and append-only PRE receipt writer, one-shot independently signed PULL subscriber ACK writer, and least-privilege role proposal previously developed in historical PR #1767. The corresponding disposable integration fixture checks fail-closed source lineage and PostgreSQL 16 RLS/INSERT-only permissions. It deliberately ends before Core reconciliation and Hub Final ACK, which have their own new-domain verifiers and separate independent four-agent + reviewer evidence.
 
 All restored components remain **default-OFF, not deployed**, require externally authorized credentials, independently custodied signers, reviewed migrations and a real independent supervisor before they can touch CST-DEV. No source test may claim a live or independent Final ACK; the integrated acceptance runner continues to return `releaseDecision: NO_GO` despite offline PASS. Do not activate `cst_onejob_qa_receipt_writer` or `cst_onejob_subscriber_writer` by merging source alone. Historical #482, PROD and healthy shared Core AI DEV remain untouched.
+
+
+## Independent subscriber: one-shot operational adapter (default OFF)
+
+The reusable, independently verified one-event PULL + signed durable ACK
+writer is now wrapped by
+`scripts/dev/cst-onejob-independent-subscriber-one-shot.mjs`.
+This adapter is a **runnable source candidate**, NOT an installed daemon,
+credential provisioner, signing service, Supabase migration or activation.
+No connection is attempted unless the specific mode, job ID and complete
+fail-closed DEV environment are presented.
+
+It reuses the **same** pinned Supabase public CA, exact transaction-pooler
+host/port 6543, and project-qualified role controls as staging and broker.
+The dedicated `cst_onejob_subscriber_login` remains unprovisioned: the
+source allowlist is not a PostgreSQL GRANT/LOGIN and must not grant
+the existing shared `aicore_dev_runtime` access. QA receipt and Core
+reconciliation identities are separately allowed in the TLS adapter for
+their later independent processes, not merged into a shared credential.
+
+### Operator-controlled inputs
+
+These become usable **only after** the previously blocked bootstrap receives
+its original official security approval.
+
+- Isolated Linux non-root process with `APP_ENV=development`,
+  `NODE_ENV=development`, no shared/PROD database variables, both
+  dispatchers OFF and the one-job subscriber flag explicitly enabled
+- Reviewed, exact CST-DEV source SHA and approved worker name, one new
+  Owner-approved Company-1 job; never historical #482
+- Authorized dedicated `CST_DEV_ONEJOB_SUBSCRIBER_DATABASE_URL` supplied
+  exclusively by the **approved** secrets custodian: URL values must never
+  be printed, placed in a repository, pasted into chat, or reused from PROD
+- Root-owned release `/etc/cst-onejob-qa/approval/subscriber-release.json`
+  with `version=1`, purpose `CST_DEV_ONEJOB_SIGNED_SUBSCRIBER`,
+  exact project/Company 1/job/source SHA/worker/subscriber ID, **dedicated
+  operator UID distinct from the signer UID**, trust fingerprint and change
+  record; its life is at most five minutes
+- Separately root-pinned public key at
+  `/etc/cst-onejob-subscriber/trust/public-root.json`, with a real
+  independent Ed25519 private key held **only** by a separately approved
+  signer service, whose Unix socket is
+  `/run/cst-onejob-subscriber/sign.sock`. The CLI validates its OS
+  ownership and verifies the returned signature with the pinned public key
+- An independent operations supervisor to invoke **once** for this exact
+  job, collect authenticated readback and enforce relock/rollback afterward
+
+A root-owned release manifest alone is **not** proof of independent QA,
+signer custody, or human Owner consent. The CLI is not permitted to
+create it. A successful one-shot subscriber result has status
+`SUBSCRIBER_ACK_PERSISTED_NOT_FINAL_ACK` and explicitly reports
+`releaseDecision=NO_GO`, `finalAckIssued=false`,
+`independentFinalAckVerified=false`. It never queues or dispatches.
+The real independent QA issuer and separate 4+1 Hub signer/reviewer
+must still be provisioned and supervised by the approved operator.
+
+The source tests include missing release/credential, wrong project/worker,
+shared or production DB variables, expired release, wrong signer key and
+same-OS-identity rejection; they do not touch CST-DEV or PROD. This closes
+a **source wiring gap only**; no operational E2E is implied.

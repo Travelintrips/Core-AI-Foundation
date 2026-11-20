@@ -49,16 +49,24 @@ export function loadPinnedCstDevSupabaseRootCa(
  */
 export const CST_ONEJOB_DEV_POOLER = "aws-1-ap-southeast-2.pooler.supabase.com";
 const CST_ONEJOB_DEV_PROJECT = "xssrfshdrtdfupgqwfdw";
+// Dedicated narrow service principals only. These names are SOURCE ALLOWLIST
+// entries, not grants or LOGIN activation in CST-DEV.
+export const CST_ONEJOB_DEV_DEDICATED_LOGINS = Object.freeze([
+  "cst_team_model_pilot_stage_login",
+  "cst_onejob_broker_login",
+  "cst_onejob_qa_receipt_login",
+  "cst_onejob_subscriber_login",
+  "cst_onejob_finalack_login",
+] as const);
 export type CstOneJobDedicatedLogin =
-  "cst_team_model_pilot_stage_login" | "cst_onejob_broker_login";
+  (typeof CST_ONEJOB_DEV_DEDICATED_LOGINS)[number];
 
 export function createPinnedCstOneJobPgConnection(
   connectionUrl: string,
   dedicatedLogin: CstOneJobDedicatedLogin,
   pinnedCaFile: string = CST_ONEJOB_DEV_CA_PATH,
 ) {
-  if (dedicatedLogin !== "cst_team_model_pilot_stage_login" &&
-      dedicatedLogin !== "cst_onejob_broker_login")
+  if (!CST_ONEJOB_DEV_DEDICATED_LOGINS.includes(dedicatedLogin))
     throw Error("CST_DEV_ONEJOB_LOGIN_NOT_ALLOWED");
   let url: URL;
   try { url = new URL(connectionUrl); }

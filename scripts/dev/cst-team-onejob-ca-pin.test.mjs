@@ -10,6 +10,7 @@ import {
   CST_ONEJOB_SUPABASE_CA_FINGERPRINT,
   loadPinnedCstDevSupabaseRootCa,
   createPinnedCstOneJobPgConnection,
+  CST_ONEJOB_DEV_DEDICATED_LOGINS,
 } from "../../lib/db/src/cstOneJobPinnedSupabaseCa.ts";
 
 const FIXTURE=fileURLToPath(new URL("./fixtures/supabase-root-2021-public-qa.crt",import.meta.url));
@@ -49,8 +50,15 @@ test("the live one-job adapter may not trust an arbitrary system root",()=>{
   assert.match(source,/CST_ONEJOB_DEV_CA_PATH/);
 });
 
-test("both one-job dedicated logins use exact DEV host and pinned CA",()=>{
-  for(const role of ["cst_team_model_pilot_stage_login","cst_onejob_broker_login"]){
+test("all five independently scoped one-job service logins use exact DEV host and pinned CA",()=>{
+  assert.deepEqual([...CST_ONEJOB_DEV_DEDICATED_LOGINS],[
+    "cst_team_model_pilot_stage_login",
+    "cst_onejob_broker_login",
+    "cst_onejob_qa_receipt_login",
+    "cst_onejob_subscriber_login",
+    "cst_onejob_finalack_login"
+  ]);
+  for(const role of CST_ONEJOB_DEV_DEDICATED_LOGINS){
     const url="postgresql://"+role+".xssrfshdrtdfupgqwfdw:"+
       "synthetic-password-only-123@aws-1-ap-southeast-2.pooler.supabase.com"+
       ":6543/postgres?sslmode=verify-full";
@@ -75,8 +83,24 @@ test("both one-job dedicated logins use exact DEV host and pinned CA",()=>{
       /DATABASE_SCOPE_OR_TLS_DENIED/);
     assert.throws(()=>createPinnedCstOneJobPgConnection(url,role,"/not/installed/ca"),
       /CA_NOT_AVAILABLE/);
+    for(const otherRole of CST_ONEJOB_DEV_DEDICATED_LOGINS){
+      if(otherRole===role)continue;
+      assert.throws(()=>createPinnedCstOneJobPgConnection(
+        url,otherRole,FIXTURE),/DATABASE_SCOPE_OR_TLS_DENIED/);
+    }
   }
 });
+test("service principal allowlist never accepts shared runtime or unknown role",()=>{
+  const url="postgresql://aicore_dev_runtime.xssrfshdrtdfupgqwfdw:"+
+    "synthetic-password-only-123@aws-1-ap-southeast-2.pooler.supabase.com"+
+    ":6543/postgres?sslmode=verify-full";
+  for(const role of ["aicore_dev_runtime","postgres","service_role",
+      "cst_onejob_arbitrary_login"]){
+    assert.throws(()=>createPinnedCstOneJobPgConnection(
+      url,role,FIXTURE),/LOGIN_NOT_ALLOWED/);
+  }
+});
+
 test("direct staging and broker paths cannot lose CA via connectionString",()=>{
   const stage=readFileSync(new URL(
     "../../artifacts/api-server/src/lib/cstOneJobStagingDatabase.ts",import.meta.url),"utf8");

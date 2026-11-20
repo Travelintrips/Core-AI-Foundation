@@ -62,6 +62,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"atomic_broker_event_outbox_candidate",argv:[node,"--test","scripts/dev/cst-onejob-broker-operational-disposable.test.mjs"]},
   {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
   {id:"independent_qa_pull_subscriber_writers",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-integrated-evidence-issuance.test.mjs"]},
+  {id:"independent_subscriber_operational_entrypoint",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-subscriber-one-shot.test.mjs"]},
   {id:"signed_subscriber_and_independent_final_ack",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-final-ack-candidate.test.mjs"]},
   {id:"postexecution_schema_real_postgresql",argv:[node,"--test","scripts/dev/cst-onejob-postexecution-ledgers-disposable.test.mjs"]},
   {id:"final_ack_readonly_serializable_postgres",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-finalack-readonly-disposable.test.mjs"]},
@@ -95,7 +96,8 @@ export function verifyManifest(exists=existsSync) {
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
     "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",
-    "signed_locked_binding","broker_fail_closed","independent_qa_pull_subscriber_writers","owner_ledger_pg",
+    "signed_locked_binding","broker_fail_closed","independent_qa_pull_subscriber_writers",
+    "independent_subscriber_operational_entrypoint","owner_ledger_pg",
     "writer_rls_pg","signed_concurrency_pg"])
     if(!ids.has(mandatory))problems.push("REQUIRED_GATE_MISSING:"+mandatory);
   return {valid:problems.length===0,problems,count:OFFLINE_TESTS.length};

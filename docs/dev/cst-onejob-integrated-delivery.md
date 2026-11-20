@@ -57,3 +57,17 @@ An audit discovered repeated CREATE TABLE fragments in the post-execution SQL pr
 ## Final ACK least-privilege correction (PostgreSQL 16)
 
 The prior Final ACK source query used `FOR UPDATE OF a,j,r,e,al,s` across six source tables. PostgreSQL requires UPDATE privilege for this locking mode, even when the intent is read-only verification. The revised candidate uses a SERIALIZABLE transaction, a scoped transaction advisory lock for cooperating Final ACK writers, a consistent read of source data and existing UNIQUE ledger constraints. It does not grant UPDATE on source tables. A network-none PostgreSQL integration test runs this exact snapshot query as a SELECT-only role with RLS-scoped subscriber visibility and confirms source UPDATE is denied. Source data must remain immutable after terminal status and all non-cooperating writers must honor the existing lifecycle contract; this change does not itself prove operational custody or allow live release.
+
+
+## One-shot independent subscriber operational wiring (candidate, default-OFF)
+
+The complete source bundle now contains a one-shot subscriber *entrypoint*
+that calls the pre-existing PULL→independent signed ACK writer under the
+approved, dedicated, pinned-CA DEV service role. It does not create its own
+signer keys, logins, roles, secrets or event subscriptions. It refuses an
+unscoped / unauthenticated release and can only use a separate-UID external
+signer socket with a pinned public trust. The source needs one real
+independent supervisor, official credential/key custody, approved DB
+ledger/grant migration and one explicit Owner-approved new job before
+activation. GitHub CI PASS for this adapter cannot close the operational
+NO-GO, and the separate Hub 4-agent + reviewer Final ACK is unchanged.
