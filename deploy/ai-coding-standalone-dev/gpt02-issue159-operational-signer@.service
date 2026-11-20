@@ -1,9 +1,12 @@
 [Unit]
 Description=GPT02 Issue159 DEV operational detached signer (%i)
-After=gpt02-issue159-reader.service gpt02-issue159-issuer-reader.service gpt02-issue159-approval-reader.service
-Requires=gpt02-issue159-reader.service gpt02-issue159-issuer-reader.service gpt02-issue159-approval-reader.service
+# Three-domain approval/Hub/Core bootstrap requires original approval and
+# Hub/Core reader only. Issuer-specific reader dependency is in the mandatory
+# @issuer drop-in AND enforced in the Python signer before loading its key.
+# Do not install this base unit without the companion issuer drop-in.
+After=gpt02-issue159-reader.service gpt02-issue159-approval-reader.service
+Requires=gpt02-issue159-reader.service gpt02-issue159-approval-reader.service
 ConditionPathExists=/run/gpt02-reader/reader.sock
-ConditionPathExists=/run/gpt02-issuer-reader/reader.sock
 ConditionPathExists=/run/gpt02-approval-reader/approval.sock
 ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-%i-private-key.pkcs8
 ConditionPathExists=/etc/gpt02-dev/trust-fingerprints.json
@@ -27,7 +30,6 @@ RuntimeDirectory=gpt02-issue159-operational-signer-%i
 RuntimeDirectoryMode=0700
 SupplementaryGroups=gpt02-issue159-signers
 BindReadOnlyPaths=/run/gpt02-reader
-BindReadOnlyPaths=/run/gpt02-issuer-reader
 BindReadOnlyPaths=/run/gpt02-approval-reader
 UMask=0077
 NoNewPrivileges=yes
