@@ -53,6 +53,9 @@ def run(args,stdin=None,timeout=35):
  return p.stdout
 def sql(q):
  return run(["docker","exec","-i",NAME,"psql","-v","ON_ERROR_STOP=1","-U","postgres","-d",DATABASE],q)
+def scalar(q):
+ return run(["docker","exec",NAME,"psql","-At","-v","ON_ERROR_STOP=1",
+             "-U","postgres","-d",DATABASE,"-c",q]).strip()
 def quote(s):return "'"+str(s).replace("'","''")+"'"
 def render(name,values):
  data=(ROOT/"scripts/dev"/name).read_text()
@@ -155,10 +158,10 @@ END $bad$;""")
    ("scoped_select","SELECT count(*) FROM pg_policies WHERE schemaname='ai_platform'"+
        " AND policyname LIKE 'cst_onejob_prestage_%'"),
   ]:
-   result=sql(q).strip()
-   if not result.endswith("0"):raise RuntimeError("TEMP_PRESTAGE_"+label+"_NOT_CLEANED")
-  persisted=sql("SELECT count(*) FROM ai_platform.ai_jobs WHERE job_code="+quote(CODE))
-  if not persisted.strip().endswith("1"):raise RuntimeError("PREPARED_JOB_LOST")
+   result=scalar(q)
+   if result!="0":raise RuntimeError("TEMP_PRESTAGE_"+label+"_NOT_CLEANED")
+  persisted=scalar("SELECT count(*) FROM ai_platform.ai_jobs WHERE job_code="+quote(CODE))
+  if persisted!="1":raise RuntimeError("PREPARED_JOB_LOST")
   print(json.dumps({
    "result":"PASS",
    "scope":"DISPOSABLE_PG16_NETWORK_NONE_ONLY",
