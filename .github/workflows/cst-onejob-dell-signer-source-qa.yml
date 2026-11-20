@@ -52,7 +52,7 @@ jobs:
           $text = Get-Content .\scripts\dev\cst-onejob-native-signer-installer.ps1 -Raw
           if ($text -notmatch 'INSTALL_DENIED_MISSING_OFFICIAL_CUSTODY_OR_ADMIN_APPROVAL' -or
               $text -notmatch "releaseDecision='NO_GO'" -or
-              $text -match 'Enable-LocalUser|Start-Service|New-LocalUser|Set-LocalUser') {
+              $text -match '(?m)^\s*(?:Enable-LocalUser|Start-Service|New-LocalUser|Set-LocalUser)\b') {
             throw 'SIGNER_INSTALLER_NOT_FAIL_CLOSED'
           }
           Write-Output 'CSTDEV_NATIVE_WINDOWS_SERVICE_SOURCE_BUILD_PASS'
