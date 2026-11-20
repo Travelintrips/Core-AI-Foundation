@@ -209,6 +209,8 @@ def tests(core: Path,hub: Path,pr196: Path,*, full=True):
              [python,"scripts/dev/test_gpt02_issue159_independent_relock_watchdog_pg.py"]),
             ("DB_FINALLY_RELOCK",core,
              [python,"scripts/dev/test_gpt02_issue159_broker_finally_relock_pg.py"]),
+            ("DB_OWNER_COLUMN_ACL_RELOCK",core,
+             [python,"scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py"]),
         ]
     return stages
 
