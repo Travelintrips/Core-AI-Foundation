@@ -1100,3 +1100,68 @@ The signer process is a **test-only fixture service**, not a new
 production signer, GPT02 issuer, or task dispatcher. The one-job
 release gate, `subscriberDeliveryVerified` and
 `independentFinalAckVerified` remain **false / NO-GO**.
+
+## Mandatory independent Owner approval — DB Owner ID is not an OTP-attested session
+
+**20 November 2026, independent read-only Supabase CST-DEV inspection:**
+
+- `ai_platform.cst_onejob_owner_approvals` currently has **zero rows**.
+  There is no fresh Company-1 `ollama_model_invocation` job in
+  `waiting` or `queued`; the only matching
+  `cst-ai-team-company1-dev:pilot-...` request is historical completed
+  job #482 (never eligible for replay).
+- `cst_team_model_pilot_stage_login` and
+  `cst_team_model_pilot_writer` both remain **NOLOGIN** and have no
+  active sessions. The stage login has a narrow membership in the
+  writer role. Neither role has permission to become a model worker
+  merely because a repository QA test passed.
+- The existing `cst_onejob_stage_approval_insert` RLS policy
+  requires a new `waiting` Company-1 Ollama job, an
+  `approved_by_user_id` referencing an active internal Owner and a
+  bounded approval time. **It does NOT, by itself, prove the named
+  Owner authenticated using Google/OTP and personally approved this
+  specific new job.** This is an authorization-provenance gap,
+  independent of ordinary PostgreSQL RLS access enforcement.
+  Never enable the stage login or construct a database `APPROVED`
+  row by substituting an Owner ID. A syntactically correct row
+  could misrepresent actual human authorization.
+
+**Minimal fail-closed fix in Draft PR #1765 (no live DB change):**
+the advisory one-job preflight now requires a separate
+`candidateIndependentOwnerApprovalAttested===true` and reports
+`INDEPENDENT_OWNER_APPROVAL_NOT_ATTESTED` if missing. The actual
+runtime fact collector **hardcodes the observation to false** until
+an independently audited authenticator proves a fresh Owner approval
+bound to this exact request/job/Company-1/worker/commit and short
+expiry. An environment flag, a stored user ID, synthetic receipt,
+or a regular SQL `APPROVED` row cannot set the fact.
+
+A new **pure verification contract**
+`scripts/dev/cst-team-onejob-owner-approval-receipt.mjs`
+checks a separately pinned Ed25519 public key against the exact
+approval/job/worker/source-SHA lineage and short validity period,
+rejecting wrong tenant, historical #482, altered fields, replay,
+extra payload keys, forged signatures and self-asserted trust roots.
+Like the already-PASS subscriber projector, this verifier
+**never claims to authenticate the actual Owner session**:
+`ownerAuthenticatedSessionVerified=false`,
+`independentOwnerApprovalAttested=false`,
+`pilotAdmissionReady=false`, and `sideEffects=NONE`
+even if the signer/row fixtures are internally consistent.
+
+**Required operational sequence before the first real new job:**
+an already-authorized Owner/Super Admin authenticates through
+the existing protected DEV session (no new account, password or
+TOTP requested here), separately approves one bounded new
+Company-1 job, and the authorized service creates a
+verifiable signed Owner-session receipt. An independent
+authority/checkpoint verifies session provenance, requester,
+source commit, expiration and uniqueness. **Only then** may
+an independently attested staging transaction be admitted.
+The operational broker, scoped RLS login, independent
+subscriber readiness, one-job execution, durable delivery
+readback and four-agent Final ACK are subsequent separate gates.
+
+No stage-role privileges, existing approval policies, owner
+accounts, database data, signer/dispatch settings or PROD
+services were changed by this source-only correction.
