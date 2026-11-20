@@ -31,6 +31,7 @@ on:
       - "docs/dev/gpt02-issue159-store-owner-relock-helper.PROPOSED.sql"
       - "docs/dev/gpt02-issue159-store-owner-relock-helper-maintenance.REVIEW_ONLY.sql"
       - "scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py"
+      - "scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py"
       - "scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py"
       - "scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py"
       - "scripts/dev/gpt02_issue159_one_pass_candidate.py"
@@ -174,7 +175,10 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
           GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
             python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
-          echo "PASS_OWNER_MAINTENANCE_PG16_PG17_DISPOSABLE_ONLY"
+          python3 scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py
+          GPT02_COLUMN_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py
+          echo "PASS_OWNER_MAINTENANCE_AND_SEVEN_TABLE_COLUMN_RELOCK_PG16_PG17"
           # Sam/Supabase's proposed postgres SET ROLE path: isolated only.
           # Preserve provider-granted ADMIN SET=false membership, restore
           # NOLOGIN owner, and revoke seven-table + column ACLs.
