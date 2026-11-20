@@ -213,5 +213,45 @@ def factories_from_systemd(candidate: dict) -> TrustedConnectionFactories:
     })
 
 
+class SystemdDeferredOneTaskSupervisor:
+    """Instantiate native connections only AFTER original broker verifies scope.
+
+    This is deliberately LAZY. The original verifier first authenticates all
+    four signatures, persisted Owner intent, and lineage; only its first
+    consume_scope_once call can supply the derived candidate. Do not perform
+    the same 9-second verifier roundtrip twice within a 15-second issuer lease.
+    """
+
+    def __init__(self):
+        self._instance=None
+        self._attempted=False
+
+    def _live(self):
+        if self._instance is None:
+            _deny("ONE_SHOT_NATIVE_SUPERVISOR_NOT_AUTHENTICATED")
+        return self._instance
+
+    def consume_scope_once(self,candidate,read_challenge):
+        if self._attempted:
+            _deny("ONE_SHOT_NATIVE_SUPERVISOR_CLAIM_REPLAY")
+        self._attempted=True
+        factories=factories_from_systemd(candidate)
+        from gpt02_issue159_native_one_shot_supervisor import OneTaskNativeSupervisor
+        self._instance=OneTaskNativeSupervisor(candidate,factories)
+        return self._instance.consume_scope_once(candidate,read_challenge)
+
+    def open_minimal_auditor_connection(self,candidate):
+        return self._live().open_minimal_auditor_connection(candidate)
+
+    def open_canonical_guard_connection(self,candidate):
+        return self._live().open_canonical_guard_connection(candidate)
+
+    def open_one_scoped_connection(self,candidate):
+        return self._live().open_one_scoped_connection(candidate)
+
+    def relock_and_verify(self,candidate):
+        return self._live().relock_and_verify(candidate)
+
+
 if __name__=="__main__":
     raise SystemExit("NO_CLI_ONE_SHOT_SYSTEMD_CUSTODY_NOT_PROVISIONED")
