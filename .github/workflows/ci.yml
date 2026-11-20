@@ -91,6 +91,8 @@ jobs:
         run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
       - name: Verify scoped pilot RLS and rollback in disposable PostgreSQL
         run: python3 scripts/dev/cst-team-dedicated-model-role-rehearsal.py
+      - name: Verify one-WAITING-job prestage cannot approve, queue or create second active job
+        run: python3 scripts/dev/cst-team-onejob-prestage-rls-pg16-qa.py
       - name: Verify separate subscriber one-event RLS, immutable receipt and rollback
         run: python3 scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py
       - name: Verify host executor private runtime directory
