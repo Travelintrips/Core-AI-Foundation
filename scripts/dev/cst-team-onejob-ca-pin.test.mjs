@@ -9,6 +9,7 @@ import {
   CST_ONEJOB_DEV_CA_PATH,
   CST_ONEJOB_SUPABASE_CA_FINGERPRINT,
   loadPinnedCstDevSupabaseRootCa,
+  createPinnedCstOneJobPgConnection,
 } from "../../lib/db/src/cstOneJobPinnedSupabaseCa.ts";
 
 const FIXTURE=fileURLToPath(new URL("./fixtures/supabase-root-2021-public-qa.crt",import.meta.url));
@@ -46,4 +47,43 @@ test("the live one-job adapter may not trust an arbitrary system root",()=>{
   assert.match(source,/rejectUnauthorized: true, ca: trustedCa/);
   assert.doesNotMatch(source,/rejectUnauthorized:\s*false/);
   assert.match(source,/CST_ONEJOB_DEV_CA_PATH/);
+});
+
+test("both one-job dedicated logins use exact DEV host and pinned CA",()=>{
+  for(const role of ["cst_team_model_pilot_stage_login","cst_onejob_broker_login"]){
+    const url="postgresql://"+role+".xssrfshdrtdfupgqwfdw:"+
+      "synthetic-password-only-123@aws-1-ap-southeast-2.pooler.supabase.com"+
+      ":6543/postgres?sslmode=verify-full";
+    const config=createPinnedCstOneJobPgConnection(url,role,FIXTURE);
+    assert.equal(config.host,"aws-1-ap-southeast-2.pooler.supabase.com");
+    assert.equal(config.port,6543);
+    assert.equal(config.database,"postgres");
+    assert.equal(config.user,role+".xssrfshdrtdfupgqwfdw");
+    assert.equal(config.ssl.rejectUnauthorized,true);
+    assert.equal(config.ssl.servername,config.host);
+    assert.equal(new X509Certificate(config.ssl.ca).fingerprint256.replace(/:/g,"").toUpperCase(),
+      CST_ONEJOB_SUPABASE_CA_FINGERPRINT);
+    assert.equal(Object.hasOwn(config,"connectionString"),false);
+    for(const bad of [
+      url.replace("aws-1-ap-southeast-2","aws-0-ap-southeast-1"),
+      url.replace(":6543/postgres",":5432/postgres"),
+      url.replace("verify-full","no-verify"),
+      url+"&sslrootcert=/tmp/fake",
+      url.replace(role+".xssrfshdrtdfupgqwfdw",
+        "aicore_dev_runtime.xssrfshdrtdfupgqwfdw")
+    ])assert.throws(()=>createPinnedCstOneJobPgConnection(bad,role,FIXTURE),
+      /DATABASE_SCOPE_OR_TLS_DENIED/);
+    assert.throws(()=>createPinnedCstOneJobPgConnection(url,role,"/not/installed/ca"),
+      /CA_NOT_AVAILABLE/);
+  }
+});
+test("direct staging and broker paths cannot lose CA via connectionString",()=>{
+  const stage=readFileSync(new URL(
+    "../../artifacts/api-server/src/lib/cstOneJobStagingDatabase.ts",import.meta.url),"utf8");
+  const broker=readFileSync(new URL(
+    "./cst-onejob-trusted-admission-bridge.mjs",import.meta.url),"utf8");
+  assert.match(stage,/createPinnedCstOneJobPgConnection\(url,CST_ONEJOB_STAGE_LOGIN\)/);
+  assert.match(broker,/createPinnedCstOneJobPgConnection\(env\[KEY\],LOGIN\)/);
+  assert.doesNotMatch(stage,/connectionString\s*:\s*url/);
+  assert.doesNotMatch(broker,/connectionString\s*:\s*env\[KEY\]/);
 });

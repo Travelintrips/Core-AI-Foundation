@@ -5,6 +5,8 @@
 import {openSync,readFileSync,closeSync,fstatSync,lstatSync,realpathSync,constants} from "node:fs";
 import {reviewOneJobSignedHandoff} from "./cst-onejob-signed-handoff-review.ts";
 import {readRootOwnedQaPublicTrust} from "./cst-onejob-qa-trust-custody.mjs";
+import {CST_ONEJOB_DEV_POOLER,createPinnedCstOneJobPgConnection}
+  from "../../lib/db/src/cstOneJobPinnedSupabaseCa.ts";
 export const PROJECT="xssrfshdrtdfupgqwfdw";
 export const LOGIN="cst_onejob_broker_login";
 export const ROLE="cst_onejob_admission_broker";
@@ -25,7 +27,7 @@ export function reviewBrokerEnvironment(env){
   else try{
     const u=new URL(env[KEY]);
     require(["postgres:","postgresql:"].includes(u.protocol),"INVALID_PROTOCOL");
-    require(/^[a-z0-9-]+\.pooler\.supabase\.com$/.test(u.hostname),"WRONG_POOLER");
+    require(u.hostname===CST_ONEJOB_DEV_POOLER,"WRONG_POOLER");
     require(u.port==="6543"&&u.pathname==="/postgres","TRANSACTION_POOLER_REQUIRED");
     require(decodeURIComponent(u.username)===LOGIN+"."+PROJECT,"BROKER_LOGIN_MISMATCH");
     require(decodeURIComponent(u.password).length>=16,"BROKER_PASSWORD_INVALID");
@@ -147,7 +149,9 @@ export async function main(args=process.argv.slice(2),env=process.env){
     const signedReceipt=JSON.parse(pinnedFile(INBOX+"/receipt.json",16384).toString("utf8"));
     const evidenceBytes=pinnedFile(INBOX+"/evidence.bin",65536);
     const {default:pg}=await import("pg");
-    const client=new pg.Client({connectionString:env[KEY],
+    // Explicit CA and exact regional hostname; never let URL sslmode
+    // replace the pinned CA on a live connection.
+    const client=new pg.Client({...createPinnedCstOneJobPgConnection(env[KEY],LOGIN),
       connectionTimeoutMillis:3500,statement_timeout:4000,
       application_name:"cst-dev-onejob-independent-broker"});
     let connected=false;

@@ -9,9 +9,10 @@
  */
 import {createHash} from "node:crypto";
 import {drizzle} from "drizzle-orm/node-postgres";
-import {PostgresPool} from "@workspace/db";
+import {PostgresPool,createPinnedCstOneJobPgConnection} from "@workspace/db";
 import {
-  CST_ONEJOB_STAGE_URL_KEY,reviewCstOneJobStageDatabaseConfig,
+  CST_ONEJOB_STAGE_URL_KEY,CST_ONEJOB_STAGE_LOGIN,
+  reviewCstOneJobStageDatabaseConfig,
 } from "./cstOneJobStageDbConfig.js";
 
 let holder:{
@@ -30,12 +31,12 @@ export function getCstOneJobStagingDatabase(env:NodeJS.ProcessEnv) {
       throw Error("ONEJOB_STAGING_DATABASE_CREDENTIAL_CHANGED_RESTART_REQUIRED");
     return holder.database;
   }
-  // sslmode=verify-full is REQUIRED in the already validated connection URL.
-  // No search_path startup option: the Supabase transaction pooler rejects it.
-  // Staging sets TRANSACTION READ WRITE explicitly after BEGIN, avoiding any
-  // driver-specific, unsupported connection 'verify' callback.
+  // Keep the validated URL out of node-postgres: its sslmode query option
+  // overrides an explicit ssl.ca. A missing or mismatched pinned CA fails
+  // closed before any network connection.
+  const pinned=createPinnedCstOneJobPgConnection(url,CST_ONEJOB_STAGE_LOGIN);
   const pool=new PostgresPool({
-    connectionString:url,
+    ...pinned,
     max:1,
     min:0,
     idleTimeoutMillis:5_000,

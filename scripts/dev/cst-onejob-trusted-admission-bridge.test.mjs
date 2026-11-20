@@ -100,13 +100,15 @@ test("default-off dedicated broker config rejects missing credential, bad TLS or
     OLLAMA_WORKER_RUNTIME_ENABLED:"false",
     CST_TEAM_DEV_APPROVED_SOURCE_SHA:sourceSha,
     CST_DEV_ONEJOB_BROKER_DATABASE_URL:
-      "postgresql://cst_onejob_broker_login.xssrfshdrtdfupgqwfdw:syntheticpasswordonly123@aws-0-test.pooler.supabase.com:6543/postgres?sslmode=verify-full"};
+      "postgresql://cst_onejob_broker_login.xssrfshdrtdfupgqwfdw:syntheticpasswordonly123@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=verify-full"};
   assert.equal(reviewBrokerEnvironment(env).ready,true);
   for(const patch of [
     {CST_DEV_ONEJOB_BROKER_ENABLED:"false"},
     {CST_DEV_ONEJOB_BROKER_DATABASE_URL:undefined},
     {CST_DEV_ONEJOB_BROKER_DATABASE_URL:env.CST_DEV_ONEJOB_BROKER_DATABASE_URL.replace("6543","5432")},
-    {SUPABASE_PROD_DATABASE_URL:"present"}
+    {SUPABASE_PROD_DATABASE_URL:"present"},
+    {CST_DEV_ONEJOB_BROKER_DATABASE_URL:env.CST_DEV_ONEJOB_BROKER_DATABASE_URL.replace(
+      "aws-1-ap-southeast-2.pooler.supabase.com","aws-0-ap-southeast-1.pooler.supabase.com")}
   ])assert.equal(reviewBrokerEnvironment({...env,...patch}).ready,false);
   const denied=await main(["--nope"],env);
   assert.equal(denied.reason,"EXPLICIT_APPROVED_DEV_MODE_REQUIRED");

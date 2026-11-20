@@ -37,3 +37,58 @@ export function loadPinnedCstDevSupabaseRootCa(
   }
   return pem;
 }
+
+
+/**
+ * Direct, bounded PostgreSQL client options for CST-DEV one-job staging and
+ * admission. Both require verify-full in the validated DSN, but neither
+ * passes that URL to node-postgres: an sslmode URL option would overwrite
+ * the explicit pinned CA supplied below.
+ *
+ * This module does not connect, issue credentials, or authorize a job.
+ */
+export const CST_ONEJOB_DEV_POOLER = "aws-1-ap-southeast-2.pooler.supabase.com";
+const CST_ONEJOB_DEV_PROJECT = "xssrfshdrtdfupgqwfdw";
+export type CstOneJobDedicatedLogin =
+  "cst_team_model_pilot_stage_login" | "cst_onejob_broker_login";
+
+export function createPinnedCstOneJobPgConnection(
+  connectionUrl: string,
+  dedicatedLogin: CstOneJobDedicatedLogin,
+  pinnedCaFile: string = CST_ONEJOB_DEV_CA_PATH,
+) {
+  if (dedicatedLogin !== "cst_team_model_pilot_stage_login" &&
+      dedicatedLogin !== "cst_onejob_broker_login")
+    throw Error("CST_DEV_ONEJOB_LOGIN_NOT_ALLOWED");
+  let url: URL;
+  try { url = new URL(connectionUrl); }
+  catch { throw Error("CST_DEV_ONEJOB_DATABASE_URL_INVALID"); }
+  let username: string, password: string;
+  try {
+    username = decodeURIComponent(url.username);
+    password = decodeURIComponent(url.password);
+  } catch { throw Error("CST_DEV_ONEJOB_DATABASE_IDENTITY_INVALID"); }
+  if (!["postgres:", "postgresql:"].includes(url.protocol) ||
+      url.hostname !== CST_ONEJOB_DEV_POOLER ||
+      url.port !== "6543" ||
+      url.pathname !== "/postgres" ||
+      username !== dedicatedLogin + "." + CST_ONEJOB_DEV_PROJECT ||
+      password.length < 16 ||
+      url.searchParams.size !== 1 ||
+      url.searchParams.get("sslmode") !== "verify-full" ||
+      url.hash !== "")
+    throw Error("CST_DEV_ONEJOB_DATABASE_SCOPE_OR_TLS_DENIED");
+  const trustedCa = loadPinnedCstDevSupabaseRootCa(pinnedCaFile);
+  return {
+    host: CST_ONEJOB_DEV_POOLER,
+    port: 6543,
+    database: "postgres",
+    user: username,
+    password,
+    ssl: {
+      rejectUnauthorized: true as const,
+      ca: trustedCa,
+      servername: CST_ONEJOB_DEV_POOLER,
+    },
+  };
+}
