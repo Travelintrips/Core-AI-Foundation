@@ -1,0 +1,74 @@
+# CST-DEV one-job: non-bypassable admission capability — security review
+
+**Decision: source-level feasibility PASS; operational NO-GO.**
+This is a narrow addition to canonical Core Draft PR #1769, not a new admission engine.
+Scope: Supabase **CST-DEV** project `xssrfshdrtdfupgqwfdw`, Company 1,
+a **NEW** job, existing Owner approval and independently validated PRE receipt.
+Do not deploy it, change LOGIN/grants, stage an Owner job or touch PROD.
+
+## Reason the existing role cannot simply receive UPDATE
+The existing `cst_onejob_private.admit_verified_onejob` is SECURITY INVOKER.
+As observed in live CST-DEV, the broker has EXECUTE but no UPDATE/INSERT on
+the necessary tables, so the transaction cannot complete. Adding direct
+broker table DML would let a compromised broker bypass the application-side
+Ed25519 verification and queue a job with raw SQL. This must remain denied.
+
+## Disposable proof-of-concept (not deployable DDL)
+The existing original invoker business routine is **preserved**. The
+`cst-onejob-admission-capability.DISPOSABLE-ONLY.sql` fixture adds:
+- `cst_onejob_admission_executor`: distinct NOLOGIN, NOBYPASSRLS, not
+  a member of or assumable by the broker. A restricted function is owned
+  by this role; the role is **not** the owner of application tables.
+- `cst_onejob_broker_login` and `cst_onejob_admission_broker` have
+  **function EXECUTE only**, plus schema USAGE. They have no direct table
+  UPDATE, INSERT, executor membership, or access to the underlying
+  invoker RPC. The wrapper checks the authenticated `session_user`
+  and the expected `current_user`.
+- `admit_verified_onejob_capability` uses SECURITY DEFINER strictly as
+  a capability boundary, with pinned `search_path=pg_catalog` and NO
+  dynamic SQL, before invoking the **same** original locked/atomic RPC.
+  The executor has only the DML required for the single transaction.
+- Explicit row policies restrict Company-1 admission, model, job, one-use
+  receipt and audit/outbox; SOURCE test database has FORCE RLS and
+  dedicated ownership. The QA receipt must be minted by an *independent*
+  approved issuer; this wrapper **cannot itself verify Ed25519**.
+
+The fixture checks the disposable database name and an explicit test-only
+setting. Its demonstration LOGIN role exists **only in a network-none
+throwaway PostgreSQL container** and never uses actual CST credentials.
+
+## Test coverage (disposable PostgreSQL 16, network none)
+The new `cst-onejob-admission-capability.disposable.test.mjs`:
+- proves broker direct UPDATE, consumption INSERT, raw invoker function,
+  session-user spoofing and executor role escalation are denied;
+- proves bad nonce/digest fails, a simulated audit failure completely
+  rolls back, only one concurrent admission succeeds, replay is denied;
+- proves the same existing Owner approval / job / verified PRE receipt /
+  ledger / outbox contract is used;
+- cleans up the isolated Docker container and creates no DEV/PROD job.
+
+These are **synthetic** source tests, NOT real credential, signer or E2E proof.
+
+## Deployment review blockers — all mandatory
+1. Formal, independent CST Security/Operations approval of the explicit
+   SECURITY DEFINER boundary. Do **not** use SECURITY DEFINER simply to
+   make a permission error disappear. An owner with superuser,
+   BYPASSRLS, table ownership or CREATE privileges is not acceptable.
+2. Compare this prototype with the **current live** roles, 6 private
+   ledger tables, approval/job/audit schemas and effective RLS policies.
+   Do not run the fixture against CST-DEV. Produce a separate reviewed
+   migration with a named owner, scoped CREATE/EXECUTE grants, exact
+   column privileges, explicit RLS intersections and rollback plan.
+3. Verify independent QA issuer custody: broker cannot forge, alter or
+   mint verified receipts; signer private keys inaccessible to broker
+   or shared Core; signed proof bound to project/company/job/source/worker.
+4. Test as real dedicated login (no shared service credential) through
+   pinned-CA TLS transaction pooler; denial of direct SQL, wrong role,
+   expired/forged/replayed approval, concurrency, rollback. Do not rely
+   on GUC flags, app-side booleans or optional middleware for DB policy.
+5. Before any runtime cutover, collect real one Owner action, one NEW
+   WAITING job, real QA approval/readback, broker admission, model event,
+   subscriber ACK, independent four-agent signatures and reviewer
+   Final ACK, then relock and verify no unexpected job. PROD untouched.
+
+**Until steps 1–5 are independently evidenced: `releaseDecision=NO_GO`.**

@@ -60,6 +60,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"cst_onejob_live_readiness",argv:[node,"--test","scripts/dev/cst-onejob-live-readiness.test.mjs"]},
   {id:"post_execution_subscriber_final_ack",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-postexecution-review.test.mjs"]},
   {id:"atomic_broker_event_outbox_candidate",argv:[node,"--test","scripts/dev/cst-onejob-broker-operational-disposable.test.mjs"]},
+  {id:"admission_capability_nonbypassable_disposable",argv:[node,"--test","scripts/dev/cst-onejob-admission-capability.disposable.test.mjs"]},
   {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
   {id:"independent_qa_pull_subscriber_writers",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-integrated-evidence-issuance.test.mjs"]},
   {id:"independent_subscriber_operational_entrypoint",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-subscriber-one-shot.test.mjs"]},
