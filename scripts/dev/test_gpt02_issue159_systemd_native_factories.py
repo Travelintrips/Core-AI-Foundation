@@ -190,6 +190,72 @@ class SystemdOneTaskCustodyTest(unittest.TestCase):
                 "POSTGRES_CONNECTION_DENIED"):
                 custody.factories_from_systemd(self.candidate).consumer()
 
+    def test_signed_packet_file_is_same_locked_systemd_unit_not_caller_path(self):
+        packet={k:{"claims":{"fixture_only":True},"signature":"fixture_not_valid"}
+                for k in ("approval","hubLink","coreLink","issuerEvidence")}
+        path=self.directory/custody.SIGNED_PACKET_FILE
+        path.write_text(json.dumps(packet))
+        path.chmod(0o600)
+        self.assertEqual(custody.signed_packet_from_systemd(),packet)
+        path.chmod(0o644)
+        with self.assertRaisesRegex(BrokerAdmissionError,"FILE_UNTRUSTED"):
+            custody.signed_packet_from_systemd()
+        path.unlink()
+        path.symlink_to(Path(self.temp.name)/"untrusted-packet.json")
+        with self.assertRaises(BrokerAdmissionError):
+            custody.signed_packet_from_systemd()
+
+    def test_deferred_bridge_never_opens_credentials_before_original_claim(self):
+        from unittest.mock import Mock
+        from gpt02_issue159_native_one_shot_supervisor import OneTaskNativeSupervisor
+        lazy=custody.SystemdDeferredOneTaskSupervisor()
+        with self.assertRaisesRegex(BrokerAdmissionError,"NOT_AUTHENTICATED"):
+            lazy.open_one_scoped_connection(self.candidate)
+        with patch.object(custody,"factories_from_systemd",
+                          return_value=self.expected) as factory, patch.object(
+                          OneTaskNativeSupervisor,"consume_scope_once",
+                          return_value={"releaseDecision":"NO_GO"}) as claim:
+            self.assertEqual(self.driver.requests,[])
+            assert lazy.consume_scope_once(self.candidate,"a"*64)=={
+                "releaseDecision":"NO_GO"
+            }
+            factory.assert_called_once_with(self.candidate)
+            claim.assert_called_once_with(self.candidate,"a"*64)
+            with self.assertRaisesRegex(BrokerAdmissionError,"CLAIM_REPLAY"):
+                lazy.consume_scope_once(self.candidate,"b"*64)
+
+    def test_deferred_bridge_failed_first_claim_cannot_reenter(self):
+        lazy=custody.SystemdDeferredOneTaskSupervisor()
+        with patch.object(custody,"factories_from_systemd",
+                          side_effect=RuntimeError("UNAVAILABLE")) as opened:
+            with self.assertRaisesRegex(RuntimeError,"UNAVAILABLE"):
+                lazy.consume_scope_once(self.candidate,"a"*64)
+            with self.assertRaisesRegex(BrokerAdmissionError,"CLAIM_REPLAY"):
+                lazy.consume_scope_once(self.candidate,"a"*64)
+            opened.assert_called_once()
+        with self.assertRaisesRegex(BrokerAdmissionError,"NOT_AUTHENTICATED"):
+            lazy.relock_and_verify(self.candidate)
+
+    def test_template_systemd_is_disabled_with_separate_exact_encrypted_credential_files(self):
+        unit=(Path(__file__).resolve().parents[2]/
+          "deploy/ai-coding-standalone-dev/gpt02-issue159-one-shot-native@.service"
+        ).read_text()
+        self.assertIn("Type=oneshot",unit)
+        self.assertIn("DynamicUser=yes",unit)
+        self.assertIn("MemoryMax=128M",unit)
+        self.assertIn("TimeoutStartSec=70s",unit)
+        self.assertNotIn("[Install]",unit)
+        self.assertNotIn("ExecStartPre=",unit)
+        self.assertNotIn("EnvironmentFile=",unit)
+        self.assertNotIn("Restart=on-failure",unit)
+        self.assertIn(
+            "ConditionPathExists=/etc/gpt02-dev/issue159-one-shot-%i-enabled.approved",unit
+        )
+        self.assertIn("LoadCredentialEncrypted=relock-catalog-dsn:",unit)
+        self.assertIn("LoadCredentialEncrypted=approved-lifecycle-packet.json:",unit)
+        for filename in custody.FILES.values():
+            self.assertIn("LoadCredentialEncrypted="+filename+":",unit)
+
     def test_source_has_no_credential_issuance_or_authentication_shortcut(self):
         source=(Path(__file__).resolve().parents[2]/
                 "deploy/ai-coding-standalone-dev/gpt02_issue159_systemd_native_factories.py"
