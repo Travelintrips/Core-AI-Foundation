@@ -29,7 +29,7 @@ SystemCallArchitectures=native
 MemoryDenyWriteExecute=yes
 LockPersonality=yes
 UMask=0077
-TimeoutStartSec=8s
+TimeoutStartSec=45s
 Restart=no
 
 # No enable/install section: it is never started automatically without
