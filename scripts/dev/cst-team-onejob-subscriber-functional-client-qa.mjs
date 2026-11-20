@@ -4,7 +4,8 @@
  * ephemeral SCRAM-SHA-256 auth inside network-none QA. Real Supabase requires
  * pinned TLS, a dedicated login and separate operational authorization.
  */
-import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
+import { createHash, createPublicKey } from "node:crypto";
+import { connect } from "node:net";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { consumeOneCstDevCompletionOnce } from "./cst-team-onejob-subscriber-consumer-qa.mjs";
@@ -27,7 +28,42 @@ const pem=readFileSync("/qa-secrets/receipt-public.pem","utf8");
 const key=createPublicKey(pem);
 const pin=createHash("sha256").update(
   key.export({type:"spki",format:"der"})).digest("hex");
-const signer=createPrivateKey(readFileSync("/qa-secrets/receipt-private.pem"));
+// Key custody is isolated in a separate non-root SO_PEERCRED-gated signer.
+if(readFileSync("/proc/net/route","utf8").split("\n").some(x=>
+  x.trim().split(/\s+/)[1]==="00000000"))
+  throw Error("QA_CLIENT_IPV4_ROUTE_FORBIDDEN");
+async function signUsingIndependentSidecar(bytes) {
+  return await new Promise((resolve,reject)=>{
+    if(!Buffer.isBuffer(bytes) || bytes.length<256 || bytes.length>2000)
+      return reject(Error("QA_SIGN_FRAME_INVALID"));
+    const socket=connect({path:"/qa-sign/sign.sock"});
+    const chunks=[];
+    let count=0,finished=false;
+    const finish=(err,result)=>{
+      if(finished)return;
+      finished=true;
+      socket.destroy();
+      if(err)reject(err); else resolve(result);
+    };
+    socket.setTimeout(3500);
+    socket.once("connect",()=>{
+      const header=Buffer.alloc(4);
+      header.writeUInt32BE(bytes.length);
+      socket.write(Buffer.concat([header,bytes]));
+    });
+    socket.on("data",chunk=>{
+      count+=chunk.length;
+      if(count>64)return finish(Error("QA_SIGNER_SIGNATURE_OVERFLOW"));
+      chunks.push(chunk);
+    });
+    socket.once("end",()=>{
+      if(count!==64)return finish(Error("QA_SIGNER_BAD_SIGNATURE_SIZE"));
+      finish(null,Buffer.concat(chunks).toString("base64"));
+    });
+    socket.once("error",finish);
+    socket.once("timeout",()=>finish(Error("QA_SIGNER_TIMEOUT")));
+  });
+}
 const pg=createRequire("/app/lib/db/package.json")("pg");
 const password=readFileSync("/qa-secrets/subscriber-password","utf8");
 if(!/^[a-f0-9]{64}$/.test(password))throw Error("QA_SCRAM_PASSWORD_INVALID");
@@ -61,7 +97,7 @@ try {
       trustedSubscriber:{roleName:QA_ROLE,subscriberId:SID,
         publicKeyPem:pem,publicKeySha256:pin},
       now:new Date(),
-      signPayload:async bytes=>sign(null,bytes,signer).toString("base64"),
+      signPayload:signUsingIndependentSidecar,
     });
     if(expectedMode!=="first"||result.claimedInsertCount!==1)
       throw Error("UNEXPECTED_RECEIPT_INSERT");
