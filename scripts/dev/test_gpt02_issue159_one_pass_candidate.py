@@ -17,7 +17,7 @@ class OnePassCandidateContract(unittest.TestCase):
     def test_never_authorizes_live_execution(self):
         self.assertEqual(qa.ENVIRONMENT, "CST-DEV")
         self.assertEqual(qa.PROJECT, "xssrfshdrtdfupgqwfdw")
-        self.assertEqual(len(qa.SQL_REQUIRED), 6)
+        self.assertEqual(len(qa.SQL_REQUIRED), 7)
         self.assertGreaterEqual(len(qa.EXTERNAL_GATES), 6)
         source=SOURCE.read_text()
         for text in ("liveReleaseDecision","NO_GO_NEVER_AUTHORIZES",
@@ -35,6 +35,7 @@ class OnePassCandidateContract(unittest.TestCase):
         self.assertEqual(len(names),len(set(names)))
         for name in (
             "CORE_FOUR_SIGNED_VERIFIER",
+            "CORE_OWNER_SQLITE_SOURCE_ATOMIC",
             "CORE_PINNED_ONESHOT_BROKER",
             "CORE_SHARED_RELOCK_TIMER",
             "CORE_THREE_DOMAIN_ISSUER_STARTUP",
@@ -50,13 +51,14 @@ class OnePassCandidateContract(unittest.TestCase):
             "DB_SIGNED_SCOPE_ISSUANCE",
             "DB_ONE_USE_CONSUMPTION",
             "DB_CANONICAL_REVOCATION_GUARD",
+            "DB_OWNER_SOURCE_PG_FENCE_NATIVE",
             "DB_CRASH_SAFE_WATCHDOG",
             "DB_FINALLY_RELOCK",
             "DB_OWNER_COLUMN_ACL_RELOCK",
             "DB_SHARED_SCOPED_RELOCK_NATIVE",
         ):
             self.assertIn(name,names)
-        self.assertEqual(len(qa.tests(root,root,root,full=False)),7)
+        self.assertEqual(len(qa.tests(root,root,root,full=False)),8)
 
     def test_no_dsn_or_private_keys_in_child_process(self):
         fake={
