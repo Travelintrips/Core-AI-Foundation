@@ -94,20 +94,25 @@ def record_issue159_approval_intent(
         # Both writes belong to the SAME SQLite transaction: a human
         # consent can never commit without its durable, immutable outbox
         # record. PostgreSQL mirroring is deliberately NOT claimed here.
-        connection.execute(
-            """INSERT INTO gpt02_issue159_owner_approval_outbox
-            (decision_id,task_id,company_id,command_id,attempt_id,
-             claims_sha256,actor_id,auth_method,role_at_decision,
-             recorded_at_ms,expires_at_ms)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                record["id"], record["task_id"], record["company_id"],
-                record["command_id"], record["attempt_id"],
-                record["claims_sha256"], record["actor_id"],
-                record["auth_method"], record["role_at_decision"],
-                record["recorded_at_ms"], record["expires_at_ms"],
-            ),
-        )
+        try:
+            connection.execute(
+                """INSERT INTO gpt02_issue159_owner_approval_outbox
+                (decision_id,task_id,company_id,command_id,attempt_id,
+                 claims_sha256,actor_id,auth_method,role_at_decision,
+                 recorded_at_ms,expires_at_ms)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record["id"], record["task_id"], record["company_id"],
+                    record["command_id"], record["attempt_id"],
+                    record["claims_sha256"], record["actor_id"],
+                    record["auth_method"], record["role_at_decision"],
+                    record["recorded_at_ms"], record["expires_at_ms"],
+                ),
+            )
+        except sqlite3.Error as exc:
+            # An outbox error is NOT a duplicate human decision. Classify it
+            # as a failed ATOMIC write and roll back the just-inserted intent.
+            raise sqlite3.OperationalError("OWNER_OUTBOX_ATOMIC_WRITE_FAILED") from exc
         connection.commit()
     except sqlite3.IntegrityError:
         try:
