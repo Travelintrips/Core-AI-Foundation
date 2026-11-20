@@ -16,6 +16,10 @@ import {
   sendAiCoreWhatsappReply,
   transcribeAiCoreWhatsappVoiceNote,
 } from "../services/aiCoreWhatsappChatService.js";
+import {
+  approveEmployeeKasbonOwnerWhatsapp,
+  parseEmployeeKasbonOwnerDecision,
+} from "../services/employeeKasbonWhatsappService.js";
 
 const router = Router();
 
@@ -659,6 +663,98 @@ router.post(
     if (!text) {
       res.status(202).json({ accepted: false, reason: "EMPTY_TEXT" });
       return;
+    }
+
+    const kasbonOwnerDecision =
+      inputSource === "text" ? parseEmployeeKasbonOwnerDecision(text) : null;
+    if (kasbonOwnerDecision) {
+      try {
+        const result = await approveEmployeeKasbonOwnerWhatsapp({
+          senderPhone: sender,
+          taskNumber: kasbonOwnerDecision.taskNumber,
+        });
+
+        if (result?.kind === "ambiguous") {
+          const destination = resolveReplyDestination(payload, sender);
+          const delivery = await sendAiCoreWhatsappReply({
+            to: destination,
+            deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
+            incomingMessageId: `${messageId}-kasbon-ambiguous`,
+            text:
+              "Ada lebih dari satu pengajuan kasbon yang masih menunggu persetujuan. " +
+              "Balas dengan format *OK [nomor pengajuan]*.\n\n" +
+              result.taskNumbers.map((value) => `• ${value}`).join("\n"),
+          });
+          res.status(200).json({
+            accepted: true,
+            kind: "EMPLOYEE_KASBON_OWNER_APPROVAL",
+            approved: false,
+            reason: "AMBIGUOUS_PENDING_KASBON",
+            delivery,
+          });
+          return;
+        }
+
+        if (result?.kind === "approved") {
+          const formattedAmount = new Intl.NumberFormat("id-ID").format(result.amount);
+          const ownerDelivery = await sendAiCoreWhatsappReply({
+            to: sender,
+            deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
+            incomingMessageId: `${messageId}-kasbon-owner`,
+            text:
+              `✅ ${result.taskNumber} disetujui dan sudah tercatat di BizPortal sebagai *${result.advanceNumber}*. ` +
+              "Status: menunggu pencairan.",
+          });
+
+          let requesterDelivery = ownerDelivery;
+          if (result.requesterPhone !== sender) {
+            requesterDelivery = await sendAiCoreWhatsappReply({
+              to: result.requesterPhone,
+              deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
+              incomingMessageId: `${messageId}-kasbon-requester`,
+              text:
+                `✅ Pengajuan kasbon Rp${formattedAmount} Anda telah disetujui Owner dan tercatat di BizPortal ` +
+                `dengan nomor *${result.advanceNumber}*. Status saat ini: menunggu pencairan.`,
+            });
+          }
+
+          res.status(200).json({
+            accepted: true,
+            kind: "EMPLOYEE_KASBON_OWNER_APPROVAL",
+            approved: true,
+            taskId: result.taskId,
+            taskNumber: result.taskNumber,
+            advanceId: result.advanceId,
+            advanceNumber: result.advanceNumber,
+            alreadyRecorded: result.alreadyRecorded,
+            ownerDelivery,
+            requesterDelivery,
+          });
+          return;
+        }
+      } catch (error) {
+        const destination = resolveReplyDestination(payload, sender);
+        const delivery = await sendAiCoreWhatsappReply({
+          to: destination,
+          deviceId: typeof payload.deviceId === "string" ? payload.deviceId : null,
+          incomingMessageId: `${messageId}-kasbon-error`,
+          text:
+            "Persetujuan kasbon belum dapat diproses. Sistem tidak membuat kasbon duplikat. " +
+            "Silakan cek nomor pengajuan atau kirim ulang persetujuan setelah beberapa saat.",
+        });
+        logger.warn(
+          { err: error, senderSuffix: sender.slice(-4), delivery },
+          "[employee-kasbon-wa] owner approval failed",
+        );
+        res.status(503).json({
+          accepted: true,
+          kind: "EMPLOYEE_KASBON_OWNER_APPROVAL",
+          approved: false,
+          error: "EMPLOYEE_KASBON_OWNER_APPROVAL_FAILED",
+          delivery,
+        });
+        return;
+      }
     }
 
     // Critical approvals intentionally stay text-only. A speech-to-text mistake
