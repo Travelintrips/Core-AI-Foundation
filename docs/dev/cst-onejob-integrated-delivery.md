@@ -1,5 +1,5 @@
 # CST-DEV One-Job — Integrated Single-Package Delivery & Acceptance
-**Scope:** Supabase CST-DEV `xssrfshdrtdfupgqwfdw` only. PR #1767 remains Draft; operational release decision is **NO-GO**. This is one complete delivery plan, not an authorization to deploy, provision secrets or sign.
+**Scope:** Supabase CST-DEV `xssrfshdrtdfupgqwfdw` only. canonical Draft PR #1769 supersedes historical PR #1767; operational release decision is **NO-GO**. This is one complete delivery plan, not an authorization to deploy, provision secrets or sign.
 
 ## What is already built and must be reused
 - One internal authenticated Owner decision; stage creates a new **WAITING** model job, one approval and audit atomically. Dedicated staging config and scoped RLS/roles exist. Generic jobs cannot impersonate reserved pilot.

@@ -22,7 +22,7 @@ AI Task Hub PR #202 remains a **separate** DEV-only monitor and four-agent signe
 node scripts/dev/cst-onejob-onepass-acceptance.mjs --offline
 ```
 
-The CI workflow first installs the isolated pinned broker-signature test dependency. This single command executes **44 GitHub-compatible** offline checks: Owner/atomic/broker/final-ACK, network, UNIX peer, pinned CA, subscriber receipt and isolated scoped-RLS. The additional functional PG16 subscriber round-trip and root-required broker namespace test are **VPS-only** (reported as `remainingVpsIsolatedQa`, not silently counted as PASS). All tests use synthetic or disposable data and are forbidden from creating a real CST-DEV job or touching PROD. The report must always say `releaseDecision: NO_GO`, even when `offlineResult: PASS`.
+The CI workflow first installs the isolated pinned broker-signature test dependency. This single command executes all registered GitHub-compatible offline checks: Owner/atomic/broker/final-ACK, network, UNIX peer, pinned CA, subscriber receipt and isolated scoped-RLS. The additional functional PG16 subscriber round-trip and root-required broker namespace test are **VPS-only** (reported as `remainingVpsIsolatedQa`, not silently counted as PASS). All tests use synthetic or disposable data and are forbidden from creating a real CST-DEV job or touching PROD. The report must always say `releaseDecision: NO_GO`, even when `offlineResult: PASS`.
 
 ## Required real E2E evidence before declaring PASS
 
@@ -57,3 +57,9 @@ reports `CORE_RECONCILIATION_COMMITTED` and `finalAckIssued=false`.
 Only the separate Hub 4+1 verifier can validate the later, independent Final
 ACK, and real E2E remains NO-GO until signer custody, authentic DB readback,
 Owner session, and relock evidence are verified. No new Owner action is added.
+
+## Existing QA + subscriber issuer sources recovered into the canonical PR
+
+The canonical Draft Core PR #1769 now **reuses**, instead of rebuilding, the independent PRE/POST QA evidence issuance and append-only PRE receipt writer, one-shot independently signed PULL subscriber ACK writer, and least-privilege role proposal previously developed in historical PR #1767. The corresponding disposable integration fixture checks fail-closed source lineage and PostgreSQL 16 RLS/INSERT-only permissions. It deliberately ends before Core reconciliation and Hub Final ACK, which have their own new-domain verifiers and separate independent four-agent + reviewer evidence.
+
+All restored components remain **default-OFF, not deployed**, require externally authorized credentials, independently custodied signers, reviewed migrations and a real independent supervisor before they can touch CST-DEV. No source test may claim a live or independent Final ACK; the integrated acceptance runner continues to return `releaseDecision: NO_GO` despite offline PASS. Do not activate `cst_onejob_qa_receipt_writer` or `cst_onejob_subscriber_writer` by merging source alone. Historical #482, PROD and healthy shared Core AI DEV remain untouched.

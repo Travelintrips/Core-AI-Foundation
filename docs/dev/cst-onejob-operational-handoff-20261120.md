@@ -1,8 +1,8 @@
 # CST-DEV one-job: operational handoff and evidence gates
 
-Status: **NO-GO**. This is a review checklist, not a provisioning script, credential, migration, authorization, or deployment instruction. It does not grant permission to merge PR #1767.
+Status: **NO-GO**. This is a review checklist, not a provisioning script, credential, migration, authorization, or deployment instruction. The official implementation is Draft PR #1769; historical PR #1767 must not be merged or deployed as a Core-only Final ACK.
 
-## Verified baseline (20 Nov 2026)
+## Historical baseline (before canonical PR #1769; 20 Nov 2026)
 
 - Exact source head before this documentation: `0bb5db158c9999058d98660a32b12b0edabdf601`. CI #44610813309: build, full suite, static/typecheck, Final CI Verify SUCCESS; deploy skipped.
 - CST-DEV Supabase project: `xssrfshdrtdfupgqwfdw` (never PROD). `cst_team_model_pilot_stage_login` and `cst_team_model_pilot_writer` exist, both NOLOGIN.
