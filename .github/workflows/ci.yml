@@ -73,6 +73,12 @@ jobs:
         run: node --test scripts/dev/cst-team-onejob-unix-peer-boundary.test.mjs
       - name: Verify Linux kernel SO_PEERCRED rejects unauthorized Unix peer
         run: python3 scripts/dev/test_cst_team_onejob_peercred.py -q
+      - name: Validate independent signature and one-session operational broker source
+        run: |
+          python3 -m venv /tmp/cst-onejob-broker-ci-venv
+          /tmp/cst-onejob-broker-ci-venv/bin/python -m pip install --disable-pip-version-check cryptography==41.0.7
+          /tmp/cst-onejob-broker-ci-venv/bin/python -B scripts/dev/test_cst_team_onejob_operational_broker.py
+          bash -n scripts/dev/cst-team-onejob-operational-broker-no-network-qa.sh
       - name: Verify offline PostgreSQL TLS passes through fixed broker
         run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-broker-pg-integration.test.mjs
       - name: Verify untrusted TLS certificate is rejected through offline broker
