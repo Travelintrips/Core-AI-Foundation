@@ -131,8 +131,9 @@ def preflight(core: Path, hub: Path, pr196: Path):
     ):
         if not (pr196/"artifacts/api-server/src/lib"/name).is_file():
             failures.append("ORIGINAL_FINAL_ACK_MODULE_MISSING:"+name)
-    if not (hub/"pr196-verifier-reference").exists():
-        failures.append("ORIGINAL_PR196_REFERENCE_UNMOUNTED")
+    ref=hub/"pr196-verifier-reference"
+    if not ref.is_dir() or ref.is_symlink():
+        failures.append("ORIGINAL_PR196_REFERENCE_MUST_BE_LOCAL_FOR_ISOLATED_DOCKER")
     if not executable("node") or not executable("docker") or not executable("python3"):
         failures.append("SOURCE_QA_RUNTIME_TOOL_MISSING")
     # These are not release permissions; record code provenance only.
@@ -153,6 +154,7 @@ def scrubbed_env(core: Path, pr196: Path):
     env["GPT02_PR196_REFERENCE"]=str(pr196)
     env["PYTHONPATH"]=str(core/"deploy/ai-coding-standalone-dev")+os.pathsep+str(core/"scripts/dev")
     env["GPT02_ISSUE159_SOURCE_ONLY_QA"]="1"
+    env["GPT02_TEST_NODE_IMAGE"]="node:22-alpine"
     return env
 
 
@@ -180,6 +182,12 @@ def tests(core: Path,hub: Path,pr196: Path,*, full=True):
     ]
     if full:
         stages += [
+            ("HUB_NATIVE_TWO_TLS_PRESIGN",hub,
+             ["bash","scripts/dev/test-gpt02-presign-native-two-tls-readers-isolated.sh"]),
+            ("HUB_POSTAUTH_DUAL_DATABASE_TLS",hub,
+             ["bash","scripts/dev/test-gpt02-postauth-dualdb-approval-issuer-isolated.sh"]),
+            ("HUB_REAL_RESTRICTED_ATTESTOR_ISSUER",hub,
+             ["bash","scripts/dev/test-gpt02-single-owner-real-attestor-isolated.sh"]),
             ("DB_SIX_MIGRATIONS_EXISTING_CATALOG",core,
              [python,"scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py"]),
             ("DB_DUAL_GRANTOR_RESTORATION",core,
