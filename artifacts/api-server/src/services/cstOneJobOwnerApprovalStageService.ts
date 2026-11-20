@@ -125,6 +125,21 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
     if(index.rows.length!==1 || record?.indisunique!==true ||
       record?.indisvalid!==true || record?.indisready!==true)
       throw Error("ONEJOB_UNIQUE_INDEX_NOT_READY");
+    // A unique request ID alone cannot protect against two distinct
+    // concurrent clicks. The one-active-approval partial UNIQUE index
+    // must also be valid/ready; it serializes this Company-1 pilot across
+    // transactions and a failed second approval rolls its WAITING job back.
+    const singleton=await tx.execute(sql`
+      SELECT i.indisunique,i.indisvalid,i.indisready
+      FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='ai_platform'
+        AND c.relname='cst_onejob_one_active_approval'
+        AND i.indpred IS NOT NULL`);
+    const one=singleton.rows[0] as Record<string,unknown>|undefined;
+    if(singleton.rows.length!==1 || one?.indisunique!==true ||
+      one?.indisvalid!==true || one?.indisready!==true)
+      throw Error("ONEJOB_SINGLE_ACTIVE_INDEX_NOT_READY");
 
     // The transaction stages a non-claimable WAITING job. No caller can
     // turn it into QUEUED until a distinct verified pilot admission step.
