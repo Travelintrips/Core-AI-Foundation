@@ -100,21 +100,36 @@ class OneJobSignedBrokerContract(unittest.TestCase):
             os.chmod(pub,0o644)
             env.write_text(json.dumps({"manifest":self.m,"signatureBase64":signed}))
             os.chmod(env,0o644)
-            self.assertEqual(broker.verify_manifest(str(env),str(pub),pin,False),self.m)
-            with self.assertRaisesRegex(RuntimeError,"TRUST_KEY_PIN_MISMATCH"):
-                broker.verify_manifest(str(env),str(pub),"f"*64,False)
-            env.write_text(json.dumps({"manifest":{**self.m,"jobId":484},"signatureBase64":signed}))
-            with self.assertRaisesRegex(RuntimeError,"SIGNATURE"):
-                broker.verify_manifest(str(env),str(pub),pin,False)
-            env.write_text(json.dumps({"manifest":self.m,"signatureBase64":signed}))
-            os.chmod(env,0o666)
-            with self.assertRaisesRegex(RuntimeError,"UNTRUSTED_FILE"):
-                broker.verify_manifest(str(env),str(pub),pin,False)
-            os.chmod(env,0o644)
-            alias=p/"link.pem"
-            alias.symlink_to(pub)
-            with self.assertRaisesRegex(RuntimeError,"UNTRUSTED_FILE"):
-                broker.verify_manifest(str(env),str(alias),pin,False)
+            # CI runs without root. Preserve the production root-owned trust
+            # requirement; simulate only ownership metadata in this unit test.
+            # Explicitly prove a non-root trust file is rejected first.
+            real_lstat=Path.lstat
+            def lstat_as(owner):
+                def fixture_lstat(path,*args,**kwargs):
+                    st=real_lstat(path,*args,**kwargs)
+                    if Path(path) in {pub,env}:
+                        return SimpleNamespace(st_mode=st.st_mode,st_size=st.st_size,st_uid=owner)
+                    return st
+                return fixture_lstat
+            with patch.object(broker.Path,"lstat",new=lstat_as(28502)):
+                with self.assertRaisesRegex(RuntimeError,"UNTRUSTED_OWNER"):
+                    broker.verify_manifest(str(env),str(pub),pin,False)
+            with patch.object(broker.Path,"lstat",new=lstat_as(0)):
+                self.assertEqual(broker.verify_manifest(str(env),str(pub),pin,False),self.m)
+                with self.assertRaisesRegex(RuntimeError,"TRUST_KEY_PIN_MISMATCH"):
+                    broker.verify_manifest(str(env),str(pub),"f"*64,False)
+                env.write_text(json.dumps({"manifest":{**self.m,"jobId":484},"signatureBase64":signed}))
+                with self.assertRaisesRegex(RuntimeError,"SIGNATURE"):
+                    broker.verify_manifest(str(env),str(pub),pin,False)
+                env.write_text(json.dumps({"manifest":self.m,"signatureBase64":signed}))
+                os.chmod(env,0o666)
+                with self.assertRaisesRegex(RuntimeError,"UNTRUSTED_FILE"):
+                    broker.verify_manifest(str(env),str(pub),pin,False)
+                os.chmod(env,0o644)
+                alias=p/"link.pem"
+                alias.symlink_to(pub)
+                with self.assertRaisesRegex(RuntimeError,"UNTRUSTED_FILE"):
+                    broker.verify_manifest(str(env),str(alias),pin,False)
 
     def test_cannot_import_startup_or_grant_dispatch(self):
         src=Path(broker.__file__).read_text()
