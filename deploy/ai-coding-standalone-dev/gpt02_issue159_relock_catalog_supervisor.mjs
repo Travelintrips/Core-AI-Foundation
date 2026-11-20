@@ -151,6 +151,19 @@ export async function runCleanupPhases(client) {
     readerInstalled = state.rows[0].phase_a;
     if (readerInstalled) {
       readerCounts = await runPair(client, READER_PHASES, 'READER');
+    } else {
+      // The original writer-only runtime is safe only when NO scoped reader
+      // identity exists. A partial migration may have created a LOGIN but
+      // omitted relock RPCs; never report successful cleanup in that state.
+      const roles = await client.query(
+        "SELECT count(*)::integer AS scoped_roles FROM pg_roles " +
+        "WHERE left(rolname::text,15)='dev_gpt02_task_'"
+      );
+      if (roles.rows.length !== 1 ||
+          !Number.isSafeInteger(roles.rows[0].scoped_roles) ||
+          roles.rows[0].scoped_roles !== 0) {
+        throw new Error('RELOCK_SCOPED_ROLE_EXISTS_WITHOUT_CLEANUP');
+      }
     }
   } catch (error) {
     readerError = error;
