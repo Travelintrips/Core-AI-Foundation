@@ -12,6 +12,20 @@ const ROLE = 'dev_gpt02_relock_catalog_auditor';
 const CERT = '/etc/gpt02-dev/supabase-root-ca-2021.crt';
 const CRED = 'relock-catalog-dsn';
 const EXPECTED = ['database','host','password','port','projectRef','sslMode','user'];
+// Keep the harder deadline model ALREADY INSTALLED on the authorized VPS.
+// The reviewed 3s/backend termination budget must not be silently replaced
+// by a shorter timeout when adding the scoped reader cleanup lane.
+export const RELOCK_TERMINATION_BUDGET = Object.freeze({
+  roleSlots: 3,
+  perBackendWaitMs: 3000,
+  connectionTimeoutMs: 4000,
+  preflightQueryTimeoutMs: 2500,
+  phaseAQueryTimeoutMs: 4500,
+  statementTimeoutMs: 12000,
+  queryTimeoutMs: 15000,
+  systemdStartTimeoutMs: 35000,
+});
+
 
 export function validateCredentials(candidate) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
@@ -56,6 +70,16 @@ function result(reason, extra = {}) {
 // writer Phase A/B remain the original installed functions; optional reader
 // Phase A/B are additive and handle ONLY exact task-scoped ephemeral roles.
 // Each query uses its own committed transaction (no BEGIN/COMMIT wrapper).
+// Historical live cleanup counts are observations, NOT proof that a
+// connected backend was killed. Preserve this existing public contract.
+export function cleanupEvidence(phaseA, phaseB) {
+  return result('RELOCK_CLEANUP_ONLY', {
+    phaseAWindowCount: validateResult(phaseA, 'PHASE_A'),
+    phaseBCleanedWindowCount: validateResult(phaseB, 'PHASE_B'),
+    connectedSessionTerminationProven: false,
+  });
+}
+
 const WRITER_PHASES = [
   'SELECT gpt02_relock_audit.relock_expired_phase_a() AS count',
   'SELECT gpt02_relock_audit.relock_expired_phase_b() AS count',
@@ -66,11 +90,22 @@ const READER_PHASES = [
 ];
 
 async function runPair(client, statements, label) {
-  const a = await client.query(statements[0]);
-  validateResult(a.rows.length === 1 ? a.rows[0].count : null, label + '_A');
+  const a = await client.query({
+    text: statements[0],
+    query_timeout: RELOCK_TERMINATION_BUDGET.phaseAQueryTimeoutMs,
+  });
+  const phaseAWindowCount = validateResult(
+    a.rows.length === 1 ? a.rows[0].count : null, label + '_A'
+  );
   // The separate statement MUST commit before phase B opens.
-  const b = await client.query(statements[1]);
-  validateResult(b.rows.length === 1 ? b.rows[0].count : null, label + '_B');
+  const b = await client.query({
+    text: statements[1],
+    query_timeout: RELOCK_TERMINATION_BUDGET.queryTimeoutMs,
+  });
+  const phaseBCleanedWindowCount = validateResult(
+    b.rows.length === 1 ? b.rows[0].count : null, label + '_B'
+  );
+  return {phaseAWindowCount, phaseBCleanedWindowCount};
 }
 
 export async function runCleanupPhases(client) {
@@ -89,13 +124,15 @@ export async function runCleanupPhases(client) {
   // cleanup. Both independent workloads are attempted, but any failure is
   // propagated. If writer A fails, writer B is NOT started uncommitted.
   let writerError;
+  let writerCounts;
   try {
-    await runPair(client, WRITER_PHASES, 'WRITER');
+    writerCounts = await runPair(client, WRITER_PHASES, 'WRITER');
   } catch (error) {
     writerError = error;
   }
   let readerError;
   let readerInstalled = false;
+  let readerCounts = null;
   try {
     const state = await client.query(
       "SELECT to_regprocedure('gpt02_relock_audit.relock_reader_phase_a()')" +
@@ -113,14 +150,14 @@ export async function runCleanupPhases(client) {
     }
     readerInstalled = state.rows[0].phase_a;
     if (readerInstalled) {
-      await runPair(client, READER_PHASES, 'READER');
+      readerCounts = await runPair(client, READER_PHASES, 'READER');
     }
   } catch (error) {
     readerError = error;
   }
   if (writerError) throw writerError;
   if (readerError) throw readerError;
-  return {readerInstalled};
+  return {readerInstalled, writerCounts, readerCounts};
 }
 
 export async function main() {
@@ -144,8 +181,9 @@ export async function main() {
       password: credentials.password,
       ssl: { ca, rejectUnauthorized: true, servername: HOST },
       application_name: 'gpt02-issue159-independent-relock-dev',
-      connectionTimeoutMillis: 4000, query_timeout: 9500,
-      statement_timeout: 9000,
+      connectionTimeoutMillis: RELOCK_TERMINATION_BUDGET.connectionTimeoutMs,
+      query_timeout: RELOCK_TERMINATION_BUDGET.preflightQueryTimeoutMs,
+      statement_timeout: RELOCK_TERMINATION_BUDGET.statementTimeoutMs,
     });
     await client.connect();
     const identity = await client.query(
@@ -156,11 +194,21 @@ export async function main() {
         identity.rows[0].database !== 'postgres') {
       throw new Error('RELOCK_NATIVE_DATABASE_IDENTITY_INVALID');
     }
-    const {readerInstalled} = await runCleanupPhases(client);
-    // Absence of the additive reader lane does not break writer cleanup.
-    // Either outcome is NO_GO and does not start an issuer or authorize DELL.
-    // Even successfully completed cleanup is NOT a release authorization.
-    console.log(JSON.stringify(result(readerInstalled ? 'RELOCK_CLEANUP_ONLY' : 'RELOCK_WRITER_ONLY_READER_NOT_INSTALLED')));
+    const {readerInstalled, writerCounts, readerCounts} =
+      await runCleanupPhases(client);
+    // Preserve LIVE counts/evidence semantics: success is NOT proof that a
+    // connected client backend terminated, nor authority to issue/dispatch.
+    const evidence = cleanupEvidence(
+      writerCounts.phaseAWindowCount, writerCounts.phaseBCleanedWindowCount
+    );
+    console.log(JSON.stringify({
+      ...evidence,
+      reason: readerInstalled ? 'RELOCK_CLEANUP_ONLY' :
+        'RELOCK_WRITER_ONLY_READER_NOT_INSTALLED',
+      readerPhaseAWindowCount: readerCounts?.phaseAWindowCount ?? 0,
+      readerPhaseBCleanedWindowCount: readerCounts?.phaseBCleanedWindowCount ?? 0,
+      readerLaneInstalled: readerInstalled,
+    }));
     return 0;
   } catch (error) {
     // No SQL text, connection strings, passwords or raw DB errors in logs.
