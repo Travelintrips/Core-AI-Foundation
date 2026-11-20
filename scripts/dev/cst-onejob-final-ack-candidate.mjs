@@ -86,7 +86,8 @@ export function reviewFinalEvidence({
   check(s?.ackNonce===signedSubscriberAck?.claims?.nonce&&
     s?.ackSignatureBase64===signedSubscriberAck?.signatureBase64&&
     s?.ackIssuerFingerprint===signedSubscriberAck?.publicKeyFingerprint&&
-    s?.receivedAt===signedSubscriberAck?.claims?.acknowledgedAt,
+    Number.isFinite(Date.parse(s?.receivedAt))&&
+    Date.parse(s.receivedAt)===Date.parse(signedSubscriberAck?.claims?.acknowledgedAt),
     "PERSISTED_SUBSCRIBER_ACK_NOT_BOUND");
   check(j?.resultJson?.output?.type==="text"&&
     j.resultJson.output.text==="CST_DEV_ONEJOB_PROBE_OK"&&
