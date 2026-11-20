@@ -55,20 +55,27 @@ PHASE_A = "SELECT gpt02_relock_audit.relock_reader_phase_a() AS count"
 PHASE_B = "SELECT gpt02_relock_audit.relock_reader_phase_b() AS count"
 MAX_RELOCK_SECONDS = 19.0
 POLL_SECONDS = 0.40
-RELOCK_NATIVE_ROLE = AUDITOR_DB_USER
+# Reuse the exact original DEV relock service identity (not a new login).
+# Its independently encrypted service credential targets this direct host,
+# rather than the pooler user suffix used by the other four read sessions.
+RELOCK_NATIVE_ROLE = "dev_gpt02_relock_catalog_auditor"
+RELOCK_DIRECT_HOST = "db.xssrfshdrtdfupgqwfdw.supabase.co"
 
 
 def _deny(code: str) -> None:
     raise BrokerAdmissionError(code)
 
 
-def _identity(connection: Any, expected_user: str, *, autocommit: bool) -> None:
+def _identity(
+    connection: Any, expected_user: str, *, autocommit: bool,
+    expected_host: str = POOLER_HOST,
+) -> None:
     """Validate native negotiated libpq identity and immutable CST-DEV CA."""
     info=getattr(connection,"info",None)
     if (
         info is None or getattr(info,"user",None) != expected_user
         or getattr(info,"dbname",None) != "postgres"
-        or getattr(info,"host",None) != POOLER_HOST
+        or getattr(info,"host",None) != expected_host
         or str(getattr(info,"port",None)) != POOLER_PORT
         or getattr(connection,"autocommit",None) is not autocommit
     ):
@@ -221,7 +228,10 @@ class OneTaskNativeSupervisor:
         phase_b_seen=False
         try:
             with self._factories.relock() as conn:
-                _identity(conn,RELOCK_NATIVE_ROLE,autocommit=False)
+                _identity(
+                    conn,RELOCK_NATIVE_ROLE,autocommit=False,
+                    expected_host=RELOCK_DIRECT_HOST,
+                )
                 while True:
                     a=_phase(conn,PHASE_A)
                     # A is a committed, durable NOLOGIN before B begins.
