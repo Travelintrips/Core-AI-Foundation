@@ -58,14 +58,19 @@ def assert_no_containers():
         if r.returncode==0:raise RuntimeError("QA_NAME_IN_USE_"+name)
 
 def create_keys(shared):
-    keydir=shared/"secrets"
+    # Private key never shares a mount with the subscriber. The separate
+    # signer has a distinct non-root UID and private 0700 custody directory.
+    keydir=shared/"client-secrets"
     keydir.mkdir(mode=0o750)
     os.chown(keydir,0,28501)
-    private=keydir/"receipt-private.pem"
+    signersecret=shared/"signer-secrets"
+    signersecret.mkdir(mode=0o700)
+    private=signersecret/"receipt-private.pem"
     public=keydir/"receipt-public.pem"
     run(["openssl","genpkey","-algorithm","ED25519","-out",str(private)])
     run(["openssl","pkey","-in",str(private),"-pubout","-out",str(public)])
-    os.chown(private,28502,28501)
+    os.chown(signersecret,28510,28501)
+    os.chown(private,28510,28501)
     os.chmod(private,0o400)
     os.chmod(public,0o444)
     pubpin=run(["/usr/bin/node","-e",
@@ -76,7 +81,7 @@ def create_keys(shared):
         str(public)]).strip()
     if len(pubpin)!=64 or not all(x in "0123456789abcdef" for x in pubpin):
         raise RuntimeError("QA_PUBLIC_KEY_PIN_INVALID")
-    return keydir,pubpin
+    return keydir,signersecret,pubpin
 
 def main():
     global ADMIN_SECRET
@@ -99,10 +104,19 @@ def main():
     sharedmod.CORRELATION=CORRELATION
     temp=Path(tempfile.mkdtemp(prefix="cst-subscriber-pg16-functional-"))
     made=False
+    signer=None
+    signerlog=None
     try:
+        # Only x permission on fixture root; private key is in a different
+        # 0700 signer-owned directory not mounted into subscriber Docker.
+        os.chmod(temp,0o755)
         sockdir=temp/"pgsock"
         sockdir.mkdir(mode=0o755)
-        keydir,pin=create_keys(temp)
+        keydir,signersecret,pin=create_keys(temp)
+        sigdir=temp/"signer-socket"
+        sigdir.mkdir(mode=0o750)
+        os.chown(sigdir,28510,28501)
+        sigpath=sigdir/"sign.sock"
         passwordfile=keydir/"subscriber-password"
         passwordfile.write_text(SUBSCRIBER_SECRET,encoding="utf8")
         os.chown(passwordfile,28502,28501)
@@ -187,6 +201,52 @@ ALTER TABLE ai_platform.ai_audit_logs ENABLE ROW LEVEL SECURITY;
              "module,action,resource_id,resource_type,status,details) VALUES("+
              "'event-bus','event_published',"+q(EVENT)+","+
              "'ai_event','success',"+q(json.dumps(public_detail))+"::jsonb);")
+        # Start the signer only after fixture DB+event is ready. The process
+        # enters the disposable PG16 network namespace and has NO default
+        # IPv4 route; it runs as UID 28510, not the subscriber's UID 28502.
+        signerlog=open(temp/"signer.log","w+",encoding="utf8")
+        pid=int(run(["docker","inspect","--format","{{.State.Pid}}",PGCON]).strip())
+        if pid<=1:raise RuntimeError("QA_PG16_NETNS_PID_INVALID")
+        signer=subprocess.Popen([
+            "nsenter","--target",str(pid),"--net","--",
+            "setpriv","--no-new-privs","--bounding-set=-all",
+            "--reuid=28510","--regid=28501","--clear-groups",
+            "/usr/bin/python3","-B",
+            str(ROOT/"scripts/dev/cst_team_onejob_signer_sidecar_qa.py"),
+            "--qa-serve",str(sigpath),str(signersecret/"receipt-private.pem"),
+        ],env={**os.environ,"CST_ONEJOB_PG16_DISPOSABLE_QA":"true"},
+           stdout=signerlog,stderr=signerlog)
+        for i in range(50):
+            signerlog.flush()
+            signerlog.seek(0)
+            contents=signerlog.read()
+            if sigpath.is_socket() and "QA_SEPARATE_SIGNER_READY_NETWORK_NONE" in contents:
+                break
+            if signer.poll() is not None:raise RuntimeError("QA_SIGNER_EXITED_BEFORE_READY")
+            time.sleep(.1)
+        else:raise RuntimeError("QA_SIGNER_SOCKET_NOT_READY")
+        if os.readlink(f"/proc/{signer.pid}/ns/net")!=os.readlink(f"/proc/{pid}/ns/net"):
+            raise RuntimeError("QA_SIGNER_NOT_IN_PG16_NETWORK_NONE_NAMESPACE")
+        if (signersecret/"receipt-private.pem").stat().st_uid!=28510:
+            raise RuntimeError("QA_SIGNER_KEY_CUSTODY_NOT_SEPARATE")
+        # Wrong UID with the authorized group can reach the pathname
+        # socket but SO_PEERCRED must reject it before any signature.
+        negative=run([
+          "docker","run","--rm","--name",NODECON,
+          "--network","none","--read-only","--user","28503:28501",
+          "--cap-drop","ALL","--security-opt","no-new-privileges",
+          "--memory","144m","--pids-limit","32",
+          "--mount",f"type=bind,source={sigdir},target=/qa-sign,readonly",
+          "--entrypoint","node",IMAGE,"-e",
+          "const net=require('net');const s=net.connect({path:'/qa-sign/sign.sock'});"+
+          "let bytes=0;s.on('data',b=>{bytes+=b.length});"+
+          "s.on('end',()=>{if(bytes)process.exitCode=8;else console.log('BAD_UID_SIGNING_DENIED')});"+
+          "s.on('error',e=>{console.log('BAD_UID_PEERCRED_REJECTED');});",
+        ],timeout=8)
+        if not ("BAD_UID_SIGNING_DENIED" in negative or
+                "BAD_UID_PEERCRED_REJECTED" in negative):
+            raise RuntimeError("QA_SIGNER_REJECT_WRONG_UID_UNVERIFIED")
+
         # Explicit test-only Node executable, cannot connect outside --network none.
         def run_client(mode):
             args=["docker","run","--rm","--name",NODECON,
@@ -195,6 +255,7 @@ ALTER TABLE ai_platform.ai_audit_logs ENABLE ROW LEVEL SECURITY;
               "--memory","256m","--pids-limit","64",
               "--mount",f"type=bind,source={sockdir},target=/var/run/postgresql,readonly",
               "--mount",f"type=bind,source={keydir},target=/qa-secrets,readonly",
+              "--mount",f"type=bind,source={sigdir},target=/qa-sign,readonly",
               "--mount",f"type=bind,source={ROOT/'scripts/dev'},target=/qa,readonly",
               "--env","CST_ONEJOB_PG16_DISPOSABLE_QA=true",
               "--entrypoint","node",IMAGE,
@@ -207,6 +268,15 @@ ALTER TABLE ai_platform.ai_audit_logs ENABLE ROW LEVEL SECURITY;
         second=run_client("duplicate")
         if "PG16_DUPLICATE_SIGNED_RECEIPT_REJECTED" not in second:
             raise RuntimeError("DUPLICATE_NOT_DENIED")
+        signer.wait(timeout=5)
+        if signer.returncode!=0:
+            raise RuntimeError("QA_SEPARATE_SIGNER_FAILED")
+        signerlog.flush()
+        signerlog.seek(0)
+        if "QA_SIGNER_SIGNED_TWO_BOUNDED_PAYLOADS_PASS" not in signerlog.read():
+            raise RuntimeError("QA_EXTERNAL_SIGNING_NOT_PROVEN")
+        if "PG16_WRONG_SCRAM_PASSWORD_REJECTED" not in first or "PG16_WRONG_SCRAM_PASSWORD_REJECTED" not in second:
+            raise RuntimeError("QA_SCRAM_NEGATIVE_NOT_CONFIRMED")
         # Separate process performs privileged fixture DB readback. The
         # subscriber itself has no SELECT privileges on ai_audit_logs.
         query="""SELECT json_build_object(
@@ -256,6 +326,9 @@ END $postcheck$;""")
           "result":"PASS",
           "mode":"DISPOSABLE_PG16_AND_NODE_BOTH_NETWORK_NONE",
           "subscriberRoleVerifiedUnderDisposableScramAuth":True,
+          "signerNetworkNoneAndSeparateNonRootUid":True,
+          "independentSyntheticSignerSoPeercredRejectsWrongUid":True,
+          "subscriberNeverMountedEd25519PrivateKey":True,
           "oneScopedEventSelected":True,
           "signedReceiptInsertedOnce":True,
           "duplicateReceiptRejected":True,
@@ -266,6 +339,13 @@ END $postcheck$;""")
           "devDbTouched":False,"prodDbTouched":False,
         },sort_keys=True))
     finally:
+        if signer is not None and signer.poll() is None:
+            signer.terminate()
+            try:signer.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                signer.kill()
+                signer.wait(timeout=3)
+        if signerlog is not None:signerlog.close()
         if made:
             subprocess.run(["docker","rm","-f","-v",PGCON],
                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
