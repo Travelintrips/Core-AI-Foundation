@@ -71,3 +71,20 @@ independent supervisor, official credential/key custody, approved DB
 ledger/grant migration and one explicit Owner-approved new job before
 activation. GitHub CI PASS for this adapter cannot close the operational
 NO-GO, and the separate Hub 4-agent + reviewer Final ACK is unchanged.
+
+## QA and Core reconciliation adapters (one source package; still NO-GO)
+
+The canonical branch also includes default-DENY, independent one-shot
+QA PRE/POST issuer and Core reconciliation entrypoints, **reusing** the
+already-PASS QA signer/correlator and Core SERIALIZABLE ledger writer. The
+common custody gate strictly reads fixed root-owned artifact paths, binds
+exact job/source/worker and signed proof bytes, validates a <=5-minute
+change-specific release and independently pinned Ed25519 signer public root,
+then requires a separate-UID signing socket. No special-purpose
+credential/role or key is created, no shared database pool is accepted, and
+no runtime service is installed. PRE may write only one authoritative
+QA receipt once an authorized dedicated service account exists. POST is
+signed evidence, **not** Core reconciliation. Core reconciliation is a
+distinct signed ledger step, **not** the independent four-agent+reviewer
+Hub Final ACK. All remain unprovisioned pending reviewed CST-DEV authorization
+and genuine E2E evidence.

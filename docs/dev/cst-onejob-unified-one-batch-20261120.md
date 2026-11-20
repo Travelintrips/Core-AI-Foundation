@@ -123,3 +123,54 @@ The source tests include missing release/credential, wrong project/worker,
 shared or production DB variables, expired release, wrong signer key and
 same-OS-identity rejection; they do not touch CST-DEV or PROD. This closes
 a **source wiring gap only**; no operational E2E is implied.
+
+## One-batch independent QA PRE/POST + Core reconciliation source adapters
+
+The existing, already-tested business algorithms are reused. This source
+addition complements the **one-shot PULL subscriber** by adding precisely
+two default-DENY, single-job **operational-shaped** entrypoints:
+
+- `scripts/dev/cst-onejob-independent-qa-one-shot.mjs`:
+  `--pre-admission <newJobId>` may persist one independently signed QA
+  PRE receipt through the distinct `cst_onejob_qa_receipt_login` role;
+  `--post-execution <sameJobId>` may produce a separately signed POST
+  source receipt without persisting a Core reconciliation or claiming Hub
+  Final ACK. PRE always requires an authoritative Owner+WAITING job readback
+  inside one SERIALIZABLE transaction, not caller-provided booleans.
+  POST signing does **not** need the PRE database credential.
+- `scripts/dev/cst-onejob-core-reconciliation-one-shot.mjs`:
+  `--reconcile-approved-dev <sameJobId> <exactEventUuid>` reads one
+  independently collected and root-custodied proof package, then calls
+  the existing Core SERIALIZABLE reconciliation ledger writer under its
+  **own** `cst_onejob_finalack_login` (historical technical role name).
+  It issues a signed **Core reconciliation only**, never the separate Hub
+  four-agent plus reviewer Final ACK.
+
+Both reuse the same pinned DEV-only PostgreSQL CA/pooler TLS configuration
+without shared Core credentials, and the existing OS-UID-separated signer
+socket helper. The new common custody helper accepts **only fixed absolute
+public-trust, release and evidence artifact paths**. It refuses symlinks,
+non-root-owned source evidence and writable parent directories. Every
+release binds the exact CST-DEV project/Company 1/job/source SHA/worker,
+signer public fingerprint, independently captured evidence SHA-256, two
+**different** operating/signing UIDs, a change record and expiry <=5 min.
+PRE and POST evidence use different exact contracts. QA, subscriber and Core
+reconciliation public-key roots remain mutually distinct.
+
+### Operational requirements not supplied by source
+
+A designated CST security/operations controller must explicitly authorize
+the DEV change, independent QA/issuer/4+1 signer custodians, database
+service principals and narrow reviewed ledger/RLS migrations, with a rollback
+plan. The source does **not** provision any of these identities, public
+roots, private keys, signer sockets, credentials, service units or approver
+records. The actual receipt bytes must be independently captured, not
+self-reported by the inspected Core AI service. Running the same binary as
+root or in the shared Core AI process is forbidden. Historic job #482,
+PROD and the existing `core-ai-dev` runtime must remain untouched.
+
+The source-only one-pass acceptance now includes a new negative-test gate:
+`independent_qa_and_core_reconciliation_ops`, alongside existing staging,
+broker, subscriber and Hub-contract tests. Every source and offline test
+still intentionally reports `releaseDecision=NO_GO`; no source-only
+success can grant queue, dispatch or independent Final ACK authority.
