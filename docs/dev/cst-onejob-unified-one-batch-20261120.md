@@ -22,7 +22,7 @@ AI Task Hub PR #202 remains a **separate** DEV-only monitor and four-agent signe
 node scripts/dev/cst-onejob-onepass-acceptance.mjs --offline
 ```
 
-The CI workflow first installs the isolated pinned broker-signature test dependency. This single command executes the original owner/atomic/broker/final-ACK suite plus network, UNIX peer, pinned CA, functional subscriber, scoped-RLS and explicit one-Owner-path negative tests. All tests use synthetic or disposable data and are forbidden from creating a real CST-DEV job or touching PROD. The report must always say `releaseDecision: NO_GO`, even when `offlineResult: PASS`.
+The CI workflow first installs the isolated pinned broker-signature test dependency. This single command executes **44 GitHub-compatible** offline checks: Owner/atomic/broker/final-ACK, network, UNIX peer, pinned CA, subscriber receipt and isolated scoped-RLS. The additional functional PG16 subscriber round-trip and root-required broker namespace test are **VPS-only** (reported as `remainingVpsIsolatedQa`, not silently counted as PASS). All tests use synthetic or disposable data and are forbidden from creating a real CST-DEV job or touching PROD. The report must always say `releaseDecision: NO_GO`, even when `offlineResult: PASS`.
 
 ## Required real E2E evidence before declaring PASS
 
