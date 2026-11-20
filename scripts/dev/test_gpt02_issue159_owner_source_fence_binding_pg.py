@@ -22,7 +22,10 @@ from test_gpt02_issue159_canonical_approval_fence_pg import (
 )
 from test_gpt02_issue159_signed_scope_pg import quote
 
-SOURCE_SQL=ROOT/"docs/dev/gpt02-issue159-owner-source-fence-binding.REVIEW_ONLY.sql"\nIMPORT_SQL=ROOT/"docs/dev/gpt02-issue159-owner-source-importer.REVIEW_ONLY.sql"\nIMPORTER="dev_gpt02_owner_source_importer"\nIMPORT_PASSWORD="synthetic_owner_importer_only_test"
+SOURCE_SQL=ROOT/"docs/dev/gpt02-issue159-owner-source-fence-binding.REVIEW_ONLY.sql"
+IMPORT_SQL=ROOT/"docs/dev/gpt02-issue159-owner-source-importer.REVIEW_ONLY.sql"
+IMPORTER="dev_gpt02_owner_source_importer"
+IMPORT_PASSWORD="synthetic_owner_importer_only_test"
 IMAGE=os.environ.get("GPT02_OWNER_SOURCE_TEST_PG_IMAGE","postgres:16-alpine")
 if IMAGE not in ("postgres:16-alpine","postgres:17-alpine"):
     raise SystemExit("DISPOSABLE_POSTGRES_IMAGE_DENIED")
@@ -115,18 +118,18 @@ CREATE ROLE authenticated NOLOGIN;
               "LOGIN CONNECTION LIMIT 1 PASSWORD "+quote(IMPORT_PASSWORD)+";")
         def import_source(p,decision_id,digest):
             now=int(time.time()*1000)
-            sql="SELECT gpt02_relock_audit.register_owner_source_once("+
+            sql=("SELECT gpt02_relock_audit.register_owner_source_once("+
               quote(decision_id)+"::uuid,"+quote(digest)+","+
               quote("synthetic_owner_pg_fixture")+
               ",'supabase_admin_session',"+str(p["task_id"])+","+
               quote(p["command_id"])+"::uuid,"+
               quote(p["attempt_id"])+"::uuid,"+
-              str(now-1000)+","+str(now+30000)+")"
+              str(now-1000)+","+str(now+30000)+")")
             return login(name,IMPORTER,IMPORT_PASSWORD,sql)
         def import_link(p,decision_id):
-            sql="SELECT gpt02_relock_audit.register_owner_scope_once("+
+            sql=("SELECT gpt02_relock_audit.register_owner_scope_once("+
               quote(decision_id)+"::uuid,"+
-              quote(p["scope_sha"])+","+quote(p["packet_sha"])+")"
+              quote(p["scope_sha"])+","+quote(p["packet_sha"])+")")
             return login(name,IMPORTER,IMPORT_PASSWORD,sql)
         def readback(p,decision_id,digest,*,link=False):
             return login(name,"dev_gpt02_relock_catalog_auditor",
