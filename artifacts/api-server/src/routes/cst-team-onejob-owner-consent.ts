@@ -54,11 +54,16 @@ function freshOwnerSession(req:Request):string|null {
   const claims=jwt.verify(token,secret,{
    algorithms:["HS256"],maxAge:"20m"
   });
-  if(typeof claims!=="object" || claims===null ||
-     claims.sub!==u.id || typeof claims.iat!=="number" ||
-     typeof claims.exp!=="number" ||
-     ("purpose" in claims))return null;
-  const age=Date.now()-claims.iat*1000;
+  if(typeof claims!=="object" || claims===null)return null;
+  // jsonwebtoken's JwtPayload types sub as a string; our existing internal
+  // session service deliberately issues numeric IDs. Parse from unknown,
+  // not by weakening identity equality or coercing client-supplied text.
+  const verified=claims as Record<string,unknown>;
+  if(typeof verified.sub!=="number" || verified.sub!==u.id ||
+     typeof verified.iat!=="number" ||
+     typeof verified.exp!=="number" ||
+     Object.hasOwn(verified,"purpose"))return null;
+  const age=Date.now()-verified.iat*1000;
   return age>=0&&age<=ACTIVE_LIMIT_MS?token:null;
  }catch{return null}
 }
