@@ -89,6 +89,50 @@ A native supervisor, currently uninstalled, must provide all of the following **
 - Crash/replay/timeout/revocation paths must force **durable NOLOGIN, CONNECTION LIMIT 0, PASSWORD NULL, revoke private column/schema grants, terminate old sessions**, independently read back zero sessions and a clean issuer state. A self-reported JSON cleanup receipt is insufficient.
 - Only after these passes: four operational signer custody/transports, non-circular issuer startup ordering with original ledger checks intact, issuer lease, native DELL command/callback and receiver-owned Final ACK. None of these can be assumed from source/CI success.
 
+## 4A. Consolidated native supervisor adapter (source ready, NOT installed)
+
+The missing **Python interface adapter** for the original signed broker now exists as
+`deploy/ai-coding-standalone-dev/gpt02_issue159_native_one_shot_supervisor.py`.
+It implements all five already-reviewed supervisor hooks with exact signed
+task/command/attempt scope, immutable role derivation, and **injected native
+CST-DEV libpq connections**. It does not introduce a replacement verifier,
+service, timer, or dispatch workflow.
+
+- It calls the **original** `consume_once_via_pinned_connection` to commit one
+  immutable PostgreSQL claim, refusing any second attempt even after a failed
+  or uncertain commit acknowledgment.
+- It opens a separately authenticated low-privilege auditor connection for
+  original consumption proof; the original broker holds a separate native
+  canonical approval `FOR SHARE` guard while reading one row.
+- It opens only **one** task-scoped connection with pinned user, host and
+  `verify-full` public CA. Arbitrary caller-supplied role/DSN/root overrides
+  cannot be used by this adapter.
+- On every original broker completion/failure it calls existing **scoped**
+  reader Phase A (COMMIT NOLOGIN/password NULL) then Phase B (COMMIT revoke
+  all table/column grants and sessions), polling only within a strict bound.
+  This adapter's cleanup report is **not** a native receipt; the original broker
+  must independently verify the exact role through the existing boolean-only
+  PostgreSQL auditor or fail closed.
+- The relock connection is pinned to the **existing direct-host auditor
+  identity and encrypted-custody route**, distinct from pooler-bound
+  consumer, guard, independent audit and reader credentials.
+
+**Critical remaining DEPLOYMENT gap:** these native connection factories
+have no operational caller yet. The separately authorized DBA and encrypted
+credential custodian must stage signed, time-bounded per-task roles and
+ledger claims, provide the genuine independent consumer/guard/auditor
+connections and the 15-second cleanup timer **without exposing passwords in
+an HTTP route, git, logs or chat**. The original persisted SQLite Owner
+decision is still NOT atomically mirrored to the PostgreSQL canonical
+approval/revocation fence. The new source interface alone does not fix
+cross-store trust and does not issue any credential.
+
+Source tests invoke the original broker with the concrete adapter and
+exercise success, wrong DB identity, cross-task role swaps, replay,
+uncertain COMMIT, failed reader, missing independent relock proof, and
+transactionally separate Phase A/B. The unified one-pass QA includes these
+tests as part of the existing broker gate, **not a new release authority**.
+
 ## 5. Required go/no-go evidence and rollback boundary
 
 **STOP / NO-GO** for wrong project or credential target, owner/admin privilege drift, unknown migration version, existing rows in the private one-read ledgers, unexpected PUBLIC/API EXECUTE, FORCE-RLS or column-grant drift, general-reader reuse, missing immutable signed authority, any residual privileged session, timeout/crash without independently verified terminal relock, signer/source identity mismatch, or any attempt to run historical Task171.
