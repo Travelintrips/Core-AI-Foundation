@@ -41,7 +41,9 @@ import {
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.js";
-import { requireAuth, requireInternalRole } from "../middleware/internalAuth.js";
+import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
+import { SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
+import { verifyFreshOneJobStageConsent } from "../lib/cstOneJobFreshStageConsent.js";
 import { stageCstDevOneJobForVerifiedOwner } from "../services/cstOneJobOwnerApprovalStageService.js";
 
 const router = Router();
@@ -326,6 +328,7 @@ router.get("/ai/jobs", async (req, res): Promise<void> => {
 router.post("/ai/dev/onejob/owner-approve-and-stage",
   requireAuth,
   requireInternalRole("owner"),
+  requirePasswordChanged,
   async (req,res):Promise<void>=>{
     const host=req.hostname.toLowerCase();
     const origin=req.get("origin");
@@ -336,14 +339,19 @@ router.post("/ai/dev/onejob/owner-approve-and-stage",
        !req.is("application/json")){
       res.status(403).json({error:"DEV_OWNER_ORIGIN_REQUIRED"});return;
     }
-    if(!req.body || typeof req.body!=="object" ||
-       Array.isArray(req.body) || Object.keys(req.body).length!==0){
-      res.status(400).json({error:"ONEJOB_APPROVAL_BODY_MUST_BE_EMPTY"});return;
-    }
+    // One Owner action, no second confirmation after staging. The existing
+    // signed session must have been issued recently; an old 12h cookie,
+    // generic admin key, password-reset token or forged actor never suffices.
     const actor=req.internalUser;
-    if(!actor || actor.role!=="owner" || actor.status!=="active" ||
-       actor.accountType!=="internal"){
-      res.status(403).json({error:"VERIFIED_OWNER_SESSION_REQUIRED"});return;
+    const sessionToken=(req.cookies as Record<string,string>|undefined)?.[SESSION_COOKIE_NAME];
+    if(!actor || !verifyFreshOneJobStageConsent({
+      sessionToken,sessionSecret:process.env.SESSION_SECRET,
+      ownerUserId:actor.id,role:actor.role,status:actor.status,
+      accountType:actor.accountType,mustChangePassword:actor.mustChangePassword,
+      body:req.body,
+    })){
+      res.status(403).json({error:"FRESH_EXPLICIT_OWNER_STAGE_CONSENT_REQUIRED",
+        dispatchPermitted:false});return;
     }
     try{
       const staged=await stageCstDevOneJobForVerifiedOwner({
