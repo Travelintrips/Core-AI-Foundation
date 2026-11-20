@@ -35,7 +35,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"broker_unix_peer_boundary",argv:[node,"--test","scripts/dev/cst-team-onejob-unix-peer-boundary.test.mjs"]},
   {id:"broker_postgres_tunnel",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-team-onejob-broker-pg-integration.test.mjs"]},
   {id:"broker_tls_denial",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-team-onejob-broker-tls-negative.test.mjs"]},
-  {id:"kernel_peer_credential",argv:["python3","scripts/dev/test_cst_team_onejob_peercred.py","-q"]},
+  {id:"kernel_peer_credential",argv:["python3","scripts/dev/test_cst_team_onejob_peercred.py"]},
   {id:"signed_subscriber_receipt",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs"]},
   {id:"subscriber_one_event_consumer",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-consumer-qa.test.mjs"]},
   {id:"subscriber_rls_isolated_pg",argv:["python3","scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py"]},
