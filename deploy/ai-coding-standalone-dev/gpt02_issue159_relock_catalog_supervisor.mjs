@@ -23,7 +23,7 @@ export const RELOCK_TERMINATION_BUDGET = Object.freeze({
   phaseAQueryTimeoutMs: 4500,
   statementTimeoutMs: 12000,
   queryTimeoutMs: 15000,
-  systemdStartTimeoutMs: 35000,
+  systemdStartTimeoutMs: 45000,
 });
 
 
