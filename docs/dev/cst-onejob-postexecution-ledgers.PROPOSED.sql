@@ -23,6 +23,11 @@ CREATE TABLE cst_onejob_private.subscriber_delivery_receipts (
   ack_issuer_fingerprint text NOT NULL
     CHECK (ack_issuer_fingerprint ~ '^[a-f0-9]{64}$'),
   received_at timestamptz NOT NULL,
+  ack_expires_at timestamptz NOT NULL,
+  CONSTRAINT cst_onejob_signed_subscriber_ack_ttl CHECK (
+    ack_expires_at > received_at AND
+    ack_expires_at <= received_at + interval '5 minutes'
+  ),
   UNIQUE(event_id,subscriber_id)
 );
 ALTER TABLE cst_onejob_private.subscriber_delivery_receipts ENABLE ROW LEVEL SECURITY;

@@ -108,7 +108,7 @@ CREATE POLICY cst_onejob_subscriber_receipt_id_read
     subscriber_id='cst-onejob-subscriber-pilot');
 GRANT INSERT (approval_id,job_id,event_id,delivery_id,subscriber_id,
   correlation_id,delivery_digest,status,ack_nonce,ack_signature_base64,
-  ack_issuer_fingerprint,received_at)
+  ack_issuer_fingerprint,received_at,ack_expires_at)
   ON cst_onejob_private.subscriber_delivery_receipts
   TO cst_onejob_subscriber_writer;
 GRANT SELECT (id) ON cst_onejob_private.subscriber_delivery_receipts

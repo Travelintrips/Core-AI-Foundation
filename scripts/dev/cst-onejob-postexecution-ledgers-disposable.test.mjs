@@ -53,18 +53,18 @@ test("post-execution schema compiles once on isolated PostgreSQL, rejects replay
   const sig=Buffer.alloc(64,11).toString("base64");
   sql("INSERT INTO cst_onejob_private.subscriber_delivery_receipts "+
     "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
-    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at)"+
+    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at,ack_expires_at)"+
     "VALUES("+Q(id)+",483,"+Q(eventId)+","+Q(deliveryId)+","+
     "'cst-onejob-subscriber-pilot',"+Q(uuid(4))+","+
     Q("a".repeat(64))+",'ACKNOWLEDGED',"+Q("b".repeat(64))+","+
-    Q(sig)+","+Q("c".repeat(64))+",clock_timestamp());");
+    Q(sig)+","+Q("c".repeat(64))+",clock_timestamp(),clock_timestamp()+interval '3 minutes');");
   assert.notEqual(sql("INSERT INTO cst_onejob_private.subscriber_delivery_receipts "+
     "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
-    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at)"+
+    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at,ack_expires_at)"+
     "VALUES("+Q(id)+",483,"+Q(uuid(5))+","+Q(uuid(6))+","+
     "'cst-onejob-subscriber-pilot',"+Q(uuid(4))+","+
     Q("d".repeat(64))+",'ACKNOWLEDGED',"+Q("b".repeat(64))+","+
-    Q(sig)+","+Q("c".repeat(64))+",clock_timestamp());",true).status,0,
+    Q(sig)+","+Q("c".repeat(64))+",clock_timestamp(),clock_timestamp()+interval '3 minutes');",true).status,0,
     "SUBSCRIBER_REPLAY_ACCEPTED");
   assert.notEqual(sql("INSERT INTO cst_onejob_private.post_execution_qa_receipts "+
     "(approval_id,job_id,delivery_id,verifier_id,stage,nonce,proof_digest,"+

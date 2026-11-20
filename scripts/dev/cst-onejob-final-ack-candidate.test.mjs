@@ -66,7 +66,8 @@ function fixture(){
     status:"ACKNOWLEDGED",receivedAt:subClaims.acknowledgedAt,
     deliveryDigest:subClaims.deliveryDigest,ackNonce:subClaims.nonce,
     ackSignatureBase64:signedSubscriberAck.signatureBase64,
-    ackIssuerFingerprint:signedSubscriberAck.publicKeyFingerprint};
+    ackIssuerFingerprint:signedSubscriberAck.publicKeyFingerprint,
+    ackExpiresAt:subClaims.expiresAt};
   const evidenceBytes=Buffer.from(JSON.stringify({
     eventId,jobId:483,subscriberId,deliveryId,responseDigest:sha(response)
   }));
@@ -139,6 +140,9 @@ test("independent QA + subscriber + persisted model output correlation is requir
   const noAck={...p.facts,subscriber:{...p.facts.subscriber,
     ackSignatureBase64:"FORGED"}};
   assert.equal(reviewFinalEvidence({...base,facts:noAck}).status,"DENIED");
+  const badExpiry={...p.facts,subscriber:{...p.facts.subscriber,
+    ackExpiresAt:new Date(Date.now()+240_000).toISOString()}};
+  assert.equal(reviewFinalEvidence({...base,facts:badExpiry}).status,"DENIED");
 });
 test("atomic Final ACK candidate only returns success after post-QA, final ledger and audit commit",async()=>{
   const a=args();

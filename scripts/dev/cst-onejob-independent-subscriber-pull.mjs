@@ -140,12 +140,12 @@ export async function pullAndAcknowledgeOneJobCompletion({
       "INSERT INTO cst_onejob_private.subscriber_delivery_receipts "+
       "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
       "delivery_digest,status,ack_nonce,ack_signature_base64,"+
-      "ack_issuer_fingerprint,received_at) "+
+      "ack_issuer_fingerprint,received_at,ack_expires_at) "+
       "VALUES($1::uuid,$2::int,$3::uuid,$4::uuid,$5,$6::uuid,$7,"+
-      "'ACKNOWLEDGED',$8,$9,$10,$11::timestamptz) RETURNING id",
+      "'ACKNOWLEDGED',$8,$9,$10,$11::timestamptz,$12::timestamptz) RETURNING id",
       [claims.approvalId,jobId,eventId,deliveryId,expectedSubscriberId,
        claims.correlationId,claims.deliveryDigest,claims.nonce,
-       signatureBase64,pinnedTrust.fingerprint,now]
+       signatureBase64,pinnedTrust.fingerprint,now,claims.expiresAt]
     );
     if(inserted.rows?.length!==1)
       throw Error("SUBSCRIBER_SIGNED_ACK_NOT_STORED");
@@ -165,4 +165,68 @@ export async function pullAndAcknowledgeOneJobCompletion({
     if(started)try{await client.query("ROLLBACK")}catch{}
     throw error;
   }
+}
+
+/**
+ * Read one committed completion from the independent subscriber's scoped role.
+ * No untrusted webhook, wildcard subscription, polling loop or shared runtime.
+ * Revalidation inside pullAndAcknowledgeOneJobCompletion closes the race
+ * between this READ ONLY discovery and the subsequent one-shot ACK transaction.
+ */
+export const ONE_JOB_COMPLETION_SOURCE_SQL=[
+  "SELECT e.event_id",
+  "FROM ai_platform.ai_jobs j",
+  "JOIN ai_platform.cst_onejob_owner_approvals a ON a.job_id=j.id",
+  "JOIN ai_platform.ai_events e ON e.source_id=j.id::text",
+  "WHERE j.id=$1 AND j.status='completed'",
+  "AND j.job_type='ollama_model_invocation'",
+  "AND j.payload_json->>'modelId'='qwen2.5:3b'",
+  "AND j.payload_json->>'requestId' ~",
+  "'^cst-ai-team-company1-dev:pilot-[a-f0-9]{20}$'",
+  "AND a.status='CONSUMED' AND a.company_id='1'",
+  "AND a.consumed_at IS NOT NULL",
+  "AND e.event_type='job.completed' AND e.source_module='job-engine'",
+  "AND e.status IN ('published','processing','processed')",
+  "AND EXISTS (SELECT 1 FROM ai_platform.ai_audit_logs l",
+  "WHERE l.resource_id=e.event_id AND l.module='event-bus'",
+  "AND l.action='event_published' AND l.status='success')",
+  "LIMIT 2"
+].join(" ");
+
+export async function discoverOneJobCompletion({client,jobId}){
+  if(!Number.isSafeInteger(jobId)||jobId<=0||jobId===482)
+    throw Error("INDEPENDENT_SUBSCRIBER_JOB_ID_REQUIRED");
+  let started=false;
+  try{
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY");
+    started=true;
+    await client.query("SET LOCAL ROLE "+SUBSCRIBER_ROLE);
+    const identity=await client.query(
+      "SELECT current_user AS role_name,session_user AS login_name,current_database() AS db");
+    if(identity.rows?.length!==1||
+       identity.rows[0].role_name!==SUBSCRIBER_ROLE||
+       identity.rows[0].login_name!==SUBSCRIBER_LOGIN||
+       identity.rows[0].db!=="postgres")
+      throw Error("INDEPENDENT_SUBSCRIBER_IDENTITY_INVALID");
+    const result=await client.query(ONE_JOB_COMPLETION_SOURCE_SQL,[jobId]);
+    if(result.rows?.length!==1||!U.test(result.rows[0]?.event_id||""))
+      throw Error("ONE_UNIQUE_COMPLETION_EVENT_REQUIRED");
+    await client.query("COMMIT");started=false;
+    return {status:"ONE_EVENT_SELECTED_READ_ONLY",
+      jobId,eventId:result.rows[0].event_id,
+      subscriberAckIssued:false,dispatchPermitted:false};
+  }catch(error){
+    if(started)try{await client.query("ROLLBACK")}catch{}
+    throw error;
+  }
+}
+
+/** An actual one-shot handoff: no background daemon or new event subscription. */
+export async function pullExactlyOneCstJobCompletion(options){
+  const selected=await discoverOneJobCompletion({
+    client:options.client,jobId:options.jobId
+  });
+  return pullAndAcknowledgeOneJobCompletion({
+    ...options,eventId:selected.eventId
+  });
 }

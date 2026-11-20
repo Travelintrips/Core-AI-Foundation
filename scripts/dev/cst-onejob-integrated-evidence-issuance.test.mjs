@@ -6,7 +6,8 @@ import {QA_DOMAIN,qaCanonicalBytes} from
 import {signIndependentQaEvidence,persistIndependentPreAdmission,PRE_QA_SOURCE_SQL,
   QA_ROLE,QA_LOGIN,PROJECT}
   from "./cst-onejob-independent-evidence-issuers.mjs";
-import {pullAndAcknowledgeOneJobCompletion,SUBSCRIBER_SOURCE_SQL,
+import {pullAndAcknowledgeOneJobCompletion,pullExactlyOneCstJobCompletion,
+  discoverOneJobCompletion,ONE_JOB_COMPLETION_SOURCE_SQL,SUBSCRIBER_SOURCE_SQL,
   SUBSCRIBER_ROLE,SUBSCRIBER_LOGIN}
   from "./cst-onejob-independent-subscriber-pull.mjs";
 import {executeTrustedAdmissionTransaction,LOCK_SQL}
@@ -118,6 +119,8 @@ class SubDb{
     if(sql.startsWith("SET LOCAL ROLE ")){this.forcedRole=sql.slice(15);return {rows:[]}}
     if(sql.includes("SELECT current_user AS role_name"))
       return {rows:[{role_name:this.forcedRole,login_name:SUBSCRIBER_LOGIN,db:"postgres"}]};
+    if(sql===ONE_JOB_COMPLETION_SOURCE_SQL)
+      return {rows:[{event_id:eventId}]};
     if(sql===SUBSCRIBER_SOURCE_SQL)
       return {rows:[{approval:approval("CONSUMED"),job:job("completed"),
         event:{...event,eventType:this.badSource?"evil.event":event.eventType},
@@ -152,7 +155,8 @@ class FinalDb{
           deliveryId:c.deliveryId,correlationId,status:"ACKNOWLEDGED",
           receivedAt:c.acknowledgedAt,deliveryDigest:c.deliveryDigest,
           ackNonce:c.nonce,ackSignatureBase64:this.ack.signatureBase64,
-          ackIssuerFingerprint:this.ack.publicKeyFingerprint}
+          ackIssuerFingerprint:this.ack.publicKeyFingerprint,
+          ackExpiresAt:c.expiresAt}
       }]};
     }
     if(sql.includes("INSERT INTO cst_onejob_private.post_execution_qa_receipts"))
@@ -181,11 +185,14 @@ test("one integrated proof chain: independently signed PRE QA -> locked broker -
   assert.equal(admission.status,"ADMISSION_COMMITTED");
   assert.equal(admission.dispatchPermitted,false);
   const subscriberDb=new SubDb();
-  const subStep=await pullAndAcknowledgeOneJobCompletion({
-    client:subscriberDb,jobId:483,eventId,expectedSubscriberId:subscriberId,
+  const subStep=await pullExactlyOneCstJobCompletion({
+    client:subscriberDb,jobId:483,expectedSubscriberId:subscriberId,
     pinnedTrust:subTrust,signBytes:subSigner
   });
   assert.equal(subStep.status,"SUBSCRIBER_ACK_PERSISTED");
+  assert.ok(subscriberDb.calls.some(q=>q.sql===ONE_JOB_COMPLETION_SOURCE_SQL),
+    "EXACTLY_ONE_EVENT_MUST_BE_DISCOVERED_BEFORE_ACK");
+  assert.equal(subStep.signedAck.claims.expiresAt.length>0,true);
   assert.equal(subStep.signedAck.claims.deliveryDigest,sha(subStep.deliveryBytes));
   assert.equal(subscriberDb.calls.at(-1).sql,"COMMIT");
   assert.equal(subStep.finalAckIssued,false);
@@ -363,12 +370,12 @@ test("one disposable network-none PostgreSQL role package compiles, SELECT-only 
     "INSERT INTO cst_onejob_private.subscriber_delivery_receipts"+
     "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
     "delivery_digest,status,ack_nonce,ack_signature_base64,"+
-    "ack_issuer_fingerprint,received_at) VALUES("+
+    "ack_issuer_fingerprint,received_at,ack_expires_at) VALUES("+
     quote(id)+",483,"+quote(eventId)+","+
     quote("123e4567-e89b-12d3-a456-426614174019")+","+
     quote(subscriberId)+","+quote(correlationId)+","+
     "repeat('e',64),'ACKNOWLEDGED',repeat('f',64),"+
-    quote(Buffer.alloc(64,3).toString("base64"))+",repeat('d',64),now()) RETURNING id;";
+    quote(Buffer.alloc(64,3).toString("base64"))+",repeat('d',64),now(),now()+interval '3 minutes') RETURNING id;";
   const inserted=sqlPG(subInsert);
   assert.match(inserted.stdout,/[0-9a-f]{8}-[0-9a-f-]{27}/);
   assert.notEqual(sqlPG("SET ROLE "+SUBSCRIBER_ROLE+";"+
@@ -391,4 +398,22 @@ test("one disposable network-none PostgreSQL role package compiles, SELECT-only 
     "SELECT has_table_privilege('cst_untrusted_test',"+
       "'cst_onejob_private.subscriber_delivery_receipts','INSERT');");
   assert.equal(anon.stdout.trim(),"f");
+});
+
+test("one-shot selector denies ambiguous two-event result and never signs or mutates",async()=>{
+  class MultipleEventsDb extends SubDb{
+    async query(sql,params=[]){
+      if(sql===ONE_JOB_COMPLETION_SOURCE_SQL){
+        this.calls.push({sql,params});
+        return {rows:[{event_id:eventId},
+          {event_id:"123e4567-e89b-12d3-a456-426614174099"}]};
+      }
+      return super.query(sql,params);
+    }
+  }
+  const client=new MultipleEventsDb();
+  await assert.rejects(discoverOneJobCompletion({client,jobId:483}),
+    /ONE_UNIQUE_COMPLETION_EVENT_REQUIRED/);
+  assert.equal(client.calls.at(-1).sql,"ROLLBACK");
+  assert.equal(client.calls.some(x=>x.sql.includes("INSERT INTO")),false);
 });
