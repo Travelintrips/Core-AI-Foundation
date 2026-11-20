@@ -159,7 +159,12 @@ test("network-none PG16 functional harness cannot access real Supabase",()=>{
   const client=read("cst-team-onejob-subscriber-functional-client-qa.mjs");
   const reviewer=read("cst-team-onejob-subscriber-functional-review-qa.mjs");
   assert.match(driver,/--network","none"/);
-  assert.match(driver,/POSTGRES_HOST_AUTH_METHOD=trust/);
+  assert.match(driver,/POSTGRES_HOST_AUTH_METHOD=scram-sha-256/);
+  assert.match(driver,/POSTGRES_INITDB_ARGS=--auth-local=scram-sha-256/);
+  assert.doesNotMatch(driver,/POSTGRES_HOST_AUTH_METHOD=trust/);
+  assert.match(driver,/SUBSCRIBER_SECRET=secrets\.token_hex\(32\)/);
+  assert.match(client,/PG16_WRONG_SCRAM_PASSWORD_REJECTED/);
+  assert.match(client,/error\?\.code!=="28P01"/);
   assert.match(driver,/type=bind,source=/);
   assert.match(driver,/docker","rm","-f"/);
   assert.match(driver,/shutil\.rmtree\(temp,ignore_errors=True\)/);
