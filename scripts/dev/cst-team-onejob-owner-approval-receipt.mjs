@@ -83,7 +83,11 @@ export function projectIndependentOneJobOwnerApproval(input,trusted,now=new Date
     Number.isFinite(end) && end>start && end-start<=30*60_000 &&
     start<=t+30_000 && t<end,
     "APPROVAL_EXPIRED_OR_REPLAYED");
-  require(hasExact(payload,keys) && payload?.approvalId===db?.id &&
+  require(hasExact(payload,keys) &&
+    payload?.version===1 && payload?.type===TYPE &&
+    payload?.project===PROJECT && payload?.purpose===PURPOSE &&
+    payload?.companyId==="1" && payload?.modelId==="qwen2.5:3b" &&
+    payload?.approvalId===db?.id &&
     payload?.ownerUserId===db?.approvedByUserId &&
     payload?.jobId===job?.id && payload?.jobCode===job?.jobCode &&
     payload?.requestId===db?.requestId &&
