@@ -22,6 +22,9 @@ on:
       - "deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service"
       - "deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer"
       - "scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs"
+      - "scripts/dev/test_gpt02_issue159_relock_shared_timer.mjs"
+      - "docs/dev/gpt02-issue159-scoped-reader-relock-add-only.REVIEW_ONLY.sql"
+      - "scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py"
       - "docs/dev/gpt02-issue159-independent-relock-supervisor.PROPOSED.md"
       - "docs/dev/gpt02-issue159-minimal-catalog-relock-auditor.PROPOSED.sql"
       - "docs/dev/gpt02-issue159-minimal-catalog-auditor-existing-role.REVIEW_ONLY.sql"
@@ -178,7 +181,10 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py
           GPT02_COLUMN_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
             python3 scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py
-          echo "PASS_OWNER_MAINTENANCE_AND_SEVEN_TABLE_COLUMN_RELOCK_PG16_PG17"
+          python3 scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py
+          GPT02_SCOPED_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py
+          echo "PASS_OWNER_MAINTENANCE_AND_SCOPED_READER_RELOCK_PG16_PG17"
           # Sam/Supabase's proposed postgres SET ROLE path: isolated only.
           # Preserve provider-granted ADMIN SET=false membership, restore
           # NOLOGIN owner, and revoke seven-table + column ACLs.
@@ -254,7 +260,7 @@ jobs:
           set -euo pipefail
           python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py -q
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_relock_admin_custody
-          node --test scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs
+          node --test scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs scripts/dev/test_gpt02_issue159_relock_shared_timer.mjs
           node --check deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
           # On hosted CI, Node lives outside /usr/bin. Verify an isolated
           # copy with the CI interpreter while keeping the reviewed VPS
