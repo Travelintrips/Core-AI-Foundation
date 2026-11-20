@@ -18,19 +18,26 @@ export const PROJECT="xssrfshdrtdfupgqwfdw";
 const node=process.execPath;
 
 export const OFFLINE_TESTS=Object.freeze([
+  {id:"cst_team_onejob_readiness_gate",argv:[node,"--test","scripts/dev/cst-team-onejob-readiness-gate.test.mjs"]},
   {id:"generic_enqueue",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-generic-enqueue-deny.test.mjs"]},
   {id:"owner_approval",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-owner-approval-review.test.mjs"]},
   {id:"owner_stage",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-contract.test.mjs"]},
-  {id:"stage_pooler_tls",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-connection-config.test.mjs"]},
-  {id:"qa_signature",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-qa-verifier.test.mjs"]},
-  {id:"qa_offline",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-qa-offline.test.mjs"]},
-  {id:"qa_host_custody",argv:[node,"--test","scripts/dev/cst-onejob-independent-qa-host-preflight.test.mjs"]},
-  {id:"signed_locked_binding",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-signed-handoff-review.test.mjs"]},
-  {id:"broker_fail_closed",argv:[node,"--test","scripts/dev/cst-onejob-broker-proposal-failclosed.test.mjs"]},
   {id:"admission_review",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-waiting-admission-review.test.mjs"]},
+  {id:"cst_onejob_onepass_acceptance",argv:[node,"--test","scripts/dev/cst-onejob-onepass-acceptance.test.mjs"]},
+  {id:"broker_fail_closed",argv:[node,"--test","scripts/dev/cst-onejob-broker-proposal-failclosed.test.mjs"]},
+  {id:"qa_signature",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-qa-verifier.test.mjs"]},
+  {id:"signed_locked_binding",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-signed-handoff-review.test.mjs"]},
+  {id:"signed_concurrency_pg",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-signed-handoff-disposable.test.mjs"]},
+  {id:"qa_offline",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-qa-offline.test.mjs"]},
+  {id:"cst_onejob_qa_trust_custody",argv:[node,"--test","scripts/dev/cst-onejob-qa-trust-custody.test.mjs"]},
+  {id:"qa_host_custody",argv:[node,"--test","scripts/dev/cst-onejob-independent-qa-host-preflight.test.mjs"]},
+  {id:"cst_team_onejob_image_provenance",argv:[node,"--test","scripts/dev/cst-team-onejob-image-provenance.test.mjs"]},
+  {id:"stamp_dev_build_sha",argv:[node,"--test","scripts/dev/stamp-dev-build-sha.test.mjs"]},
+  {id:"cst_team_dedicated_model_role_rehearsal",argv:["python3","scripts/dev/cst-team-dedicated-model-role-rehearsal.py"]},
   {id:"owner_ledger_pg",argv:["python3","scripts/dev/cst-onejob-owner-ledger-disposable.py"]},
   {id:"writer_rls_pg",argv:["python3","scripts/dev/cst-onejob-writer-rls-disposable.py"]},
-  {id:"signed_concurrency_pg",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-signed-handoff-disposable.test.mjs"]},
+  {id:"stage_pooler_tls",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-connection-config.test.mjs"]},
+  {id:"cst_onejob_live_readiness",argv:[node,"--test","scripts/dev/cst-onejob-live-readiness.test.mjs"]},
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",

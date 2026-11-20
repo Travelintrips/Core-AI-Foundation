@@ -42,46 +42,9 @@ jobs:
         run: node --test scripts/ci-quorum-row-lock.test.mjs
       - name: Verify scoped CST team DEV readiness is non-authorizing
         run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
-      - name: Verify read-only CST-DEV one-job pilot preflight cannot execute or sign
-        run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
-      - name: Block generic model job enqueue without one-use Owner pilot approval
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-generic-enqueue-deny.test.mjs
-      - name: Reject forged or expired one-job Owner review evidence
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-owner-approval-review.test.mjs
-      - name: Verify one-use Owner approval staging remains waiting and fail closed
-        run: node --test scripts/dev/cst-onejob-owner-stage-contract.test.mjs
-      - name: Verify waiting-to-queued admission evidence cannot authorize dispatch
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-waiting-admission-review.test.mjs
-      - name: Verify integrated one-pass DEV one-job acceptance inventory stays fail closed
-        run: node --test scripts/dev/cst-onejob-onepass-acceptance.test.mjs
-      - name: Verify proposed one-job broker and receipt schema stay fail closed
-        run: node --test scripts/dev/cst-onejob-broker-proposal-failclosed.test.mjs
-      - name: Verify independent QA Ed25519 receipt binding is non-authorizing
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-independent-qa-verifier.test.mjs
-      - name: Verify signed QA claims against locked DEV onejob rows and independent evidence bytes
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-signed-handoff-review.test.mjs
-      - name: Verify synthetic signed QA to one-use atomic transition with disposable PostgreSQL
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-signed-handoff-disposable.test.mjs
-      - name: Verify isolated independent QA CLI and pinned trust fail-closed
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-independent-qa-offline.test.mjs
-      - name: Verify root-owned pinned public QA trust custody policy
-        run: node --test scripts/dev/cst-onejob-qa-trust-custody.test.mjs
-      - name: Verify QA host preflight cannot accept caller trust root
-        run: node --test scripts/dev/cst-onejob-independent-qa-host-preflight.test.mjs
-      - name: Verify QA image marker readback rejects stale or privileged image
-        run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
-      - name: Verify DEV QA image source marker is never stale
-        run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
-      - name: Verify scoped pilot RLS and rollback in disposable PostgreSQL
-        run: python3 scripts/dev/cst-team-dedicated-model-role-rehearsal.py
-      - name: Verify Owner approval ledger constraints with disposable PostgreSQL
-        run: python3 scripts/dev/cst-onejob-owner-ledger-disposable.py
-      - name: Verify dedicated Owner staging role RLS and atomic rollback with disposable PostgreSQL
-        run: python3 scripts/dev/cst-onejob-writer-rls-disposable.py
-      - name: Verify isolated staging pooler project, role and TLS configuration
-        run: node --experimental-strip-types --test scripts/dev/cst-onejob-stage-connection-config.test.mjs
-      - name: Verify onejob live readiness remains read-only and cannot issue GO
-        run: node --test scripts/dev/cst-onejob-live-readiness.test.mjs
+      # One command runs all 20 existing one-job fixtures and emits one matrix.
+      - name: Single-pass CST-DEV one-job offline acceptance (NO-GO operational)
+        run: node scripts/dev/cst-onejob-onepass-acceptance.mjs --offline
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap
