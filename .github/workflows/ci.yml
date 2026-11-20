@@ -52,7 +52,7 @@ jobs:
         run: |
           node --check scripts/dev/cst-team-onejob-subscriber-functional-client-qa.mjs
           node --check scripts/dev/cst-team-onejob-subscriber-functional-review-qa.mjs
-          python3 -c "import ast,pathlib;ast.parse(pathlib.Path('scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py').read_text())"
+          python3 -c "import ast,pathlib;[ast.parse(pathlib.Path(p).read_text()) for p in ['scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py','scripts/dev/cst_team_onejob_signer_sidecar_qa.py']]"
       - name: Verify host-gateway deny test before one-job DEV admission
         run: node --test scripts/dev/cst-team-host-gateway-probe.test.mjs
       - name: Verify QA kernel nftables allow-deny evidence cannot promote live pilot
