@@ -6,8 +6,8 @@ import {QA_DOMAIN,qaCanonicalBytes}
   from "../../artifacts/api-server/src/lib/cstOneJobIndependentQaVerifier.ts";
 import {ACK_DOMAIN,subscriberAckCanonicalBytes,reviewSignedSubscriberAck}
   from "./cst-onejob-subscriber-ack-review.mjs";
-import {executeFinalAckCandidate,reviewFinalEvidence,SOURCE_SNAPSHOT_SQL,
-  FINAL_DOMAIN,finalAckCanonicalBytes}
+import {executeCoreReconciliationCandidate,reviewCoreReconciliationEvidence,SOURCE_SNAPSHOT_SQL,
+  CORE_RECONCILIATION_DOMAIN,coreReconciliationCanonicalBytes}
   from "./cst-onejob-final-ack-candidate.mjs";
 
 const sha=x=>createHash("sha256").update(x).digest("hex");
@@ -93,8 +93,8 @@ class Client{
     if(sql===SOURCE_SNAPSHOT_SQL)return {rows:[this.facts]};
     if(sql.includes("INSERT INTO cst_onejob_private.post_execution_qa_receipts"))
       return {rows:[{id:postId}]};
-    if(sql.includes("INSERT INTO cst_onejob_private.final_ack_reconciliations"))
-      return {rows:[{final_ack_id:params[4]}]};
+    if(sql.includes("INSERT INTO cst_onejob_private.core_signed_reconciliations"))
+      return {rows:[{reconciliation_id:params[4]}]};
     if(sql.includes("INSERT INTO ai_platform.ai_audit_logs")&&this.failWrite)
       throw Error("SYNTHETIC_AUDIT_DENIED");
     return {rows:[]};
@@ -132,19 +132,22 @@ test("independent QA + subscriber + persisted model output correlation is requir
     subscriberTrust:subTrust,deliveryBytes:delivery,
     signedPostReceipt:p.signedPostReceipt,qaTrust,evidenceBytes:p.evidenceBytes,
     responseBytes:response,expectedSubscriberId:subscriberId};
-  assert.equal(reviewFinalEvidence(base).status,"INDEPENDENT_FINAL_RECONCILIATION_MATCH");
+  assert.equal(reviewCoreReconciliationEvidence(base).status,"INDEPENDENT_FINAL_RECONCILIATION_MATCH");
   const wrong={...p.facts,job:{...p.facts.job,
     resultJson:{output:{type:"text",text:"INCORRECT"}}}};
-  assert.equal(reviewFinalEvidence({...base,facts:wrong}).status,"DENIED");
+  assert.equal(reviewCoreReconciliationEvidence({...base,facts:wrong}).status,"DENIED");
   const noAck={...p.facts,subscriber:{...p.facts.subscriber,
     ackSignatureBase64:"FORGED"}};
-  assert.equal(reviewFinalEvidence({...base,facts:noAck}).status,"DENIED");
+  assert.equal(reviewCoreReconciliationEvidence({...base,facts:noAck}).status,"DENIED");
 });
 test("atomic Final ACK candidate only returns success after post-QA, final ledger and audit commit",async()=>{
   const a=args();
-  const v=await executeFinalAckCandidate(a);
-  assert.equal(v.status,"FINAL_ACK_COMMITTED");
-  assert.equal(v.finalAckIssued,true);
+  const v=await executeCoreReconciliationCandidate(a);
+  assert.equal(v.status,"CORE_RECONCILIATION_COMMITTED");
+  assert.equal(v.finalAckIssued,false);
+  assert.equal(v.coreReconciliationRecorded,true);
+  assert.equal(v.fourAgentQuorumVerified,false);
+  assert.equal(v.operationalE2EVerified,false);
   assert.equal(v.dispatchPermitted,false);
   assert.equal(a.client.calls[0].sql,"BEGIN ISOLATION LEVEL SERIALIZABLE");
   assert.equal(a.client.calls.at(-1).sql,"COMMIT");
@@ -153,7 +156,7 @@ test("atomic Final ACK candidate only returns success after post-QA, final ledge
   const advisory=stmts.findIndex(q=>q.includes("pg_advisory_xact_lock"));
   assert.ok(advisory>0&&advisory<lock,"FINAL_ACK_LOCK_ORDER_INVALID");
   const insert=stmts.findIndex(q=>q.includes("INSERT INTO cst_onejob_private.post_execution_qa_receipts"));
-  const finalIx=stmts.findIndex(q=>q.includes("INSERT INTO cst_onejob_private.final_ack_reconciliations"));
+  const finalIx=stmts.findIndex(q=>q.includes("INSERT INTO cst_onejob_private.core_signed_reconciliations"));
   assert.ok(lock>0&&insert>lock&&finalIx>insert);
 });
 test("wrong signer, forged subscriber, wrong role, audit failure all roll back; no false Final ACK",async()=>{
@@ -168,7 +171,7 @@ test("wrong signer, forged subscriber, wrong role, audit failure all roll back; 
     {client:new Client(p.facts,{failWrite:true})}
   ]){
     const a=args(changes);
-    await assert.rejects(executeFinalAckCandidate(a));
+    await assert.rejects(executeCoreReconciliationCandidate(a));
     assert.equal(a.client.calls.at(-1).sql,"ROLLBACK");
     assert.equal(a.client.calls.some(x=>x.sql==="COMMIT"),false);
   }
@@ -177,14 +180,14 @@ test("postexecution ledgers enforce FORCE RLS and separate signed final ACK evid
   const src=readFileSync(new URL(
     "../../docs/dev/cst-onejob-postexecution-ledgers.PROPOSED.sql",import.meta.url),"utf8");
   for(const table of ["subscriber_delivery_receipts","post_execution_qa_receipts",
-    "final_ack_reconciliations"]){
+    "core_signed_reconciliations"]){
     assert.match(src,new RegExp("ALTER TABLE cst_onejob_private\\."+table+
       " FORCE ROW LEVEL SECURITY;"));
     assert.match(src,new RegExp("REVOKE ALL ON cst_onejob_private\\."+table+
       " FROM PUBLIC;"));
   }
-  assert.match(src,/ack_signature_base64/);
-  assert.match(src,/ack_claims_digest/);
+  assert.match(src,/reconciliation_signature_base64/);
+  assert.match(src,/reconciliation_claims_digest/);
   assert.match(src,/ack_nonce text NOT NULL UNIQUE/);
   const code=src.replace(/--[^\n]*/g,"");
   assert.doesNotMatch(code,/\bGRANT\s+(?:ALL|INSERT|UPDATE|DELETE|EXECUTE)/);

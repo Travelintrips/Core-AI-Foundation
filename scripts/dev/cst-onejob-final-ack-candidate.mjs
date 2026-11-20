@@ -1,6 +1,7 @@
 /**
- * Independent final-ACK transaction candidate; NOT a deployed issuer.
- * Must run only on a separately authorized, custodied QA/operations host.
+ * Core signed reconciliation candidate; NOT the four-agent FINAL ACK.
+ * Independent Hub four-agent signatures + reviewer are still required
+ * after this Core receipt. The result NEVER authorizes E2E PASS.
  * No default HTTP route, credentials, keys, role grants or signer setup.
  */
 import {createHash,createPublicKey,verify,randomUUID} from "node:crypto";
@@ -9,23 +10,23 @@ import {qaCanonicalBytes} from
 import {reviewCstOneJobPostExecution} from "./cst-onejob-postexecution-review.mjs";
 import {reviewSignedSubscriberAck} from "./cst-onejob-subscriber-ack-review.mjs";
 
-export const FINAL_ROLE="cst_onejob_finalack_writer";
-export const FINAL_LOGIN="cst_onejob_finalack_login";
-export const FINAL_DOMAIN="cst-onejob-final-ack/v1";
+export const CORE_RECONCILIATION_ROLE="cst_onejob_finalack_writer";
+export const CORE_RECONCILIATION_LOGIN="cst_onejob_finalack_login";
+export const CORE_RECONCILIATION_DOMAIN="cst-onejob-core-reconciliation/v1";
 const PROJECT="xssrfshdrtdfupgqwfdw";
 const SHA=/^[a-f0-9]{64}$/;
 const U=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const hash=x=>createHash("sha256").update(x).digest("hex");
 const keys=["domain","project","approvalId","jobId","eventId","deliveryId",
-  "postNonce","postProofDigest","finalAckId","issuedAt"];
-export function finalAckCanonicalBytes(c){
+  "postNonce","postProofDigest","reconciliationId","issuedAt"];
+export function coreReconciliationCanonicalBytes(c){
   const out={};
   for(const k of keys)out[k]=c[k];
   return Buffer.from(JSON.stringify(out),"utf8");
 }
 // Query uses only real catalog column names verified against CST-DEV.
 // Read source rows under one SERIALIZABLE snapshot, with a per-job
-// transaction advisory lock for cooperating Final ACK issuers.
+// transaction advisory lock for cooperating Core reconciliation issuers.
 // Unlike SELECT FOR UPDATE, this needs no UPDATE grant on source tables.
 // Immutable terminal evidence + UNIQUE job/approval/delivery ledger constraints
 // are separately required; this is NOT proof of live role provisioning.
@@ -49,7 +50,7 @@ export const SOURCE_SNAPSHOT_SQL=[
  "jsonb_build_object('eventId',s.event_id,'jobId',s.job_id,'subscriberId',s.subscriber_id,",
  "'deliveryId',s.delivery_id,'correlationId',s.correlation_id,'status',s.status,",
  "'receivedAt',s.received_at,'deliveryDigest',s.delivery_digest,",
- "'ackNonce',s.ack_nonce,'ackSignatureBase64',s.ack_signature_base64,",
+ "'ackNonce',s.ack_nonce,'ackSignatureBase64',s.reconciliation_signature_base64,",
  "'ackIssuerFingerprint',s.ack_issuer_fingerprint) subscriber",
  "FROM ai_platform.cst_onejob_owner_approvals a",
  "JOIN ai_platform.ai_jobs j ON j.id=a.job_id",
@@ -61,7 +62,7 @@ export const SOURCE_SNAPSHOT_SQL=[
  "AND s.event_id::text=e.event_id AND s.approval_id=a.id",
  "WHERE j.id=$1"
 ].join(" ");
-export function reviewFinalEvidence({
+export function reviewCoreReconciliationEvidence({
   facts,signedSubscriberAck,subscriberTrust,deliveryBytes,
   signedPostReceipt,qaTrust,evidenceBytes,responseBytes,expectedSubscriberId
 }){
@@ -100,7 +101,7 @@ export function reviewFinalEvidence({
   return {status:blockers.length?"DENIED":"INDEPENDENT_FINAL_RECONCILIATION_MATCH",
     blockers,finalAckIssued:false,dispatchPermitted:false};
 }
-export async function executeFinalAckCandidate({
+export async function executeCoreReconciliationCandidate({
   client,jobId,eventId,signedSubscriberAck,subscriberTrust,deliveryBytes,
   signedPostReceipt,qaTrust,evidenceBytes,responseBytes,expectedSubscriberId,
   signer,finalIssuerTrust
@@ -111,13 +112,13 @@ export async function executeFinalAckCandidate({
   try{
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");started=true;
     await client.query("SET TRANSACTION READ WRITE");
-    await client.query("SET LOCAL ROLE "+FINAL_ROLE);
+    await client.query("SET LOCAL ROLE "+CORE_RECONCILIATION_ROLE);
     const ident=await client.query(
       "SELECT current_user AS role_name,session_user AS login_name,current_database() AS db");
     if(ident.rows?.length!==1||
-       ident.rows[0].role_name!==FINAL_ROLE||
-       ident.rows[0].login_name!==FINAL_LOGIN||ident.rows[0].db!=="postgres")
-      throw Error("DEDICATED_FINAL_ACK_ROLE_NOT_VERIFIED");
+       ident.rows[0].role_name!==CORE_RECONCILIATION_ROLE||
+       ident.rows[0].login_name!==CORE_RECONCILIATION_LOGIN||ident.rows[0].db!=="postgres")
+      throw Error("DEDICATED_CORE_RECONCILIATION_ROLE_NOT_VERIFIED");
     // Advisory locks coordinate only participating issuers. SERIALIZABLE
     // supplies consistency checks, while unique constraints reject replay.
     await client.query(
@@ -125,31 +126,31 @@ export async function executeFinalAckCandidate({
     const locked=await client.query(SOURCE_SNAPSHOT_SQL,[jobId,eventId]);
     if(locked.rows?.length!==1)throw Error("AUTHORITATIVE_FINAL_ROWS_MISSING");
     const facts=locked.rows[0];
-    const review=reviewFinalEvidence({facts,signedSubscriberAck,
+    const review=reviewCoreReconciliationEvidence({facts,signedSubscriberAck,
       subscriberTrust,deliveryBytes,signedPostReceipt,qaTrust,
       evidenceBytes,responseBytes,expectedSubscriberId});
     if(review.status!=="INDEPENDENT_FINAL_RECONCILIATION_MATCH")
       throw Error("INDEPENDENT_FINAL_RECONCILIATION_DENIED");
     if(typeof signer!=="function"||finalIssuerTrust?.project!==PROJECT||
-       finalIssuerTrust?.use!=="CST_DEV_ONEJOB_FINAL_ACK_PUBLIC_PIN")
-      throw Error("FINAL_ACK_ISSUER_NOT_CUSTODIED");
+       finalIssuerTrust?.use!=="CST_DEV_ONEJOB_CORE_RECONCILIATION_PUBLIC_PIN")
+      throw Error("CORE_RECONCILIATION_ISSUER_NOT_CUSTODIED");
     const publicKey=createPublicKey(finalIssuerTrust.publicKeyPem);
     if(publicKey.asymmetricKeyType!=="ed25519"||
        hash(publicKey.export({type:"spki",format:"der"}))!==finalIssuerTrust.fingerprint)
-      throw Error("FINAL_ACK_PUBLIC_KEY_NOT_PINNED");
-    const ackId=randomUUID(),time=new Date().toISOString();
+      throw Error("CORE_RECONCILIATION_PUBLIC_KEY_NOT_PINNED");
+    const reconciliationId=randomUUID(),time=new Date().toISOString();
     const postClaims=signedPostReceipt.claims;
     const postDigest=hash(qaCanonicalBytes(postClaims));
-    const claims={domain:FINAL_DOMAIN,project:PROJECT,
+    const claims={domain:CORE_RECONCILIATION_DOMAIN,project:PROJECT,
       approvalId:facts.approval.id,jobId,eventId,deliveryId:facts.subscriber.deliveryId,
-      postNonce:postClaims.nonce,postProofDigest:postDigest,finalAckId:ackId,issuedAt:time};
-    const bytes=finalAckCanonicalBytes(claims);
+      postNonce:postClaims.nonce,postProofDigest:postDigest,reconciliationId:reconciliationId,issuedAt:time};
+    const bytes=coreReconciliationCanonicalBytes(claims);
     const signature=await signer(bytes);
-    if(typeof signature!=="string")throw Error("FINAL_ACK_SIGNATURE_REQUIRED");
+    if(typeof signature!=="string")throw Error("CORE_RECONCILIATION_SIGNATURE_REQUIRED");
     const raw=Buffer.from(signature,"base64");
     if(raw.length!==64||raw.toString("base64")!==signature||
        !verify(null,bytes,publicKey,raw))
-      throw Error("FINAL_ACK_SIGNATURE_UNTRUSTED");
+      throw Error("CORE_RECONCILIATION_SIGNATURE_UNTRUSTED");
 
     // One-use constraints on jobId, approvalId, deliveryId, and post nonce.
     // A duplicate/replayed receipt aborts both inserts and the audit.
@@ -165,30 +166,32 @@ export async function executeFinalAckCandidate({
     );
     if(first.rows?.length!==1)throw Error("POST_EXECUTION_RECEIPT_NOT_INSERTED");
     const second=await client.query(
-      "INSERT INTO cst_onejob_private.final_ack_reconciliations "+
-      "(approval_id,job_id,delivery_id,post_receipt_id,final_ack_id,"+
-      "independently_verified_by,issued_at,source_digest,ack_signature_base64,"+
-      "issuer_public_fingerprint,ack_claims_digest) "+
+      "INSERT INTO cst_onejob_private.core_signed_reconciliations "+
+      "(approval_id,job_id,delivery_id,post_receipt_id,reconciliation_id,"+
+      "independently_verified_by,issued_at,source_digest,reconciliation_signature_base64,"+
+      "issuer_public_fingerprint,reconciliation_claims_digest) "+
       "VALUES($1::uuid,$2::int,$3::uuid,$4::uuid,$5::uuid,$6,$7::timestamptz,$8,$9,$10,$11) "+
-      "RETURNING final_ack_id",
+      "RETURNING reconciliation_id",
       [facts.approval.id,jobId,facts.subscriber.deliveryId,first.rows[0].id,
-        ackId,finalIssuerTrust.issuerId,time,hash(evidenceBytes),signature,
+        reconciliationId,finalIssuerTrust.issuerId,time,hash(evidenceBytes),signature,
         finalIssuerTrust.fingerprint,hash(bytes)]
     );
     if(second.rows?.length!==1||
-       String(second.rows[0].final_ack_id)!==ackId)
-      throw Error("FINAL_ACK_LEDGER_INSERT_FAILED");
+       String(second.rows[0].reconciliation_id)!==reconciliationId)
+      throw Error("CORE_RECONCILIATION_LEDGER_INSERT_FAILED");
     await client.query(
       "INSERT INTO ai_platform.ai_audit_logs"+
       "(module,action,resource_type,resource_id,status,details) "+
-      "VALUES('cst-onejob','independent_final_ack','ai_job',$1,'success',"+
-      "jsonb_build_object('finalAckId',$2::text,'deliveryId',$3::text,"+
+      "VALUES('cst-onejob','core_signed_reconciliation','ai_job',$1,'success',"+
+      "jsonb_build_object('reconciliationId',$2::text,'deliveryId',$3::text,"+
       "'postReceiptId',$4::text,'signatureDigest',$5::text))",
-      [String(jobId),ackId,facts.subscriber.deliveryId,String(first.rows[0].id),hash(bytes)]
+      [String(jobId),reconciliationId,facts.subscriber.deliveryId,String(first.rows[0].id),hash(bytes)]
     );
     await client.query("COMMIT");started=false;
-    return {status:"FINAL_ACK_COMMITTED",jobId,finalAckId:ackId,
-      finalAckIssued:true,dispatchPermitted:false};
+    return {status:"CORE_RECONCILIATION_COMMITTED",jobId,reconciliationId,
+      coreReconciliationRecorded:true,finalAckIssued:false,
+      fourAgentQuorumVerified:false,operationalE2EVerified:false,
+      dispatchPermitted:false};
   }catch(error){
     if(started)try{await client.query("ROLLBACK")}catch{}
     throw error;

@@ -42,7 +42,7 @@ test("post-execution schema compiles once on isolated PostgreSQL, rejects replay
     "CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;");
   sql(sqlSource);
   for(const table of ["subscriber_delivery_receipts","post_execution_qa_receipts",
-    "final_ack_reconciliations"]){
+    "core_signed_reconciliations"]){
     const p=sql("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class "+
       "WHERE oid=to_regclass("+Q("cst_onejob_private."+table)+");");
     assert.equal(p.stdout.trim(),"t","RLS_NOT_FORCED:"+table);
@@ -53,14 +53,14 @@ test("post-execution schema compiles once on isolated PostgreSQL, rejects replay
   const sig=Buffer.alloc(64,11).toString("base64");
   sql("INSERT INTO cst_onejob_private.subscriber_delivery_receipts "+
     "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
-    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at)"+
+    "delivery_digest,status,ack_nonce,reconciliation_signature_base64,ack_issuer_fingerprint,received_at)"+
     "VALUES("+Q(id)+",483,"+Q(eventId)+","+Q(deliveryId)+","+
     "'cst-onejob-subscriber-pilot',"+Q(uuid(4))+","+
     Q("a".repeat(64))+",'ACKNOWLEDGED',"+Q("b".repeat(64))+","+
     Q(sig)+","+Q("c".repeat(64))+",clock_timestamp());");
   assert.notEqual(sql("INSERT INTO cst_onejob_private.subscriber_delivery_receipts "+
     "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
-    "delivery_digest,status,ack_nonce,ack_signature_base64,ack_issuer_fingerprint,received_at)"+
+    "delivery_digest,status,ack_nonce,reconciliation_signature_base64,ack_issuer_fingerprint,received_at)"+
     "VALUES("+Q(id)+",483,"+Q(uuid(5))+","+Q(uuid(6))+","+
     "'cst-onejob-subscriber-pilot',"+Q(uuid(4))+","+
     Q("d".repeat(64))+",'ACKNOWLEDGED',"+Q("b".repeat(64))+","+
@@ -78,24 +78,24 @@ test("post-execution schema compiles once on isolated PostgreSQL, rejects replay
     Q(id)+",483,"+Q(deliveryId)+",'cst-independent-qa-fixturetest',"+
     "'POST_EXECUTION',"+Q("e".repeat(64))+","+Q("f".repeat(64))+","+
     Q("0".repeat(64))+",now(),now()+interval '4 minutes');");
-  sql("INSERT INTO cst_onejob_private.final_ack_reconciliations "+
-    "(approval_id,job_id,delivery_id,post_receipt_id,final_ack_id,"+
+  sql("INSERT INTO cst_onejob_private.core_signed_reconciliations "+
+    "(approval_id,job_id,delivery_id,post_receipt_id,reconciliation_id,"+
     "independently_verified_by,issued_at,source_digest,"+
-    "ack_signature_base64,issuer_public_fingerprint,ack_claims_digest) VALUES("+
+    "reconciliation_signature_base64,issuer_public_fingerprint,reconciliation_claims_digest) VALUES("+
     Q(id)+",483,"+Q(deliveryId)+","+Q(postId)+","+Q(uuid(7))+","+
     "'cst-final-reconciler-dev',clock_timestamp(),"+Q("1".repeat(64))+","+
     Q(sig)+","+Q("2".repeat(64))+","+Q("3".repeat(64))+");");
   const state=sql("SELECT (SELECT count(*) FROM cst_onejob_private.subscriber_delivery_receipts),"+
     "(SELECT count(*) FROM cst_onejob_private.post_execution_qa_receipts),"+
-    "(SELECT count(*) FROM cst_onejob_private.final_ack_reconciliations);");
+    "(SELECT count(*) FROM cst_onejob_private.core_signed_reconciliations);");
   assert.equal(state.stdout.trim(),"1|1|1");
-  assert.notEqual(sql("INSERT INTO cst_onejob_private.final_ack_reconciliations "+
-    "(approval_id,job_id,delivery_id,post_receipt_id,final_ack_id,"+
+  assert.notEqual(sql("INSERT INTO cst_onejob_private.core_signed_reconciliations "+
+    "(approval_id,job_id,delivery_id,post_receipt_id,reconciliation_id,"+
     "independently_verified_by,issued_at,source_digest,"+
-    "ack_signature_base64,issuer_public_fingerprint,ack_claims_digest) VALUES("+
+    "reconciliation_signature_base64,issuer_public_fingerprint,reconciliation_claims_digest) VALUES("+
     Q(id)+",483,"+Q(deliveryId)+","+Q(postId)+","+Q(uuid(8))+","+
     "'cst-final-reconciler-dev',clock_timestamp(),"+Q("1".repeat(64))+","+
     Q(sig)+","+Q("2".repeat(64))+","+Q("4".repeat(64))+");",true).status,0,
     "DOUBLE_FINAL_ACK_ACCEPTED");
-  assert.equal(sql("SELECT count(*) FROM cst_onejob_private.final_ack_reconciliations;").stdout.trim(),"1");
+  assert.equal(sql("SELECT count(*) FROM cst_onejob_private.core_signed_reconciliations;").stdout.trim(),"1");
 });

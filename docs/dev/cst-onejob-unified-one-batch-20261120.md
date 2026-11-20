@@ -44,3 +44,16 @@ The receipt is deposited **only by the independent QA custodian** under root-own
 The **atomic WAITING staging service independently rechecks this same proof** before attempting a write. The previous session-binding, RLS and single-active unique indexes remain mandatory. This signed technical readiness is **not** the Owner's business approval, not a queue permit, and does not authorize real-DEV dispatch.
 
 All code remains Draft and default-OFF. No real trust key, stage credential, role LOGIN, broker/subscriber runtime, four-agent signer or actual Owner approval was installed or issued by these changes. Do not ask the Owner to click until approved operations has completed and independently verified all technical preparation.
+
+
+## Distinguish Core reconciliation from real four-agent FINAL ACK
+
+The previously named `FINAL_ACK_COMMITTED` Core candidate could commit a
+post-execution signed receipt before AI Task Hub independently verified all
+four agent attestations and reviewer. This must **not** claim final release.
+The Core proposal now uses the `cst-onejob-core-reconciliation/v1` signing
+domain and `core_signed_reconciliations` ledger. A committed Core receipt
+reports `CORE_RECONCILIATION_COMMITTED` and `finalAckIssued=false`.
+Only the separate Hub 4+1 verifier can validate the later, independent Final
+ACK, and real E2E remains NO-GO until signer custody, authentic DB readback,
+Owner session, and relock evidence are verified. No new Owner action is added.
