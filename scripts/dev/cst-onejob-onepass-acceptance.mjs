@@ -39,7 +39,6 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"signed_subscriber_receipt",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs"]},
   {id:"subscriber_one_event_consumer",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-consumer-qa.test.mjs"]},
   {id:"subscriber_rls_isolated_pg",argv:["python3","scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py"]},
-  {id:"subscriber_functional_isolated_pg",argv:["python3","scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py"]},
   {id:"operational_broker_signed_manifest",argv:["/tmp/cst-onejob-broker-ci-venv/bin/python","scripts/dev/test_cst_team_onejob_operational_broker.py"]},
   {id:"admission_review",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-waiting-admission-review.test.mjs"]},
   {id:"cst_onejob_onepass_acceptance",argv:[node,"--test","scripts/dev/cst-onejob-onepass-acceptance.test.mjs"]},
@@ -63,6 +62,12 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"signed_subscriber_and_independent_final_ack",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-final-ack-candidate.test.mjs"]},
   {id:"postexecution_schema_real_postgresql",argv:[node,"--test","scripts/dev/cst-onejob-postexecution-ledgers-disposable.test.mjs"]},
   {id:"final_ack_readonly_serializable_postgres",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-finalack-readonly-disposable.test.mjs"]},
+]);
+// These checks need the authorized VPS / prebuilt isolated image and root
+// namespace setup. They are NOT silently counted as GitHub CI PASS.
+export const VPS_ISOLATED_QA_GATES=Object.freeze([
+ "scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py",
+ "scripts/dev/cst-team-onejob-operational-broker-no-network-qa.sh",
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",
@@ -137,6 +142,7 @@ export function acceptanceSummary({manifest,tests,live}){
     offlineResult:tests.length?offline?"PASS":"FAIL":"NOT_EXECUTED",
     tests,live:live??{status:"NOT_EXECUTED"},
     outstandingOperationalGates:LIVE_GATES,
+    remainingVpsIsolatedQa:VPS_ISOLATED_QA_GATES,
     releaseDecision:"NO_GO",
     queueTransitionAuthorized:false,
     dispatchPermitted:false,
