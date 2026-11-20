@@ -117,15 +117,36 @@ service, timer, or dispatch workflow.
   identity and encrypted-custody route**, distinct from pooler-bound
   consumer, guard, independent audit and reader credentials.
 
-**Critical remaining DEPLOYMENT gap:** these native connection factories
-have no operational caller yet. The separately authorized DBA and encrypted
-credential custodian must stage signed, time-bounded per-task roles and
-ledger claims, provide the genuine independent consumer/guard/auditor
-connections and the 15-second cleanup timer **without exposing passwords in
-an HTTP route, git, logs or chat**. The original persisted SQLite Owner
-decision is still NOT atomically mirrored to the PostgreSQL canonical
-approval/revocation fence. The new source interface alone does not fix
-cross-store trust and does not issue any credential.
+**Single one-shot entrypoint now exists in source (NOT installed):**
+`gpt02_issue159_one_shot_native_runtime.py` accepts only the sealed original
+four-signature lifecycle packet mounted by systemd, and invokes the **original
+broker ONCE** using `SystemdDeferredOneTaskSupervisor`. No credentials are
+opened until the broker itself authenticates the packet, Owner intent and
+trusted lineage. This avoids repeating the expensive verifier roundtrip inside
+the 15-second issuer lease.
+
+`gpt02_issue159_systemd_native_factories.py` strictly pins five native
+connection identities, the exact CST-DEV project, TLS verify-full and public
+CA, and reads credentials using no-follow, bounded file-descriptor access
+from `CREDENTIALS_DIRECTORY`. Symlink, world-readable, wrong role/host/port,
+foreign task and password-in-argv paths fail closed. The separate source-only
+systemd `gpt02-issue159-one-shot-native@.service` is **Type=oneshot**, has no
+Install/autostart section, uses root-prepared encrypted credentials and is
+limited by `MemoryMax=128M`/`TimeoutStartSec=70s`. It does not create a
+permanently running watchdog or replacement signer/worker.
+
+**Critical remaining LIVE DEPLOYMENT gap:** The source-only systemd unit and
+native Python dependency are **not installed or activated on VPS**. The
+separately authorized DBA and encrypted credential custodian must first stage
+signed, time-bounded per-task roles, canonical one-use issuance and
+independent consumer/guard/auditor connections, provision encrypted unit
+credentials, and prove the **existing** 5-second relock timer is operational.
+No password is to enter a browser, chat, git, HTTP route or ordinary env var.
+The original persisted SQLite Owner decision is still NOT atomically mirrored
+to PostgreSQL's canonical approval/revocation fence. Neither a source-only
+entrypoint nor a valid Ed25519 packet can substitute for that trust boundary.
+The one-shot unit must not be started until those conditions are met, and its
+success STILL CANNOT authorize signer, DELL dispatch or Task183 completion.
 
 Source tests invoke the original broker with the concrete adapter and
 exercise success, wrong DB identity, cross-task role swaps, replay,
