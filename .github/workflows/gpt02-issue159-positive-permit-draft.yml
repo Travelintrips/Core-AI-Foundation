@@ -29,6 +29,8 @@ on:
       - "scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py"
       - "scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py"
       - "scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py"
+      - "scripts/dev/gpt02_issue159_one_pass_candidate.py"
+      - "scripts/dev/test_gpt02_issue159_one_pass_candidate.py"
       - "docs/dev/gpt02-issue159-two-phase-owner-split-relock.PROPOSED.sql"
       - "scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py"
       - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
@@ -149,6 +151,7 @@ jobs:
           python3 scripts/dev/test_gpt02_issue159_postlineage_reader_scope.py -q
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_pinned_tls_ca
           python3 -m unittest -q scripts.dev.test_gpt02_issue159_one_shot_reader_broker
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_one_pass_candidate
           python3 scripts/dev/test_gpt02_issue159_native_relock_catalog_pg.py
           python3 scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py
           # Owner-split permission boundary is real: postgres lacks
