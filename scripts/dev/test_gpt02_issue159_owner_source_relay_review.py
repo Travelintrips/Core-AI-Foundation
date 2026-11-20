@@ -118,7 +118,7 @@ class SourceBridgeReviewTest(unittest.TestCase):
             ("claimsSha256","b"*64),
             ("authMethod","static_dev_token"),
             ("recordedAt",self.now+1000),
-            ("expiresAt",self.now+120000),
+            ("expiresAt",self.now+60000),
         ):
             with self.subTest(field=key):
                 self.setUp()
