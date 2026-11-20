@@ -76,6 +76,9 @@ class SupervisorTest(unittest.TestCase):
         fixture=PostlineageReaderScopeOfflineTest()
         fixture.setUp()
         self.candidate=fixture.check()
+        self.packet=fixture.fixture.packet
+        self.roots=fixture.fixture.roots
+        self.now=fixture.fixture.now
         self.role=self.candidate["candidateRole"]
         self.events=[]
         self.clock=Clock()
@@ -83,10 +86,10 @@ class SupervisorTest(unittest.TestCase):
             native.RELOCK_NATIVE_ROLE,self.events,
             phases={native.PHASE_A:[1],native.PHASE_B:[1]},
         )
-        self.consumer=Connection(native.POOLER_USER_SUFFIX.join(
-            ["dev_gpt02_reader_claim_consumer",""]
-        )[:-len(native.POOLER_USER_SUFFIX)] + native.POOLER_USER_SUFFIX,
-            self.events)
+        self.consumer=Connection(
+            "dev_gpt02_reader_claim_consumer"+native.POOLER_USER_SUFFIX,
+            self.events,
+        )
         self.reader=Connection(self.role+native.POOLER_USER_SUFFIX,self.events)
         self.auditor=Connection(native.AUDITOR_DB_USER,self.events)
         self.guard=Connection("dev_gpt02_reader_admission_guard"+
@@ -228,11 +231,7 @@ class SupervisorTest(unittest.TestCase):
         """Use ORIGINAL signed broker with the concrete five-factory adapter."""
         import gpt02_issue159_one_shot_reader_broker as broker
         from unittest.mock import Mock
-        fixture=PostlineageReaderScopeOfflineTest()
-        fixture.setUp()
-        packet=fixture.fixture.packet
-        self.candidate=fixture.check()
-        role=self.candidate["candidateRole"]
+        packet=self.packet
         self.supervisor=native.OneTaskNativeSupervisor(
             self.candidate,self.factories,
             monotonic=self.clock.monotonic,sleep=self.clock.sleep,
@@ -275,7 +274,7 @@ class SupervisorTest(unittest.TestCase):
             patch.object(native,"consume_once_via_pinned_connection",
                          side_effect=atomic_claim) as claim,
             patch.object(broker,"_load_public_roots",
-                         return_value=fixture.fixture.roots),
+                         return_value=self.roots),
             patch.object(broker,"inspect_postlineage_scoped_reader_candidate",
                          return_value=self.candidate),
             patch.object(broker,"read_lineage_once",reader),
@@ -286,7 +285,7 @@ class SupervisorTest(unittest.TestCase):
             patch.object(broker,"attest_boolean_relock",
                          side_effect=attested_relock) as boolcheck,
             patch.object(broker.time,"time",
-                         return_value=fixture.fixture.now/1000),
+                         return_value=self.now/1000),
         ):
             try:
                 value=broker.review_one_shot_reader_readback(
