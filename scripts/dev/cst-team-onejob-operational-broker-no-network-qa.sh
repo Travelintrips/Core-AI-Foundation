@@ -102,7 +102,7 @@ set +e
 nsenter --target "$PID" --net -- \
  setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups \
  /usr/bin/python3 -B "$ROOT/scripts/dev/cst_team_onejob_operational_broker.py" \
- --qa-run --envelope "$EVIDENCE/forged.json" --public-key "$EVIDENCE/public.pem" \
+ qa-run --envelope "$EVIDENCE/forged.json" --public-key "$EVIDENCE/public.pem" \
  --pinned-sha256 "$PIN" >"$EVIDENCE/forged.log" 2>&1
 RC=$?
 set -e
@@ -118,7 +118,7 @@ echo "FORGED_SCOPE_DENIED_BEFORE_SOCKET_BIND=true"
 nsenter --target "$PID" --net -- \
  setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups \
  /usr/bin/python3 -B "$ROOT/scripts/dev/cst_team_onejob_operational_broker.py" \
- --qa-run --envelope "$EVIDENCE/envelope.json" --public-key "$EVIDENCE/public.pem" \
+ qa-run --envelope "$EVIDENCE/envelope.json" --public-key "$EVIDENCE/public.pem" \
  --pinned-sha256 "$PIN" >"$EVIDENCE/broker.log" 2>&1 &
 BROKER_PID=$!
 for i in $(seq 1 50);do
