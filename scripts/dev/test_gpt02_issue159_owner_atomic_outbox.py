@@ -43,6 +43,41 @@ class AtomicOwnerOutboxTest(unittest.TestCase):
         )
     def n(self,table):
         return self.db.execute("SELECT COUNT(*) FROM "+table).fetchone()[0]
+    def test_existing_dev_auto_chain_readiness_gate_denies_without_any_owner_row(self):
+        for gate in (
+            lambda _record: False,
+            lambda _record: None,
+            lambda _record: 1,
+            lambda _record: (_ for _ in ()).throw(
+                RuntimeError("SYNTHETIC_NOT_READY")
+            ),
+            "NOT_A_CALLABLE",
+        ):
+            with self.subTest(gate=repr(gate)):
+                result=record_issue159_approval_intent(
+                    TOKEN,self.db,CLAIMS,identity_verifier=trusted,
+                    now_ms=2000,readiness_gate=gate,
+                )
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["reason"],"AUTO_CHAIN_PREREQUISITES_NOT_READY")
+                self.assertEqual(self.n("gpt02_issue159_approval_intents"),0)
+                self.assertEqual(self.n("gpt02_issue159_owner_approval_outbox"),0)
+
+    def test_existing_readiness_gate_true_allows_same_atomic_owner_outbox(self):
+        observed=[]
+        def ready(record):
+            observed.append((record["task_id"],record["company_id"]))
+            return True
+        result=record_issue159_approval_intent(
+            TOKEN,self.db,CLAIMS,identity_verifier=trusted,
+            now_ms=2000,readiness_gate=ready,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(observed,[(183,"default")])
+        self.assertEqual(self.n("gpt02_issue159_approval_intents"),1)
+        self.assertEqual(self.n("gpt02_issue159_owner_approval_outbox"),1)
+        self.assertFalse(result["authorizationGranted"])
+
     def test_one_genuine_owner_consent_commits_same_decision_to_immutable_outbox(self):
         res=self.record()
         self.assertTrue(res["ok"],res)
