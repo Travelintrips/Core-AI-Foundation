@@ -68,13 +68,23 @@ def main():
        "--memory","350m","--pids-limit","96",
        "-e","POSTGRES_HOST_AUTH_METHOD=trust","postgres:16-alpine"])
   created=True
-  for _ in range(65):
+  # Postgres Docker initialization briefly starts a TEMPORARY server,
+  # then stops it before launching the final server. Require init COMPLETE
+  # and a successful post-init SQL probe, not the temporary server.
+  for _ in range(90):
+   logs=subprocess.run(["docker","logs",NAME],text=True,capture_output=True,timeout=5)
+   initialized="PostgreSQL init process complete" in (logs.stderr+logs.stdout)
    result=subprocess.run(["docker","exec",NAME,"psql","-At","-U","postgres",
                           "-d","postgres","-c","SELECT 1"],
                          text=True,capture_output=True,timeout=5)
-   if result.returncode==0 and result.stdout.strip()=="1":break
+   if initialized and result.returncode==0 and result.stdout.strip()=="1":
+    time.sleep(.25)
+    again=subprocess.run(["docker","exec",NAME,"psql","-At","-U","postgres",
+                          "-d","postgres","-c","SELECT 1"],
+                         text=True,capture_output=True,timeout=5)
+    if again.returncode==0 and again.stdout.strip()=="1":break
    time.sleep(.2)
-  else:raise RuntimeError("QA_PG_NOT_READY")
+  else:raise RuntimeError("QA_PG_NOT_READY_AFTER_INIT")
   sql(SCHEMA)
   expires=(datetime.now(timezone.utc)+timedelta(minutes=12)).isoformat()
   vals={
