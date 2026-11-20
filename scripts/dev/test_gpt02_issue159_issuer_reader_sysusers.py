@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 UNIT = ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service"
 SYSUSERS = ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.sysusers"
 OPERATIONAL_UNIT = ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-operational-signer@.service"
+ISSUER_UNIT_DROPIN = ROOT / "deploy/ai-coding-standalone-dev/gpt02-issue159-operational-signer@issuer.service.d/10-require-issuer-reader.conf"
 
 
 class IssuerReaderServiceIdentityTest(unittest.TestCase):
@@ -47,13 +48,21 @@ class IssuerReaderServiceIdentityTest(unittest.TestCase):
             "ConditionPathExists=/etc/gpt02-dev/issue159-operational-signer-%i-enabled.approved",
             unit,
         )
-        self.assertIn("ConditionPathExists=/run/gpt02-issuer-reader/reader.sock", unit)
+        issuer = ISSUER_UNIT_DROPIN.read_text(encoding="utf-8")
+        # Three preissuer signer domains must not depend on the future issuer.
+        self.assertNotIn("ConditionPathExists=/run/gpt02-issuer-reader/reader.sock", unit)
+        self.assertNotIn("Requires=gpt02-issue159-issuer-reader.service", unit)
+        self.assertNotIn("BindReadOnlyPaths=/run/gpt02-issuer-reader", unit)
+        # Issuer alone requires its own readback service and socket.
+        self.assertIn("ConditionPathExists=/run/gpt02-issuer-reader/reader.sock", issuer)
+        self.assertIn("Requires=gpt02-issue159-issuer-reader.service", issuer)
+        self.assertIn("BindReadOnlyPaths=/run/gpt02-issuer-reader", issuer)
         self.assertIn(
             "ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-%i-private-key.pkcs8",
             unit,
         )
         self.assertIn("Requires=gpt02-issue159-reader.service", unit)
-        self.assertIn("Requires=gpt02-issue159-reader.service gpt02-issue159-issuer-reader.service", unit)
+        self.assertIn("Requires=gpt02-issue159-reader.service gpt02-issue159-approval-reader.service", unit)
         self.assertIn("NoNewPrivileges=yes", unit)
         self.assertIn("PrivateNetwork=yes", unit)
         # A role-independent shared marker would accidentally enable all
