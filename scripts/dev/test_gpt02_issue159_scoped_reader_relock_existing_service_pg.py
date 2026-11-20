@@ -26,7 +26,7 @@ TABLES=("approvals","operator_links","receipts","core_identity_receipts",
 def run(args,sql=None,check=True,timeout=50):
     p=subprocess.run(args,input=sql,text=True,capture_output=True,timeout=timeout)
     if check and p.returncode:
-        raise RuntimeError("DISPOSABLE_SCOPED_RELOCK_COMMAND_FAILED:"+p.stderr[-900:])
+        raise RuntimeError("DISPOSABLE_SCOPED_RELOCK_COMMAND_FAILED:"+p.stderr[-3500:])
     return p
 
 def query(name,user,password,sql,check=True):
@@ -64,13 +64,15 @@ def main():
 CREATE ROLE postgres LOGIN CREATEROLE NOINHERIT PASSWORD '{pp}';
 GRANT CREATE ON DATABASE postgres TO postgres;
 GRANT SELECT ON pg_catalog.pg_authid TO postgres;
-GRANT pg_signal_backend TO postgres;
+GRANT pg_signal_backend TO postgres WITH INHERIT TRUE, SET FALSE;
 CREATE ROLE gpt02_store_owner NOLOGIN NOINHERIT;
 CREATE ROLE gpt02_owner_maintenance LOGIN NOINHERIT NOSUPERUSER
  NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '{mp}';
 CREATE ROLE {AUDITOR} NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 0;
 CREATE SCHEMA gpt02_private AUTHORIZATION gpt02_store_owner;
 REVOKE ALL ON SCHEMA gpt02_private FROM PUBLIC;
+-- Existing CST-DEV grants postgres schema USAGE without table SELECT/DDL.
+GRANT USAGE ON SCHEMA gpt02_private TO postgres;
 CREATE SCHEMA gpt02_relock_audit AUTHORIZATION postgres;
 REVOKE ALL ON SCHEMA gpt02_relock_audit FROM PUBLIC;
 GRANT USAGE ON SCHEMA gpt02_relock_audit TO {AUDITOR};
@@ -197,7 +199,7 @@ VALUES('{ROLE}',183,'{"a"*64}',
             "BEGIN;SELECT gpt02_relock_audit.relock_reader_phase_b();"
             "SELECT 1/0;COMMIT;",check=False)
         if failed.returncode==0 or "division by zero" not in failed.stderr:
-            raise AssertionError("LATE_TRANSACTION_ABORT_NOT_REPRODUCED")
+            raise AssertionError("LATE_TRANSACTION_ABORT_NOT_REPRODUCED:"+failed.stderr[-1400:])
         if scalar(name,"fixture_root",rp,
             "SELECT count(*) FROM gpt02_relock_audit.reader_issuance_watchdog "
             "WHERE cleaned_at IS NULL")!="1":
