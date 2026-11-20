@@ -1,5 +1,5 @@
 # CST-DEV One-Job — Integrated Single-Package Delivery & Acceptance
-**Scope:** Supabase CST-DEV \`xssrfshdrtdfupgqwfdw\` only. PR #1767 remains Draft; operational release decision is **NO-GO**. This is one complete delivery plan, not an authorization to deploy, provision secrets or sign.
+**Scope:** Supabase CST-DEV `xssrfshdrtdfupgqwfdw` only. PR #1767 remains Draft; operational release decision is **NO-GO**. This is one complete delivery plan, not an authorization to deploy, provision secrets or sign.
 
 ## What is already built and must be reused
 - One internal authenticated Owner decision; stage creates a new **WAITING** model job, one approval and audit atomically. Dedicated staging config and scoped RLS/roles exist. Generic jobs cannot impersonate reserved pilot.
@@ -20,10 +20,10 @@
 ## Single acceptance sequence — no more piecemeal tests
 1. Freeze exact PR SHA and agreed custody/permission design. Implement **all five missing operating components in the same reviewed branch**, not scattered unrelated PRs. Existing PASS code must be reused.
 2. Run one offline command after a complete candidate is built:
-   \`node scripts/dev/cst-onejob-onepass-acceptance.mjs --offline\`
+   `node scripts/dev/cst-onejob-onepass-acceptance.mjs --offline`
    This runs the existing full set of one-job tests (including disposable network-none PostgreSQL), produces one structured matrix and always issues **NO_GO** for operations.
 3. After approved provisioning, run on an authorized DEV QA host with existing DEV-only environment:
-   \`node scripts/dev/cst-onejob-onepass-acceptance.mjs --full-readonly\`
+   `node scripts/dev/cst-onejob-onepass-acceptance.mjs --full-readonly`
    This adds actual READ-ONLY catalog readiness. It is not a substitute for staging authentication, independent key custody or E2E.
 4. Only after staging, QA, broker, subscriber and Final ACK have been implemented as a complete package, run one controlled, **new** pilot job under the release gate. Owner approves once. Verify each step against immutable independent evidence. Do not reuse historical job #482.
 5. One consolidated PASS/FAIL report must include exact build/CI SHAs, runtime image digest, project ID, role/TLS inspection, nonce evidence (never private keys), job/approval/audit IDs, subscriber receipt, Final ACK, independent reviewers, timestamps and rollback. Missing evidence yields NO-GO and a single blocker report, not partial release.
