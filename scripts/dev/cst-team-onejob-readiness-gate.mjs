@@ -188,6 +188,8 @@ export function projectOneJobGate(data) {
       "BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
  // Job emission must not precede an independently authenticated, scoped
  // subscriber path: an atomic event publish is NOT a delivered receipt.
+ deny(data.candidateIndependentOwnerApprovalAttested===true,
+      "INDEPENDENT_OWNER_APPROVAL_NOT_ATTESTED");
  deny(data.candidateIndependentSubscriberArmed===true,
       "INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
  deny(data.devHostResolved===true,"UNIFIED_DEV_HOST_DNS_MISSING");
@@ -373,6 +375,10 @@ fetch("http://127.0.0.1:3000/api/healthz",{signal:AbortSignal.timeout(2500)})
    candidateBrokerUnixFilesystemVerified:false,
    candidateBrokerKernelPeerCredentialsVerified:false,
    // Role/receipt templates and offline signatures cannot arm a live consumer.
+   // A DB row that names an active Owner is not an authenticated Owner
+   // instruction: the stage writer can supply approved_by_user_id itself.
+   // Only independently verified, owner-bound approval evidence may unblock.
+   candidateIndependentOwnerApprovalAttested:false,
    candidateIndependentSubscriberArmed:false,
    devHostResolved:hostResolved,retiredHostQuarantined,candidateDirectHealthy,
    nginxApiRetainsExistingCore,
