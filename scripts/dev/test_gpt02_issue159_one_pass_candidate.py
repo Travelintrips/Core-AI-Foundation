@@ -51,6 +51,7 @@ class OnePassCandidateContract(unittest.TestCase):
             "DB_CANONICAL_REVOCATION_GUARD",
             "DB_CRASH_SAFE_WATCHDOG",
             "DB_FINALLY_RELOCK",
+            "DB_OWNER_COLUMN_ACL_RELOCK",
         ):
             self.assertIn(name,names)
         self.assertEqual(len(qa.tests(root,root,root,full=False)),6)
