@@ -206,12 +206,13 @@ class SystemdOneTaskCustodyTest(unittest.TestCase):
             custody.signed_packet_from_systemd()
 
     def test_deferred_bridge_never_opens_credentials_before_original_claim(self):
+        import gpt02_issue159_native_one_shot_supervisor as native_mod
         lazy=custody.SystemdDeferredOneTaskSupervisor()
         with self.assertRaisesRegex(BrokerAdmissionError,"NOT_AUTHENTICATED"):
             lazy.open_one_scoped_connection(self.candidate)
         with patch.object(custody,"factories_from_systemd",
-                          return_value=self.expected) as factory, patch(
-                          "gpt02_issue159_native_one_shot_supervisor.OneTaskNativeSupervisor"
+                          return_value=self.expected) as factory, patch.object(
+                          native_mod,"OneTaskNativeSupervisor"
                         ) as NativeConstructor:
             NativeConstructor.return_value.consume_scope_once.return_value={
                 "releaseDecision":"NO_GO"
