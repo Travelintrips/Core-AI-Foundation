@@ -1035,3 +1035,68 @@ verification, independently controlled broker/ACL, an actual
 RLS-authenticated subscriber connection and persisted receipt
 with a separate real readback and QA/Final ACK. Existing
 Core DEV, GPT02 signers, job #482 and PROD were untouched.
+
+## Offline subscriber auth strengthened: SCRAM and separate SO_PEERCRED signer
+
+**20 November 2026, isolated VPS QA only.** The earlier disposable
+PostgreSQL functional receipt test used a local `trust` authentication
+fixture and temporarily made a synthetic Ed25519 private key readable
+inside the subscriber test container. Neither arrangement could prove
+separation of machine credentials from the subscriber signing key.
+
+The same **previously passing functional flow** is now strengthened,
+without rebuilding its event-bus, one-event RLS, immutable receipt
+index, or rollback logic:
+
+- Disposable `postgres:16-alpine` starts with **SCRAM-SHA-256**
+  local/host authentication, an automatically generated temporary
+  database admin password, and a **separate randomly generated
+  subscriber password**. Only the subscriber QA container can read
+  its own short-lived password file (mode `0400`). A deliberately
+  wrong password is rejected with PostgreSQL `28P01` **before**
+  the correct subscriber role is allowed to read its one RLS event.
+- The original subscriber QA client **no longer imports or mounts
+  any Ed25519 private key**. It has only the public key and a
+  separate Unix socket to an isolated test signer.
+- `scripts/dev/cst_team_onejob_signer_sidecar_qa.py` is an explicit
+  QA-only Python+OpenSSL signer process, running as separate
+  UID/GID `28510:28501`, in the disposable PG16
+  **network-none namespace**. Its private key exists only in a
+  signer-owned `0700` directory, readable as `0400` by the
+  signer UID, **never mounted** to the subscriber container.
+  It checks kernel `SO_PEERCRED` on each accepted Unix connection
+  for the expected subscriber UID/GID `28502:28501`, validates
+  the fixed synthetic Company-1 event/worker/receipt fields and
+  freshness, and signs at most **two** bounded, canonical payloads.
+  An unrelated UID with the socket group is rejected before signing.
+- Subscriber and PostgreSQL QA containers still use `--network none`.
+  Signer runs in that same isolated network namespace, and no
+  live pooler/PROD/owner passwords are used. The existing consumer
+  still performs only `current_user` verification, one RLS-scoped
+  event SELECT, one append-only audit INSERT, and duplicate denial.
+  A separately invoked fixture reviewer still reads the persisted
+  receipt and verifies the Ed25519 signature from a public key
+  provisioned outside the receipt data.
+
+**Actual VPS proof:** first an independent SCRAM smoke test rejected
+a wrong password with `28P01` and accepted the correct machine role.
+Then the exact-source functional PG16+Node+separate-signer test
+returned `PASS`: `subscriberRoleVerifiedUnderDisposableScramAuth=true`,
+`independentSyntheticSignerSoPeercredRejectsWrongUid=true`,
+`signerNetworkNoneAndSeparateNonRootUid=true`,
+`subscriberNeverMountedEd25519PrivateKey=true`,
+`signedReceiptInsertedOnce=true`,
+`duplicateReceiptRejected=true`, and
+`cryptographicSignatureVerifiedFromIndependentFixtureReadback=true`.
+Unit/regression testing preserved the existing consumer's negative
+and no-side-effect guards. All temporary credentials, private keys,
+processes, sockets, containers and worktrees were cleaned.
+
+**No operational promotion:** this does not establish real Supabase
+CST-DEV pooler role authentication, an owner-approved new job,
+the independent signer key custody in production, actual subscriber
+delivery, four independently attested workers, or signed Final ACK.
+The signer process is a **test-only fixture service**, not a new
+production signer, GPT02 issuer, or task dispatcher. The one-job
+release gate, `subscriberDeliveryVerified` and
+`independentFinalAckVerified` remain **false / NO-GO**.
