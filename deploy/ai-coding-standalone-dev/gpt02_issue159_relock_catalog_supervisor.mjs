@@ -52,6 +52,77 @@ function result(reason, extra = {}) {
   };
 }
 
+// Reuse ONE existing relock timer/service. This does not grant access:
+// writer Phase A/B remain the original installed functions; optional reader
+// Phase A/B are additive and handle ONLY exact task-scoped ephemeral roles.
+// Each query uses its own committed transaction (no BEGIN/COMMIT wrapper).
+const WRITER_PHASES = [
+  'SELECT gpt02_relock_audit.relock_expired_phase_a() AS count',
+  'SELECT gpt02_relock_audit.relock_expired_phase_b() AS count',
+];
+const READER_PHASES = [
+  'SELECT gpt02_relock_audit.relock_reader_phase_a() AS count',
+  'SELECT gpt02_relock_audit.relock_reader_phase_b() AS count',
+];
+
+async function runPair(client, statements, label) {
+  const a = await client.query(statements[0]);
+  validateResult(a.rows.length === 1 ? a.rows[0].count : null, label + '_A');
+  // The separate statement MUST commit before phase B opens.
+  const b = await client.query(statements[1]);
+  validateResult(b.rows.length === 1 ? b.rows[0].count : null, label + '_B');
+}
+
+export async function runCleanupPhases(client) {
+  const writer = await client.query(
+    "SELECT to_regprocedure('gpt02_relock_audit.relock_expired_phase_a()')" +
+    " IS NOT NULL AS phase_a," +
+    "to_regprocedure('gpt02_relock_audit.relock_expired_phase_b()')" +
+    " IS NOT NULL AS phase_b"
+  );
+  if (writer.rows.length !== 1 ||
+      writer.rows[0].phase_a !== true ||
+      writer.rows[0].phase_b !== true) {
+    throw new Error('RELOCK_PHASE_FUNCTIONS_NOT_INSTALLED');
+  }
+  // Never allow an exception in the original writer lane to starve reader
+  // cleanup. Both independent workloads are attempted, but any failure is
+  // propagated. If writer A fails, writer B is NOT started uncommitted.
+  let writerError;
+  try {
+    await runPair(client, WRITER_PHASES, 'WRITER');
+  } catch (error) {
+    writerError = error;
+  }
+  let readerError;
+  let readerInstalled = false;
+  try {
+    const state = await client.query(
+      "SELECT to_regprocedure('gpt02_relock_audit.relock_reader_phase_a()')" +
+      " IS NOT NULL AS phase_a," +
+      "to_regprocedure('gpt02_relock_audit.relock_reader_phase_b()')" +
+      " IS NOT NULL AS phase_b"
+    );
+    if (state.rows.length !== 1 ||
+        typeof state.rows[0].phase_a !== 'boolean' ||
+        typeof state.rows[0].phase_b !== 'boolean') {
+      throw new Error('RELOCK_READER_CATALOG_UNKNOWN');
+    }
+    if (state.rows[0].phase_a !== state.rows[0].phase_b) {
+      throw new Error('RELOCK_READER_PARTIAL_INSTALL_DENIED');
+    }
+    readerInstalled = state.rows[0].phase_a;
+    if (readerInstalled) {
+      await runPair(client, READER_PHASES, 'READER');
+    }
+  } catch (error) {
+    readerError = error;
+  }
+  if (writerError) throw writerError;
+  if (readerError) throw readerError;
+  return {readerInstalled};
+}
+
 export async function main() {
   let client;
   try {
@@ -73,8 +144,8 @@ export async function main() {
       password: credentials.password,
       ssl: { ca, rejectUnauthorized: true, servername: HOST },
       application_name: 'gpt02-issue159-independent-relock-dev',
-      connectionTimeoutMillis: 4000, query_timeout: 2500,
-      statement_timeout: 2000,
+      connectionTimeoutMillis: 4000, query_timeout: 9500,
+      statement_timeout: 9000,
     });
     await client.connect();
     const identity = await client.query(
@@ -85,33 +156,11 @@ export async function main() {
         identity.rows[0].database !== 'postgres') {
       throw new Error('RELOCK_NATIVE_DATABASE_IDENTITY_INVALID');
     }
-    // Do not invoke or install any privileged routine until its two-phase
-    // owner-defined implementation and exact EXECUTE grant have been reviewed.
-    const state = await client.query(
-      "SELECT to_regprocedure('gpt02_relock_audit.relock_expired_phase_a()')" +
-      " IS NOT NULL AS phase_a," +
-      "to_regprocedure('gpt02_relock_audit.relock_expired_phase_b()')" +
-      " IS NOT NULL AS phase_b"
-    );
-    if (state.rows.length !== 1 ||
-        state.rows[0].phase_a !== true ||
-        state.rows[0].phase_b !== true) {
-      console.log(JSON.stringify(result('RELOCK_PHASE_FUNCTIONS_NOT_INSTALLED')));
-      return 3;
-    }
-    // Each query is its own AUTOCOMMITTED transaction; never enclose both
-    // phases in BEGIN/COMMIT. This prevents the proven late-login race.
-    // SQL names and argument counts are exact and NOT user controlled.
-    const a = await client.query(
-      'SELECT gpt02_relock_audit.relock_expired_phase_a() AS count'
-    );
-    validateResult(a.rows.length === 1 ? a.rows[0].count : null, 'PHASE_A');
-    const b = await client.query(
-      'SELECT gpt02_relock_audit.relock_expired_phase_b() AS count'
-    );
-    validateResult(b.rows.length === 1 ? b.rows[0].count : null, 'PHASE_B');
+    const {readerInstalled} = await runCleanupPhases(client);
+    // Absence of the additive reader lane does not break writer cleanup.
+    // Either outcome is NO_GO and does not start an issuer or authorize DELL.
     // Even successfully completed cleanup is NOT a release authorization.
-    console.log(JSON.stringify(result('RELOCK_CLEANUP_ONLY')));
+    console.log(JSON.stringify(result(readerInstalled ? 'RELOCK_CLEANUP_ONLY' : 'RELOCK_WRITER_ONLY_READER_NOT_INSTALLED')));
     return 0;
   } catch (error) {
     // No SQL text, connection strings, passwords or raw DB errors in logs.
