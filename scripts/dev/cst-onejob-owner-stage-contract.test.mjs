@@ -14,7 +14,11 @@ test("dedicated Owner route authenticates from current internal session, not act
  assert.match(target,/requireInternalRole\("owner"\)/);
  assert.match(target,/origin!=="https:\/\/dev\.cstlogistic\.co\.id"/);
  assert.match(target,/host!=="dev\.cstlogistic\.co\.id"/);
- assert.match(target,/ONEJOB_APPROVAL_BODY_MUST_BE_EMPTY/);
+ assert.match(target,/verifyFreshOneJobStageConsent/);
+ assert.match(target,/FRESH_EXPLICIT_OWNER_STAGE_CONSENT_REQUIRED/);
+ assert.match(target,/requirePasswordChanged/);
+ assert.match(target,/SESSION_COOKIE_NAME/);
+ assert.doesNotMatch(target,/ONEJOB_APPROVAL_BODY_MUST_BE_EMPTY/);
  assert.match(target,/ownerUserId:actor\.id/);
  assert.doesNotMatch(target,/x-admin-key|req\.body\.actor|admin-api|requireAdminApiKey/);
  assert.match(target,/dispatchPermitted:false/);
@@ -37,6 +41,8 @@ test("waiting job, approval FK and audit are atomic in same transaction",()=>{
  assert.doesNotMatch(service,/account_type='internal'\s*FOR SHARE/);
  assert.match(service,/role='owner' AND status='active' AND account_type='internal'/);
  assert.match(service,/ONEJOB_UNIQUE_INDEX_NOT_READY/);
+ assert.match(service,/cst_onejob_one_active_approval/);
+ assert.match(service,/ONEJOB_SINGLE_ACTIVE_INDEX_NOT_READY/);
  assert.match(service,/,'waiting',0,'immediate'/);
  assert.match(service,/status:"waiting" as const/);
  assert.match(service,/admissionReady:false,dispatchPermitted:false,finalAckVerified:false/);
