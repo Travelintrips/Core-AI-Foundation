@@ -261,6 +261,18 @@ export function Layout({ children }: LayoutProps) {
           ))}
         </div>
 
+        {/* DEV-only single Owner action, never shown to ordinary admins or PROD. */}
+        {user?.role==="owner"&&
+         typeof window!=="undefined"&&window.location.hostname==="dev.cstlogistic.co.id"&&(
+          <div className="px-3 py-2">
+            <Link href="/dev-onejob">
+              <div className="flex items-center gap-2 rounded-md px-2 py-2 text-xs text-violet-300 hover:bg-white/5"
+               data-testid="nav-dev-onejob">
+                <ShieldAlert className="size-4"/> Uji satu job CST-DEV
+              </div>
+            </Link>
+          </div>
+        )}
         {/* Signed-in staff account */}
         {user && (
           <div className="px-4 py-3 flex-shrink-0 flex items-center justify-between gap-2" style={{ borderTop: '1px solid #1E3057' }}>

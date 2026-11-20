@@ -35,7 +35,7 @@ export function reviewCstOneJobStageDatabaseConfig(env:NodeJS.ProcessEnv) {
       const user=decodeURIComponent(u.username);
       requireCondition(["postgres:","postgresql:"].includes(u.protocol),
         "STAGING_DATABASE_PROTOCOL_INVALID");
-      requireCondition(/^[a-z0-9-]+\.pooler\.supabase\.com$/.test(u.hostname),
+      requireCondition(u.hostname==="aws-1-ap-southeast-2.pooler.supabase.com",
         "STAGING_DATABASE_NOT_SUPABASE_POOLER");
       requireCondition(u.port==="6543","STAGING_TRANSACTION_POOLER_REQUIRED");
       requireCondition(u.pathname==="/postgres","STAGING_DATABASE_NAME_INVALID");

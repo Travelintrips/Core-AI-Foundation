@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 import { sql } from "drizzle-orm";
 import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";
 import {CST_ONEJOB_STAGE_LOGIN} from "../lib/cstOneJobStageDbConfig.js";
+import {readIndependentlySignedPreapproval} from "../lib/cstOneJobPreapprovalReadiness.js";
 
 const SHA = /^[a-f0-9]{40}$/;
 const WORKER = /^cst-dev-dell-onejob-[0-9]{8}-[a-f0-9]{8}$/;
@@ -46,6 +47,14 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
   if(!gate.eligibleForWaitingStage)
     throw Error("ONEJOB_STAGE_NOT_READY:"+gate.blockers.join(","));
   const workerName=input.env.CST_TEAM_DEV_APPROVED_WORKER_NAME!;
+  // A QA-signed short-lived readiness record must already attest the
+  // broker ACL, dedicated DB transport, armed subscriber and independent
+  // agent/Final-ACK path. This does not replace the Owner click.
+  const prepared=readIndependentlySignedPreapproval({
+    sourceSha:buildSha,workerName,
+  });
+  if(!prepared.verified)
+    throw Error("ONEJOB_STAGE_NOT_READY:INDEPENDENT_QA_PREAPPROVAL_REQUIRED");
   const requestId=PILOT_PREFIX+randomBytes(10).toString("hex");
   const jobCode="OLLAMA-"+randomBytes(4).toString("hex").toUpperCase();
   const payload={

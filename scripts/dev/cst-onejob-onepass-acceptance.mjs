@@ -23,6 +23,8 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"owner_approval",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-owner-approval-review.test.mjs"]},
   {id:"owner_stage",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-contract.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
+  {id:"signed_preapproval_ready",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-preapproval-ready.test.mjs"]},
+  {id:"owner_panel_one_click",argv:[node,"--test","scripts/dev/cst-onejob-owner-ready-panel.test.mjs"]},
   {id:"one_canonical_owner_path",argv:[node,"--test","scripts/dev/cst-onejob-integrated-single-owner.test.mjs"]},
   {id:"owner_receipt_trust",argv:[node,"--test","scripts/dev/cst-team-onejob-owner-approval-receipt.test.mjs"]},
   {id:"host_gateway_denial",argv:[node,"--test","scripts/dev/cst-team-host-gateway-probe.test.mjs"]},
@@ -88,7 +90,7 @@ export function verifyManifest(exists=existsSync) {
       file.includes("..")||!exists(resolve(ROOT,file)))
       problems.push("MISSING_TEST:"+test.id);
   }
-  for(const mandatory of ["owner_stage","fresh_owner_consent","one_canonical_owner_path",
+  for(const mandatory of ["owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","one_canonical_owner_path",
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
     "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",

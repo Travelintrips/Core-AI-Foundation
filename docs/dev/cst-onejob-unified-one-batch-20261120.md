@@ -34,3 +34,13 @@ The CI workflow first installs the isolated pinned broker-signature test depende
 6. Rollback/relock after success or failure, with duplicate/replay rejection and existing shared DEV healthy. No PROD change.
 
 If **any** evidence item is missing, `CST_DEV_ONEJOB_REAL_E2E_PASS` must not be reported; keep **NO_GO** and identify the missing item. Do not merge, deploy or issue credentials solely on CI success.
+
+## One Owner click is withheld until independent technical readiness
+
+The integrated candidate adds a **DEV Owner-only** page `/dev-onejob` on `dev.cstlogistic.co.id`, reusing the existing email-link session. The one approval button is disabled by default. The backend's read-only `/api/ai/dev/onejob/owner-stage-readiness` checks the exact source marker, the dedicated staging login and role membership, and a separately issued Ed25519 preapproval readiness receipt.
+
+The receipt is deposited **only by the independent QA custodian** under root-owned immutable paths `/etc/cst-onejob-qa/trust/public-root.json` and `/var/lib/cst-onejob-qa/preapproval-ready.json`. It is short-lived (maximum five minutes), pinned to exact CST-DEV project, Company 1, source SHA, worker name, container image digest, a change record, and independent attestations of the broker ACL, dedicated DB transport, armed subscriber, agent routes and Final-ACK issuer. The private QA key never belongs to Core AI. Any missing, stale, malformed, forged or mismatched proof denies staging.
+
+The **atomic WAITING staging service independently rechecks this same proof** before attempting a write. The previous session-binding, RLS and single-active unique indexes remain mandatory. This signed technical readiness is **not** the Owner's business approval, not a queue permit, and does not authorize real-DEV dispatch.
+
+All code remains Draft and default-OFF. No real trust key, stage credential, role LOGIN, broker/subscriber runtime, four-agent signer or actual Owner approval was installed or issued by these changes. Do not ask the Owner to click until approved operations has completed and independently verified all technical preparation.

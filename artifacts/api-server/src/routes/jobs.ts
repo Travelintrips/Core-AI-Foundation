@@ -44,7 +44,12 @@ import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
 import { verifyFreshOneJobStageConsent } from "../lib/cstOneJobFreshStageConsent.js";
-import { stageCstDevOneJobForVerifiedOwner } from "../services/cstOneJobOwnerApprovalStageService.js";
+import { stageCstDevOneJobForVerifiedOwner, evaluateCstOneJobStageEnvironment } from "../services/cstOneJobOwnerApprovalStageService.js";
+import {reviewCstOneJobStageDatabaseConfig} from "../lib/cstOneJobStageDbConfig.js";
+import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";
+import {readIndependentlySignedPreapproval} from "../lib/cstOneJobPreapprovalReadiness.js";
+import {readFileSync} from "node:fs";
+import {resolve} from "node:path";
 
 const router = Router();
 
@@ -321,6 +326,58 @@ router.get("/ai/jobs", async (req, res): Promise<void> => {
     offset,
   });
 });
+
+// DEV Owner panel: one read-only readiness response, NO approval or job write.
+// A signed QA preapproval does not grant dispatch, and the real stage action
+// independently verifies all protected conditions again in its transaction.
+router.get("/ai/dev/onejob/owner-stage-readiness",
+  requireAuth,requireInternalRole("owner"),requirePasswordChanged,
+  async (_req,res):Promise<void>=>{
+    let sha="";
+    try{sha=readFileSync(resolve(process.cwd(),".cst-build-sha"),"utf8").trim()}catch{}
+    const envGate=evaluateCstOneJobStageEnvironment(process.env,sha);
+    const stageConfig=reviewCstOneJobStageDatabaseConfig(process.env);
+    const qa=readIndependentlySignedPreapproval({
+      sourceSha:sha,workerName:process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME??"",
+    });
+    const blockers=[...envGate.blockers,...stageConfig.blockers,...qa.blockers];
+    if(blockers.length===0){
+      try{
+        const db=getCstOneJobStagingDatabase(process.env);
+        const valid=await db.transaction(async tx=>{
+          await tx.execute(sql`SET TRANSACTION READ ONLY`);
+          const r=await tx.execute(sql`
+            SELECT current_user AS role_name,current_database() AS database_name,
+              EXISTS(SELECT 1 FROM pg_roles
+                WHERE rolname=current_user AND rolcanlogin
+                  AND NOT rolbypassrls AND NOT rolsuper AND NOT rolinherit)
+                AS scoped_login,
+              EXISTS(SELECT 1 FROM pg_auth_members m
+                JOIN pg_roles wr ON wr.oid=m.roleid
+                JOIN pg_roles lo ON lo.oid=m.member
+                WHERE wr.rolname='cst_team_model_pilot_writer'
+                  AND lo.rolname='cst_team_model_pilot_stage_login'
+                  AND m.set_option AND NOT m.inherit_option AND NOT m.admin_option)
+                AS scoped_membership`);
+          const row=r.rows[0] as Record<string,unknown>|undefined;
+          return r.rows.length===1&&
+            row?.role_name==='cst_team_model_pilot_stage_login'&&
+            row?.database_name==='postgres'&&
+            row?.scoped_login===true&&row?.scoped_membership===true;
+        });
+        if(!valid)blockers.push("SCOPED_STAGING_LOGIN_NOT_VERIFIED");
+      }catch{blockers.push("SCOPED_STAGING_DB_UNREACHABLE");}
+    }
+    res.setHeader("Cache-Control","no-store");
+    res.status(200).json({
+      project:"xssrfshdrtdfupgqwfdw",companyId:"1",modelId:"qwen2.5:3b",
+      readyForOneOwnerClick:blockers.length===0,
+      blockers:[...new Set(blockers)],
+      requiresNewPassword:false,secondOwnerApprovalRequired:false,
+      dispatchPermitted:false,operationalE2EVerified:false,
+    });
+  }
+);
 
 // Dedicated one-use DEV Owner approval: stages a WAITING job only.
 // No generic API key, machine identity or body-provided actor can authorize it.
