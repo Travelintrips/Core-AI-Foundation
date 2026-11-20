@@ -9,11 +9,12 @@ const R_A = 'SELECT gpt02_relock_audit.relock_reader_phase_a() AS count';
 const R_B = 'SELECT gpt02_relock_audit.relock_reader_phase_b() AS count';
 
 class FakePG {
-  constructor({reader=true,fail=null,count=0,writer=true}={}) {
+  constructor({reader=true,fail=null,count=0,writer=true,roleCount=0}={}) {
     this.reader=reader;
     this.writer=writer;
     this.fail=fail;
     this.count=count;
+    this.roleCount=roleCount;
     this.events=[];
     this.options=[];
   }
@@ -28,6 +29,7 @@ class FakePG {
     if (sql.includes("to_regprocedure('gpt02_relock_audit.relock_reader_phase_a()')")) {
       return {rows:[{phase_a:this.reader,phase_b:this.reader}]};
     }
+    if (sql.includes('AS scoped_roles FROM pg_roles')) return {rows:[{scoped_roles:this.roleCount}]};
     if (![W_A,W_B,R_A,R_B].includes(sql)) throw new Error('UNEXPECTED_SQL');
     return {rows:[{count:this.count}]};
   }
@@ -53,6 +55,13 @@ test('no new reader functions does not interrupt original writer cleanup',async(
     readerCounts:null,
   });
   assert.deepEqual(pg.events.filter(s=>[W_A,W_B,R_A,R_B].includes(s)),[W_A,W_B]);
+});
+
+test('no reader relock functions with an orphan task role must never be reported clean',async()=>{
+  const pg=new FakePG({reader:false,roleCount:1});
+  await assert.rejects(runCleanupPhases(pg),/RELOCK_SCOPED_ROLE_EXISTS_WITHOUT_CLEANUP/);
+  assert.deepEqual(pg.events.filter(s=>[W_A,W_B,R_A,R_B].includes(s)),[W_A,W_B]);
+  assert.equal(pg.events.some(s=>s.includes('AS scoped_roles FROM pg_roles')),true);
 });
 
 test('missing a writer function denies immediately; no scoped cleanup is claimed',async()=>{
