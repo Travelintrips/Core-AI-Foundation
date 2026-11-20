@@ -47,6 +47,9 @@ CORE_COMPONENTS = (
     "deploy/ai-coding-standalone-dev/gpt02_issue159_one_shot_reader_broker.py",
     "deploy/ai-coding-standalone-dev/gpt02_issue159_native_relock_attestation.py",
     "deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs",
+    "docs/dev/gpt02-issue159-scoped-reader-relock-add-only.REVIEW_ONLY.sql",
+    "scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py",
+    "scripts/dev/test_gpt02_issue159_relock_shared_timer.mjs",
     "scripts/dev/gpt02_issue159_scoped_policy_proposal.py",
     "scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py",
     "scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py",
@@ -167,6 +170,8 @@ def tests(core: Path,hub: Path,pr196: Path,*, full=True):
         ("CORE_PINNED_ONESHOT_BROKER",core,
          [python,"-m","unittest","-q",
           "scripts.dev.test_gpt02_issue159_one_shot_reader_broker"]),
+        ("CORE_SHARED_RELOCK_TIMER",core,
+         ["node","--test","scripts/dev/test_gpt02_issue159_relock_shared_timer.mjs"]),
         ("CORE_THREE_DOMAIN_ISSUER_STARTUP",core,
          [python,"-m","unittest","-q",
           "scripts.dev.test_gpt02_issue159_preissuer_signer_bootstrap",
@@ -211,6 +216,8 @@ def tests(core: Path,hub: Path,pr196: Path,*, full=True):
              [python,"scripts/dev/test_gpt02_issue159_broker_finally_relock_pg.py"]),
             ("DB_OWNER_COLUMN_ACL_RELOCK",core,
              [python,"scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py"]),
+            ("DB_SHARED_SCOPED_RELOCK_NATIVE",core,
+             [python,"scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py"]),
         ]
     return stages
 
