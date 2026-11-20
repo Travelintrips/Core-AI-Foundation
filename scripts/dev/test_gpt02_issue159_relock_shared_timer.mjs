@@ -126,7 +126,7 @@ test('deployed writer cleanup evidence and timeout budget remain intact',()=>{
     roleSlots:3,perBackendWaitMs:3000,connectionTimeoutMs:4000,
     preflightQueryTimeoutMs:2500,phaseAQueryTimeoutMs:4500,
     statementTimeoutMs:12000,queryTimeoutMs:15000,
-    systemdStartTimeoutMs:35000,
+    systemdStartTimeoutMs:45000,
   });
   const evidence=cleanupEvidence(1,1);
   assert.equal(evidence.phaseAWindowCount,1);
