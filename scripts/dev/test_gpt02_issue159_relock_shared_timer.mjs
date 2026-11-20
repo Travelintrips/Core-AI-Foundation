@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {runCleanupPhases} from '../../deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs';
+import {runCleanupPhases,cleanupEvidence,RELOCK_TERMINATION_BUDGET} from '../../deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs';
 
 const W_A = 'SELECT gpt02_relock_audit.relock_expired_phase_a() AS count';
 const W_B = 'SELECT gpt02_relock_audit.relock_expired_phase_b() AS count';
@@ -15,9 +15,12 @@ class FakePG {
     this.fail=fail;
     this.count=count;
     this.events=[];
+    this.options=[];
   }
-  async query(sql) {
+  async query(spec) {
+    const sql=typeof spec==='string'?spec:spec.text;
     this.events.push(sql);
+    this.options.push(spec);
     if (this.fail === sql) throw new Error('RELOCK_SYNTHETIC_QUERY_FAILED');
     if (sql.includes("to_regprocedure('gpt02_relock_audit.relock_expired_phase_a()')")) {
       return {rows:[{phase_a:this.writer,phase_b:this.writer}]};
@@ -32,13 +35,23 @@ class FakePG {
 
 test('one timer handles historical writer and new scoped reader in strictly committed phase order',async()=>{
   const pg=new FakePG();
-  assert.deepEqual(await runCleanupPhases(pg),{readerInstalled:true});
+  assert.deepEqual(await runCleanupPhases(pg),{
+    readerInstalled:true,
+    writerCounts:{phaseAWindowCount:0,phaseBCleanedWindowCount:0},
+    readerCounts:{phaseAWindowCount:0,phaseBCleanedWindowCount:0},
+  });
+  const timeoutQueries=pg.options.filter(x=>typeof x==='object');
+  assert.deepEqual(timeoutQueries.map(x=>x.query_timeout),[4500,15000,4500,15000]);
   assert.deepEqual(pg.events.filter(s=>[W_A,W_B,R_A,R_B].includes(s)),[W_A,W_B,R_A,R_B]);
 });
 
 test('no new reader functions does not interrupt original writer cleanup',async()=>{
   const pg=new FakePG({reader:false});
-  assert.deepEqual(await runCleanupPhases(pg),{readerInstalled:false});
+  assert.deepEqual(await runCleanupPhases(pg),{
+    readerInstalled:false,
+    writerCounts:{phaseAWindowCount:0,phaseBCleanedWindowCount:0},
+    readerCounts:null,
+  });
   assert.deepEqual(pg.events.filter(s=>[W_A,W_B,R_A,R_B].includes(s)),[W_A,W_B]);
 });
 
@@ -50,7 +63,8 @@ test('missing a writer function denies immediately; no scoped cleanup is claimed
 
 test('partially installed reader functions fail closed after preserving writer relock',async()=>{
   const pg=new FakePG();
-  pg.query=async function(sql){
+  pg.query=async function(spec){
+    const sql=typeof spec==='string'?spec:spec.text;
     this.events.push(sql);
     if(sql.includes("to_regprocedure('gpt02_relock_audit.relock_expired_phase_a()')"))
       return {rows:[{phase_a:true,phase_b:true}]};
@@ -103,4 +117,23 @@ test('source-only cleanup never becomes a signer, credential issuer or dispatch 
     assert.equal(source.includes(forbidden),false,forbidden);
   }
   assert.match(source,/releaseDecision: 'NO_GO'/);
+});
+
+// Preserve the stronger timeout/custody budget already installed on VPS
+// rather than accidentally replacing it with short test fixture defaults.
+test('deployed writer cleanup evidence and timeout budget remain intact',()=>{
+  assert.deepEqual(RELOCK_TERMINATION_BUDGET,{
+    roleSlots:3,perBackendWaitMs:3000,connectionTimeoutMs:4000,
+    preflightQueryTimeoutMs:2500,phaseAQueryTimeoutMs:4500,
+    statementTimeoutMs:12000,queryTimeoutMs:15000,
+    systemdStartTimeoutMs:35000,
+  });
+  const evidence=cleanupEvidence(1,1);
+  assert.equal(evidence.phaseAWindowCount,1);
+  assert.equal(evidence.phaseBCleanedWindowCount,1);
+  assert.equal(evidence.connectedSessionTerminationProven,false);
+  assert.equal(evidence.authorizationGranted,false);
+  assert.equal(evidence.signingPermitted,false);
+  assert.equal(evidence.dispatchPermitted,false);
+  assert.equal(evidence.releaseDecision,'NO_GO');
 });
