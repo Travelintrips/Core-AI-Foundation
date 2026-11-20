@@ -13,6 +13,7 @@ import grp
 import json
 import os
 import pwd
+import re
 import signal
 import struct
 import socket
@@ -154,7 +155,7 @@ def _read_request(conn: socket.socket) -> tuple[str, bytes]:
 def _require_persisted_admin_decision(
     claims: dict[str, Any], approval_digest: str,
     reader_socket_path: str, server_now_ms: int,
-) -> None:
+) -> int:
     """Confirm a signer-verified approval was also persisted by the DEV admin API.
 
     This is a read-only Unix-socket lookup, not signer/dispatch authorization.
@@ -167,7 +168,11 @@ def _require_persisted_admin_decision(
         raise RuntimeError("APPROVAL_SOCKET_NOT_PRIVATE")
     # The canonical production reader socket must be root-owned. Test-only
     # socket paths use disposable private directories and never grant authority.
-    if reader_socket_path == DEFAULT_APPROVAL_READER_SOCKET:
+    # The live socket's custody is pinned to its immutable absolute path,
+    # not a test-overridable default. Disposable private Unix sockets are
+    # exercised by ordinary, non-root CI users; the production path ALWAYS
+    # requires root ownership and a non-world-accessible parent.
+    if reader_socket_path == "/run/gpt02-approval-reader/approval.sock":
         parent = os.lstat(str(Path(reader_socket_path).parent))
         if (st.st_uid != 0 or parent.st_uid != 0
                 or not stat.S_ISDIR(parent.st_mode)
@@ -195,7 +200,7 @@ def _require_persisted_admin_decision(
     chunks = []
     n = 0
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(2.0)
+        conn.settimeout(4.0)
         conn.connect(reader_socket_path)
         conn.sendall(request)
         while True:
@@ -260,8 +265,16 @@ def _require_persisted_admin_decision(
             or decision.get("authMethod") not in (
                 "supabase_admin_session", "supabase_aal2")
             or type(decision.get("recordedAt")) is not int
-            or decision["recordedAt"] > server_now_ms):
+            or decision["recordedAt"] > server_now_ms
+            or type(decision.get("expiresAt")) is not int
+            or decision["expiresAt"] <= server_now_ms
+            or decision["expiresAt"] <= decision["recordedAt"]
+            or decision["expiresAt"] - decision["recordedAt"] > 300_000):
         raise BrokerAdmissionError("PERSISTED_ADMIN_APPROVAL_READBACK_MISMATCH")
+    # This absolute expiry is read from the trusted, private SQLite approval
+    # reader. It is only evidence for later NO_GO review; returning it never
+    # authorizes any PostgreSQL write, credential, signer or dispatch.
+    return decision["expiresAt"]
 
 
 def _require_persisted_lineage(
@@ -303,7 +316,7 @@ def _require_persisted_lineage(
     chunks: list[bytes] = []
     size = 0
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(2.0)
+        conn.settimeout(4.0)
         conn.connect(reader_socket)
         if not hasattr(socket, "SO_PEERCRED"):
             raise RuntimeError("LINEAGE_PEER_CREDENTIALS_UNAVAILABLE")
@@ -423,8 +436,13 @@ class _Handler(socketserver.StreamRequestHandler):
                 "dispatchPermitted": False, "releaseDecision": "NO_GO",
             }))
         except BrokerAdmissionError as exc:
-            self.wfile.write(_response(403 if str(exc).startswith("PERSISTED_") else 400, {
-                "ok": False, "reason": "PERSISTED_APPROVAL_OR_SIGNED_EVIDENCE_DENIED",
+            code = str(exc)
+            # Never echo arbitrary exception text; a stable uppercase code
+            # is safe to expose while all authorization flags remain false.
+            if not re.fullmatch(r"[A-Z0-9_:-]{1,120}", code):
+                code = "PERSISTED_APPROVAL_OR_SIGNED_EVIDENCE_DENIED"
+            self.wfile.write(_response(403 if code.startswith("PERSISTED_") else 400, {
+                "ok": False, "reason": code,
                 "writerEnabled": False, "signingPermitted": False,
                 "authorizationGranted": False, "dispatchPermitted": False,
                 "releaseDecision": "NO_GO",

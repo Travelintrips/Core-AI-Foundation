@@ -73,9 +73,9 @@ class ApprovalReaderRuntimeTest(unittest.TestCase):
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True)
         self.thread.start()
 
-    def _post(self,lookup=None,observed=None):
+    def _post(self,lookup=None,observed=None,route="/approval-intent"):
         body=json.dumps({"lookup":lookup or self.lookup,"observedAt":self.now if observed is None else observed},separators=(",",":")).encode()
-        request=(b"POST /approval-intent HTTP/1.1\r\nHost: localhost\r\n"
+        request=("POST "+route+" HTTP/1.1\r\nHost: localhost\r\n").encode()+(
                  b"Content-Type: application/json\r\nContent-Length: "+str(len(body)).encode()+
                  b"\r\nConnection: close\r\n\r\n"+body)
         c=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);c.settimeout(3)
@@ -124,6 +124,48 @@ class ApprovalReaderRuntimeTest(unittest.TestCase):
         self.assertEqual(status,404,out)
         self.assertFalse(out["ok"])
         self.assertEqual(out["releaseDecision"],"NO_GO")
+
+    def test_source_outbox_endpoint_requires_same_committed_owner_row(self):
+        self._start_server()
+        # Original approval intent remains readable without the new outbox
+        # extension. The new stronger route MUST refuse an old-only intent.
+        status,old=self._post()
+        self.assertEqual(status,200,old)
+        status,absent=self._post(route="/owner-outbox-intent")
+        self.assertEqual(status,404,absent)
+        self.assertFalse(absent["ok"])
+        con=sqlite3.connect(self.db)
+        con.executescript("""
+          CREATE TABLE gpt02_issue159_owner_approval_outbox(
+            decision_id TEXT PRIMARY KEY,task_id INTEGER,company_id TEXT,
+            command_id TEXT,attempt_id TEXT,claims_sha256 TEXT,actor_id TEXT,
+            auth_method TEXT,role_at_decision TEXT,
+            recorded_at_ms INTEGER,expires_at_ms INTEGER
+          );
+          INSERT INTO gpt02_issue159_owner_approval_outbox
+          SELECT id,task_id,company_id,command_id,attempt_id,claims_sha256,
+                 actor_id,auth_method,role_at_decision,
+                 recorded_at_ms,expires_at_ms
+            FROM gpt02_issue159_approval_intents;
+        """)
+        con.close()
+        status,proven=self._post(route="/owner-outbox-intent")
+        self.assertEqual(status,200,proven)
+        self.assertTrue(proven["result"]["sourceOutboxMatched"])
+        self.assertTrue(proven["result"]["persistedTrustedReadProven"])
+        self.assertFalse(proven["authorizationGranted"])
+        self.assertFalse(proven["dispatchPermitted"])
+        self.assertEqual(proven["releaseDecision"],"NO_GO")
+        # Tainted/cross-task outbox must be rejected even if normal approval
+        # is still valid; never use a client-provided `outboxMatched` flag.
+        con=sqlite3.connect(self.db)
+        con.execute("UPDATE gpt02_issue159_owner_approval_outbox SET task_id=184")
+        con.commit();con.close()
+        status,wrong=self._post(route="/owner-outbox-intent")
+        self.assertEqual(status,404,wrong)
+        self.assertFalse(wrong["ok"])
+        status,legacy=self._post()
+        self.assertEqual(status,200,legacy)
 
     def test_socket_rejects_backdated_client_observation(self):
         self._start_server()

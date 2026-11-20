@@ -1,0 +1,56 @@
+[Unit]
+Description=GPT02 Issue159 CST-DEV original signed one-read review (%i), NO DISPATCH
+After=network-online.target gpt02-issue159-verifier.service
+Wants=network-online.target
+ConditionPathExists=/etc/gpt02-dev/trust-fingerprints.json
+ConditionPathExists=/etc/gpt02-dev/supabase-root-ca-2021.crt
+ConditionPathExists=/etc/gpt02-dev/issue159-one-shot-%i-enabled.approved
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-one-shot-%i-packet.json
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-one-shot-%i-scoped.json
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-claim-consumer.json
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-approval-guard.json
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-independent-auditor.json
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_one_shot_native_runtime.py
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+SupplementaryGroups=gpt02-issue159-signers
+Environment=APP_ENV=development
+LoadCredentialEncrypted=approved-lifecycle-packet.json:/etc/credstore.encrypted/gpt02-issue159-one-shot-%i-packet.json
+LoadCredentialEncrypted=reader-scoped-once.json:/etc/credstore.encrypted/gpt02-issue159-one-shot-%i-scoped.json
+LoadCredentialEncrypted=reader-claim-consumer.json:/etc/credstore.encrypted/gpt02-issue159-claim-consumer.json
+LoadCredentialEncrypted=reader-current-guard.json:/etc/credstore.encrypted/gpt02-issue159-approval-guard.json
+LoadCredentialEncrypted=reader-independent-auditor.json:/etc/credstore.encrypted/gpt02-issue159-independent-auditor.json
+LoadCredentialEncrypted=relock-catalog-dsn:/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn
+ExecStart=/usr/bin/python3 -B /opt/ai-coding-standalone-dev/gpt02_issue159_one_shot_native_runtime.py
+WorkingDirectory=/opt/ai-coding-standalone-dev
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+ProtectProc=invisible
+ProcSubset=pid
+UMask=0077
+MemoryMax=128M
+TasksMax=16
+TimeoutStartSec=70s
+Restart=no
+
+# Intentionally NO [Install]: this one-shot has no autostart or persistent
+# service. A separately approved DBA/custodian must stage all encrypted
+# per-task credentials and prove the independent relock timer is ACTIVE
+# before any authorized transient manual launch. Its success is STILL NO_GO
+# for signer, DELL dispatch, or Task183 completion.

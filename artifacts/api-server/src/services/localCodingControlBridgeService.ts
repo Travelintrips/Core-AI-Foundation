@@ -208,6 +208,14 @@ export async function submitCodingBridgeCommand(input: {
     )
     .limit(1);
   if (existing) {
+    // The incoming request may omit a protected marker while reusing the same
+    // source/external ID. The persisted command's metadata is authoritative:
+    // do not let generic submit re-notify a protected Issue159 or recovery job.
+    if (isQuarantinedGpt02RecoveryMetadata(existing.metadataJson)) {
+      throw Object.assign(new Error("GPT02_PROTECTED_GENERIC_RENOTIFY_FORBIDDEN"), {
+        bridgeStage: "DEDICATED_ISSUER_REQUIRED",
+      });
+    }
     stage = "EXISTING_COMMAND_NOTIFICATION_FAILED";
     if (input.assignedClientId) await notifyExternalAgentWork(input.assignedClientId, existing.id);
     return { command: existing, created: false };

@@ -1,0 +1,362 @@
+name: GPT02 Issue159 OpenClaw candidate lifecycle (isolated only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - ".github/workflows/gpt02-issue159-openclaw-isolated-lifecycle.yml"
+      - "scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs"
+      - "scripts/dev/dev-gpt02-issue159-backup-recovery-gate.mjs"
+      - "scripts/dev/dev-gpt02-issue159-backup-recovery-gate.test.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Separate ephemeral CI machines. No repo write, credentials, DELL connectivity,
+# service restart, production resources, migration or worker dispatch.
+jobs:
+  source-identity:
+    name: Verify pinned stable/beta tag source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout this PR's test harness
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout original DELL-version source at immutable commit
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 157d8c2bc3ea2fa183afdc11088e69690bf8e64e
+          path: upstream-original
+          persist-credentials: false
+      - name: Checkout official stable source at immutable commit
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 847611dcaa3bf0e2783335f961dd1fd0580e4d9f
+          path: upstream-stable
+          persist-credentials: false
+      - name: Checkout official beta source at immutable commit
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          path: upstream-beta
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Verify source features without executing upstream code
+        run: node scripts/dev/test_gpt02_issue159_openclaw_source_guard.mjs upstream-stable upstream-beta upstream-original
+      - name: Enforce fail-closed host-plugin-Codex dependency cohort
+        run: node --test scripts/dev/dev-gpt02-codex-cohort-check.test.mjs
+      - name: Verify backup evidence remains fail-closed without operator custody
+        run: node --test scripts/dev/dev-gpt02-issue159-backup-recovery-gate.test.mjs
+
+  windows-owner-lock:
+    name: Windows Gateway owner-lock regressions (upstream fixture)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Read the precise pnpm version and integrity pin from the
+        # upstream packageManager field. Do not specify it twice.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pinned upstream dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run actual Windows lock regression in ephemeral test state
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts --testNamePattern "(uses native process identity for local Windows owners|uses process identity for a .* Windows owner|inspects and acquires a legacy Windows lock)"
+
+  linux-shutdown:
+    name: Linux plugin-close / SIGUSR2 lifecycle regressions (upstream fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Read the precise pnpm version and integrity pin from the
+        # upstream packageManager field. Do not specify it twice.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pinned upstream dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run cross-platform namespace regression on its native Linux runner
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/gateway-lock.namespace.test.ts
+      - name: Run plugin retirement cleanup regression
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.plugins.config.ts src/plugins/loader.instance-cleanup.test.ts
+      - name: Run real child-process SIGUSR2 shutdown regression (fixture only)
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.cli-process.config.ts src/cli/gateway-cli/run-loop.restart-liveness.process.test.ts
+
+  codex-auth-candidate:
+    name: Codex model-route/auth and shutdown contracts (isolated fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned upstream candidate only
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # The upstream packageManager field specifies the exact version/pin.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install candidate dependencies without package lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Test fake Codex auth selection, connection and client shutdown
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+          OPENCLAW_STATE_DIR: "${{ runner.temp }}/issue159-codex-fixture"
+          OPENCLAW_CONFIG_PATH: "${{ runner.temp }}/issue159-codex-fixture/openclaw.json"
+        run: |
+          pnpm exec vitest run --config test/vitest/vitest.extension-codex.config.ts \
+            extensions/codex/src/app-server/auth-profile-selection.test.ts \
+            extensions/codex/src/app-server/connection-health.test.ts \
+            extensions/codex/src/app-server/client-shutdown.test.ts
+      - name: Test agent runtime auth requirement and stored-profile isolation
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+          OPENCLAW_STATE_DIR: "${{ runner.temp }}/issue159-codex-fixture"
+          OPENCLAW_CONFIG_PATH: "${{ runner.temp }}/issue159-codex-fixture/openclaw.json"
+        run: |
+          pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts \
+            extensions/codex/src/app-server/auth-requirement-matrix.test.ts \
+            extensions/codex/src/app-server/auth-profile-runtime-contract.test.ts
+
+  windows-codex-native:
+    name: Windows Codex native package and process-custody fixtures
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout immutable official candidate source
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Use the packageManager field of the pinned upstream checkout.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pinned dependencies without package lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Windows native package resolution behind isolated install shim
+        timeout-minutes: 6
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: >
+          pnpm exec vitest run
+          --config test/vitest/vitest.extension-codex.config.ts
+          extensions/codex/src/app-server/managed-binary.test.ts
+          --testNamePattern "resolves native dependencies from the real package behind an isolated install shim"
+          --testTimeout 20000 --hookTimeout 20000
+      - name: Windows isolated npm generation resolution without local shim
+        timeout-minutes: 6
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: >
+          pnpm exec vitest run
+          --config test/vitest/vitest.extension-codex.config.ts
+          extensions/codex/src/app-server/managed-binary.test.ts
+          --testNamePattern "resolves the isolated npm generation package without a local shim on Windows"
+          --testTimeout 20000 --hookTimeout 20000
+      - name: Windows synthetic Codex profile selection
+        timeout-minutes: 6
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: >
+          pnpm exec vitest run
+          --config test/vitest/vitest.extension-codex.config.ts
+          extensions/codex/src/app-server/auth-profile-selection.test.ts
+          --testTimeout 20000 --hookTimeout 20000
+      # IMPORTANT: Windows jobs default to PowerShell, where a Bash-style
+      # trailing backslash is NOT a line continuation. The old multiline
+      # command accidentally ran the entire extension-database-workers shard
+      # (including unrelated Matrix tests) and timed out after 12 minutes.
+      # Use one single-line, file-scoped invocation per test. Do not suppress
+      # real failures or broaden the test set to unrelated extensions.
+      - name: Windows Codex native process custody (worker shard only)
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts extensions/codex/src/app-server/native-process-authority.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Windows Codex auth requirement matrix (worker shard only)
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.extension-database-workers.config.ts extensions/codex/src/app-server/auth-requirement-matrix.test.ts --testTimeout 30000 --hookTimeout 30000
+
+  backup-restore-disposable:
+    name: Synthetic OpenClaw backup verify/restore and credential inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout immutable official candidate only
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Use upstream packageManager, no second version override.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install exact upstream lockfile without scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Check encrypted filesystem storage, wrong keys and location markers (fixtures)
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.unit.config.ts src/storage/encryption.test.ts src/storage/filesystem.test.ts src/storage/locations.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Exercise disposable archive verification and isolated restore
+        timeout-minutes: 10
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-restore.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify candidate accepts legacy archive links and manifests
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-verify.test.ts --testNamePattern "older Windows cross-asset links|root-relative internal hardlink targets from older backups" --testTimeout 30000 --hookTimeout 30000
+      - name: Verify SQLite backup inventory completeness and omission refusal
+        timeout-minutes: 10
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-verify-completeness.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify synthetic credential coverage without copying real credentials
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.infra.config.ts src/infra/backup-create.client-credentials.test.ts --testTimeout 30000 --hookTimeout 30000
+
+  installed-release-backup-baseline:
+    name: Installed OpenClaw 2026.10.7 synthetic archive baseline (not DELL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout immutable original installed-version source
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 157d8c2bc3ea2fa183afdc11088e69690bf8e64e
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        # Exact packageManager pin comes from this historical checkout.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install original source dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify old-release synthetic archive restore into clean target
+        timeout-minutes: 10
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-restore.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify old-release SQLite snapshot inventory and omission rejection
+        timeout-minutes: 8
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/backup-verify-completeness.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Verify original storage encryption and key rejection
+        timeout-minutes: 7
+        env:
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: pnpm exec vitest run --config test/vitest/vitest.unit.config.ts src/storage/encryption.test.ts src/storage/filesystem.test.ts src/storage/locations.test.ts --testTimeout 30000 --hookTimeout 30000
+
+  cross-release-archive-synthetic:
+    name: Original 2026.10.7 archive into candidate isolated restore (synthetic only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout original immutable release as execution root
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 157d8c2bc3ea2fa183afdc11088e69690bf8e64e
+          persist-credentials: false
+      - name: Checkout immutable candidate in separate subdirectory
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: c0f42f648144b25b8945b9c56329eb13eb6d7754
+          path: candidate
+          persist-credentials: false
+      - name: Checkout Issue159 fixtures without any credentials
+        uses: actions/checkout@v4
+        with:
+          path: harness
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install original release lockfile without package scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Produce actual synthetic original-release archive
+        timeout-minutes: 8
+        env:
+          ISSUE159_SYNTHETIC_ARCHIVE: ${{ runner.temp }}/issue159-original-synthetic.tar.gz
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: |
+          cp harness/scripts/dev/fixtures/issue159-original-archive-producer.test.ts src/commands/issue159-original-archive-producer.test.ts
+          pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/issue159-original-archive-producer.test.ts --testTimeout 30000 --hookTimeout 30000
+      - name: Install candidate release lockfile without package scripts
+        working-directory: candidate
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify original archive using candidate code and restore independently
+        timeout-minutes: 8
+        working-directory: candidate
+        env:
+          ISSUE159_SYNTHETIC_ARCHIVE: ${{ runner.temp }}/issue159-original-synthetic.tar.gz
+          OPENCLAW_NO_RESPAWN: "1"
+          OPENCLAW_LIVE_TEST: "0"
+        run: |
+          cp ../harness/scripts/dev/fixtures/issue159-candidate-archive-consumer.test.ts src/commands/issue159-candidate-archive-consumer.test.ts
+          pnpm exec vitest run --config test/vitest/vitest.commands.config.ts src/commands/issue159-candidate-archive-consumer.test.ts --testTimeout 30000 --hookTimeout 30000

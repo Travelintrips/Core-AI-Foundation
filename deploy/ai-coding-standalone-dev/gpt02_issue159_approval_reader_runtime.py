@@ -55,8 +55,15 @@ def _read_request(conn):
         if len(data)>MAX_HEADER: raise OverflowError("HEADER_TOO_LARGE")
     header,_,body=data.partition(b"\r\n\r\n")
     lines=header.split(b"\r\n")
-    if not lines or lines[0]!=b"POST /approval-intent HTTP/1.1":
+    if not lines:
         raise LookupError("NOT_FOUND")
+    routes={
+        b"POST /approval-intent HTTP/1.1":False,
+        b"POST /owner-outbox-intent HTTP/1.1":True,
+    }
+    if lines[0] not in routes:
+        raise LookupError("NOT_FOUND")
+    require_owner_outbox=routes[lines[0]]
     headers={}
     for line in lines[1:]:
         if b":" not in line: raise ValueError("HEADER_INVALID")
@@ -74,7 +81,7 @@ def _read_request(conn):
         if not chunk: raise ValueError("BODY_INCOMPLETE")
         body+=chunk
     if len(body)!=size: raise ValueError("BODY_LENGTH_MISMATCH")
-    return body
+    return require_owner_outbox,body
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -84,7 +91,7 @@ class _Handler(socketserver.StreamRequestHandler):
 
     def handle(self):
         try:
-            raw=_read_request(self.request)
+            require_outbox,raw=_read_request(self.request)
             req=json.loads(raw.decode("utf-8"))
             if not isinstance(req,dict) or set(req)!={"lookup","observedAt"}:
                 raise ValueError("REQUEST_SHAPE_INVALID")
@@ -98,8 +105,16 @@ class _Handler(socketserver.StreamRequestHandler):
                     or abs(client_now_ms - server_now_ms) > 5000):
                 raise ValueError("UNTRUSTED_APPROVAL_OBSERVATION_TIME")
             reader=type(self).approval_reader_fn or _load_reader()
-            result=reader(self.db_path,lookup,server_now_ms,operational=self.operational)
-            proven=result.get("persistedTrustedReadProven") is True
+            result=reader(
+                self.db_path,lookup,server_now_ms,
+                operational=self.operational,
+                **({"require_owner_outbox":True} if require_outbox else {}),
+            )
+            proven=(
+                result.get("persistedTrustedReadProven") is True
+                and (not require_outbox or
+                     result.get("sourceOutboxMatched") is True)
+            )
             self.wfile.write(_response(200 if proven else 404,{
                 "ok":proven,"environment":"DEV","result":result,
                 "approvalReadOnly":True,"decisionCreated":False,
