@@ -224,6 +224,110 @@ class SupervisorTest(unittest.TestCase):
         with self.assertRaisesRegex(BrokerAdmissionError,"FACTORY_UNAVAILABLE"):
             native.OneTaskNativeSupervisor(self.candidate,invalid)
 
+    def run_original_broker(self, *, reader_error=None, audit_native=False):
+        """Use ORIGINAL signed broker with the concrete five-factory adapter."""
+        import gpt02_issue159_one_shot_reader_broker as broker
+        from unittest.mock import Mock
+        fixture=PostlineageReaderScopeOfflineTest()
+        fixture.setUp()
+        packet=fixture.fixture.packet
+        self.candidate=fixture.check()
+        role=self.candidate["candidateRole"]
+        self.supervisor=native.OneTaskNativeSupervisor(
+            self.candidate,self.factories,
+            monotonic=self.clock.monotonic,sleep=self.clock.sleep,
+        )
+
+        def atomic_claim(conn,candidate,challenge):
+            return {
+                "scopeSha256":candidate["scopeSha256"],
+                "verifiedPacketSha256":candidate["verifiedPacketSha256"],
+                "role":candidate["candidateRole"],
+                "commandId":candidate["scope"]["command_id"],
+                "attemptId":candidate["scope"]["attempt_id"],
+                "receiptId":candidate["scope"]["receipt_id"],
+                "fenceId":candidate["scope"]["fence_id"],
+                "readChallenge":challenge,
+                "consumedExactlyOnce":True,
+                "releaseDecision":"NO_GO",
+            }
+
+        def attested_consumption(_conn,candidate,challenge):
+            return {
+                "consumptionPersistedInDatabase":True,
+                "role":candidate["candidateRole"],
+                "scopeSha256":candidate["scopeSha256"],
+                "verifiedPacketSha256":candidate["verifiedPacketSha256"],
+                "readChallenge":challenge,
+                "releaseDecision":"NO_GO",
+            }
+
+        def attested_relock(_conn,candidate):
+            return {
+                "nativeCatalogReadBack":not audit_native,
+                "role":candidate["candidateRole"],
+                "scopeSha256":candidate["scopeSha256"],
+                "releaseDecision":"NO_GO",
+            }
+        reader=Mock(return_value=[{"fixture_only":"no_private_row"}])
+        if reader_error is not None:reader.side_effect=reader_error
+        with (
+            patch.object(native,"consume_once_via_pinned_connection",
+                         side_effect=atomic_claim) as claim,
+            patch.object(broker,"_load_public_roots",
+                         return_value=fixture.fixture.roots),
+            patch.object(broker,"inspect_postlineage_scoped_reader_candidate",
+                         return_value=self.candidate),
+            patch.object(broker,"read_lineage_once",reader),
+            patch.object(broker,"validate_trusted_lineage_row"),
+            patch.object(broker,"attest_persisted_read_consumption",
+                         side_effect=attested_consumption),
+            patch.object(broker,"attest_current_approval_held"),
+            patch.object(broker,"attest_boolean_relock",
+                         side_effect=attested_relock) as boolcheck,
+            patch.object(broker.time,"time",
+                         return_value=fixture.fixture.now/1000),
+        ):
+            try:
+                value=broker.review_one_shot_reader_readback(
+                    packet,self.supervisor,
+                )
+            finally:
+                self.last_claim=claim
+                self.last_reader=reader
+                self.last_boolcheck=boolcheck
+        return value
+
+    def test_real_original_broker_uses_five_factory_adapter_and_never_authorizes(self):
+        result=self.run_original_broker()
+        self.assertTrue(result["oneCanonicalReadReviewed"])
+        self.assertTrue(result["postReadRelockVerifiedByNativePostgres"])
+        self.assertEqual(result["releaseDecision"],"NO_GO")
+        self.assertFalse(result["credentialIssuancePermitted"])
+        self.assertFalse(result["authorizationGranted"])
+        self.assertFalse(result["dispatchPermitted"])
+        self.assertEqual(self.last_reader.call_count,1)
+        self.assertEqual(self.last_claim.call_count,1)
+        self.assertEqual(self.last_boolcheck.call_count,1)
+        self.assertEqual(self.relock.commits,2)
+        self.assertTrue(self.reader.closed)
+
+    def test_original_broker_failure_still_relocks_and_never_replays(self):
+        with self.assertRaisesRegex(RuntimeError,"SYNTHETIC_NATIVE_SQL_DENIED"):
+            self.run_original_broker(reader_error=RuntimeError(
+                "SYNTHETIC_NATIVE_SQL_DENIED"
+            ))
+        self.assertEqual(self.relock.commits,2)
+        self.assertTrue(self.reader.closed)
+        self.assertEqual(self.last_claim.call_count,1)
+
+    def test_original_broker_rejects_native_relock_attestation_false(self):
+        with self.assertRaisesRegex(BrokerAdmissionError,
+            "ONE_SHOT_NATIVE_RELOCK_ATTESTATION_INVALID"):
+            self.run_original_broker(audit_native=True)
+        self.assertEqual(self.relock.commits,2)
+        self.assertEqual(self.last_reader.call_count,1)
+
     def test_source_is_not_any_new_signer_dispatch_role_or_db_credential(self):
         source=(Path(__file__).resolve().parents[2]/
             "deploy/ai-coding-standalone-dev/gpt02_issue159_native_one_shot_supervisor.py"
