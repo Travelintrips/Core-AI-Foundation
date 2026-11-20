@@ -37,11 +37,14 @@ def run(args,stdin=None,timeout=35,env=None):
                            (p.stderr[-1300:] or p.stdout[-900:]))
     return p.stdout
 
+ADMIN_SECRET = None
 def psql(sql):
-    return run(["docker","exec","-i",PGCON,"psql","-v","ON_ERROR_STOP=1",
+    return run(["docker","exec","-e","PGPASSWORD="+ADMIN_SECRET,
+                "-i",PGCON,"psql","-v","ON_ERROR_STOP=1",
                 "-U","postgres","-d",DB],sql)
 def psql_json(sql):
-    rows=run(["docker","exec",PGCON,"psql","-At","-v","ON_ERROR_STOP=1",
+    rows=run(["docker","exec","-e","PGPASSWORD="+ADMIN_SECRET,
+              PGCON,"psql","-At","-v","ON_ERROR_STOP=1",
               "-U","postgres","-d",DB,"-c",sql]).strip().splitlines()
     if len(rows)!=1:raise RuntimeError("EXACT_ONE_DB_JSON_ROW_REQUIRED")
     return json.loads(rows[0])
@@ -76,7 +79,12 @@ def create_keys(shared):
     return keydir,pubpin
 
 def main():
+    global ADMIN_SECRET
     assert_no_containers()
+    # Generate an ephemeral machine credential inside the QA process only.
+    # Never ask for, reuse or log an Owner password.
+    ADMIN_SECRET=secrets.token_hex(32)
+    SUBSCRIBER_SECRET=secrets.token_hex(32)
     spec=importlib.util.spec_from_file_location("cst_subscriber_existing_qa",MODULE)
     sharedmod=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(sharedmod)
@@ -95,6 +103,10 @@ def main():
         sockdir=temp/"pgsock"
         sockdir.mkdir(mode=0o755)
         keydir,pin=create_keys(temp)
+        passwordfile=keydir/"subscriber-password"
+        passwordfile.write_text(SUBSCRIBER_SECRET,encoding="utf8")
+        os.chown(passwordfile,28502,28501)
+        os.chmod(passwordfile,0o400)
         sharedmod.PIN=pin
         # PostgreSQL and Node have NO IP routes and share only this fixture
         # database's Unix socket. This is not the real pooler TLS topology.
@@ -102,11 +114,14 @@ def main():
              "--memory","340m","--pids-limit","110",
              "--mount",f"type=bind,source={sockdir},target=/var/run/postgresql",
              "-e","POSTGRES_DB="+DB,
-             "-e","POSTGRES_HOST_AUTH_METHOD=trust",PGIMAGE])
+             "-e","POSTGRES_PASSWORD="+ADMIN_SECRET,
+             "-e","POSTGRES_INITDB_ARGS=--auth-local=scram-sha-256 --auth-host=scram-sha-256",
+             "-e","POSTGRES_HOST_AUTH_METHOD=scram-sha-256",PGIMAGE])
         made=True
         for count in range(65):
             ready=subprocess.run(
-                ["docker","exec",PGCON,"psql","-At","-U","postgres",
+                ["docker","exec","-e","PGPASSWORD="+ADMIN_SECRET,
+                 PGCON,"psql","-At","-U","postgres",
                  "-d",DB,"-c","SELECT 1"],
                 text=True,capture_output=True,timeout=4)
             if ready.returncode==0 and ready.stdout.strip()=="1":
@@ -145,7 +160,13 @@ ALTER TABLE ai_platform.ai_audit_logs ENABLE ROW LEVEL SECURITY;
              "'ollama','ollama_remote_pull','qwen2.5:3b',"+
              q("ollama-remote:"+WORKER_NAME)+");")
         expiry=(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()
-        psql(sharedmod.render(sharedmod.APPLY,expiry))
+        psql(sharedmod.render(sharedmod.APPLY,expiry,
+            {"SUBSCRIBER_PASSWORD":SUBSCRIBER_SECRET}))
+        auth_check=psql_json("SELECT json_build_object('scram',"+
+            "rolpassword LIKE 'SCRAM-SHA-256$%', 'login',rolcanlogin)"+
+            " FROM pg_authid WHERE rolname="+q(PID_ROLE))
+        if auth_check!={"scram":True,"login":True}:
+            raise RuntimeError("DISPOSABLE_SUBSCRIBER_SCRAM_NOT_ENFORCED")
         publication=(datetime.now(timezone.utc)-timedelta(seconds=15)).isoformat()
         public_detail={
             "eventType":"job.completed","sourceModule":"job-engine",
@@ -234,7 +255,7 @@ END $postcheck$;""")
         print(json.dumps({
           "result":"PASS",
           "mode":"DISPOSABLE_PG16_AND_NODE_BOTH_NETWORK_NONE",
-          "subscriberRoleVerifiedUnderDisposableLocalTrustAuth":True,
+          "subscriberRoleVerifiedUnderDisposableScramAuth":True,
           "oneScopedEventSelected":True,
           "signedReceiptInsertedOnce":True,
           "duplicateReceiptRejected":True,
