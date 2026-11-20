@@ -18,7 +18,8 @@ MAIN = ROOT / "docs/dev/gpt02-issue159-two-phase-owner-split-relock.PROPOSED.sql
 ROLE = "dev_gpt02_task_200_abcdef012345"
 AUDITOR = "dev_gpt02_relock_catalog_auditor"
 TABLES = ("approvals","operator_links","receipts",
-          "core_identity_receipts","post_consumption_fences")
+          "core_identity_receipts","post_consumption_fences",
+          "issuer_evidences","issuer_lease_consumptions")
 # Strictly bounded disposable images: production/DEV connections forbidden.
 IMAGE = os.environ.get("GPT02_RELOCK_TEST_PG_IMAGE", "postgres:16-alpine")
 if IMAGE not in ("postgres:16-alpine", "postgres:17-alpine"):
