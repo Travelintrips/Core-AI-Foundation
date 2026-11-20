@@ -63,7 +63,7 @@ const event={eventId,eventType:"job.completed",sourceModule:"job-engine",
   payloadJson:{jobId:483,jobType:"ollama_model_invocation",workerId:8}};
 const eventAudit={module:"event-bus",action:"event_published",
   resourceId:eventId,status:"success",
-  details:{eventType:"job.completed",correlationId}};
+  details:{eventType:"job.completed",sourceModule:"job-engine",correlationId}};
 class QaDb{
   constructor(){this.calls=[];this.forcedRole=null}
   async query(sql,params=[]){
@@ -106,8 +106,9 @@ class BrokerDb{
   }
 }
 class SubDb{
-  constructor({badSource=false,failAudit=false}={}){
-    this.calls=[];this.forcedRole=null;this.badSource=badSource;this.failAudit=failAudit;
+  constructor({badSource=false,badWorker=false,failAudit=false}={}){
+    this.calls=[];this.forcedRole=null;this.badSource=badSource;
+    this.badWorker=badWorker;this.failAudit=failAudit;
   }
   async query(sql,params=[]){
     this.calls.push({sql,params});
@@ -118,6 +119,10 @@ class SubDb{
       return {rows:[{event_id:eventId}]};
     if(sql===SUBSCRIBER_SOURCE_SQL)
       return {rows:[{approval:approval("CONSUMED"),job:job("completed"),
+        worker:{id:8,workerName:this.badWorker?
+          "cst-dev-dell-onejob-20261120-ffffffff":worker,
+          providerSlug:"ollama",modelId:"qwen2.5:3b",
+          runtimeKind:"ollama_remote_pull"},
         event:{...event,eventType:this.badSource?"evil.event":event.eventType},
         event_audit:eventAudit}]};
     if(sql.includes("INSERT INTO cst_onejob_private.subscriber_delivery_receipts"))
@@ -196,7 +201,14 @@ test("reject self-asserted or incomplete independent QA, forged signing key and 
     pinnedTrust:qaTrust,signBytes:qaSigner
   }),/QA_NEW_JOB_IMAGE_REQUIRED/);
 });
-test("subscriber denies false event origin and atomic audit failure; no false ACK on rollback",async()=>{
+test("subscriber denies false event origin, wrong worker, and failed audit; no false ACK on rollback",async()=>{
+  const badWorker=new SubDb({badWorker:true});
+  await assert.rejects(pullAndAcknowledgeOneJobCompletion({
+    client:badWorker,jobId:483,eventId,expectedSubscriberId:subscriberId,
+    pinnedTrust:subTrust,signBytes:subSigner
+  }),/SUBSCRIBER_COMPLETION_NOT_INDEPENDENTLY_OBSERVED/);
+  assert.equal(badWorker.calls.at(-1).sql,"ROLLBACK");
+  assert.equal(badWorker.calls.some(x=>x.sql.includes("INSERT INTO")),false);
   const bad=new SubDb({badSource:true});
   await assert.rejects(pullAndAcknowledgeOneJobCompletion({
     client:bad,jobId:483,eventId,expectedSubscriberId:subscriberId,
@@ -250,12 +262,15 @@ test("one disposable network-none PostgreSQL role package compiles, SELECT-only 
     "CREATE TABLE ai_platform.internal_users(id integer PRIMARY KEY,role text,status text,account_type text);"+
     "CREATE TABLE ai_platform.ai_jobs(id integer PRIMARY KEY,status text,job_type text,"+
       "required_capability text,max_retry integer,payload_json jsonb,result_json jsonb);"+
+    "CREATE TABLE ai_platform.ai_workers(id integer PRIMARY KEY,worker_name text,"+
+      "provider_slug text,model_id text,runtime_kind text);"+
     "CREATE TABLE ai_platform.ai_events(id serial PRIMARY KEY,event_id text,event_type text,"+
       "source_module text,source_id text,correlation_id text,status text,payload_json jsonb);"+
     "CREATE TABLE ai_platform.ai_audit_logs(id serial PRIMARY KEY,module text,action text,"+
       "resource_type text,resource_id text,status text,details jsonb);"+
     "ALTER TABLE ai_platform.internal_users ENABLE ROW LEVEL SECURITY;"+
     "ALTER TABLE ai_platform.ai_jobs ENABLE ROW LEVEL SECURITY;"+
+    "ALTER TABLE ai_platform.ai_workers ENABLE ROW LEVEL SECURITY;"+
     "ALTER TABLE ai_platform.ai_events ENABLE ROW LEVEL SECURITY;"+
     "ALTER TABLE ai_platform.ai_audit_logs ENABLE ROW LEVEL SECURITY;");
   sqlPG(read("docs/dev/cst-onejob-owner-approval.PROPOSED.sql"));
@@ -263,6 +278,10 @@ test("one disposable network-none PostgreSQL role package compiles, SELECT-only 
   sqlPG(read("docs/dev/cst-onejob-postexecution-ledgers.PROPOSED.sql"));
   sqlPG(read("docs/dev/cst-onejob-independent-writers.CANDIDATE.sql"));
   sqlPG("INSERT INTO ai_platform.internal_users VALUES(1,'owner','active','internal');"+
+    "INSERT INTO ai_platform.ai_workers VALUES(8,"+quote(worker)+
+      ",'ollama','qwen2.5:3b','ollama_remote_pull');"+
+    "INSERT INTO ai_platform.ai_workers VALUES(9,'unrelated-worker',"+
+      "'ollama','qwen2.5:3b','ollama_remote_pull');"+
     "INSERT INTO ai_platform.ai_jobs VALUES(483,'waiting','ollama_model_invocation',"+
       "'ollama_inference',0,jsonb_build_object('requestId',"+
       quote(requestId)+",'modelId','qwen2.5:3b'),NULL);"+
@@ -308,17 +327,21 @@ test("one disposable network-none PostgreSQL role package compiles, SELECT-only 
     "(event_id,event_type,source_module,source_id,correlation_id,status,payload_json)"+
     "VALUES("+quote(eventId)+",'job.completed','job-engine','483',"+
     quote(correlationId)+",'processed',"+
-    "jsonb_build_object('jobId',483,'jobType','ollama_model_invocation'));"+
+    "jsonb_build_object('jobId',483,'workerId',8,'jobType','ollama_model_invocation'));"+
     "INSERT INTO ai_platform.ai_audit_logs"+
     "(module,action,resource_type,resource_id,status,details)"+
     "VALUES('event-bus','event_published','ai_event',"+
     quote(eventId)+",'success',jsonb_build_object"+
-    "('eventType','job.completed','correlationId',"+quote(correlationId)+"));");
+    "('eventType','job.completed','sourceModule','job-engine','correlationId',"+quote(correlationId)+"));");
   const subRead=sqlPG("SET ROLE "+SUBSCRIBER_ROLE+";"+
     SUBSCRIBER_SOURCE_SQL.replaceAll("$1","483")
       .replaceAll("$2",quote(eventId))+";");
   assert.match(subRead.stdout,/CST_DEV_ONEJOB_PROBE_OK/);
   assert.match(subRead.stdout,/job.completed/);
+  assert.match(subRead.stdout,/cst-dev-dell-onejob-20261120-abcdef12/);
+  const workerScope=sqlPG("SET ROLE "+SUBSCRIBER_ROLE+";"+
+    "SELECT id FROM ai_platform.ai_workers ORDER BY id;");
+  assert.equal(workerScope.stdout.trim(),"8","SUBSCRIBER_WORKER_RLS_NOT_SCOPED");
   const subInsert="SET ROLE "+SUBSCRIBER_ROLE+";"+
     "INSERT INTO cst_onejob_private.subscriber_delivery_receipts"+
     "(approval_id,job_id,event_id,delivery_id,subscriber_id,correlation_id,"+
@@ -339,7 +362,7 @@ test("one disposable network-none PostgreSQL role package compiles, SELECT-only 
       quote(role)+";");
     assert.equal(flags.stdout.trim(),"f|f");
     for(const table of ["ai_platform.ai_jobs","ai_platform.ai_events",
-      "ai_platform.cst_onejob_owner_approvals",
+      "ai_platform.ai_workers","ai_platform.cst_onejob_owner_approvals",
       "cst_onejob_private.verified_admission_receipts",
       "cst_onejob_private.subscriber_delivery_receipts"]){
       const write=sqlPG("SELECT has_table_privilege("+quote(role)+","+

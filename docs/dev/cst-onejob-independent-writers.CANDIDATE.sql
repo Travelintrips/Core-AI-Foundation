@@ -64,7 +64,7 @@ CREATE POLICY cst_onejob_sub_approval_read
   FOR SELECT TO cst_onejob_subscriber_writer
   USING (company_id='1' AND status='CONSUMED' AND consumed_at IS NOT NULL
     AND purpose='CST_DEV_ONEJOB_MODEL');
-GRANT SELECT (id,job_id,company_id,status,model_id,request_id)
+GRANT SELECT (id,job_id,company_id,status,model_id,request_id,worker_name)
   ON ai_platform.cst_onejob_owner_approvals
   TO cst_onejob_subscriber_writer;
 CREATE POLICY cst_onejob_sub_job_read ON ai_platform.ai_jobs
@@ -75,6 +75,15 @@ CREATE POLICY cst_onejob_sub_job_read ON ai_platform.ai_jobs
       '^cst-ai-team-company1-dev:pilot-[a-f0-9]{20}$');
 GRANT SELECT (id,status,job_type,payload_json,result_json)
   ON ai_platform.ai_jobs TO cst_onejob_subscriber_writer;
+-- The subscriber must read only the independently registered worker
+-- referenced by the actual event, never trust event workerId unbound.
+CREATE POLICY cst_onejob_sub_worker_read ON ai_platform.ai_workers
+  FOR SELECT TO cst_onejob_subscriber_writer
+  USING (worker_name ~ '^cst-dev-dell-onejob-[0-9]{8}-[a-f0-9]{8}$'
+    AND provider_slug='ollama' AND model_id='qwen2.5:3b'
+    AND runtime_kind='ollama_remote_pull');
+GRANT SELECT (id,worker_name,provider_slug,model_id,runtime_kind)
+  ON ai_platform.ai_workers TO cst_onejob_subscriber_writer;
 CREATE POLICY cst_onejob_sub_event_read ON ai_platform.ai_events
   FOR SELECT TO cst_onejob_subscriber_writer
   USING (event_type='job.completed' AND source_module='job-engine'

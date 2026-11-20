@@ -19,17 +19,22 @@ export const SUBSCRIBER_LOGIN="cst_onejob_subscriber_login";
 export const SUBSCRIBER_ROLE="cst_onejob_subscriber_writer";
 const U=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SUB=/^cst-onejob-subscriber-[a-z0-9_-]{4,64}$/;
+const WORKER=/^cst-dev-dell-onejob-[0-9]{8}-[a-f0-9]{8}$/;
 const sha=x=>createHash("sha256").update(x).digest("hex");
 
 export const SUBSCRIBER_SOURCE_SQL=[
  "SELECT",
  "jsonb_build_object('id',a.id,'jobId',a.job_id,",
  "'companyId',a.company_id,'status',a.status,",
- "'modelId',a.model_id,'requestId',a.request_id) approval,",
+ "'modelId',a.model_id,'requestId',a.request_id,"+
+ "'workerName',a.worker_name) approval,",
  "jsonb_build_object('id',j.id,'status',j.status,'jobType',j.job_type,",
  "'requestId',j.payload_json->>'requestId',",
  "'modelId',j.payload_json->>'modelId',",
  "'resultJson',j.result_json) job,",
+ "jsonb_build_object('id',w.id,'workerName',w.worker_name,",
+ "'providerSlug',w.provider_slug,'modelId',w.model_id,",
+ "'runtimeKind',w.runtime_kind) worker,",
  "jsonb_build_object('eventId',e.event_id,'eventType',e.event_type,",
  "'sourceModule',e.source_module,'sourceId',e.source_id,",
  "'correlationId',e.correlation_id,'status',e.status,",
@@ -41,6 +46,9 @@ export const SUBSCRIBER_SOURCE_SQL=[
  "JOIN ai_platform.cst_onejob_owner_approvals a ON a.job_id=j.id",
  "JOIN ai_platform.ai_events e ON e.source_id=j.id::text",
  "AND e.event_id=$2",
+ "JOIN ai_platform.ai_workers w ON w.id::text=e.payload_json->>'workerId'",
+ "AND w.worker_name=a.worker_name AND w.provider_slug='ollama'",
+ "AND w.model_id=a.model_id AND w.runtime_kind='ollama_remote_pull'",
  "JOIN ai_platform.ai_audit_logs al ON al.resource_id=e.event_id",
  "AND al.module='event-bus' AND al.action='event_published'",
  "WHERE j.id=$1"
@@ -63,11 +71,16 @@ export function independentlyObservedEventBytes(e){
 }
 export function reviewSubscriberSource(facts,jobId,eventId){
   const a=facts?.approval,j=facts?.job,e=facts?.event,log=facts?.event_audit;
+  const w=facts?.worker;
   const good=Boolean(a&&j&&e&&log&&
     Number.isSafeInteger(jobId)&&jobId>0&&jobId!==482&&
     U.test(eventId)&&U.test(a.id)&&
     a.jobId===jobId&&a.companyId==="1"&&a.status==="CONSUMED"&&
-    a.modelId==="qwen2.5:3b"&&j.id===jobId&&
+    a.modelId==="qwen2.5:3b"&&WORKER.test(a.workerName||"")&&
+    Number.isSafeInteger(w?.id)&&w.id>0&&
+    w.workerName===a.workerName&&w.providerSlug==="ollama"&&
+    w.modelId===a.modelId&&w.runtimeKind==="ollama_remote_pull"&&
+    j.id===jobId&&
     j.status==="completed"&&j.jobType==="ollama_model_invocation"&&
     j.modelId===a.modelId&&j.requestId===a.requestId&&
     j.resultJson?.output?.type==="text"&&
@@ -76,11 +89,12 @@ export function reviewSubscriberSource(facts,jobId,eventId){
     e.eventType==="job.completed"&&e.sourceModule==="job-engine"&&
     e.sourceId===String(jobId)&&
     ["published","processing","processed"].includes(e.status)&&
-    e.payloadJson?.jobId===jobId&&
+    e.payloadJson?.jobId===jobId&&e.payloadJson?.workerId===w.id&&
     e.payloadJson?.jobType==="ollama_model_invocation"&&
     log.module==="event-bus"&&log.action==="event_published"&&
     log.resourceId===eventId&&log.status==="success"&&
     log.details?.eventType===e.eventType&&
+    log.details?.sourceModule===e.sourceModule&&
     log.details?.correlationId===e.correlationId);
   return good?{status:"AUTHORITATIVE_COMPLETION_OBSERVED"}:
     {status:"DENIED",reason:"SUBSCRIBER_UNTRUSTED_EVENT_SOURCE"};
@@ -178,6 +192,9 @@ export const ONE_JOB_COMPLETION_SOURCE_SQL=[
   "FROM ai_platform.ai_jobs j",
   "JOIN ai_platform.cst_onejob_owner_approvals a ON a.job_id=j.id",
   "JOIN ai_platform.ai_events e ON e.source_id=j.id::text",
+  "JOIN ai_platform.ai_workers w ON w.id::text=e.payload_json->>'workerId'",
+  "AND w.worker_name=a.worker_name AND w.provider_slug='ollama'",
+  "AND w.model_id=a.model_id AND w.runtime_kind='ollama_remote_pull'",
   "WHERE j.id=$1 AND j.status='completed'",
   "AND j.job_type='ollama_model_invocation'",
   "AND j.payload_json->>'modelId'='qwen2.5:3b'",
@@ -186,6 +203,8 @@ export const ONE_JOB_COMPLETION_SOURCE_SQL=[
   "AND a.status='CONSUMED' AND a.company_id='1'",
   "AND a.consumed_at IS NOT NULL",
   "AND e.event_type='job.completed' AND e.source_module='job-engine'",
+  "AND e.payload_json->>'jobId'=j.id::text",
+  "AND e.payload_json->>'jobType'='ollama_model_invocation'",
   "AND e.status IN ('published','processing','processed')",
   "AND EXISTS (SELECT 1 FROM ai_platform.ai_audit_logs l",
   "WHERE l.resource_id=e.event_id AND l.module='event-bus'",
