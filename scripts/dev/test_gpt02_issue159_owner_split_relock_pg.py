@@ -367,7 +367,7 @@ VALUES ('{ROLE}',200,'{"a"*64}',clock_timestamp()-interval '1 second');
           "AND attname='id' AND attnum>0")
         assert ROLE not in column_acl_after, (
           "RETAINED_COLUMN_GRANT_SURVIVED_OWNER_CLEANUP")
-        print("PASS_OWNER_HELPER_REVOKED_FIVE_TABLE_GRANTS_AND_SCHEMA",flush=True)
+        print("PASS_OWNER_HELPER_REVOKED_SEVEN_TABLE_GRANTS_AND_SCHEMA",flush=True)
         print("PASS_PHASE_B_CLEANUP_DURABLE_AND_REPLAY_IDEMPOTENT",flush=True)
 
         outsider=psql(name,"fixture_root",root_pw,
