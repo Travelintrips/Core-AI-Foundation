@@ -206,21 +206,25 @@ class SystemdOneTaskCustodyTest(unittest.TestCase):
             custody.signed_packet_from_systemd()
 
     def test_deferred_bridge_never_opens_credentials_before_original_claim(self):
-        from unittest.mock import Mock
-        from gpt02_issue159_native_one_shot_supervisor import OneTaskNativeSupervisor
         lazy=custody.SystemdDeferredOneTaskSupervisor()
         with self.assertRaisesRegex(BrokerAdmissionError,"NOT_AUTHENTICATED"):
             lazy.open_one_scoped_connection(self.candidate)
         with patch.object(custody,"factories_from_systemd",
-                          return_value=self.expected) as factory, patch.object(
-                          OneTaskNativeSupervisor,"consume_scope_once",
-                          return_value={"releaseDecision":"NO_GO"}) as claim:
+                          return_value=self.expected) as factory, patch(
+                          "gpt02_issue159_native_one_shot_supervisor.OneTaskNativeSupervisor"
+                        ) as NativeConstructor:
+            NativeConstructor.return_value.consume_scope_once.return_value={
+                "releaseDecision":"NO_GO"
+            }
             self.assertEqual(self.driver.requests,[])
             assert lazy.consume_scope_once(self.candidate,"a"*64)=={
                 "releaseDecision":"NO_GO"
             }
             factory.assert_called_once_with(self.candidate)
-            claim.assert_called_once_with(self.candidate,"a"*64)
+            NativeConstructor.assert_called_once_with(self.candidate,self.expected)
+            NativeConstructor.return_value.consume_scope_once.assert_called_once_with(
+                self.candidate,"a"*64
+            )
             with self.assertRaisesRegex(BrokerAdmissionError,"CLAIM_REPLAY"):
                 lazy.consume_scope_once(self.candidate,"b"*64)
 
@@ -244,7 +248,7 @@ class SystemdOneTaskCustodyTest(unittest.TestCase):
         self.assertIn("DynamicUser=yes",unit)
         self.assertIn("MemoryMax=128M",unit)
         self.assertIn("TimeoutStartSec=70s",unit)
-        self.assertNotIn("[Install]",unit)
+        self.assertNotRegex(unit,r"(?m)^\\[Install\\]$")
         self.assertNotIn("ExecStartPre=",unit)
         self.assertNotIn("EnvironmentFile=",unit)
         self.assertNotIn("Restart=on-failure",unit)
