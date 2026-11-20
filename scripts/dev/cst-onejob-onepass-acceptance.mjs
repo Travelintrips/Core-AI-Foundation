@@ -22,6 +22,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"generic_enqueue",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-generic-enqueue-deny.test.mjs"]},
   {id:"owner_approval",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-owner-approval-review.test.mjs"]},
   {id:"owner_stage",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-contract.test.mjs"]},
+  {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
   {id:"admission_review",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-waiting-admission-review.test.mjs"]},
   {id:"cst_onejob_onepass_acceptance",argv:[node,"--test","scripts/dev/cst-onejob-onepass-acceptance.test.mjs"]},
   {id:"broker_fail_closed",argv:[node,"--test","scripts/dev/cst-onejob-broker-proposal-failclosed.test.mjs"]},
@@ -63,7 +64,7 @@ export function verifyManifest(exists=existsSync) {
       file.includes("..")||!exists(resolve(ROOT,file)))
       problems.push("MISSING_TEST:"+test.id);
   }
-  for(const mandatory of ["owner_stage","stage_pooler_tls","qa_signature",
+  for(const mandatory of ["owner_stage","fresh_owner_consent","stage_pooler_tls","qa_signature",
     "signed_locked_binding","broker_fail_closed","owner_ledger_pg",
     "writer_rls_pg","signed_concurrency_pg"])
     if(!ids.has(mandatory))problems.push("REQUIRED_GATE_MISSING:"+mandatory);
