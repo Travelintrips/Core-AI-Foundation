@@ -48,6 +48,8 @@ jobs:
         run: node --test scripts/dev/cst-team-onejob-owner-approval-receipt.test.mjs
       - name: Verify one-click session-bound Owner intent rejects replay and unsafe Origin
         run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-owner-session-intent.test.mjs
+      - name: Verify bounded one-WAITING-job preparer and rollback cannot approve or dispatch
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-prestage-once.test.mjs
       - name: Verify signed independent one-job subscriber receipt cannot fake delivery or Final ACK
         run: node --test scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs
       - name: Verify isolated one-job subscriber consumes only one RLS event and signs exactly once
