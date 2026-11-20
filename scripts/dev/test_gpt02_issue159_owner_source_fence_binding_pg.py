@@ -84,7 +84,16 @@ def main():
         run("docker","run","--rm","-d","--network","none",
           "--name",name,"-e","POSTGRES_USER=root_admin",
           "-e","POSTGRES_PASSWORD=fixture_only",IMAGE)
-        for _ in range(100):
+        for _ in range(120):
+            # Docker Postgres starts a TEMPORARY initdb server, then shuts
+            # it down before launching the real DB server. A raw SELECT 1
+            # may hit the temporary process and race with final shutdown.
+            logs=run("docker","logs",name,check=False)
+            if "PostgreSQL init process complete" not in (
+                logs.stdout+logs.stderr
+            ):
+                time.sleep(.25)
+                continue
             p=run("docker","exec",name,"psql","-X","-w",
                "-U","root_admin","-d","postgres","-Atc","SELECT 1",check=False)
             if p.returncode==0 and p.stdout.strip()=="1":break
