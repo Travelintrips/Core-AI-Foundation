@@ -295,6 +295,11 @@ class SignerOperationalReadinessTest(unittest.TestCase):
         self.assertIn("directory.st_gid != signer_gid", function)
         self.assertIn("endpoint.st_gid != signer_gid", function)
         self.assertIn('payload.get("readerReady") is True', function)
+        # Live DEV Hub/Core health can legitimately take ~9 s; a past
+        # 8 s cap falsely marked a healthy reader unavailable. Preserve the
+        # already-PASS 12 s limit without relaxing socket identity checks.
+        self.assertIn("client.settimeout(12)", function)
+        self.assertNotIn("client.settimeout(8)", function)
         self.assertNotIn("client.settimeout(35)", function)
 
     def test_issuer_reader_source_has_exact_dynamicuser_mapping_allowlist(self):

@@ -6,7 +6,9 @@ from pathlib import Path
 from admin_identity import admin_identity
 from gpt02_issue159_approval_http import handle_issue159_approval_intent
 from gpt02_issue159_approval_intent_contract import ApprovalIntentContractError, validate_approval_claims
-from gpt02_issue159_approval_request_refresh import refresh_pending, RefreshDenied
+from gpt02_issue159_approval_request_refresh import refresh_pending, RefreshDenied, _socket_fact_reader, _verify_pre_sign_facts
+from gpt02_issue159_auto_chain import run_after_approval, AutoChainError
+from gpt02_issue159_relock_supervisor_readiness import independent_relock_supervisor_ready as issue159_independent_relock_supervisor_ready
 DB='/opt/ai-coding-standalone-dev/tasks.db'
 TOKEN=os.environ.get('AICODING_APPROVAL_TOKEN','')
 ISSUE159_APPROVAL_INTENT_ENABLED=os.environ.get(
@@ -38,11 +40,24 @@ def persist_issue159_approved_packet(claims,result):
   'releaseDecision':'NO_GO',
  }
  target=Path(ISSUE159_APPROVED_PACKET)
+ # The approval decision is one-use: never overwrite retained evidence
+ # from any prior task, including a symlink or a stranded temp file.
+ if not issue159_approved_packet_slot_clear():
+  raise FileExistsError('APPROVED_PACKET_OUTPUT_OCCUPIED')
  target.parent.mkdir(parents=True,exist_ok=True)
  tmp=target.with_name('.'+target.name+'.tmp')
- tmp.write_text(json.dumps(packet,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
- os.chmod(tmp,0o600)
- os.replace(tmp,target)
+ payload=(json.dumps(packet,sort_keys=True,separators=(',',':'))+'\n').encode('utf-8')
+ fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600)
+ try:
+  with os.fdopen(fd,'wb') as stream:
+   stream.write(payload)
+   stream.flush()
+   os.fsync(stream.fileno())
+  # Exclusive hard-link publication is fail-closed if another request
+  # has already claimed the canonical output target.
+  os.link(tmp,target)
+ finally:
+  tmp.unlink(missing_ok=True)
  return packet
 def issue159_operator_identity(identity,connection):
  if (not identity or identity.get('role')!='super_admin'
@@ -61,6 +76,151 @@ def issue159_operator_identity(identity,connection):
          'enabled':True,'authMethod':'supabase_admin_session'}
 def issue159_identity_verifier(token,connection):
  return issue159_operator_identity(admin_identity(token,connection),connection)
+def issue159_chain_readiness_gate(record):
+ # Additional DEV-only precommit guard. Do not consume a one-shot Super Admin
+ # approval while issuer reader or one-time signer output custody is not ready.
+ if os.environ.get('GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY','false').strip().lower()!='true':
+  return False
+ if type(record.get('task_id')) is not int or record['task_id']<=139:
+  return False
+ # A success code from systemctl start alone is insufficient. Require the
+ # independent relock watchdog to be ENABLED, actually executed (not skipped),
+ # and recently successful before consuming any one-time Super Admin approval.
+ if not issue159_independent_relock_supervisor_ready():
+  return False
+ if not Path('/run/gpt02-issuer-reader/reader.sock').is_socket():
+  return False
+ if not issue159_signer_output_preflight_clear():
+  return False
+ if not issue159_approved_packet_slot_clear():
+  return False
+ if not issue159_operator_link_slot_clear():
+  return False
+ if not issue159_precommit_presign_matches(record):
+  return False
+ return True
+
+def issue159_precommit_presign_matches(record):
+ """Recheck the exact pending claims and independent Hub/Core facts before
+ one irrevocable Super Admin approval is recorded. No grant or DB write.
+ A stale/mutated PIC, company, command, or attempt fails closed.
+ """
+ try:
+  if not isinstance(record,dict):
+   return False
+  path=Path(ISSUE159_PENDING_CLAIMS)
+  st=os.lstat(path)
+  if (not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)
+      or st.st_uid!=0 or st.st_gid!=0 or st.st_nlink!=1
+      or stat.S_IMODE(st.st_mode)!=0o600 or not 0<st.st_size<=8192):
+   return False
+  payload=json.loads(path.read_text(encoding='utf-8'))
+  if (type(payload) is not dict or set(payload)!={'claims'}
+      or type(payload.get('claims')) is not dict):
+   return False
+  claims=payload['claims']
+  verified=validate_approval_claims(claims)
+  bindings=(
+   (record.get('claims_sha256'),verified['claimsSha256']),
+   (record.get('task_id'),claims['taskId']),
+   (record.get('command_id'),claims['commandId']),
+   (record.get('attempt_id'),claims['attemptId']),
+   (record.get('company_id'),claims['companyId']),
+   (record.get('actor_id'),claims['superAdminId']),
+   (record.get('expires_at_ms'),claims['expiresAt']),
+   (record.get('decision'),'APPROVE'),
+   (record.get('role_at_decision'),'super_admin'),
+  )
+  if any(a!=b for a,b in bindings):
+   return False
+  now_ms=int(time.time()*1000)
+  # The four-stage one-shot chain needs a usable window; an approval with
+  # less than two minutes remaining is denied BEFORE consuming its nonce.
+  if (now_ms<claims['issuedAt'] or
+      claims['expiresAt']-now_ms<120_000 or
+      record.get('recorded_at_ms')>now_ms):
+   return False
+  query={
+   'companyId':claims['companyId'],'hubTaskId':claims['taskId'],
+   'commandCandidateId':claims['commandId'],
+   'attemptId':claims['attemptId'],
+  }
+  facts=_socket_fact_reader(query)
+  observed=int(time.time()*1000)
+  preparation_expiry=_verify_pre_sign_facts(facts,claims,observed)
+  return (
+   preparation_expiry>=claims['expiresAt']+1000
+   and claims['expiresAt']-observed>=120_000
+  )
+ except Exception:
+  # Missing file, bad security, reader outage and scope drift all deny.
+  return False
+
+ISSUE159_OPERATOR_LINK_OUTPUT=Path('/opt/ai-coding-standalone-dev/gpt02_issue159_hub_core_link_claims.json')
+
+def issue159_operator_link_slot_clear():
+ """Reject a prior verified Hub/Core link or temporary peer before approval.
+
+ This is only a read-only occupancy check. The auto-chain itself must still
+ publish exclusively to prevent concurrent replacement after this check.
+ """
+ target=Path(ISSUE159_OPERATOR_LINK_OUTPUT)
+ tmp=target.with_name('.'+target.name+'.auto.tmp')
+ for path in (target,tmp):
+  try:
+   os.lstat(path)
+  except FileNotFoundError:
+   continue
+  except OSError:
+   return False
+  return False
+ return True
+
+def issue159_approved_packet_slot_clear():
+ """Fail closed if an earlier approved packet or its temp file exists.
+
+ The output is an immutable one-use artifact, not a mutable latest pointer.
+ Never follow symlinks or overwrite a previous task's approved claims.
+ """
+ target=Path(ISSUE159_APPROVED_PACKET)
+ for path in (target,target.with_name('.'+target.name+'.tmp')):
+  try:
+   os.lstat(path)
+  except FileNotFoundError:
+   continue
+  except OSError:
+   return False
+  return False
+ return True
+
+# Read-only preflight. These are the exact retained RuntimeDirectory outputs
+# of the four existing one-shot signer roles. A previous task's signature
+# must NEVER be deleted/overwritten to make room for a new approval.
+ISSUE159_SIGNER_OUTPUTS = tuple(
+ Path("/run/gpt02-issue159-sign-once-"+role) / (role+"-signature.json")
+ for role in ("approval", "hub", "core", "issuer")
+)
+
+
+def issue159_signer_output_preflight_clear():
+ """Fail closed if any preserved signed output or its temporary peer exists.
+
+ This is NOT a signature archival/rotation or authority check. It only
+ prevents knowingly recording a *new* irrevocable one-time approval while
+ the next signer output path is already occupied.
+ """
+ for target in ISSUE159_SIGNER_OUTPUTS:
+  for file in (target, target.with_name("."+target.name+".tmp")):
+   try:
+    os.lstat(file)
+   except FileNotFoundError:
+    continue
+   except OSError:
+    return False
+   return False
+ return True
+
+
 def load_issue159_pending_claims(actor_id):
  try:
   st=os.lstat(ISSUE159_PENDING_CLAIMS)
@@ -98,6 +258,15 @@ def load_issue159_pending_claims(actor_id):
   observed=int(time.time()*1000)
   if observed<claims['issuedAt'] or observed>=claims['expiresAt']:
    return {'environment':'DEV','pending':False,'reason':'PENDING_REQUEST_EXPIRED','taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  if not issue159_signer_output_preflight_clear():
+   return {'environment':'DEV','pending':False,'reason':'SIGNATURE_OUTPUT_OCCUPIED',
+           'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  if not issue159_approved_packet_slot_clear():
+   return {'environment':'DEV','pending':False,'reason':'APPROVED_PACKET_OUTPUT_OCCUPIED',
+           'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
+  if not issue159_operator_link_slot_clear():
+   return {'environment':'DEV','pending':False,'reason':'VERIFIED_OPERATOR_LINK_OCCUPIED',
+           'taskId':claims['taskId'],'releaseDecision':'NO_GO'}
   return {
    'environment':'DEV','pending':True,'taskId':claims['taskId'],
    'commandId':claims['commandId'],'expiresAt':claims['expiresAt'],
@@ -208,12 +377,70 @@ class Handler(BaseHTTPRequestHandler):
     if n<0 or n>8192:return self.send(400,{'error':'invalid_size'})
     raw=self.rfile.read(n)
     data=json.loads(raw.decode('utf-8'))
+    # Never report retained signature state before authenticating and
+    # confirming the pinned Super Admin-to-Hub operator mapping.
+    if ISSUE159_APPROVAL_INTENT_ENABLED and isinstance(data,dict) and set(data)=={'claims'}:
+     auth=self.headers.get('Authorization','')
+     if auth.startswith('Bearer '):
+      with conn() as auth_conn:
+       identity=issue159_operator_identity(admin_identity(auth[7:],auth_conn),auth_conn)
+      if identity and not issue159_signer_output_preflight_clear():
+       return self.send(409,{'error':'signature_output_occupied',
+        'signingPermitted':False,'authorizationGranted':False,
+        'dispatchPermitted':False,'releaseDecision':'NO_GO'})
     with conn() as c:
      status,body=handle_issue159_approval_intent(
       self.headers.get('Authorization',''),raw,c,issue159_identity_verifier,
-      enabled=ISSUE159_APPROVAL_INTENT_ENABLED)
+      enabled=ISSUE159_APPROVAL_INTENT_ENABLED,
+      readiness_gate=issue159_chain_readiness_gate)
     if status==201 and isinstance(data,dict) and set(data)=={'claims'}:
-     persist_issue159_approved_packet(data['claims'],body)
+     try:
+      persist_issue159_approved_packet(data['claims'],body)
+     except Exception:
+      # The one-use SQLite approval has ALREADY COMMITTED. JSON serialization
+      # and packet validation can also fail without raising OSError. Never
+      # emit a generic 400/500 or reveal exception details after the commit.
+      # A separately supervised recovery may republish only the exact
+      # still-fresh persisted intent, without another approval write.
+      return self.send(503,{'error':'issue159_approved_packet_recovery_required',
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'})
+     try:
+      chain=run_after_approval(data['claims']['taskId'])
+      # The delegated systemd chain is not an authorization or HTTP identity
+      # authority. Never merge arbitrary result keys into a committed one-use
+      # Super Admin decision, even when the child reports success.
+      if (type(chain) is not dict
+          or set(chain)!={'environment','taskId','autoChainCompleted',
+                          'authorizationGranted','dispatchPermitted',
+                          'releaseDecision'}
+          or chain['environment']!='DEV'
+          or type(chain['taskId']) is not int
+          or chain['taskId']!=data['claims']['taskId']
+          or chain['autoChainCompleted'] is not True
+          or chain['authorizationGranted'] is not False
+          or chain['dispatchPermitted'] is not False
+          or chain['releaseDecision']!='NO_GO'):
+       raise AutoChainError('AUTO_CHAIN_RESULT_CONTRACT_INVALID')
+      body={**body,'autoChainCompleted':True,
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'}
+     except AutoChainError as exc:
+      body={**body,'autoChainCompleted':False,'autoChainError':str(exc),
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'}
+     except Exception:
+      # The one-use SQLite intent and approved packet have ALREADY COMMITTED.
+      # Do not return generic 400/500, expose an exception message (may hold
+      # restricted data), or imply that the Super Admin may approve again.
+      body={**body,'autoChainCompleted':False,
+       'autoChainError':'AUTO_CHAIN_UNEXPECTED_FAILURE',
+       'intentRecorded':True,'approvalCanBeReplayed':False,
+       'signingPermitted':False,'authorizationGranted':False,
+       'dispatchPermitted':False,'releaseDecision':'NO_GO'}
     return self.send(status,body)
    except (ValueError,TypeError,KeyError,sqlite3.Error):
     return self.send(400,{'error':'invalid_request'})
