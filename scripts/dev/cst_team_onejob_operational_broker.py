@@ -245,13 +245,13 @@ def serve(m:dict) -> None:
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument("mode",choices=("--validate","--run","--qa-run"))
+    parser.add_argument("mode",choices=("validate","run","qa-run"))
     parser.add_argument("--envelope",required=True)
     parser.add_argument("--public-key",required=True)
     parser.add_argument("--pinned-sha256",required=True)
     args=parser.parse_args()
-    qa=args.mode=="--qa-run"
-    if args.mode=="--validate":
+    qa=args.mode=="qa-run"
+    if args.mode=="validate":
         # Validates signature/scope in the CURRENT isolated OS context but
         # never opens sockets. Does not attest the actual kernel ACL.
         m=verify_manifest(args.envelope,args.public_key,args.pinned_sha256,qa=False)
