@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/cst-onejob-dell-signer-source-qa.yml"
       - "scripts/dev/cst-onejob-dell-signer-*"
+      - "scripts/dev/cst-onejob-dell-dpapi-custody.cs"
       - "scripts/dev/cst-onejob-native-signer-*"
       - "docs/dev/cst-onejob-dell-*"
   workflow_dispatch:
@@ -38,8 +39,8 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-          $serviceDll = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\System.ServiceProcess.dll'
+          $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64/v4.0.30319/csc.exe'
+          $serviceDll = Join-Path $env:WINDIR 'Microsoft.NET\Framework64/v4.0.30319/System.ServiceProcess.dll'
           if (-not (Test-Path $compiler) -or -not (Test-Path $serviceDll)) { throw 'FRAMEWORK_SERVICE_COMPILER_NOT_PRESENT' }
           $output = Join-Path $env:RUNNER_TEMP 'CstDevSignerService.exe'
           & $compiler /nologo /target:exe /optimize+ "/r:$serviceDll" "/out:$output" .\scripts\dev\cst-onejob-native-signer-service.cs
@@ -57,6 +58,33 @@ jobs:
           }
           Write-Output 'CSTDEV_NATIVE_WINDOWS_SERVICE_SOURCE_BUILD_PASS'
           Write-Output 'INSTALLER_SYNTAX_PASS_NO_INSTALL_NO_KEYS_NO_GO'
+      - name: Windows DPAPI CurrentUser synthetic self-test - no keys or installation
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          if (-not (Test-Path $compiler)) { throw 'WINDOWS_FRAMEWORK_COMPILER_NOT_PRESENT' }
+          $output = Join-Path $env:RUNNER_TEMP 'CstDevDpapiSyntheticQA.exe'
+          & $compiler /nologo /target:exe /optimize+ '/r:System.Security.dll' "/out:$output" .\scripts\dev\cst-onejob-dell-dpapi-custody.cs
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) {
+            throw 'DPAPI_SYNTHETIC_SOURCE_COMPILATION_FAILED'
+          }
+          $testOutput = & $output --synthetic-selftest
+          if ($LASTEXITCODE -ne 0) { throw 'DPAPI_CURRENT_USER_SYNTHETIC_TEST_FAILED' }
+          $result = $testOutput | ConvertFrom-Json
+          if ($result.status -ne 'PASS' -or $result.scope -ne 'WINDOWS_DPAPI_CURRENT_USER_SYNTHETIC_ONLY' -or
+              $result.roundTrip -ne $true -or $result.tamperingDenied -ne $true -or
+              $result.wrongScopeMetadataDenied -ne $true -or
+              $result.realSignerKeyCreated -ne $false -or
+              $result.vaultFileCreated -ne $false -or
+              $result.releaseDecision -ne 'NO_GO') {
+            throw 'DPAPI_SYNTHETIC_SOURCE_PROOF_INCOMPLETE'
+          }
+          $denyOutput = & $output --unseal-operational-key
+          if ($LASTEXITCODE -ne 2 -or $denyOutput -notmatch 'OPERATIONAL_COMMANDS_DISABLED') {
+            throw 'DPAPI_UNAUTHORIZED_RUNTIME_MODE_ACCEPTED'
+          }
+          Write-Output 'CST_DEV_DPAPI_SYNTHETIC_SOURCE_QA_PASS_NO_REAL_SIGNERS'
       - name: Default-deny QA scope
         shell: pwsh
         run: |
