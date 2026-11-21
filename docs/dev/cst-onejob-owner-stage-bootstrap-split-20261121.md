@@ -252,3 +252,19 @@ A genuinely authorized independent controller, signed release/admission
 lease, server-side durable deadline, secure admin database access, and
 Supavisor transaction-pooler frontend drain still must be built and tested.
 This is **not automatic live relock** and does not authorize deployment.
+
+## Relock security drift containment (source-only)
+
+A dedicated role catalog with unexpected BYPASSRLS, SUPERUSER, INHERIT or
+connection-limit changes must never return PASS. Earlier code aborted before
+NOLOGIN and pg_terminate_backend; that could leave an existing stage session
+running if role privilege drift was observed. The revised import-only relock
+primitive now always attempts NOLOGIN and scoped session termination after
+confirming the *identity* of the expected role, then reports drift as an
+error after checking zero sessions. Invalid or missing catalog remains
+fail-closed before mutation. This does NOT connect to live CST-DEV.
+
+The four pure mock-based security tests PASS. This is not yet an operational
+controller or proof of transaction-pooler frontend drain. No PROD or shared
+runtime mutation. VPS free space is critically low; do not run another full
+Docker acceptance loop or build additional images for this source-only fix.

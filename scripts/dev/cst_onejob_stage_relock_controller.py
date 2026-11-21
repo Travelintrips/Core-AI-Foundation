@@ -44,11 +44,13 @@ def relock_once(query, *, pause=time.sleep, attempts=5):
     if attempts<1 or attempts>10:
         raise RelockError("RELOCK_INVALID_ATTEMPT_LIMIT")
     initial=_one(query(ROLE_QUERY),"PRE")
-    if initial[1:]!=(0,0,0,1):
-        raise RelockError("RELOCK_ROLE_SCOPE_DRIFT")
+    # A privilege drift is a violation, but it must NOT prevent containment:
+    # first disable authentication and terminate established role sessions,
+    # then report the drift only after zero-session readback. Never mask it.
+    scope_drift=initial[1:]!=(0,0,0,1)
     query(NOLOGIN_QUERY)
-    if _one(query(ROLE_QUERY),"POST_NOLOGIN")!=(0,0,0,0,1):
-        raise RelockError("RELOCK_NOLOGIN_NOT_CONFIRMED")
+    post=_one(query(ROLE_QUERY),"POST_NOLOGIN")
+    post_drift=post!=(0,0,0,0,1)
     for n in range(attempts):
         query(TERMINATE_QUERY)
         rows=query(ACTIVE_QUERY)
@@ -63,6 +65,10 @@ def relock_once(query, *, pause=time.sleep, attempts=5):
         if remaining==0:
             if _one(query(ROLE_QUERY),"FINAL")!=(0,0,0,0,1):
                 raise RelockError("RELOCK_FINAL_ROLE_CHANGED")
+            if scope_drift:
+                raise RelockError("RELOCK_ROLE_SCOPE_DRIFT_AFTER_CONTAINMENT")
+            if post_drift:
+                raise RelockError("RELOCK_NOLOGIN_NOT_CONFIRMED_AFTER_CONTAINMENT")
             return {"status":"PASS","role":ROLE,"roleLogin":False,
                     "roleBypassRls":False,"roleConnLimit":1,
                     "residualRoleSessions":0,"operationalPermission":False}

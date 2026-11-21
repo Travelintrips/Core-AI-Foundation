@@ -54,12 +54,20 @@ class ReLockRealPostgres(unittest.TestCase):
         self.assertEqual(query("SELECT rolcanlogin::int FROM pg_roles WHERE rolname='cst_unrelated_worker'"),[["0"]])
         print("ISOLATED_RELOCK_CRASH_RETRY_PASS")
 
-    def test_mismatch_never_pretends_success(self):
+    def test_mismatch_still_relocks_and_terminates_before_failing(self):
+        statements=[]
         def false_catalog(statement):
-            if statement==r.ROLE_QUERY:return [["1","1","0","0","1"]]
-            self.fail("MUTATION_ON_BAD_ROLE_SCOPE")
-        with self.assertRaisesRegex(r.RelockError,"ROLE_SCOPE_DRIFT"):
-            r.relock_once(false_catalog)
+            statements.append(statement)
+            if statement==r.ROLE_QUERY:
+                return [["1","1","0","0","1"]]
+            if statement==r.ACTIVE_QUERY:
+                return [["0"]]
+            return []
+        with self.assertRaisesRegex(r.RelockError,"FINAL_ROLE_CHANGED"):
+            r.relock_once(false_catalog,pause=lambda _:None)
+        self.assertIn(r.NOLOGIN_QUERY,statements)
+        self.assertIn(r.TERMINATE_QUERY,statements)
+        self.assertIn(r.ACTIVE_QUERY,statements)
 
     def test_residual_sessions_fail_closed(self):
         statements=[]
