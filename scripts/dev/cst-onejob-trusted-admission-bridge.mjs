@@ -7,6 +7,8 @@ import {createHash} from "node:crypto";
 import {reviewSignedIndependentQaReceipt} from
   "../../artifacts/api-server/src/lib/cstOneJobIndependentQaVerifier.ts";
 import {readRootOwnedQaPublicTrust} from "./cst-onejob-qa-trust-custody.mjs";
+import {APPROVED_OPS_ROOT_FINGERPRINT,verifySignedOperationsBrokerRelease}
+  from "./cst-onejob-operations-broker-release.mjs";
 import {CST_ONEJOB_DEV_POOLER,createPinnedCstOneJobPgConnection}
   from "../../lib/db/src/cstOneJobPinnedSupabaseCa.ts";
 export const PROJECT="xssrfshdrtdfupgqwfdw";
@@ -14,7 +16,10 @@ export const LOGIN="cst_onejob_broker_login";
 export const ROLE="cst_onejob_admission_broker";
 const KEY="CST_DEV_ONEJOB_BROKER_DATABASE_URL";
 const INBOX="/var/lib/cst-onejob-qa/pre-admission";
-const RELEASE="/etc/cst-onejob-qa/approval/broker-release.json";
+// A plain root-owned broker-release.json is NOT a signed Operations approval.
+const OPS_ROOT="/etc/cst-onejob-dev/operator-trust/release-public.pem";
+const OPS_BATCH="/etc/cst-onejob-dev/inbox/signed-release-batch.json";
+const PASSWD="/etc/passwd";
 const SHA=/^[a-f0-9]{40}$/;
 export function reviewBrokerEnvironment(env){
   const blockers=[],require=(ok,name)=>{if(!ok)blockers.push(name)};
@@ -115,9 +120,15 @@ export async function executeTrustedAdmissionTransaction({
   }
 }
 function pinnedFile(path,max){
-  const dirs=path.startsWith(INBOX)?
-    ["/var","/var/lib","/var/lib/cst-onejob-qa",INBOX]:
-    ["/etc","/etc/cst-onejob-qa","/etc/cst-onejob-qa/approval"];
+  const paths=new Map([
+    [INBOX+"/receipt.json",["/var","/var/lib","/var/lib/cst-onejob-qa",INBOX]],
+    [INBOX+"/evidence.bin",["/var","/var/lib","/var/lib/cst-onejob-qa",INBOX]],
+    [OPS_ROOT,["/etc","/etc/cst-onejob-dev","/etc/cst-onejob-dev/operator-trust"]],
+    [OPS_BATCH,["/etc","/etc/cst-onejob-dev","/etc/cst-onejob-dev/inbox"]],
+    [PASSWD,["/etc"]]
+  ]);
+  const dirs=paths.get(path);
+  if(!dirs)throw Error("FILE_PATH_NOT_APPROVED");
   for(const d of dirs){
     const s=lstatSync(d);
     if(s.uid!==0||(s.mode&0o022)!==0||!s.isDirectory()||
@@ -137,17 +148,23 @@ export async function main(args=process.argv.slice(2),env=process.env){
   const gate=reviewBrokerEnvironment(env);
   if(!gate.ready)return {status:"DENIED",reason:"BROKER_NOT_PROVISIONED",blockers:gate.blockers};
   try{
-    const release=JSON.parse(pinnedFile(RELEASE,8192).toString("utf8"));
-    if(release.project!==PROJECT||release.authorization!=="ONEJOB_DEV_ONLY"||
-       release.sourceSha!==env.CST_TEAM_DEV_APPROVED_SOURCE_SHA||
-       typeof release.changeId!=="string"||
-       !/^CST-DEV-[A-Z0-9-]{6,50}$/.test(release.changeId)||
-       typeof release.expiresAt!=="string"||
-       !(Date.now()<Date.parse(release.expiresAt))||
-       !(Date.parse(release.expiresAt)-Date.now()<=1800000))
-      return {status:"DENIED",reason:"RELEASE_CUSTODY_INVALID"};
+    // Root ownership is only file integrity, NOT authorization.
+    // Exactly the eight-permit Operations signed batch must verify against
+    // an independently approved, source-pinned public root (currently NULL).
+    const release=verifySignedOperationsBrokerRelease({
+      batch:JSON.parse(pinnedFile(OPS_BATCH,200000).toString("utf8")),
+      rootPublicKeyPem:pinnedFile(OPS_ROOT,8192).toString("utf8"),
+      passwdText:pinnedFile(PASSWD,131071).toString("utf8"),
+      expectedSourceSha:env.CST_TEAM_DEV_APPROVED_SOURCE_SHA,
+      approvedRootFingerprint:APPROVED_OPS_ROOT_FINGERPRINT
+    });
     const pinnedTrust=readRootOwnedQaPublicTrust().document;
     const signedReceipt=JSON.parse(pinnedFile(INBOX+"/receipt.json",16384).toString("utf8"));
+    const claims=signedReceipt?.claims;
+    if(claims?.project!==PROJECT||claims?.companyId!=="1"||
+       claims?.jobId!==release.jobId||claims?.approvalId!==release.approvalId||
+       claims?.sourceSha!==release.sourceSha||claims?.workerName!==release.workerName)
+      return {status:"DENIED",reason:"OPERATIONS_RELEASE_QA_BINDING_MISMATCH"};
     const evidenceBytes=pinnedFile(INBOX+"/evidence.bin",65536);
     const {default:pg}=await import("pg");
     // Explicit CA and exact regional hostname; never let URL sslmode

@@ -18,3 +18,17 @@ Operational E2E remains NO-GO until independent real signed authorization, Owner
 ## Pinned installed-runtime caveat
 
 The review importer's `SOURCE_SHA` pin is the **currently installed** dormant signer source hash `cb24077b4ae31c1de24f365046a274d74e7249a3b05ab46dcb2d5880cef31702`, rather than an assumption that all newer PR commits have been deployed. The signer source in commit `d4effeeea37b1a78743099476588bb352f8d98e7` includes an additional nonce-directory durability improvement but was not part of the original VPS installation readback. Before operational signing, reconcile the installed signer source and immutable approved release hash under one reviewed exact-source change. Do not silently remove the source pin to obtain readiness.
+
+
+## Broker admission interlock (additional source-only validation)
+
+The independent broker does **not** accept a plain root-owned broker-release
+JSON as authorization. Its source-only gate validates the **same complete**
+signed eight-role batch, the public Operations root, the SHA-pinned manifest
+and all eight signer identity/public fingerprints using
+scripts/dev/cst-onejob-operations-broker-release.mjs.
+It then binds QA PRE receipt job, approval, worker and source to the signed
+Operations batch before opening a DB transaction. It intentionally retains
+APPROVED_OPS_ROOT_FINGERPRINT=null until independently reviewed custody and
+a new authorized code pin. This cannot be overridden with environment
+variables or synthetic QA fixtures. Broker remains NO-GO.

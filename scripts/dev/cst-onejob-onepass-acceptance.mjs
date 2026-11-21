@@ -62,6 +62,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"atomic_broker_event_outbox_candidate",argv:[node,"--test","scripts/dev/cst-onejob-broker-operational-disposable.test.mjs"]},
   {id:"admission_capability_nonbypassable_disposable",argv:[node,"--test","scripts/dev/cst-onejob-admission-capability.disposable.test.mjs"]},
   {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
+  {id:"signed_operations_release_broker",argv:[node,"--test","scripts/dev/cst-onejob-operations-broker-release.test.mjs"]},
   {id:"independent_qa_pull_subscriber_writers",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-integrated-evidence-issuance.test.mjs"]},
   {id:"independent_subscriber_operational_entrypoint",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-subscriber-one-shot.test.mjs"]},
   {id:"independent_qa_and_core_reconciliation_ops",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-issuer-ops.test.mjs"]},
@@ -77,6 +78,7 @@ export const VPS_ISOLATED_QA_GATES=Object.freeze([
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",
+  "INDEPENDENT_OPERATIONS_SIGNED_RELEASE_AND_SOURCE_PINNED_PUBLIC_ROOT",
   "INDEPENDENT_QA_IDENTITY_KEY_AND_SOURCE_PROVENANCE",
   "LIVE_VERIFIED_RECEIPT_LEDGER_AND_ATOMIC_ADMISSION_BROKER",
   "REAL_SUBSCRIBER_DELIVERY_AND_SIGNED_RECEIPT",
@@ -98,7 +100,8 @@ export function verifyManifest(exists=existsSync) {
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
     "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",
-    "signed_locked_binding","broker_fail_closed","independent_qa_pull_subscriber_writers",
+    "signed_locked_binding","broker_fail_closed","signed_operations_release_broker",
+    "independent_qa_pull_subscriber_writers",
      "independent_subscriber_operational_entrypoint","independent_qa_and_core_reconciliation_ops","owner_ledger_pg",
     "writer_rls_pg","signed_concurrency_pg"])
     if(!ids.has(mandatory))problems.push("REQUIRED_GATE_MISSING:"+mandatory);

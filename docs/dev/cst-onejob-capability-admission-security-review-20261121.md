@@ -172,3 +172,44 @@ remain NOLOGIN, raw DML remains denied, and the scoped capability wrapper
 is **not installed**. A live admission attempt would fail closed.
 PR stays DRAFT. No runtime deployment, dispatch, signer enable, PROD change
 or operational PASS claim is authorized.
+
+
+## Cryptographic Operations release at broker boundary — source-only (21 November 2026)
+
+The previously root-owned, **unsigned** broker-release.json is no longer
+an acceptable runtime authority. The trusted admission bridge now reads
+only the **existing canonical Operations release importer inputs**:
+- /etc/cst-onejob-dev/operator-trust/release-public.pem, independently
+  controlled Ed25519 public root;
+- /etc/cst-onejob-dev/inbox/signed-release-batch.json, one Company-1 DEV
+  job and eight role-scoped Ed25519 permits from that same root;
+- /etc/passwd, read-only, for independently matching the eight signer
+  and eight operator OS UIDs.
+
+The new verifier checks the complete canonical Python importer envelope
+and each permit signature, exact issuer, public manifest SHA and all eight
+dormant signer fingerprints already present on the actual VPS, 5-minute
+expiry, unique nonces, job/approval/company/worker/source binding.
+Only then can the broker read the independent QA signed PRE receipt, whose
+project/job/approval/worker/SHA must match the Operations batch. This gate
+does not synthesize Owner approval or turn signer/dispatch on.
+
+**Critical custody safeguard:** APPROVED_OPS_ROOT_FINGERPRINT is
+deliberately null. An independent approved Operations Ed25519 PUBLIC root
+must be reviewed and pinned in a separate authorized immutable code change;
+it cannot come from an environment flag or a root-created placeholder.
+Until then, broker activation is **impossible** even if someone puts a
+root-owned file in the expected path.
+
+VPS fixture source tests exercise seven negative/positive cases using only
+ephemeral in-memory test keys, including Python JSON canonicalization parity,
+invalid signature, eight-role mismatch, source mismatch, UUID/job binding,
+missing role, replayed nonce, wrong host UID, stale and future permits,
+and no plain-release fallback. Tests are **synthetic only**.
+There is no independent root, signed release or real Owner job on CST-DEV.
+Deployment, database capability grants, LOGIN, signer and dispatch remain OFF.
+
+Separate Security/Operations reviewer must still approve the non-bypassable
+DB capability, RLS intersection, real root custody and actual release
+before any live one-job E2E. The read-only filesystem status does not
+constitute an Operations signature.
