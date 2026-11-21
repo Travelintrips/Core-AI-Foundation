@@ -23,6 +23,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"generic_queue_pilot_status_guard",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-generic-queue-pilot-guard.test.mjs"]},
   {id:"owner_approval",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-owner-approval-review.test.mjs"]},
   {id:"owner_stage",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-contract.test.mjs"]},
+  {id:"owner_stage_bootstrap_circular_gate_split",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-bootstrap-split.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
   {id:"signed_preapproval_ready",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-preapproval-ready.test.mjs"]},
   {id:"owner_panel_one_click",argv:[node,"--test","scripts/dev/cst-onejob-owner-ready-panel.test.mjs"]},
@@ -103,7 +104,7 @@ export function verifyManifest(exists=existsSync) {
       file.includes("..")||!exists(resolve(ROOT,file)))
       problems.push("MISSING_TEST:"+test.id);
   }
-  for(const mandatory of ["generic_queue_pilot_status_guard","generic_queue_pilot_sql_disposable_pg","owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","owner_stage_readonly_recovery","one_canonical_owner_path","super_admin_single_human_authority","super_admin_root_candidate_oneclick_ledger",
+  for(const mandatory of ["generic_queue_pilot_status_guard","generic_queue_pilot_sql_disposable_pg","owner_stage_bootstrap_circular_gate_split","owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","owner_stage_readonly_recovery","one_canonical_owner_path","super_admin_single_human_authority","super_admin_root_candidate_oneclick_ledger",
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
     "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",
