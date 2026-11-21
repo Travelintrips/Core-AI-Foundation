@@ -7,7 +7,7 @@ import {createHash} from "node:crypto";
 import {reviewSignedIndependentQaReceipt} from
   "../../artifacts/api-server/src/lib/cstOneJobIndependentQaVerifier.ts";
 import {readRootOwnedQaPublicTrust} from "./cst-onejob-qa-trust-custody.mjs";
-import {APPROVED_OPS_ROOT_FINGERPRINT,verifySignedOperationsBrokerRelease}
+import {APPROVED_OPS_ROOT_FINGERPRINT,verifySignedOperationsJobAuthorizationV2}
   from "./cst-onejob-operations-broker-release.mjs";
 import {CST_ONEJOB_DEV_POOLER,createPinnedCstOneJobPgConnection}
   from "../../lib/db/src/cstOneJobPinnedSupabaseCa.ts";
@@ -18,8 +18,8 @@ const KEY="CST_DEV_ONEJOB_BROKER_DATABASE_URL";
 const INBOX="/var/lib/cst-onejob-qa/pre-admission";
 // A plain root-owned broker-release.json is NOT a signed Operations approval.
 const OPS_ROOT="/etc/cst-onejob-dev/operator-trust/release-public.pem";
-const OPS_BATCH="/etc/cst-onejob-dev/inbox/signed-release-batch.json";
-const PASSWD="/etc/passwd";
+const OPS_AUTH="/etc/cst-onejob-dev/approved-change/job-authorization-v2.json";
+
 const SHA=/^[a-f0-9]{40}$/;
 export function reviewBrokerEnvironment(env){
   const blockers=[],require=(ok,name)=>{if(!ok)blockers.push(name)};
@@ -124,8 +124,7 @@ function pinnedFile(path,max){
     [INBOX+"/receipt.json",["/var","/var/lib","/var/lib/cst-onejob-qa",INBOX]],
     [INBOX+"/evidence.bin",["/var","/var/lib","/var/lib/cst-onejob-qa",INBOX]],
     [OPS_ROOT,["/etc","/etc/cst-onejob-dev","/etc/cst-onejob-dev/operator-trust"]],
-    [OPS_BATCH,["/etc","/etc/cst-onejob-dev","/etc/cst-onejob-dev/inbox"]],
-    [PASSWD,["/etc"]]
+    [OPS_AUTH,["/etc","/etc/cst-onejob-dev","/etc/cst-onejob-dev/approved-change"]]
   ]);
   const dirs=paths.get(path);
   if(!dirs)throw Error("FILE_PATH_NOT_APPROVED");
@@ -149,12 +148,11 @@ export async function main(args=process.argv.slice(2),env=process.env){
   if(!gate.ready)return {status:"DENIED",reason:"BROKER_NOT_PROVISIONED",blockers:gate.blockers};
   try{
     // Root ownership is only file integrity, NOT authorization.
-    // Exactly the eight-permit Operations signed batch must verify against
-    // an independently approved, source-pinned public root (currently NULL).
-    const release=verifySignedOperationsBrokerRelease({
-      batch:JSON.parse(pinnedFile(OPS_BATCH,200000).toString("utf8")),
+    // Verify one signed job authorization without demanding unknowable
+    // future payload digests, against an independently pinned public root.
+    const release=verifySignedOperationsJobAuthorizationV2({
+      authorization:JSON.parse(pinnedFile(OPS_AUTH,200000).toString("utf8")),
       rootPublicKeyPem:pinnedFile(OPS_ROOT,8192).toString("utf8"),
-      passwdText:pinnedFile(PASSWD,131071).toString("utf8"),
       expectedSourceSha:env.CST_TEAM_DEV_APPROVED_SOURCE_SHA,
       approvedRootFingerprint:APPROVED_OPS_ROOT_FINGERPRINT
     });

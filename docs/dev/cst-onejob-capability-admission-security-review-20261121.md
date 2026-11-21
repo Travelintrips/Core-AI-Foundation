@@ -257,3 +257,18 @@ The candidate does not verify QA Ed25519 inside PostgreSQL; independent
 QA custody and verified signer release remain mandatory before any
 broker database credential is activated. In no case is a green source
 test an authorization to apply this migration. Operational NO-GO.
+
+
+## V2 stage authorization correction, source-only
+
+The previous all-eight permit bundle had unknowable future payload hashes.
+V2 uses a one-hour, one-job, independently signed Operations scope for the
+eight original public identities, without any future payload hash. Each of
+nine actual sequential technical payloads receives its own <=5-minute
+signed permit as its evidence arrives. No second Owner consent is needed.
+See docs/dev/cst-onejob-vps-stage-jit-v2-20261121.md.
+
+The broker now validates V2 signed job authorization before QA PRE receipt.
+The existing signer protocol is reused. Operations public root source pin
+remains null/None, Owner DB approval=0, admission SQL is still guarded
+REVIEW-ONLY, all signer services remain OFF, and no live Final ACK exists.

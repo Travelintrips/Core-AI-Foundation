@@ -64,6 +64,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"review_only_capability_live_schema_mirror",argv:[node,"--test","scripts/dev/cst-onejob-capability-review-live-schema.disposable.test.mjs"]},
   {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
   {id:"signed_operations_release_broker",argv:[node,"--test","scripts/dev/cst-onejob-operations-broker-release.test.mjs"]},
+  {id:"vps_stage_jit_v2_source_only",argv:["/tmp/cst-onejob-broker-ci-venv/bin/python","scripts/dev/cst-onejob-vps-stage-v2-source-qa.py"]},
   {id:"independent_qa_pull_subscriber_writers",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-integrated-evidence-issuance.test.mjs"]},
   {id:"independent_subscriber_operational_entrypoint",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-subscriber-one-shot.test.mjs"]},
   {id:"independent_qa_and_core_reconciliation_ops",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-issuer-ops.test.mjs"]},
@@ -101,7 +102,8 @@ export function verifyManifest(exists=existsSync) {
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
     "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",
-    "signed_locked_binding","broker_fail_closed","signed_operations_release_broker",
+     "signed_locked_binding","broker_fail_closed","signed_operations_release_broker",
+    "vps_stage_jit_v2_source_only",
     "independent_qa_pull_subscriber_writers",
      "independent_subscriber_operational_entrypoint","independent_qa_and_core_reconciliation_ops","owner_ledger_pg",
     "writer_rls_pg","signed_concurrency_pg","review_only_capability_live_schema_mirror"])

@@ -1,5 +1,15 @@
 # CST-DEV VPS — one-shot official signed-release batch importer
 
+**V1 operational notice, 21 November 2026:** The original all-eight-payload
+installer cannot pre-sign outputs of sequential future QA/subscriber/Hub
+stages. Its source CLI install mode is fail-closed. The replacement signed
+one-job authorization and per-stage just-in-time permits are specified in
+[cst-onejob-vps-stage-jit-v2-20261121.md](cst-onejob-vps-stage-jit-v2-20261121.md).
+Descriptions below of v1 install success are historical synthetic QA,
+not operational authorization. The installed VPS importer is unchanged
+until a separately reviewed source-pinned change.
+
+
 **Purpose:** Complete the missing installation bridge *only after* a separate, authorized CST Security/Operations custodian returns a **cryptographically signed** single-job change record. Do not generate a private Operations key here, reuse the 8 operator/signer keys, or fill public roots with fake placeholders.
 
 Script: `deploy/cst-onejob-vps/install_approved_release_batch.py`. Two explicit modes:

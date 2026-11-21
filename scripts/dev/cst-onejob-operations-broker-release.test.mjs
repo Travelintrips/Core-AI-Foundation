@@ -5,7 +5,9 @@ import {spawnSync} from "node:child_process";
 import {readFileSync} from "node:fs";
 import {
   APPROVED_OPS_ROOT_FINGERPRINT,MANIFEST_SHA,ROLES,canonicalOperationsBatch,
-  canonicalOperationsPermit,verifySignedOperationsBrokerRelease
+  canonicalOperationsPermit,verifySignedOperationsBrokerRelease,
+  canonicalOperationsJobAuthorizationV2,verifySignedOperationsJobAuthorizationV2,
+  AUTH_V2_SCHEMA,AUTH_V2_DOMAIN
 } from "./cst-onejob-operations-broker-release.mjs";
 import {main} from "./cst-onejob-trusted-admission-bridge.mjs";
 
@@ -135,8 +137,65 @@ test("canonical batch JSON is byte-identical to Python signer importer",()=>{
 });
 test("broker has NO fallback from a plain root-owned JSON release",()=>{
  const s=readFileSync(new URL("./cst-onejob-trusted-admission-bridge.mjs",import.meta.url),"utf8");
- assert.match(s,/verifySignedOperationsBrokerRelease/);
+ assert.match(s,/verifySignedOperationsJobAuthorizationV2/);
+ assert.equal(s.includes("pinnedFile(OPS_BATCH,"),false);
+ assert.match(s,/OPS_AUTH/);
  assert.match(s,/APPROVED_OPS_ROOT_FINGERPRINT/);
  assert.equal(s.includes("pinnedFile(RELEASE,"),false);
  assert.equal(s.includes('const RELEASE="/etc/cst-onejob-qa/approval/broker-release.json"'),false);
+});
+
+
+const authV2=()=>{
+ const issuedAt=new Date(Date.now()-25000).toISOString();
+ const expiresAt=new Date(Date.now()+195000).toISOString();
+ const payload={
+   schema:AUTH_V2_SCHEMA,project:"xssrfshdrtdfupgqwfdw",companyId:"1",
+   changeId:"CST-DEV-20261121-STAGED",jobId:483,approvalId,
+   sourceSha:sha,workerName,manifestSha256:MANIFEST_SHA,
+   issuedAt,expiresAt,roles:Object.fromEntries(Object.entries(ROLES)
+     .map(([role,info])=>[role,info.fingerprint]))
+ };
+ return {payload,signatureBase64:sig(canonicalOperationsJobAuthorizationV2(payload))};
+};
+const verifyV2=(authorization=authV2(),patch={})=>
+ verifySignedOperationsJobAuthorizationV2({
+  authorization,rootPublicKeyPem,expectedSourceSha:sha,
+  approvedRootFingerprint:fingerprint,...patch
+ });
+test("v2 one Owner job authorizes eight static roles, not unknown future payloads",()=>{
+ const a=authV2();
+ assert.equal(Object.keys(a.payload.roles).length,8);
+ assert.equal(Object.hasOwn(a.payload,"permits"),false);
+ assert.equal(Object.hasOwn(a.payload,"payloadSha256"),false);
+ const verified=verifyV2(a);
+ assert.equal(verified.operationsAuthorizationVerified,true);
+ assert.equal(verified.ownerApprovalVerified,false);
+ assert.equal(verified.futurePayloadsPreApproved,false);
+ assert.equal(verified.finalAckIssued,false);
+ assert.equal(verified.dispatchPermitted,false);
+ assert.equal(verified.jobId,483);
+});
+test("v2 root not pinned and tampered authorization fail before broker SQL",()=>{
+ assert.throws(()=>verifyV2(authV2(),{approvedRootFingerprint:null}),
+  /INDEPENDENT_ROOT_NOT_PINNED/);
+ const changed=authV2();changed.payload.jobId=484;
+ assert.throws(()=>verifyV2(changed),/INVALID_OPERATIONS_SIGNATURE/);
+ const missing=authV2();delete missing.payload.roles.reviewer;
+ missing.signatureBase64=sig(canonicalOperationsJobAuthorizationV2(missing.payload));
+ assert.throws(()=>verifyV2(missing),/AUTH_ROLES_INVALID/);
+ assert.throws(()=>verifyV2(authV2(),{expectedSourceSha:"b".repeat(40)}),
+  /AUTH_SCOPE_INVALID/);
+});
+test("v2 authorization canonical bytes match Python independent stage verifier",()=>{
+ const p=authV2().payload;
+ const py="import json,sys; x=json.loads(sys.stdin.buffer.read());"+
+  "sys.stdout.buffer.write(b'CST_DEV_ONEJOB_VPS_JOB_AUTHORIZATION_V2' + bytes([10]) +"+
+  "json.dumps(x,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode())";
+ const result=spawnSync("python3",["-c",py],{
+  input:Buffer.from(JSON.stringify(p)),maxBuffer:65536
+ });
+ assert.equal(result.status,0,result.stderr?.toString());
+ assert.deepEqual(result.stdout,canonicalOperationsJobAuthorizationV2(p));
+ assert.equal(AUTH_V2_DOMAIN.endsWith("\n"),true);
 });

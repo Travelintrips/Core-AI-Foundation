@@ -227,6 +227,11 @@ def main():
  arg=ap.parse_args()
  if arg.read_only == arg.install_after_signed_approval:
   raise GateError("CHOOSE_ONE_EXPLICIT_MODE")
+ # V1 requires future subscriber/POST/Final-ACK payload hashes up front,
+ # which are unknowable before the previous stages finish. Never install
+ # this obsolete all-at-once variant; retain verification for regression QA.
+ if arg.install_after_signed_approval:
+  raise GateError("V1_FUTURE_PAYLOAD_BATCH_DEPRECATED_USE_STAGE_V2")
  manifest=runtime_safe()
  if not TRUST.is_file() or not INBOX.is_file():
   print(json.dumps({"project":PROJECT,"status":"AWAITING_INDEPENDENT_SIGNED_RELEASE",

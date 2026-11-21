@@ -186,3 +186,62 @@ export function verifySignedOperationsBrokerRelease({
     signsOperationalOwnerApproval:false,dispatchPermitted:false
   });
 }
+
+
+// V2 job authorization intentionally contains NO future payload hashes.
+// One Owner business approval; nine technical signings across eight roles.
+// Every stage receives its own short-lived v1-compatible Ed25519 permit
+// *after* independently captured actual payload bytes exist.
+export const AUTH_V2_SCHEMA="cst-onejob-vps-job-authorization/v2";
+export const AUTH_V2_DOMAIN="CST_DEV_ONEJOB_VPS_JOB_AUTHORIZATION_V2\n";
+const AUTH_V2_KEYS=[
+  "schema","project","companyId","changeId","jobId","approvalId",
+  "sourceSha","workerName","manifestSha256","issuedAt","expiresAt","roles"
+];
+export function canonicalOperationsJobAuthorizationV2(payload){
+  return Buffer.from(AUTH_V2_DOMAIN+JSON.stringify(sortedObject(payload)),"utf8");
+}
+export function verifySignedOperationsJobAuthorizationV2({
+  authorization,rootPublicKeyPem,expectedSourceSha,
+  approvedRootFingerprint,nowMs=Date.now()
+}){
+  requireOk(H64.test(approvedRootFingerprint||""),
+    "INDEPENDENT_ROOT_NOT_PINNED");
+  requireOk(typeof rootPublicKeyPem==="string","ROOT_PUBLIC_KEY_MISSING");
+  let key;
+  try{key=createPublicKey(rootPublicKeyPem)}catch{fail("INVALID_ROOT_KEY")}
+  requireOk(key.asymmetricKeyType==="ed25519","ROOT_NOT_ED25519");
+  const fingerprint=createHash("sha256").update(
+    key.export({type:"spki",format:"der"})).digest("hex");
+  requireOk(fingerprint===approvedRootFingerprint,"UNTRUSTED_ROOT_FINGERPRINT");
+  requireOk(exactKeys(authorization,["payload","signatureBase64"]),
+    "AUTH_ENVELOPE_INVALID");
+  const p=authorization.payload;
+  requireOk(exactKeys(p,AUTH_V2_KEYS),"AUTH_FIELDS_INVALID");
+  requireOk(
+    p.schema===AUTH_V2_SCHEMA&&p.project===PROJECT&&p.companyId==="1"&&
+    typeof p.changeId==="string"&&CHANGE.test(p.changeId)&&
+    Number.isSafeInteger(p.jobId)&&p.jobId>482&&p.jobId<=2147483647&&
+    typeof p.approvalId==="string"&&UUID.test(p.approvalId)&&
+    typeof p.sourceSha==="string"&&H40.test(p.sourceSha)&&
+    p.sourceSha===expectedSourceSha&&
+    typeof p.workerName==="string"&&WORKER.test(p.workerName)&&
+    p.manifestSha256===MANIFEST_SHA,"AUTH_SCOPE_INVALID");
+  requireOk(exactKeys(p.roles,Object.keys(ROLES)),"AUTH_ROLES_INVALID");
+  for(const [role,row] of Object.entries(ROLES))
+    requireOk(p.roles[role]===row.fingerprint,"AUTH_ROLE_FINGERPRINT_MISMATCH");
+  const t0=timestamp(p.issuedAt),t1=timestamp(p.expiresAt);
+  requireOk(Number.isFinite(nowMs)&&t0<=nowMs&&nowMs<t1&&
+    t1-t0>0&&t1-t0<=3600000&&nowMs-t0<=3600000,
+    "AUTH_EXPIRED_OR_UNBOUNDED");
+  verifySignature(key,authorization.signatureBase64,
+    canonicalOperationsJobAuthorizationV2(p));
+  return Object.freeze({
+    project:p.project,companyId:p.companyId,changeId:p.changeId,
+    jobId:p.jobId,approvalId:p.approvalId,sourceSha:p.sourceSha,
+    workerName:p.workerName,expiresAt:p.expiresAt,
+    operationsAuthorizationVerified:true,
+    futurePayloadsPreApproved:false,ownerApprovalVerified:false,
+    dispatchPermitted:false,finalAckIssued:false
+  });
+}
