@@ -30,6 +30,7 @@ jobs:
         run: |
           python3 -B -m unittest -v deploy/cst-onejob-vps/test_cst_onejob_vps_readonly_gate.py
           python3 -B -m unittest -v deploy/cst-onejob-vps/test_cst_onejob_vps_nonce_durability.py
+          python3 -B -m unittest -v deploy/cst-onejob-vps/test_install_approved_release_batch.py
           python3 - <<'PY'
           import json,subprocess,sys
           script="deploy/cst-onejob-vps/cst_onejob_vps_readonly_gate.py"
