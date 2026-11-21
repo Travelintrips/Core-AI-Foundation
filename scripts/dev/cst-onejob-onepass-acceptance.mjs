@@ -61,6 +61,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"post_execution_subscriber_final_ack",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-postexecution-review.test.mjs"]},
   {id:"atomic_broker_event_outbox_candidate",argv:[node,"--test","scripts/dev/cst-onejob-broker-operational-disposable.test.mjs"]},
   {id:"admission_capability_nonbypassable_disposable",argv:[node,"--test","scripts/dev/cst-onejob-admission-capability.disposable.test.mjs"]},
+  {id:"review_only_capability_live_schema_mirror",argv:[node,"--test","scripts/dev/cst-onejob-capability-review-live-schema.disposable.test.mjs"]},
   {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
   {id:"signed_operations_release_broker",argv:[node,"--test","scripts/dev/cst-onejob-operations-broker-release.test.mjs"]},
   {id:"independent_qa_pull_subscriber_writers",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-integrated-evidence-issuance.test.mjs"]},
@@ -103,7 +104,7 @@ export function verifyManifest(exists=existsSync) {
     "signed_locked_binding","broker_fail_closed","signed_operations_release_broker",
     "independent_qa_pull_subscriber_writers",
      "independent_subscriber_operational_entrypoint","independent_qa_and_core_reconciliation_ops","owner_ledger_pg",
-    "writer_rls_pg","signed_concurrency_pg"])
+    "writer_rls_pg","signed_concurrency_pg","review_only_capability_live_schema_mirror"])
     if(!ids.has(mandatory))problems.push("REQUIRED_GATE_MISSING:"+mandatory);
   return {valid:problems.length===0,problems,count:OFFLINE_TESTS.length};
 }

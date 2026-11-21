@@ -213,3 +213,47 @@ Separate Security/Operations reviewer must still approve the non-bypassable
 DB capability, RLS intersection, real root custody and actual release
 before any live one-job E2E. The read-only filesystem status does not
 constitute an Operations signature.
+
+
+## Live-schema-matched candidate and guarded rollback — source-only (21 November 2026)
+
+Prepared exact-source **review-only** artifacts:
+- docs/dev/cst-onejob-admission-capability.REVIEW-ONLY.sql
+- docs/dev/cst-onejob-admission-capability.ROLLBACK-REVIEW-ONLY.sql
+- scripts/dev/cst-onejob-capability-review-live-schema.disposable.test.mjs
+
+Both SQL files start with a transaction and explicit unconditional
+RAISE EXCEPTION review guard. **Do not remove these guards** without
+an independent signed Security/Operations authorization, exact PR commit
+pin, real role-custody review and an explicit isolated DEV release plan.
+Neither file is installed on Supabase CST-DEV.
+
+The candidate preserves live Owner staging and existing broker roles
+and memberships; it creates **only one distinct NOLOGIN executor**.
+It checks both existing broker roles are NOLOGIN/limit-0, app schemas and
+RLS enabled, original atomic SQL is SECURITY INVOKER, and direct broker
+SELECT/UPDATE remain forbidden. It intentionally does not change
+table ownership, enable/force RLS on existing app tables, create
+passwords, grant broker raw DML, or change PROD.
+
+Live catalog inspection confirmed the source table columns, existing
+Company-1 Owner/QA/receipt ledgers, original invoker function, the
+required RLS baseline, and existing NOLOGIN broker pair. The underlying
+receipt-consumption ID is GENERATED ALWAYS AS IDENTITY on live
+PostgreSQL 17, so the existing atomic RPC correctly omits that ID.
+The network-none PG16 functional rehearsal uses a disposable serial ID
+and does not claim full PG17 live-runtime equivalence.
+
+The source test first **executes both guarded SQL files and proves they
+refuse ALL changes**, then strips the guard **inside an isolated PG16
+container only**. Its live-schema-shaped fixture tests guarded
+capability installation, zero raw broker SELECT/UPDATE, distinct executor
+NOLOGIN/no-membership, missing PRE receipt denial, invalid nonce,
+one allowed WAITING→QUEUED transition with consumed Owner/QA receipt
+and audit/outbox, replay rejection, clean pre-admission rollback and
+explicit refusal to rollback a consumed job. Result **2/2 PASS**.
+
+The candidate does not verify QA Ed25519 inside PostgreSQL; independent
+QA custody and verified signer release remain mandatory before any
+broker database credential is activated. In no case is a green source
+test an authorization to apply this migration. Operational NO-GO.
