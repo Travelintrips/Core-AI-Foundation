@@ -41,7 +41,7 @@ def run(args,stdin=None,allow=False):
 def psql(q,allow=False):
  return run(["docker","exec","-i",NAME,"psql","-X","-qAt",
   "-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose",
-  "-U","postgres","-d","postgres"],q,allow)
+  "-h","127.0.0.1","-U","postgres","-d","postgres"],q,allow)
 def require(ok,code):
  if not ok:raise RuntimeError(code)
 def main():
@@ -55,20 +55,20 @@ def main():
   ready=False
   # Cold CI image startup may take longer than warm VPS startup.
   # Keep all assertions identical; only the bounded readiness poll changes.
+  # Docker's bootstrap PostgreSQL temporarily listens on a UNIX socket.
+  # Only the final TCP listener can authorize fixture SQL setup.
   for _ in range(90):
-   # The official postgres entrypoint starts a temporary init server, then
-   # shuts it down before launching the durable final server. A successful
-   # first SELECT against that temporary server is NOT durable readiness.
-   logs=run(["docker","logs",NAME],allow=True)
-   if "PostgreSQL init process complete; ready for start up." not in (
-       logs.stdout+"\n"+logs.stderr):
-    time.sleep(.3)
-    continue
-   r=psql("SELECT 1;",True)
-   if r.returncode==0 and r.stdout.strip()=="1":ready=True;break
+   # A TCP pg_isready check cannot succeed against the temporary bootstrap
+   # Unix-only PostgreSQL server; it confirms durable post-init readiness.
+   h=run(["docker","exec",NAME,"pg_isready","-h","127.0.0.1",
+     "-U","postgres","-d","postgres"],allow=True)
+   if h.returncode==0:
+    r=psql("SELECT 1;",True)
+    if r.returncode==0 and r.stdout.strip()=="1":ready=True;break
    time.sleep(.3)
   require(ready,"DISPOSABLE_POSTGRES_NOT_READY")
-  psql("""CREATE SCHEMA ai_platform;
+  schema_sql="""BEGIN;
+   CREATE SCHEMA ai_platform;
    CREATE TABLE ai_platform.ai_jobs(
      id integer PRIMARY KEY,status text NOT NULL,
      job_type text NOT NULL,payload_json jsonb NOT NULL);
@@ -103,7 +103,10 @@ def main():
     (484,'waiting','coding_workstream_execution',
       jsonb_build_object('requestId','normal-coding-work')),
     (485,'queued','coding_workstream_execution',
-      jsonb_build_object('requestId','normal-previously-queued'));""")
+      jsonb_build_object('requestId','normal-previously-queued'));   COMMIT;"""
+  # The fixture schema is one atomic transaction: invalid SQL never
+  # leaves partially-created roles, tables or policies.
+  psql(schema_sql)
   guarded="""BEGIN;
     SET LOCAL ROLE synthetic_generic_queue_actor;
     UPDATE ai_platform.ai_jobs SET status='queued'

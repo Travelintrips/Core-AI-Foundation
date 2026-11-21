@@ -27,6 +27,8 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"preapproval_broker_separation",argv:[node,"--test","scripts/dev/cst-onejob-preapproval-broker-separation.test.mjs"]},
   {id:"gate_a_preapproval_stage_broker_security",argv:["python3","-B","scripts/dev/test_cst_onejob_preapproval_stage_broker.py"]},
   {id:"nonroot_stage_credential_handoff",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_credential_handoff.py"]},
+  {id:"owner_stage_scoped_jwt_readonly_auth",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-owner-session-auth.test.mjs"]},
+  {id:"owner_stage_scoped_jwt_readonly_auth",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-owner-session-auth.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
   {id:"signed_preapproval_ready",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-preapproval-ready.test.mjs"]},
   {id:"owner_panel_one_click",argv:[node,"--test","scripts/dev/cst-onejob-owner-ready-panel.test.mjs"]},
@@ -64,6 +66,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"cst_team_dedicated_model_role_rehearsal",argv:["python3","scripts/dev/cst-team-dedicated-model-role-rehearsal.py"]},
   {id:"owner_ledger_pg",argv:["python3","scripts/dev/cst-onejob-owner-ledger-disposable.py"]},
   {id:"writer_rls_pg",argv:["python3","scripts/dev/cst-onejob-writer-rls-disposable.py"]},
+  {id:"owner_session_rls_single_column_pg",argv:["python3","scripts/dev/cst-onejob-stage-owner-session-rls.disposable.py"]},
   {id:"generic_queue_pilot_sql_disposable_pg",argv:["python3","scripts/dev/cst-onejob-generic-queue-sql.disposable.py"]},
   {id:"stage_pooler_tls",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-connection-config.test.mjs"]},
   {id:"cst_onejob_live_readiness",argv:[node,"--test","scripts/dev/cst-onejob-live-readiness.test.mjs"]},
@@ -107,7 +110,7 @@ export function verifyManifest(exists=existsSync) {
       file.includes("..")||!exists(resolve(ROOT,file)))
       problems.push("MISSING_TEST:"+test.id);
   }
-  for(const mandatory of ["generic_queue_pilot_status_guard","generic_queue_pilot_sql_disposable_pg","owner_stage_bootstrap_circular_gate_split","owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","owner_stage_readonly_recovery","one_canonical_owner_path","super_admin_single_human_authority","super_admin_root_candidate_oneclick_ledger",
+  for(const mandatory of ["generic_queue_pilot_status_guard","generic_queue_pilot_sql_disposable_pg","owner_stage_bootstrap_circular_gate_split","owner_stage_scoped_jwt_readonly_auth","owner_session_rls_single_column_pg","owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","owner_stage_readonly_recovery","one_canonical_owner_path","super_admin_single_human_authority","super_admin_root_candidate_oneclick_ledger",
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
     "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",

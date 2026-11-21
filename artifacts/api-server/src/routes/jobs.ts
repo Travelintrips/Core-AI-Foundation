@@ -43,7 +43,7 @@ import { publishSafe } from "../services/aiEventBusService.js";
 import {
  isReservedOneJobPilotRequest,CST_ONEJOB_RESERVED_REQUEST_PREFIX
 } from "../lib/cstOneJobPilotEnqueueGuard.js";
-import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
+import {requireCstOneJobStageOwner} from "../middleware/cstOneJobStageOwnerAuth.js";
 import { SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
 import { verifyFreshOneJobStageConsent } from "../lib/cstOneJobFreshStageConsent.js";
 import { stageCstDevOneJobForVerifiedOwner, evaluateCstOneJobStageEnvironment } from "../services/cstOneJobOwnerApprovalStageService.js";
@@ -337,7 +337,7 @@ router.get("/ai/jobs", async (req, res): Promise<void> => {
 // A signed QA preapproval does not grant dispatch, and the real stage action
 // independently verifies all protected conditions again in its transaction.
 router.get("/ai/dev/onejob/owner-stage-readiness",
-  requireAuth,requireInternalRole("owner"),requirePasswordChanged,
+  requireCstOneJobStageOwner,
   async (_req,res):Promise<void>=>{
     let sha="";
     try{sha=readFileSync(resolve(process.cwd(),".cst-build-sha"),"utf8").trim()}catch{}
@@ -404,7 +404,7 @@ router.get("/ai/dev/onejob/owner-stage-readiness",
 // The scoped reader uses no more privilege than the already-existing
 // staging writer, and does not make a retry safe or grant dispatch.
 router.get("/ai/dev/onejob/owner-stage-status",
- requireAuth,requireInternalRole("owner"),requirePasswordChanged,
+ requireCstOneJobStageOwner,
  async (req,res):Promise<void>=>{
   res.setHeader("Cache-Control","no-store");
   const actor=req.internalUser;
@@ -431,9 +431,7 @@ router.get("/ai/dev/onejob/owner-stage-status",
 // No generic API key, machine identity or body-provided actor can authorize it.
 // Deliberately disabled unless the exact deployment explicitly enables it.
 router.post("/ai/dev/onejob/owner-approve-and-stage",
-  requireAuth,
-  requireInternalRole("owner"),
-  requirePasswordChanged,
+  requireCstOneJobStageOwner,
   async (req,res):Promise<void>=>{
     const host=req.hostname.toLowerCase();
     const origin=req.get("origin");

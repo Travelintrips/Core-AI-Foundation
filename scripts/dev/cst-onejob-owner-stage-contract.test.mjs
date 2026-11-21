@@ -10,13 +10,11 @@ test("dedicated Owner route authenticates from current internal session, not act
  const pos=route.indexOf('router.post("/ai/dev/onejob/owner-approve-and-stage"');
  assert.ok(pos>0);
  const target=route.slice(pos,route.indexOf("// ── Enqueue Job",pos));
- assert.match(target,/requireAuth/);
- assert.match(target,/requireInternalRole\("owner"\)/);
+ assert.match(target,/requireCstOneJobStageOwner/);
  assert.match(target,/origin!=="https:\/\/dev\.cstlogistic\.co\.id"/);
  assert.match(target,/host!=="dev\.cstlogistic\.co\.id"/);
  assert.match(target,/verifyFreshOneJobStageConsent/);
  assert.match(target,/FRESH_EXPLICIT_OWNER_STAGE_CONSENT_REQUIRED/);
- assert.match(target,/requirePasswordChanged/);
  assert.match(target,/SESSION_COOKIE_NAME/);
  assert.doesNotMatch(target,/ONEJOB_APPROVAL_BODY_MUST_BE_EMPTY/);
  assert.match(target,/ownerUserId:actor\.id/);

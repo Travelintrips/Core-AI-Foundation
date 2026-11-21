@@ -80,7 +80,10 @@ test("future Nginx routing is Owner-guarded, same-origin, bounded, and NOT insta
  assert.match(nginx,/proxy_pass http:\/\/127\.0\.0\.1:18583\//);
  assert.match(nginx,/location \^~ \/api\/ai\/dev\/onejob\/owner-approve-and-stage\//);
  const existing=load("artifacts/api-server/src/routes/jobs.ts");
- assert.match(existing,/requireAuth,\s*requireInternalRole\("owner"\)/);
+ assert.match(existing,/requireCstOneJobStageOwner/);
+ const scoped=load("artifacts/api-server/src/middleware/cstOneJobStageOwnerAuth.ts");
+ assert.match(scoped,/algorithms:\["HS256"\]/);
+ assert.match(scoped,/must_change_password!==false/);
  assert.match(existing,/verifyFreshOneJobStageConsent/);
  assert.match(existing,/origin!=="https:\/\/dev\.cstlogistic\.co\.id"/);
 });
