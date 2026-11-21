@@ -67,3 +67,31 @@ The real Operations signed root/job package and admission capability are
 missing, signer units inactive, and no Owner approval has yet been recorded.
 No user should be told to click an absent or disabled button. Real E2E and
 reviewer Final ACK remain **NO-GO** until verified with real data.
+
+## Actual DEV Nginx frontend and API route proof (21 Nov 2026)
+
+The public DEV Nginx server serves /dev-onejob and /assets/* from its
+AI Platform static root, and proxies only /api/* to the Core backend.
+The API's own bundled api-server/dist/public SPA is a DIFFERENT frontend:
+its HTTP 200 fallback does NOT establish that the Super Admin screen
+exists. The runtime image smoke therefore checks the actual compiled
+AI Platform index.html, uniquely referenced Super Admin JS and CSS,
+build metadata pinned to exact source SHA, and rehearses a combined
+same-origin static/API route in network-none Docker. The protected
+GET readiness and POST approval routes must both deny anonymous traffic.
+Do not advertise a button based solely on a generic SPA fallback.
+
+VPS proof, original official GitHub CI artifact head
+0bdf03f71fe6a7b3129e6a458e77dae57add2721:
+the ZIP, UI/API and rollback are staged in the existing
+/opt/cst-onejob-superadmin-dev-candidates/ private folder. The isolated
+--network none --read-only parallel combined route test returned
+CSTDEV_SUPER_ADMIN_PARALLEL_ROUTE_QA_PASS with exact frontend and backend
+hashes, expected HTTP 200 and anonymous 401. The container was removed.
+Neither public Nginx nor active shared Core was changed.
+
+Live cutover is NOT cleared: the dedicated staging login, independently
+signed QA PRE, Operations root/job release, admission capability, genuine
+authenticated Super Admin job and Final ACK are absent. Routing an
+unready button could break unrelated working DEV features; preserve the
+original site until the coherent cutover and rollback gates can pass.

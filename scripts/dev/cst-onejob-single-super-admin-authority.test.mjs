@@ -55,3 +55,18 @@ test("single human decision does not forge Operations keys or bypass technical e
   assert.match(policy,/No KMS/);
   assert.doesNotMatch(policy,/approvedRootFingerprint="[a-f0-9]{64}"/);
 });
+
+test("CI image checks ACTUAL routed Super Admin UI and CSS, not arbitrary SPA HTTP 200",()=>{
+  const smoke=source("scripts/dev/cst-onejob-ci-image-runtime-smoke.mjs");
+  assert.match(smoke,/aiUiRoot="\/app\/artifacts\/ai-platform\/dist\/public"/);
+  assert.match(smoke,/uiJs\.includes\("Persetujuan Super Admin"\)/);
+  assert.match(smoke,/uiJs\.includes\("owner-stage-readiness"\)/);
+  assert.match(smoke,/uiJs\.includes\("owner-approve-and-stage"\)/);
+  assert.match(smoke,/SUPER_ADMIN_UI_MAIN_CSS_MISSING/);
+  assert.match(smoke,/sameOriginFrontendAndApiVerified:true/);
+  assert.match(smoke,/SAME_ORIGIN_SUPER_ADMIN_JS_NOT_ROUTED/);
+  assert.match(smoke,/SAME_ORIGIN_ANONYMOUS_APPROVAL_NOT_DENIED/);
+  assert.match(smoke,/SAME_ORIGIN_ANONYMOUS_READINESS_NOT_DENIED/);
+  assert.match(smoke,/CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED==="false"/);
+  assert.match(smoke,/dispatchPermitted:false,signerActivated:false,realE2EPass:false/);
+});
