@@ -148,3 +148,20 @@ systemd silently ignored that condition. It is replaced by the supported
 ExecCondition=/usr/bin/test -S /run/cst-onejob-stage-db/pg-pooler.sock
 in the source-only unit. Systemd parser review and absence handling must
 pass before any installation. No unit was installed or started.
+
+## Gate-A non-root staging client and systemd credential handoff
+
+Source-only stage-credential-handoff.py prepares the two existing systemd
+decrypted credentials in a fresh private /run (tmpfs) directory, UID 28502,
+GID 28501, directory 0700 and files 0400. It rejects symlinks, stale paths,
+unsafe source permissions and unexpected cleanup targets, and never logs
+credential bytes. ExecStopPost removes only the managed temporary copies.
+
+Candidate Docker client now runs --user 28502:28501. The host systemd
+wrapper remains root only for Docker and encrypted credential staging.
+Gate-A broker runs as distinct UID 28500/GID 28501 and checks SO_PEERCRED.
+
+Synthetic systemd credential ownership and handoff tests PASS. No real
+credentials were accessed. Actual unit credential lifecycle, non-root Docker
+mount accessibility, session issuer custody, network egress, JIT LOGIN/relock
+and real Owner approval remain NO-GO until independently tested.
