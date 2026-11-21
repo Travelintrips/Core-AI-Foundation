@@ -86,6 +86,35 @@ jobs:
           }
           Write-Output 'CST_DEV_DPAPI_SYNTHETIC_SOURCE_QA_PASS_NO_REAL_SIGNERS'
           exit 0
+      - name: Verify signing certificate and approved post-signing hash source contract
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = '.\scripts\dev\cst-onejob-native-signer-installer.ps1'
+          $source = Get-Content $file -Raw
+          $required = @(
+            'unsignedReferenceBuildShaVerified',
+            'nativeServiceHashVerified=$false',
+            'PROTECTED_NATIVE_BINARY_AUTHENTICODE_NOT_VALID',
+            'INDEPENDENT_SIGNED_CHANGE_APPROVAL_NOT_VERIFIED',
+            'APPROVED_SIGNED_BINARY_HASH_MISMATCH',
+            'CST_DEV_SIGNER_SERVICE_CHANGE_SIGNATURE_VALID\|([A-F0-9]{64})',
+            'INSTALL_DENIED_MISSING_OFFICIAL_CUSTODY_OR_ADMIN_APPROVAL'
+          )
+          foreach ($term in $required) {
+            if (-not $source.Contains($term)) {
+              throw ('MISSING_FAIL_CLOSED_SIGNED_ARTIFACT_CONTROL: ' + $term)
+            }
+          }
+          if ($source.Contains('$ExpectedBinarySha') -or
+              $source -match '(?s)if\s*\(\s*\$hash\s+-cne\s+\$UnsignedReferenceSha') {
+            throw 'OLD_UNSIGNED_BINARY_HASH_WOULD_REJECT_APPROVED_SIGNATURE'
+          }
+          if ($source -match '(?m)^\s*(?:Enable-LocalUser|Start-Service|New-LocalUser)\b') {
+            throw 'SIGNER_SOURCE_ATTEMPTS_UNAUTHORIZED_ACTIVATION'
+          }
+          Write-Output 'SIGNED_ARTIFACT_HASH_TRUST_CONTRACT_SOURCE_PASS'
+          Write-Output 'NO_SIGNING_KEY_NO_CERT_ISSUANCE_NO_SERVICE_INSTALL'
       - name: Default-deny QA scope
         shell: pwsh
         run: |

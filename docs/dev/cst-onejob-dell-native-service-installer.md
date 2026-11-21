@@ -21,3 +21,38 @@ The protected Ed25519 signer worker, five independently authorized role-specific
 Database roles remain `NOLOGIN`; broker must not receive direct `UPDATE ai_jobs` grants bypassing external QA. Never claim the guarded Windows host, signed-release verifier or synthetic test as a real operational signature or Final ACK.
 
 **Release decision: NO-GO until these dependencies are independently satisfied and one real Company-1 DEV E2E succeeds.**
+## 21 November 2026 — signed executable SHA admission fix (source only)
+
+Microsoft Smart App Control identified itself as VerifiedAndReputableDesktop.
+CodeIntegrity event ID 3077 blocked the new UNSIGNED DPAPI QA executable on
+physical DELL. The proper path keeps this policy ENABLED and uses an approved
+publisher certificate from a CA in the Microsoft Trusted Root Program.
+No Google KMS is required for CST-DEV runtime signing custody.
+
+Earlier source incorrectly hardcoded the UNSIGNED build SHA-256
+A040A4884CD5686894CDAAB618D51C3C6B47F8951EB4FB25915C4E55B258D3CB
+as an operational admission pin. Authenticode signing changes that digest,
+so even a legitimately signed binary would fail. The gate is corrected
+without removing any operational hash check:
+
+- Preflight compares that hash as informative UNSIGNED reference only.
+  nativeServiceHashVerified remains FALSE; releaseDecision remains NO_GO.
+- InstallDisabled requires a protected, Authenticode-verified installer and
+  separately signed native EXE; independent custody and approved change
+  verifier must be available, with exact current DELL role names.
+- The protected verifier must return exactly one line consisting of
+  CST_DEV_SIGNER_SERVICE_CHANGE_SIGNATURE_VALID followed by vertical bar
+  and exactly 64 uppercase SHA-256 hexadecimal characters from the
+  independently SIGNED approval. This is compared byte-for-byte against
+  the final post-signing EXE SHA-256.
+- The verifier itself is not implemented or simulated by this code;
+  no local unsigned-EXE hash, copied approval flag, chat reply or CLI
+  shortcut may be treated as an approved signed-change verdict.
+- On physical DELL with existing unsigned reference build: read-only
+  source Preflight PASS, five disabled signers verified, nativeServiceHashVerified
+  FALSE, and intentional InstallDisabled without custody DENIED.
+  No Windows signer service was installed.
+
+A publisher signing identity, protected verifier, independently custodial
+key material and legitimate approved change record remain unavailable.
+No source PASS can be promoted to operational deployment PASS. PROD unchanged.

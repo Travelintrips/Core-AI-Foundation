@@ -13,7 +13,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $Project='xssrfshdrtdfupgqwfdw'
-$ExpectedBinarySha='A040A4884CD5686894CDAAB618D51C3C6B47F8951EB4FB25915C4E55B258D3CB'
+$UnsignedReferenceSha='A040A4884CD5686894CDAAB618D51C3C6B47F8951EB4FB25915C4E55B258D3CB'
 $dir=Split-Path -Parent $MyInvocation.MyCommand.Path
 $bin=Join-Path $dir 'CstDevSignerService.exe'
 $roles=@(
@@ -37,7 +37,9 @@ if(-not (Test-Path -LiteralPath $bin -PathType Leaf)){
  throw 'NATIVE_SIGNER_SERVICE_NOT_COMPILED'
 }
 $hash=(Get-FileHash -LiteralPath $bin -Algorithm SHA256).Hash
-if($hash -cne $ExpectedBinarySha){throw 'NATIVE_SERVICE_BINARY_SHA_MISMATCH'}
+$unsignedReferenceMatches=($hash -ceq $UnsignedReferenceSha)
+# An unsigned build hash is an informational source preflight, not an
+# installation authorization. A signed executable has a DIFFERENT hash.
 $users=@($roles | ForEach-Object {Assert-ExistingAccount $_})
 if(($users|ForEach-Object{$_.SID.Value}|Sort-Object -Unique).Count -ne 5){
  throw 'FIVE_DISTINCT_SIGNER_SIDS_REQUIRED'
@@ -70,7 +72,9 @@ $report=[ordered]@{
  accountsPresent=$users.Count
  accountsDisabled=@($users|Where-Object{-not $_.Enabled}).Count
  distinctSids=(@($users|ForEach-Object{$_.SID.Value}|Sort-Object -Unique).Count -eq 5)
- nativeServiceHashVerified=$true
+ nativeServiceHashVerified=$false
+ unsignedReferenceBuildShaVerified=$unsignedReferenceMatches
+ signedPublisherVerified=$false
  currentlyElevated=$elevated
  servicesAlreadyPresent=$svc.Count
  authorizedTrustAndWorkerInstalled=(
@@ -101,8 +105,10 @@ if(-not $scriptPath.StartsWith(($trustedRoot+'\'),
 }
 $auth=Get-AuthenticodeSignature -LiteralPath $scriptPath
 if($auth.Status -ne 'Valid'){throw 'ELEVATED_INSTALLER_SIGNATURE_NOT_VALID'}
-if((Get-FileHash -LiteralPath $protectedExecutable -Algorithm SHA256).Hash -cne
-    $ExpectedBinarySha){throw 'PROTECTED_NATIVE_BINARY_HASH_MISMATCH'}
+$exeSignature=Get-AuthenticodeSignature -LiteralPath $protectedExecutable
+if($exeSignature.Status -ne 'Valid' -or -not $exeSignature.SignerCertificate){
+ throw 'PROTECTED_NATIVE_BINARY_AUTHENTICODE_NOT_VALID'
+}
 $protectedFiles=@($protectedExecutable,$protectedApprovalVerifier,
   $trustedApproval,$signerWorker)
 foreach($artifact in $protectedFiles){
@@ -124,10 +130,27 @@ foreach($artifact in $protectedFiles){
 # The reviewer is an externally installed, root-owned enterprise verifier.
 # It must independently validate the signed change/allowlist. A copied JSON
 # flag or local administrator claim must NOT grant authorization.
-$check=& $protectedApprovalVerifier -ApprovalPath $trustedApproval -BinaryPath $protectedExecutable -Project $Project
-if($LASTEXITCODE -ne 0 -or $check -cne 'CST_DEV_SIGNER_SERVICE_CHANGE_SIGNATURE_VALID'){
+# Protected independent verifier MUST validate the signed change record,
+# approved source SHA, project, immutable binary digest and allowed publisher.
+# Output one exact line: CST_DEV_SIGNER_SERVICE_CHANGE_SIGNATURE_VALID|SHA256
+# The old unsigned SHA may NOT be accepted as a signed-artifact permit.
+$check=@(& $protectedApprovalVerifier -ApprovalPath $trustedApproval -BinaryPath $protectedExecutable -Project $Project)
+if($LASTEXITCODE -ne 0 -or $check.Count -ne 1 -or $check[0] -isnot [string]){
  throw 'INDEPENDENT_SIGNED_CHANGE_APPROVAL_NOT_VERIFIED'
 }
+$verdict=[regex]::Match($check[0],
+ '^CST_DEV_SIGNER_SERVICE_CHANGE_SIGNATURE_VALID\|([A-F0-9]{64})$')
+if(-not $verdict.Success){
+ throw 'INDEPENDENT_SIGNED_CHANGE_APPROVAL_NOT_VERIFIED'
+}
+$approvedSignedHash=$verdict.Groups[1].Value
+$actualSignedHash=(Get-FileHash -LiteralPath $protectedExecutable -Algorithm SHA256).Hash
+if($approvedSignedHash -cne $actualSignedHash){
+ throw 'APPROVED_SIGNED_BINARY_HASH_MISMATCH'
+}
+$report.nativeServiceHashVerified=$true
+$report.signedPublisherVerified=$true
+$report.changeAuthorizationVerified=$true
 foreach($spec in $roles){
  $cred=$ServiceCredentials[$spec.role]
  if($null -eq $cred -or $cred -isnot [pscredential] -or
