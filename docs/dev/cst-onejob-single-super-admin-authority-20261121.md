@@ -257,3 +257,41 @@ status route, including same-origin proxying.
 This is only source and isolated DEV QA. It is NOT promoted into the
 existing public read-only preview; live Super Admin still has not
 approved a one-job execution.
+
+## Real Owner audit readback — narrow scoped SELECT in CST-DEV
+
+To bind one authenticated Super Admin click to the Operations public
+candidate, an independent database readback must see the same job,
+Company-1 Owner approval and immutable owner_approved_waiting_job audit.
+Previously the stage writer could insert the audit, but had no SELECT
+permission on its details or the approval purpose, so source-only root
+evidence could never be checked by a scoped stage-login session.
+
+The new CST-DEV-only migration
+cst-onejob-stage-ops-root-audit-read.CSTDEV-ONLY.sql
+adds only column-level SELECT(purpose) to the existing Owner approval
+and SELECT(module,action,resource_type,resource_id,status,details) to
+the existing audit table, plus a single Owner-audit-specific SELECT
+RLS policy. The policy requires:
+- approved Company-1 single-job proof with matching job ID, Owner ID,
+  approval ID, request ID, worker and source SHA;
+- exact public Operations candidate fingerprint
+  65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b;
+- Operations-root-trusted=false, independent-QA-admission=false,
+  dispatch-permitted=false; all other audit types are invisible.
+
+The status recovery service uses the same signed Owner identity,
+existing dedicated staging connection, READ ONLY transaction and SET
+LOCAL writer, now reading that tightly bounded audit and passing its
+ledger fields to the existing pure matching helper. The UI may display
+"audit cocok" only if the Owner, approval, WAITING job and audit all
+match. This is not a trusted Operations root, signed release,
+subscriber delivery, QA PRE receipt, or authority to run the job.
+No credentials/role LOGIN, KMS, second human approval or PROD changes.
+
+The accompanying rollback requires the approval ledger to be empty.
+Disposable PostgreSQL16 network-none QA uses the exact migration
+and rollback, verifies Owner audit visibility, forged-root audit
+invisibility, no UPDATE/DELETE, duplicate migration denial, and
+post-approval rollback denial. Deploy only via verified CST-DEV
+migration tooling after source CI PASS.

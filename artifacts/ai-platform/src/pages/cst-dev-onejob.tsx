@@ -31,6 +31,8 @@ type Recovery={
   "JOB_NOT_VISIBLE"|"UNVERIFIED_ROW"|"NOT_VISIBLE"|"UNAVAILABLE";
  jobId:number|null;jobCode:string|null;expiresAt:string|null;
  approvalReadbackVerified:boolean;jobReadbackVerified:boolean;
+ rootCandidateAuditMatched:boolean;operationsRootTrusted:false;
+ signedReleaseAuthorized:false;
  automaticRetryAllowed:false;dispatchPermitted:false;
  releaseDecision:"NO_GO";
 };
@@ -201,7 +203,10 @@ export default function CstDevOneJobPage(){
        Hasil persetujuan sebelumnya sudah terverifikasi dalam database:
        job <strong>#{recovered.jobId}</strong> berstatus
        <strong> WAITING</strong>. Tidak ada persetujuan kedua dikirim.
-       Signer, admission, dan dispatch masih terkunci.
+       Bukti audit Operations
+       <strong>{recovered.rootCandidateAuditMatched?" cocok":" belum terverifikasi"}</strong>.
+       Kunci Operations masih belum dipercaya; signer, admission,
+       dan dispatch tetap terkunci.
       </div>
      )}
      {recovered&&recovered.state!=="WAITING_VERIFIED"&&(

@@ -14,6 +14,8 @@ BASE=ROOT/"docs/dev/cst-onejob-owner-approval.PROPOSED.sql"
 POLICY=ROOT/"docs/dev/cst-onejob-writer-rls.PROPOSED.sql"
 MIGRATION=ROOT/"docs/dev/cst-onejob-ops-root-audit-guard.CSTDEV-ONLY.sql"
 ROLLBACK=ROOT/"docs/dev/cst-onejob-ops-root-audit-guard.ROLLBACK-CSTDEV-ONLY.sql"
+OWNER_AUDIT_READ=ROOT/"docs/dev/cst-onejob-stage-ops-root-audit-read.CSTDEV-ONLY.sql"
+OWNER_AUDIT_ROLLBACK=ROOT/"docs/dev/cst-onejob-stage-ops-root-audit-read.ROLLBACK-CSTDEV-ONLY.sql"
 REQ1="cst-ai-team-company1-dev:pilot-"+"a"*20
 REQ2="cst-ai-team-company1-dev:pilot-"+"b"*20
 WORKER="cst-dev-dell-onejob-20261119-abcdef12"
@@ -136,6 +138,14 @@ def main():
         duplicate_migration=psql(MIGRATION.read_text(),True)
         if duplicate_migration.returncode==0 or            "ROOT_BINDING_POLICY_ALREADY_EXISTS" not in duplicate_migration.stderr:
             raise RuntimeError("DUPLICATE_ROOT_MIGRATION_NOT_DENIED")
+        # Exact new DEV-only column SELECT migration: install, roll back,
+        # reinstall and reject replay, all with both stage roles NOLOGIN.
+        psql(OWNER_AUDIT_READ.read_text())
+        psql(OWNER_AUDIT_ROLLBACK.read_text())
+        psql(OWNER_AUDIT_READ.read_text())
+        duplicate_owner_read=psql(OWNER_AUDIT_READ.read_text(),True)
+        if duplicate_owner_read.returncode==0 or            "ROOT_EVIDENCE_READER_ALREADY_CHANGED" not in duplicate_owner_read.stderr:
+            raise RuntimeError("DUPLICATE_SCOPED_OWNER_AUDIT_READER_NOT_DENIED")
         catalog=psql("""SELECT
           (SELECT NOT rolcanlogin AND NOT rolbypassrls AND NOT rolsuper
             FROM pg_roles WHERE rolname='cst_team_model_pilot_writer') AND
@@ -273,6 +283,42 @@ def main():
           AND (SELECT count(*) FROM ai_platform.ai_audit_logs
            WHERE action='owner_approved_waiting_job')=1;""").stdout.strip()
         if state!="t":raise RuntimeError("ATOMIC_STAGING_POSTCONDITION_FAILED")
+        # Root-candidate ledger proof is readable to the bounded staging
+        # writer as a SINGLE Owner audit after one click; no other audit type
+        # or forged fingerprint may be read. Pure SELECT + explicit ROLLBACK.
+        owner_root_read=psql("""BEGIN;
+          SET TRANSACTION READ ONLY;
+          SET LOCAL ROLE cst_team_model_pilot_writer;
+          SELECT details->>'operationsRootCandidateSha256',
+                 details->>'sameSuperAdminRootSelection'
+            FROM ai_platform.ai_audit_logs
+           WHERE module='cst-onejob' AND action='owner_approved_waiting_job'
+             AND resource_type='ai_job'
+             AND resource_id=(SELECT job_id::text
+                 FROM ai_platform.cst_onejob_owner_approvals
+                 WHERE company_id='1' AND status='APPROVED' LIMIT 1);
+          ROLLBACK;""",False,"cst_team_model_pilot_stage_login").stdout.strip()
+        if owner_root_read!="65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b|true":
+            raise RuntimeError("ROOT_CANDIDATE_OWNER_AUDIT_NOT_VISIBLE_TO_SCOPED_READER")
+        # In a disposable rollback transaction, privileged postgres can
+        # insert a forged audit marker. RLS must still hide it from writer.
+        forged=psql("""BEGIN;
+          INSERT INTO ai_platform.ai_audit_logs
+            (module,action,resource_type,resource_id,status,details)
+            SELECT module,action,resource_type,resource_id,status,
+              jsonb_set(details,'{operationsRootCandidateSha256}',
+                to_jsonb(repeat('f',64)),false)
+            FROM ai_platform.ai_audit_logs
+            WHERE action='owner_approved_waiting_job';
+          SET LOCAL ROLE cst_team_model_pilot_writer;
+          SELECT count(*)::int FROM ai_platform.ai_audit_logs
+            WHERE action='owner_approved_waiting_job';
+          ROLLBACK;""").stdout.strip()
+        if forged!="1":raise RuntimeError("FORGED_ROOT_AUDIT_VISIBLE_VIA_RLS")
+        # No policy rollback after approval exists.
+        read_rollback=psql(OWNER_AUDIT_ROLLBACK.read_text(),True)
+        if read_rollback.returncode==0 or            "ROOT_AUDIT_READER_ROLLBACK_ACTIVE_APPROVAL_DENIED" not in read_rollback.stderr:
+            raise RuntimeError("SCOPED_ROOT_AUDIT_ROLLBACK_WITH_APPROVAL_ALLOWED")
         # New Owner status-recovery endpoint: exercise the actual scoped
         # READ-ONLY SELECT shape with the REAL disposable stage LOGIN, not
         # a privileged postgres role or the shared runtime.
@@ -370,7 +416,10 @@ def main():
             zeroApprovalRollbackPassed=True,
             duplicateMigrationDenied=True,
             postApprovalRollbackDenied=True,
-            scopedReadOnlyOwnerRecoveryAndRollback=True)
+            scopedReadOnlyOwnerRecoveryAndRollback=True,
+            scopedOwnerRootAuditSelect=True,
+            forgedRootAuditHiddenByRls=True,
+            scopedOwnerAuditReadMigrationRollbackGated=True)
         print("ONEJOB_WRITER_RLS_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:

@@ -120,3 +120,41 @@ test("root approval, QA and dispatcher remain independent mandatory gates",()=>{
  for(const token of ["SIGNED_QA_EVIDENCE_DENIED","admit_verified_onejob_capability"])
   assert.ok(broker.includes(token),token);
 });
+
+test("a WAITING job reads the same Owner fingerprint audit without creating signed root trust",()=>{
+ const reader=read("artifacts/api-server/src/services/cstOneJobStageRecoveryService.ts");
+ const page=read("artifacts/ai-platform/src/pages/cst-dev-onejob.tsx");
+ const audit=read("artifacts/api-server/src/lib/cstOneJobOperationsRootSelectionReview.ts");
+ for(const part of [
+  "SELECT module,action,resource_type,resource_id,status,details",
+  "FROM ai_platform.ai_audit_logs",
+  "action='owner_approved_waiting_job'",
+  "details->>'approvalId'",
+  "ONEJOB_RECOVERY_DUPLICATE_ROOT_AUDIT",
+  "reviewCstOneJobSingleSuperAdminRootSelection",
+  "rootCandidateAuditMatched:proof.sameSuperAdminSingleJobFieldsMatch",
+  "operationsRootTrusted:false,signedReleaseAuthorized:false",
+  "SET TRANSACTION READ ONLY",
+  "SET LOCAL ROLE cst_team_model_pilot_writer",
+ ])assert.ok(reader.includes(part),part);
+ assert.match(audit,/authenticatedDbReadbackVerified:false/);
+ assert.match(page,/recovered.rootCandidateAuditMatched/);
+ assert.match(page,/Kunci Operations masih belum dipercaya/);
+ assert.doesNotMatch(reader,/GRANT ALL|CREATE ROLE|INSERT INTO|SET TRANSACTION READ WRITE/);
+});
+test("source-pinned narrow audit SELECT migration cannot grant writer UPDATE or another root",()=>{
+ const mig=read("docs/dev/cst-onejob-stage-ops-root-audit-read.CSTDEV-ONLY.sql");
+ const rollback=read("docs/dev/cst-onejob-stage-ops-root-audit-read.ROLLBACK-CSTDEV-ONLY.sql");
+ assert.match(mig,/CREATE POLICY cst_onejob_stage_owner_audit_read/);
+ assert.match(mig,/FOR SELECT TO cst_team_model_pilot_writer/);
+ assert.match(mig,/GRANT SELECT \(purpose\)/);
+ assert.match(mig,/GRANT SELECT \(module,action,resource_type,resource_id,status,details\)/);
+ assert.match(mig,/65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b/);
+ assert.match(mig,/sameSuperAdminRootSelection/);
+ assert.match(mig,/operationsRootTrusted/);
+ assert.match(mig,/independentQaAdmissionVerified/);
+ assert.match(mig,/OWNER_APPROVAL_OR_STAGE_SESSION_ALREADY_PRESENT/);
+ assert.doesNotMatch(mig,/GRANT SELECT ON ai_platform.ai_audit_logs|GRANT ALL|GRANT UPDATE|ALTER ROLE|CREATE ROLE/);
+ assert.match(rollback,/ROOT_AUDIT_READER_ROLLBACK_ACTIVE_APPROVAL_DENIED/);
+ assert.match(rollback,/REVOKE SELECT \(purpose\)/);
+});
