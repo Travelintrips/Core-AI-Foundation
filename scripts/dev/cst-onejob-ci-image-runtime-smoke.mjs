@@ -47,7 +47,8 @@ const uiCss=readFileSync(join(aiUiRoot,cssMatch[1].slice(1)));
 if(!uiCss.length)throw Error("SUPER_ADMIN_UI_CSS_EMPTY");
 if(!uiJs.includes("Persetujuan Super Admin") ||
    !uiJs.includes("owner-stage-readiness") ||
-   !uiJs.includes("owner-approve-and-stage")){
+   !uiJs.includes("owner-approve-and-stage") ||
+   !uiJs.includes("owner-stage-status")){
  throw Error("SUPER_ADMIN_PAGE_NOT_IN_ACTUAL_AI_PLATFORM_UI");
 }
 const uiBuildMeta=readFileSync(join(aiUiRoot,"build-meta.json"));
@@ -107,6 +108,8 @@ try{
  assert(ready,"CORE_CI_API_NOT_READY_"+lastError);
  const get=await request("/api/ai/dev/onejob/owner-stage-readiness");
  assert(get.status===401,"ANONYMOUS_OWNER_GET_NOT_DENIED");
+ const statusGet=await request("/api/ai/dev/onejob/owner-stage-status");
+ assert(statusGet.status===401,"ANONYMOUS_OWNER_RECOVERY_GET_NOT_DENIED");
  const post=await request("/api/ai/dev/onejob/owner-approve-and-stage",{
   method:"POST",headers:{"content-type":"application/json"},
   body:JSON.stringify({intent:"APPROVE_ONE_NEW_CST_DEV_MODEL_JOB"})
@@ -164,6 +167,8 @@ try{
    "SAME_ORIGIN_SUPER_ADMIN_META_NOT_ROUTED");
  const getViaSite=await request("/api/ai/dev/onejob/owner-stage-readiness",{},site);
  assert(getViaSite.status===401,"SAME_ORIGIN_ANONYMOUS_READINESS_NOT_DENIED");
+ const recoveryViaSite=await request("/api/ai/dev/onejob/owner-stage-status",{},site);
+ assert(recoveryViaSite.status===401,"SAME_ORIGIN_ANONYMOUS_RECOVERY_NOT_DENIED");
  const postViaSite=await request("/api/ai/dev/onejob/owner-approve-and-stage",{
    method:"POST",headers:{"content-type":"application/json"},
    body:JSON.stringify({intent:"APPROVE_ONE_NEW_CST_DEV_MODEL_JOB"})
@@ -176,7 +181,8 @@ try{
   spaDevOnejob:200,buildMetaMatches:true,
   actualAiPlatformUiSha256:sha256(uiJs),uiCssSha256:sha256(uiCss),
   sameOriginFrontendAndApiVerified:true,readonlyPreviewGuardEnabled:true,
-  sameOriginAnonymousGet:401,sameOriginAnonymousPost:401,
+  sameOriginAnonymousGet:401,sameOriginAnonymousRecoveryGet:401,
+  sameOriginAnonymousPost:401,
   ownerSessionAuthenticated:false,ownerApprovalCreated:false,
   dispatchPermitted:false,signerActivated:false,realE2EPass:false,
   releaseDecision:"NO_GO",

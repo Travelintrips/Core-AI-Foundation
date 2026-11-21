@@ -15,7 +15,8 @@ const reviewer=source("scripts/dev/cst-onejob-operations-broker-release.mjs");
 test("one Super Admin human: existing Core owner role, NOT generic admin or manager",()=>{
   const s=jobs.slice(jobs.indexOf('router.get("/ai/dev/onejob/owner-stage-readiness"'),
     jobs.indexOf('router.post("/ai/jobs"'));
-  assert.equal((s.match(/requireInternalRole\("owner"\)/g)||[]).length,2);
+  // Readiness GET, recovery GET and one approval POST all share Owner gate.
+  assert.equal((s.match(/requireInternalRole\("owner"\)/g)||[]).length,3);
   assert.doesNotMatch(s,/requireInternalRole\("admin"\)/);
   assert.doesNotMatch(s,/requireInternalRole\("manager"\)/);
   assert.match(consent,/i\.role!=="owner"/);
@@ -44,7 +45,7 @@ test("UI says Super Admin but only privileged owner can see one action in DEV",(
   assert.match(nav,/Persetujuan Super Admin/);
   assert.match(ui,/APPROVE_ONE_NEW_CST_DEV_MODEL_JOB/);
   assert.match(ui,/onejob-ops-candidate-fingerprint/);
-  assert.match(ui,/disabled=\{!ready\|\|submitted\|\|loading\}/);
+  assert.match(ui,/disabled=\{!ready\|\|submitted\|\|loading\|\|statusLoading\}/);
   assert.doesNotMatch(ui,/setInterval|autoRetry|type="password"/);
 });
 test("non-owner session explains role and offers existing email-login account switch",()=>{

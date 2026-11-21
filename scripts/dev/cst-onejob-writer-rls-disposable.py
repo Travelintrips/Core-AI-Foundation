@@ -273,6 +273,35 @@ def main():
           AND (SELECT count(*) FROM ai_platform.ai_audit_logs
            WHERE action='owner_approved_waiting_job')=1;""").stdout.strip()
         if state!="t":raise RuntimeError("ATOMIC_STAGING_POSTCONDITION_FAILED")
+        # New Owner status-recovery endpoint: exercise the actual scoped
+        # READ-ONLY SELECT shape with the REAL disposable stage LOGIN, not
+        # a privileged postgres role or the shared runtime.
+        recovery=psql("""BEGIN;
+          SET TRANSACTION READ ONLY;
+          SET LOCAL ROLE cst_team_model_pilot_writer;
+          SELECT count(*)::int FROM ai_platform.internal_users
+            WHERE id=1 AND role='owner' AND status='active'
+              AND account_type='internal';
+          SELECT a.job_id::text || '|' || j.job_code || '|' || j.status
+            FROM ai_platform.cst_onejob_owner_approvals a
+            JOIN ai_platform.ai_jobs j ON j.id=a.job_id
+            WHERE a.approved_by_user_id=1
+              AND a.company_id='1' AND a.model_id='qwen2.5:3b'
+              AND a.status='APPROVED' AND a.consumed_at IS NULL
+              AND j.payload_json->>'requestId'=a.request_id
+              AND j.payload_json->>'modelId'=a.model_id
+            ORDER BY a.expires_at DESC LIMIT 2;
+          ROLLBACK;""",False,"cst_team_model_pilot_stage_login")
+        recovered=[x.strip() for x in recovery.stdout.splitlines() if x.strip()]
+        if (len(recovered)!=2 or recovered[0]!="1" or
+            not recovered[1].endswith("|OLLAMA-A1B2C3D4|waiting")):
+            raise RuntimeError("SCOPED_READONLY_OWNER_APPROVAL_RECOVERY_FAILED:"+str(recovered))
+        # The status reader cannot silently mutate or enqueue anything.
+        stable=psql("""SELECT
+          (SELECT count(*) FROM ai_platform.ai_jobs)=1
+          AND (SELECT count(*) FROM ai_platform.cst_onejob_owner_approvals)=1
+          AND (SELECT count(*) FROM ai_platform.ai_audit_logs)=1;""").stdout.strip()
+        if stable!="t":raise RuntimeError("RECOVERY_MUTATED_DISPOSABLE_LEDGER")
         # After the first real (disposable) Owner approval row exists, do
         # not permit weakening this RLS by applying the rollback.
         rejected_rollback=psql(ROLLBACK.read_text(),True)
@@ -340,7 +369,8 @@ def main():
             guardedDevMigrationAppliedAndReadBack=True,
             zeroApprovalRollbackPassed=True,
             duplicateMigrationDenied=True,
-            postApprovalRollbackDenied=True)
+            postApprovalRollbackDenied=True,
+            scopedReadOnlyOwnerRecoveryAndRollback=True)
         print("ONEJOB_WRITER_RLS_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:

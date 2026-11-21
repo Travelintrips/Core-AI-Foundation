@@ -26,6 +26,14 @@ type Stage={
  operationsRootTrusted:false;independentQaAdmissionVerified:false;
  dispatchPermitted:false;finalAckVerified:false;
 };
+type Recovery={
+ state:"WAITING_VERIFIED"|"EXPIRED"|"SOURCE_MISMATCH"|
+  "JOB_NOT_VISIBLE"|"UNVERIFIED_ROW"|"NOT_VISIBLE"|"UNAVAILABLE";
+ jobId:number|null;jobCode:string|null;expiresAt:string|null;
+ approvalReadbackVerified:boolean;jobReadbackVerified:boolean;
+ automaticRetryAllowed:false;dispatchPermitted:false;
+ releaseDecision:"NO_GO";
+};
 const DEV_HOST="dev.cstlogistic.co.id";
 export default function CstDevOneJobPage(){
  const {user,logout,loading:authLoading}=useInternalAuth();
@@ -36,6 +44,8 @@ export default function CstDevOneJobPage(){
  const [loading,setLoading]=useState(false);
  const [result,setResult]=useState<Stage|null>(null);
  const [error,setError]=useState<string|null>(null);
+ const [statusLoading,setStatusLoading]=useState(false);
+ const [recovered,setRecovered]=useState<Recovery|null>(null);
  const readiness=useQuery<Readiness>({
   queryKey:["cst-dev-onejob-owner-stage-readiness"],
   queryFn:()=>apiFetch<Readiness>("/api/ai/dev/onejob/owner-stage-readiness"),
@@ -78,6 +88,23 @@ export default function CstDevOneJobPage(){
    readiness.data?.project==="xssrfshdrtdfupgqwfdw"&&
    readiness.data?.companyId==="1"&&!readiness.isFetching&&
    !readiness.isError;
+ async function checkPreviousApproval(){
+  if(!ready||statusLoading)return null;
+  setStatusLoading(true);
+  try{
+   // Only GET. Never repeat the POST after an uncertain response.
+   const r=await apiFetch<Recovery>("/api/ai/dev/onejob/owner-stage-status");
+   setRecovered(r);
+   if(r.state==="WAITING_VERIFIED"&&r.jobId){
+    setSubmitted(true);
+    setError(null);
+   }
+   return r;
+  }catch{
+   setError("Status persetujuan sebelumnya belum dapat dipastikan. Jangan mengulangi persetujuan.");
+   return null;
+  }finally{setStatusLoading(false);}
+ }
  async function approveOnce(){
   if(!ready||submitted||loading)return;
   // Never auto-retry. If the response is lost, PostgreSQL's one-active
@@ -92,8 +119,14 @@ export default function CstDevOneJobPage(){
    })
    });
    setResult(response);
-  }catch(e){
-   setError(e instanceof Error?e.message:"Konfirmasi gagal. Periksa status sebelum mencoba kembali.");
+   setRecovered(null);
+  }catch{
+   // Lost HTTP response may mean the DB transaction committed. Read back
+   // through the authenticated scoped GET, NEVER replay the POST.
+   const recovery=await checkPreviousApproval();
+   if(recovery?.state!=="WAITING_VERIFIED"){
+    setError("Respons persetujuan tidak pasti. Status sudah diperiksa satu kali; jangan klik Setujui ulang.");
+   }
   }finally{setLoading(false);}
  }
  return (
@@ -148,8 +181,13 @@ export default function CstDevOneJobPage(){
        <RefreshCw className="mr-2 size-4"/> Periksa kesiapan
       </Button>
       <Button onClick={()=>void approveOnce()}
-       disabled={!ready||submitted||loading} data-testid="approve-one-cst-dev-job">
+       disabled={!ready||submitted||loading||statusLoading} data-testid="approve-one-cst-dev-job">
        {loading?"Mencatat persetujuan…":"Setujui satu job DEV"}
+      </Button>
+      <Button variant="outline" disabled={!ready||loading||statusLoading}
+       onClick={()=>void checkPreviousApproval()}
+       data-testid="read-onejob-approval-status">
+       {statusLoading?"Memeriksa status…":"Periksa status job sebelumnya"}
       </Button>
      </div>
      {result&&<div className="text-sm">
@@ -158,11 +196,27 @@ export default function CstDevOneJobPage(){
       belum dinyatakan PASS. Kunci Operations tetap belum aktif; bukti QA
       dan izin admission wajib diverifikasi sebelum job dijalankan.
      </div>}
+     {recovered?.state==="WAITING_VERIFIED"&&(
+      <div className="text-sm" data-testid="onejob-recovered-waiting">
+       Hasil persetujuan sebelumnya sudah terverifikasi dalam database:
+       job <strong>#{recovered.jobId}</strong> berstatus
+       <strong> WAITING</strong>. Tidak ada persetujuan kedua dikirim.
+       Signer, admission, dan dispatch masih terkunci.
+      </div>
+     )}
+     {recovered&&recovered.state!=="WAITING_VERIFIED"&&(
+      <div className="text-sm text-muted-foreground">
+       Pemeriksaan status: <strong>{recovered.state}</strong>.
+       Pembaca terbatas belum dapat membuktikan job WAITING yang sah.
+       Hasil ini bukan izin mengulangi persetujuan atau menjalankan job.
+      </div>
+     )}
      {error&&<div className="text-sm text-destructive">
-      {error}. Jangan mengulangi klik sebelum status job diperiksa.
+      {error}
      </div>}
      <p className="text-xs text-muted-foreground">
-      Persetujuan tidak berlaku untuk job lain. Pengujian E2E baru dinyatakan PASS
+      Jika respons jaringan hilang, gunakan Periksa status job sebelumnya;
+      jangan kirim ulang persetujuan. Pengujian E2E baru dinyatakan PASS
       setelah receipt subscriber, empat agen independen, Final ACK, dan relock terbukti.
      </p>
     </CardContent>

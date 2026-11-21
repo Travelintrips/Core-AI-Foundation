@@ -224,3 +224,36 @@ dedicated NOLOGIN principal is still not verified. Only CST-DEV project
 xssrfshdrtdfupgqwfdw on the pinned transaction pooler port 6543 with
 TLS is allowed. Genuine signed PRE QA and controlled admission remain
 mandatory before any WAITING job becomes QUEUED.
+
+## Response-loss recovery — read-only GET, no second approval
+
+After the authenticated Super Admin submits a single one-job approval
+POST, the network response could be lost even if PostgreSQL committed
+the WAITING job, approval and audit atomically. Retrying that POST would
+be wrong: a second attempt could conflict with the single-active index
+and obscure the original result. The previous UI lacked readback.
+
+The same Owner page now provides a manual "Periksa status job sebelumnya"
+and attempts exactly one GET if the approval POST fails. The endpoint
+/api/ai/dev/onejob/owner-stage-status accepts only an authenticated
+internal Owner and uses the already-existing dedicated stage database
+LOGIN, SET TRANSACTION READ ONLY and SET LOCAL ROLE writer. It reads only
+columns already granted to that role under RLS, and verifies the
+Owner account plus matching one Company-1 approval and nonclaimable
+WAITING job. No new role, grant, credential or database migration.
+
+Current-source matching WAITING data can be displayed as a recovery
+readback. Expired, source-drifted, invisible, or inconsistent data
+remains uncertain and never authorizes a second POST. A row hidden by
+RLS is not proof that the original request failed. No automatic retry,
+signing, admission, queueing, dispatch, or Final ACK is performed.
+
+The disposable PostgreSQL16 network-none fixture now performs a real
+restricted SELECT as the synthetic stage LOGIN with SET LOCAL writer,
+then ROLLBACK, and verifies unchanged job/approval/audit counts.
+The image boot smoke requires HTTP 401 on anonymous GET for the new
+status route, including same-origin proxying.
+
+This is only source and isolated DEV QA. It is NOT promoted into the
+existing public read-only preview; live Super Admin still has not
+approved a one-job execution.

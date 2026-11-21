@@ -45,6 +45,7 @@ import { requireAuth, requireInternalRole, requirePasswordChanged } from "../mid
 import { SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
 import { verifyFreshOneJobStageConsent } from "../lib/cstOneJobFreshStageConsent.js";
 import { stageCstDevOneJobForVerifiedOwner, evaluateCstOneJobStageEnvironment } from "../services/cstOneJobOwnerApprovalStageService.js";
+import {getCstOneJobStageRecoveryForVerifiedOwner} from "../services/cstOneJobStageRecoveryService.js";
 import {reviewCstOneJobStageDatabaseConfig} from "../lib/cstOneJobStageDbConfig.js";
 import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";
 import {readIndependentlySignedPreapproval} from "../lib/cstOneJobPreapprovalReadiness.js";
@@ -395,6 +396,32 @@ router.get("/ai/dev/onejob/owner-stage-readiness",
       dispatchPermitted:false,operationalE2EVerified:false,
     });
   }
+);
+
+// Read-only Owner-only recovery of an ambiguous previous approval POST.
+// The scoped reader uses no more privilege than the already-existing
+// staging writer, and does not make a retry safe or grant dispatch.
+router.get("/ai/dev/onejob/owner-stage-status",
+ requireAuth,requireInternalRole("owner"),requirePasswordChanged,
+ async (req,res):Promise<void>=>{
+  res.setHeader("Cache-Control","no-store");
+  const actor=req.internalUser;
+  if(!actor||!Number.isSafeInteger(actor.id)||actor.id<=0){
+   res.status(403).json({error:"ACTIVE_SUPER_ADMIN_REQUIRED"});return;
+  }
+  try{
+   const reviewed=await getCstOneJobStageRecoveryForVerifiedOwner({
+     ownerUserId:actor.id,env:process.env
+   });
+   res.status(200).json(reviewed);
+  }catch{
+   // No raw Postgres errors, DSN, selected rows or JWT contents exposed.
+   res.status(503).json({
+    state:"UNAVAILABLE",automaticRetryAllowed:false,
+    dispatchPermitted:false,releaseDecision:"NO_GO"
+   });
+  }
+ }
 );
 
 // One-use Super Admin business decision using existing Core role "owner":

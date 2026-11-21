@@ -29,7 +29,7 @@ test("one Super Admin WAITING click checks dedicated DB scope but defers job-spe
 test("UI never auto-approves, never asks for a new login, and is hidden outside Owner DEV",()=>{
  assert.match(ui,/user\.role==="owner"/);
  assert.match(ui,/dev\.cstlogistic\.co\.id/);
- assert.match(ui,/disabled=\{!ready\|\|submitted\|\|loading\}/);
+ assert.match(ui,/disabled=\{!ready\|\|submitted\|\|loading\|\|statusLoading\}/);
  assert.match(ui,/APPROVE_ONE_NEW_CST_DEV_MODEL_JOB/);
  assert.match(ui,/operationsRootFingerprint:readiness.data\?\.operationsRootCandidateSha256/);
  assert.match(ui,/onejob-ops-candidate-fingerprint/);
