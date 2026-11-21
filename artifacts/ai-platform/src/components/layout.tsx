@@ -268,7 +268,7 @@ export function Layout({ children }: LayoutProps) {
             <Link href="/dev-onejob">
               <div className="flex items-center gap-2 rounded-md px-2 py-2 text-xs text-violet-300 hover:bg-white/5"
                data-testid="nav-dev-onejob">
-                <ShieldAlert className="size-4"/> Uji satu job CST-DEV
+                <ShieldAlert className="size-4"/> Persetujuan Super Admin · CST-DEV
               </div>
             </Link>
           </div>

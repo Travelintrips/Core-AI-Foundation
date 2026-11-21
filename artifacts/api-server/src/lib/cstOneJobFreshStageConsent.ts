@@ -1,6 +1,9 @@
 /**
- * One explicit Owner/Super Admin-equivalent business decision for the
- * isolated CST-DEV Company-1 one-job pilot. This checks the app's existing
+ * One explicit Super Admin business decision for the CST-DEV Company-1 pilot.
+ * Existing Core internal_users uses the top-level role "owner" as the
+ * Super Admin session mapping. Generic "admin" and "manager" are excluded.
+ * Do not add a second human Security/Operations approval or bypass
+ * signed technical QA/signer custody with a role name. This checks the app's existing
  * signed numeric-user JWT; it does not issue sessions, passwords, OTPs,
  * staging credentials, dispatch authority or Final ACK.
  *

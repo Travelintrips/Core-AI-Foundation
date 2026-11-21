@@ -1,5 +1,6 @@
 /**
- * One-use CST-DEV Owner approval + WAITING model job staging.
+ * One-use CST-DEV Super Admin approval (existing internal role "owner")
+ * + WAITING model job staging. One human consent only.
  *
  * Deliberately fail closed until a separately reviewed DEV migration and
  * bounded writer policy exist. This is not the dispatcher / release gate.

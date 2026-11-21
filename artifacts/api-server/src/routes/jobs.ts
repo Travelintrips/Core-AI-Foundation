@@ -327,7 +327,9 @@ router.get("/ai/jobs", async (req, res): Promise<void> => {
   });
 });
 
-// DEV Owner panel: one read-only readiness response, NO approval or job write.
+// One Super Admin human authority only. Existing Core internal role "owner"
+ // is the privileged Super Admin mapping; generic "admin"/"manager" are denied.
+ // Readiness response is read-only, no approval or job write.
 // A signed QA preapproval does not grant dispatch, and the real stage action
 // independently verifies all protected conditions again in its transaction.
 router.get("/ai/dev/onejob/owner-stage-readiness",
@@ -379,7 +381,8 @@ router.get("/ai/dev/onejob/owner-stage-readiness",
   }
 );
 
-// Dedicated one-use DEV Owner approval: stages a WAITING job only.
+// One-use Super Admin business decision using existing Core role "owner":
+ // stages exactly one WAITING job only; no second human approval.
 // No generic API key, machine identity or body-provided actor can authorize it.
 // Deliberately disabled unless the exact deployment explicitly enables it.
 router.post("/ai/dev/onejob/owner-approve-and-stage",

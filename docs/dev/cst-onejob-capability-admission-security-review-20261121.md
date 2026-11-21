@@ -272,3 +272,14 @@ The broker now validates V2 signed job authorization before QA PRE receipt.
 The existing signer protocol is reused. Operations public root source pin
 remains null/None, Owner DB approval=0, admission SQL is still guarded
 REVIEW-ONLY, all signer services remain OFF, and no live Final ACK exists.
+
+## Human approval actor corrected — 21 Nov 2026
+
+Single **Super Admin** human decision only: existing Core privileged
+internal_users.role=owner is the authenticated route guard; generic
+admin/manager are excluded. No second human Security/Operations approval,
+and no new role or account. Dedicated signer/QA cryptographic checks,
+strict RLS, reviewed migration/source and immutable audit remain necessary;
+no boolean or user-facing role label can substitute for a real Ed25519
+signature or independently observed agent work. Operational E2E remains
+NO-GO. See cst-onejob-single-super-admin-authority-20261121.md.

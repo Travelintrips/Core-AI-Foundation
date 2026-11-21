@@ -1,5 +1,18 @@
 # CST-DEV one-job: operational handoff and evidence gates
 
+**LATEST HUMAN-AUTHORITY DECISION — 21 NOV 2026:** **SUPER ADMIN ONLY.**
+The earlier Owner/Operations/Security reviewer wording below is historical
+where it implies **multiple human approvals**. For CST-DEV one-job, the
+existing Core privileged internal DB role owner is the one authenticated
+Super Admin actor. One fresh session and one click create a single WAITING
+Company-1 job/approval. There is **no second human reviewer or separate
+Security/Operations approval screen**. Cryptographic root custody,
+independent QA/service evidence, exact-permit signing, subscriber, Hub
+four-agent signatures, Final ACK, and relock are still technical security
+checks and cannot be replaced with unverified human assertions. See
+cst-onejob-single-super-admin-authority-20261121.md. No PROD change.
+
+
 Status: **NO-GO**. This is a review checklist, not a provisioning script, credential, migration, authorization, or deployment instruction. The official implementation is Draft PR #1769; historical PR #1767 must not be merged or deployed as a Core-only Final ACK.
 
 ## Historical baseline (before canonical PR #1769; 20 Nov 2026)

@@ -1,7 +1,8 @@
 /**
- * Owner-only CST-DEV one-job staging. No new login, OTP, password or manual
- * second approval. Backend is authoritative; a missing signed QA preflight
- * leaves the single approval button disabled.
+ * One Super Admin decision for a single CST-DEV job. Core's privileged
+ * internal role is called "owner" in the existing DB schema; ordinary
+ * "admin"/"manager" are NOT Super Admin. No new login/OTP/second approver.
+ * Backend is authoritative; independent technical QA remains mandatory.
  */
 import {useState} from "react";
 import {useQuery} from "@tanstack/react-query";
@@ -39,7 +40,7 @@ export default function CstDevOneJobPage(){
  });
  if(!dev||!owner){
   return <div className="p-8 text-sm text-muted-foreground">
-   Halaman ini hanya untuk Owner yang aktif pada CST-DEV.
+   Halaman persetujuan satu job ini hanya untuk Super Admin CST-DEV (role internal owner).
   </div>;
  }
  const ready=readiness.data?.readyForOneOwnerClick===true&&
@@ -64,9 +65,10 @@ export default function CstDevOneJobPage(){
  return (
   <div className="mx-auto max-w-3xl space-y-5 p-6 md:p-8">
    <div>
-    <h1 className="text-2xl font-bold">Satu job AI — CST-DEV</h1>
+    <h1 className="text-2xl font-bold">Persetujuan Super Admin — CST-DEV</h1>
     <p className="mt-2 text-sm text-muted-foreground">
-     Satu persetujuan Owner untuk satu job baru Company 1. Tidak mengaktifkan PROD,
+     Cukup satu persetujuan Super Admin untuk satu job baru Company 1.
+     Tidak memerlukan persetujuan manusia kedua dan tidak mengaktifkan PROD,
      signer atau dispatch secara otomatis.
     </p>
    </div>
@@ -80,7 +82,7 @@ export default function CstDevOneJobPage(){
     <CardContent className="space-y-4">
      <p className="text-sm text-muted-foreground">
       Model: qwen2.5:3b · Company 1 · CST-DEV. Verifikasi kesiapan menggunakan
-      bukti QA bertanda tangan, koneksi database khusus, dan sesi Owner yang sah.
+      bukti QA bertanda tangan, koneksi database khusus, dan satu sesi Super Admin yang sah.
      </p>
      {readiness.isLoading&&<p className="text-sm">Memeriksa kesiapan…</p>}
      {readiness.isError&&<p className="text-sm text-destructive">Pemeriksaan belum dapat dibaca.</p>}
@@ -103,7 +105,7 @@ export default function CstDevOneJobPage(){
       </Button>
      </div>
      {result&&<div className="text-sm">
-      Persetujuan telah dicatat. Job <strong>#{result.jobId}</strong>
+      Persetujuan Super Admin telah dicatat. Job <strong>#{result.jobId}</strong>
       {" "}berstatus <strong>WAITING</strong>. Menunggu broker dan pengujian E2E,
       belum dinyatakan PASS.
      </div>}

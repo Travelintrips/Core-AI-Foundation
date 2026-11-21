@@ -1,5 +1,18 @@
 # CST-DEV One-Job — Unified single-batch candidate (20 November 2026)
 
+**LATEST HUMAN-AUTHORITY DECISION — 21 NOV 2026:** **SUPER ADMIN ONLY.**
+The earlier Owner/Operations/Security reviewer wording below is historical
+where it implies **multiple human approvals**. For CST-DEV one-job, the
+existing Core privileged internal DB role owner is the one authenticated
+Super Admin actor. One fresh session and one click create a single WAITING
+Company-1 job/approval. There is **no second human reviewer or separate
+Security/Operations approval screen**. Cryptographic root custody,
+independent QA/service evidence, exact-permit signing, subscriber, Hub
+four-agent signatures, Final ACK, and relock are still technical security
+checks and cannot be replaced with unverified human assertions. See
+cst-onejob-single-super-admin-authority-20261121.md. No PROD change.
+
+
 **Scope:** Supabase CST-DEV `xssrfshdrtdfupgqwfdw`, Company 1, one NEW qwen2.5:3b job. **Release: NO_GO** until real E2E proof. **Historical #482: read-only; no replay. PROD excluded.**
 
 ## One canonical business action

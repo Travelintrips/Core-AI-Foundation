@@ -103,3 +103,19 @@ subscriber, four agent work records, Final ACK and relock. PROD untouched.
 - Signer private keys, DEV/PROD services, database credentials untouched.
 
 **Synthetic source PASS does NOT constitute live Owner E2E or Final ACK.**
+
+
+## Super Admin-only human authority (21 Nov 2026)
+
+User decision: **Super Admin is the only human approver**. In the existing
+Core AI internal-users schema, the one-job stage maps the privileged Super
+Admin session to existing database role owner (not generic admin).
+One authenticated click authorizes a single Company-1 WAITING job.
+No extra human Security/Operations reviewer or second approval is required.
+
+The actual Operations root signature, independently captured QA, per-stage
+actual-payload technical signatures, and Hub reviewer evidence are still
+required because a role name cannot replace cryptographic verification.
+Those are programmatic separation-of-duties checks, not extra people.
+Do not claim that one shared VPS root provides independent hardware
+custody. See cst-onejob-single-super-admin-authority-20261121.md.
