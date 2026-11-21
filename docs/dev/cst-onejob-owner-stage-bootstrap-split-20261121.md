@@ -120,3 +120,23 @@ non-root peer identity, bounded LOGIN lease and automatic NOLOGIN relock
 is STILL MISSING. Also missing: verified Core session-secret custody and
 actual signed Super Admin test. Source-only PASS is NOT operational GO.
 No signed Gate-B permit is a substitute; keep signers/dispatch/PROD OFF.
+
+## Gate A technical broker source candidate (not installed)
+
+scripts/dev/cst_onejob_preapproval_stage_broker.py is a new independent
+Gate-A pre-approval transport candidate. It accepts a **technical** Ed25519
+manifest with scope PREAPPROVAL_STAGE_ONLY, not an Owner/QA job-specific
+manifest, checks a separately pinned public key, exact source SHA, fixed
+CST-DEV transaction pooler destination, peer UID/GID, current Linux network
+namespace and already installed default-deny kernel egress rules. Signed
+leases are at most 10 minutes; it forwards one connection then exits.
+No database URL/secret, approval, role alteration, or dispatcher is created.
+
+Critically, **source tests are not operational permission**. No trusted
+technical public key, signed Gate-A manifest, root-owned source receipt,
+reviewed kernel ACL or real non-root staging peer have been installed.
+Current candidate bootstrap Docker container defaults to root while this
+broker mandates an explicitly non-root stage peer; switching container user
+without a reviewed encrypted-credential delivery mechanism would break
+credential access. This identity/custody mismatch remains a hard NO-GO
+gate. Do not use Gate-B signed job permits for Gate A.
