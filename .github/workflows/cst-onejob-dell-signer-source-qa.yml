@@ -85,6 +85,7 @@ jobs:
             throw 'DPAPI_UNAUTHORIZED_RUNTIME_MODE_ACCEPTED'
           }
           Write-Output 'CST_DEV_DPAPI_SYNTHETIC_SOURCE_QA_PASS_NO_REAL_SIGNERS'
+          exit 0
       - name: Default-deny QA scope
         shell: pwsh
         run: |
