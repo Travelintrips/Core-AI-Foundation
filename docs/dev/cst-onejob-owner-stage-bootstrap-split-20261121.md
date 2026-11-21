@@ -235,3 +235,20 @@ approved custody, automatic failure cleanup/relock, durable deadline,
 and Owner binding remains unimplemented. Zero backend sessions also
 does not independently verify Supavisor transaction-pooler frontends.
 Do not enable CST-DEV LOGIN from this isolated fixture proof.
+
+## Stage-only relock primitive and crash retry QA
+
+Source candidate cst_onejob_stage_relock_controller.py is an import-only
+relock primitive. It uses only a dedicated stage role name, sets NOLOGIN,
+terminates residual connections of that exact role, and verifies both the
+catalog flags and zero sessions before PASS. It is idempotent after a crash
+or duplicate invocation. A bad role scope, unkillable sessions or unavailable
+catalog raises an error instead of returning PASS. It CANNOT enable LOGIN.
+
+Disposable PostgreSQL16 regression proves a live synthetic role session
+is terminated and fresh login rejected. Another synthetic role stays untouched.
+No operational CLI, timer or Supabase credentials exist in this candidate.
+A genuinely authorized independent controller, signed release/admission
+lease, server-side durable deadline, secure admin database access, and
+Supavisor transaction-pooler frontend drain still must be built and tested.
+This is **not automatic live relock** and does not authorize deployment.
