@@ -130,8 +130,15 @@ function executeTest(test,env=process.env){
     cwd:ROOT,env:safeOfflineEnvironment(env),encoding:"utf8",
     timeout:180_000,maxBuffer:2*1024*1024
   });
-  return {id:test.id,status:child.status===0?"PASS":"FAIL",
+  const outcome={id:test.id,status:child.status===0?"PASS":"FAIL",
     code:child.status===null?"TIMEOUT_OR_SPAWN_ERROR":String(child.status)};
+  if(test.id==="generic_queue_pilot_sql_disposable_pg"&&child.status!==0){
+    const match=(child.stdout??"").match(
+      /GENERIC_ONEJOB_QUEUE_SQL_DISPOSABLE_FAIL ([A-Z0-9_]{3,90})/
+    );
+    return {...outcome,diagnostic:match?.[1]??"NO_STRUCTURED_DIAGNOSTIC"};
+  }
+  return outcome;
 }
 function inspectLiveReadonly(env=process.env) {
   // Existing script performs read-only catalog SQL and always denies release.
