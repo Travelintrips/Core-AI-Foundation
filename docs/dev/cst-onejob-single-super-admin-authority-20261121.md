@@ -134,3 +134,33 @@ releaseDecision=NO_GO. A synthetic fixture is never E2E proof.
 
 No new login, OTP/TOTP, second human sign-off, KMS, grant widening,
 signer activation, active DEV cutover or PROD change is authorized.
+
+## Additional RLS enforcement: exact Operations candidate fingerprint
+
+The previous CST-DEV staging audit RLS allows an extra, unverified
+operationsRootCandidateSha256 JSON field. To avoid trusting arbitrary
+client or DB-writer text, add one **RESTRICTIVE INSERT-only** policy scoped
+to the already-existing NOLOGIN staging writer, as a separate migration:
+cst-onejob-ops-root-audit-guard.CSTDEV-ONLY.sql.
+
+It combines with (does not replace) the already-installed permissive
+staging audit policy, and allows only:
+- source-pinned candidate SHA-256
+  65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b
+- sameSuperAdminRootSelection=true
+- operationsRootTrusted=false
+- independentQaAdmissionVerified=false
+- dispatchPermitted=false
+- existing owner_approved_waiting_job audit identity and resource
+
+No new role/login, privileges, broad grants, RLS disable, signer activation
+or PROD change. The policy is a necessary row-integrity guard, not proof
+of a legitimate authenticated Owner session or of independent custody.
+A matching audit is not an Operations signature or a live E2E PASS.
+The guarded rollback refuses removal after any Owner approval exists.
+
+Disposable PostgreSQL 16 network-none evidence uses the exact DEV-only
+migration and guarded rollback, confirms success, fails on duplicate
+migration, confirms rollback only before any approval, and refuses wrong
+Operations fingerprint or forged trust booleans. This does not establish
+any live CST-DEV migration until separately applied and read back.

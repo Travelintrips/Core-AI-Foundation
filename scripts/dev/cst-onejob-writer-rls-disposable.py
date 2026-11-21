@@ -7,13 +7,18 @@ import json, os, re, subprocess, sys, time
 
 ROOT=Path(__file__).resolve().parents[2]
 NAME=f"cst-onejob-writer-rls-pg16-{os.getpid()}"
-DB="cst_onejob_writer_rls_fixture"
+# Supabase real DEV uses database "postgres"; preserve that exact
+# guard in the disposable network-none container, not a relaxed SQL test.
+DB="postgres"
 BASE=ROOT/"docs/dev/cst-onejob-owner-approval.PROPOSED.sql"
 POLICY=ROOT/"docs/dev/cst-onejob-writer-rls.PROPOSED.sql"
+MIGRATION=ROOT/"docs/dev/cst-onejob-ops-root-audit-guard.CSTDEV-ONLY.sql"
+ROLLBACK=ROOT/"docs/dev/cst-onejob-ops-root-audit-guard.ROLLBACK-CSTDEV-ONLY.sql"
 REQ1="cst-ai-team-company1-dev:pilot-"+"a"*20
 REQ2="cst-ai-team-company1-dev:pilot-"+"b"*20
 WORKER="cst-dev-dell-onejob-20261119-abcdef12"
 SHA="a"*40
+ROOT_FINGERPRINT="65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b"
 INPUT=json.dumps({"version":1,
  "system":"DEV-only model liveness check. Reply exactly with the requested token.",
  "user":"Reply CST_DEV_ONEJOB_PROBE_OK"},separators=(",",":"))
@@ -112,12 +117,36 @@ def main():
         else:raise RuntimeError("POSTGRES_FINAL_NOT_READY")
         psql(fixture())
         psql(BASE.read_text())
-        psql(POLICY.read_text())
+        # Exercise the ACTUAL guarded DEV-only migration against the old
+        # permissive RLS baseline; never precreate the new restrictive policy.
+        policy=POLICY.read_text()
+        start=policy.index("CREATE POLICY cst_onejob_stage_ops_root_binding")
+        end=policy.index(");\nGRANT USAGE ON SEQUENCE",start)+2
+        psql(policy[:start]+policy[end:])
+        psql("""CREATE ROLE cst_team_model_pilot_stage_login NOLOGIN
+          NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+          NOBYPASSRLS CONNECTION LIMIT 1;
+          GRANT cst_team_model_pilot_writer TO cst_team_model_pilot_stage_login
+            WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;""")
+        psql(MIGRATION.read_text())
+        # Rollback must work only while no approval exists. Reapply to test
+        # the actual runtime policy and later prove rollback becomes denied.
+        psql(ROLLBACK.read_text())
+        psql(MIGRATION.read_text())
+        duplicate_migration=psql(MIGRATION.read_text(),True)
+        if duplicate_migration.returncode==0 or            "ROOT_BINDING_POLICY_ALREADY_EXISTS" not in duplicate_migration.stderr:
+            raise RuntimeError("DUPLICATE_ROOT_MIGRATION_NOT_DENIED")
         catalog=psql("""SELECT
           (SELECT NOT rolcanlogin AND NOT rolbypassrls AND NOT rolsuper
             FROM pg_roles WHERE rolname='cst_team_model_pilot_writer') AND
           (SELECT count(*) FROM pg_auth_members m JOIN pg_roles r
-            ON r.oid=m.roleid WHERE r.rolname='cst_team_model_pilot_writer')=0 AND
+            ON r.oid=m.roleid WHERE r.rolname='cst_team_model_pilot_writer')=1 AND
+          (SELECT count(*) FROM pg_auth_members m
+            JOIN pg_roles r ON r.oid=m.roleid
+            JOIN pg_roles lo ON lo.oid=m.member
+            WHERE r.rolname='cst_team_model_pilot_writer'
+              AND lo.rolname='cst_team_model_pilot_stage_login'
+              AND m.set_option AND NOT m.inherit_option AND NOT m.admin_option)=1 AND
           NOT has_table_privilege('cst_team_model_pilot_writer',
             'ai_platform.ai_jobs','UPDATE') AND
           NOT has_table_privilege('cst_team_model_pilot_writer',
@@ -165,12 +194,9 @@ def main():
         # Exercise the *real* separated login using PostgreSQL 16 role
         # membership SET TRUE, INHERIT FALSE. This credentialless fixture
         # uses --network none and trust auth; no live password is created.
-        psql("""CREATE ROLE cst_team_model_pilot_stage_login LOGIN NOINHERIT
-          NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
-          CONNECTION LIMIT 1;
-          GRANT cst_team_model_pilot_writer
-            TO cst_team_model_pilot_stage_login
-            WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;""")
+        # The guard was installed while the stage principal was NOLOGIN;
+        # enable it ONLY inside the disposable network-none fixture.
+        psql("ALTER ROLE cst_team_model_pilot_stage_login LOGIN;")
         before=psql("SELECT id FROM ai_platform.internal_users;",
           True,"cst_team_model_pilot_stage_login")
         if before.returncode==0:
@@ -226,7 +252,12 @@ def main():
                 j_id::text,'success',
                 jsonb_build_object('ownerUserId',1,'approvalId',a_id::text,
                   'requestId','{REQ1}','workerName','{WORKER}',
-                  'sourceSha','{SHA}','dispatchPermitted',false));
+                  'sourceSha','{SHA}',
+                  'operationsRootCandidateSha256','{ROOT_FINGERPRINT}',
+                  'sameSuperAdminRootSelection',true,
+                  'operationsRootTrusted',false,
+                  'independentQaAdmissionVerified',false,
+                  'dispatchPermitted',false));
           END $stage$;
           COMMIT;
           SELECT current_user;"""
@@ -242,6 +273,38 @@ def main():
           AND (SELECT count(*) FROM ai_platform.ai_audit_logs
            WHERE action='owner_approved_waiting_job')=1;""").stdout.strip()
         if state!="t":raise RuntimeError("ATOMIC_STAGING_POSTCONDITION_FAILED")
+        # After the first real (disposable) Owner approval row exists, do
+        # not permit weakening this RLS by applying the rollback.
+        rejected_rollback=psql(ROLLBACK.read_text(),True)
+        if rejected_rollback.returncode==0 or            "ROLLBACK_REQUIRES_EMPTY_CST_DEV_APPROVAL_LEDGER" not in rejected_rollback.stderr:
+            raise RuntimeError("POST_APPROVAL_ROOT_POLICY_ROLLBACK_NOT_DENIED")
+        bound=psql("""SELECT
+          details->>'operationsRootCandidateSha256'=
+             '65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b'
+          AND details->>'sameSuperAdminRootSelection'='true'
+          AND details->>'operationsRootTrusted'='false'
+          AND details->>'independentQaAdmissionVerified'='false'
+          AND details->>'dispatchPermitted'='false'
+          FROM ai_platform.ai_audit_logs
+          WHERE action='owner_approved_waiting_job';""").stdout.strip()
+        if bound!="t":raise RuntimeError("OWNER_ROOT_SELECTION_NOT_AUDITED")
+        def audit_mutation(value):
+            return f"""INSERT INTO ai_platform.ai_audit_logs
+              (module,action,resource_type,resource_id,status,details)
+              SELECT module,action,resource_type,resource_id,status,
+                jsonb_set(details,'{{operationsRootCandidateSha256}}',
+                   to_jsonb('{value}'::text),false)
+              FROM ai_platform.ai_audit_logs
+              WHERE action='owner_approved_waiting_job';"""
+        denied(audit_mutation('d'*64),"WRONG_ROOT_AUDIT_MUST_BE_DENIED")
+        denied("""INSERT INTO ai_platform.ai_audit_logs
+              (module,action,resource_type,resource_id,status,details)
+              SELECT module,action,resource_type,resource_id,status,
+                jsonb_set(details,'{operationsRootTrusted}',
+                   'true'::jsonb,false)
+              FROM ai_platform.ai_audit_logs
+              WHERE action='owner_approved_waiting_job';""",
+               "FAKE_ROOT_TRUST_MUST_BE_DENIED")
 
         # A separate active request with a unique ID must roll back the new
         # WAITING job after the second approval fails the single-active index.
@@ -270,7 +333,14 @@ def main():
             sharedRuntimePilotRlsDenied=True,sharedRoleEscalationDenied=True,badCapabilityDenied=True,
             prematureQueuedDenied=True,wrongModelDenied=True,
             ownerPromotionDenied=True,atomicWaitingStage=True,isolatedLoginSetLocalRole=True,autoResetAfterCommit=True,autoResetAfterRollback=True,
-            distinctSecondStageRollback=True,auditBoundToApproval=True)
+            distinctSecondStageRollback=True,auditBoundToApproval=True,
+            candidateOperationsRootAudited=True,
+            forgedRootDeniedByRestrictiveRls=True,
+            fakeOperationsTrustDeniedByRls=True,
+            guardedDevMigrationAppliedAndReadBack=True,
+            zeroApprovalRollbackPassed=True,
+            duplicateMigrationDenied=True,
+            postApprovalRollbackDenied=True)
         print("ONEJOB_WRITER_RLS_DISPOSABLE_PASS",json.dumps(report))
         return 0
     except Exception as e:

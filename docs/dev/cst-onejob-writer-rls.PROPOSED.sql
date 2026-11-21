@@ -110,6 +110,22 @@ CREATE POLICY cst_onejob_stage_audit_insert ON ai_platform.ai_audit_logs
  );
 GRANT INSERT (module,action,resource_type,resource_id,status,details)
  ON ai_platform.ai_audit_logs TO cst_team_model_pilot_writer;
+-- Additional RESTRICTIVE policy combines with the original permissive
+-- audit policy: every writer INSERT must pin the exact public candidate
+-- root and keep technical trust / QA / dispatch explicitly FALSE.
+-- No new rights are granted; other roles and existing policies are untouched.
+CREATE POLICY cst_onejob_stage_ops_root_binding ON ai_platform.ai_audit_logs
+ AS RESTRICTIVE FOR INSERT TO cst_team_model_pilot_writer
+ WITH CHECK (
+   module='cst-onejob' AND action='owner_approved_waiting_job'
+   AND resource_type='ai_job' AND status='success'
+   AND details->>'operationsRootCandidateSha256'=
+     '65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b'
+   AND details->>'sameSuperAdminRootSelection'='true'
+   AND details->>'operationsRootTrusted'='false'
+   AND details->>'independentQaAdmissionVerified'='false'
+   AND details->>'dispatchPermitted'='false'
+ );
 GRANT USAGE ON SEQUENCE ai_platform.ai_audit_logs_id_seq
  TO cst_team_model_pilot_writer;
 
