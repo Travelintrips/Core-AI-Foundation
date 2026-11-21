@@ -251,8 +251,15 @@ def serve_stage_once(m):
     previous_term=signal.signal(signal.SIGTERM,request_stop)
     previous_int=signal.signal(signal.SIGINT,request_stop)
     server=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    owned_socket=None
     try:
+        # A failed bind does NOT grant ownership of the pathname. Never
+        # unlink a socket already held by a different instance.
         server.bind(SOCKET_PATH)
+        own=os.lstat(SOCKET_PATH)
+        if (not stat.S_ISSOCK(own.st_mode) or own.st_uid!=m["brokerUid"]):
+            deny("BOUND_SOCKET_IDENTITY_DENIED")
+        owned_socket=(own.st_dev,own.st_ino)
         os.chmod(SOCKET_PATH,0o660)
         server.listen(1)
         # Exact signed lease enforced; never start a general permanent broker.
@@ -278,7 +285,19 @@ def serve_stage_once(m):
     finally:
         server.close()
         try:
-            Path(SOCKET_PATH).unlink(missing_ok=True)
+            # If bind never succeeded, or another process replaced the path,
+            # preserve that other's socket. Never use a blind unlink.
+            if owned_socket is not None:
+                try:
+                    current=os.lstat(SOCKET_PATH)
+                except FileNotFoundError:
+                    pass
+                else:
+                    if (stat.S_ISSOCK(current.st_mode) and
+                        (current.st_dev,current.st_ino)==owned_socket):
+                        os.unlink(SOCKET_PATH)
+                    else:
+                        deny("SOCKET_REPLACED_DURING_CLEANUP")
         finally:
             signal.signal(signal.SIGTERM,previous_term)
             signal.signal(signal.SIGINT,previous_int)

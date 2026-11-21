@@ -304,3 +304,18 @@ egress is **mocked only in the disposable test**, no real pooler or
 signed authorization exists; this does NOT approve a live broker.
 An in-memory socketpair test also verifies signal interruption of an
 already-open synthetic forwarded connection and upstream closure.
+
+## Gate-A socket ownership and unclean crash QA
+
+A real non-root VPS test now checks two concurrent listener candidates.
+A second process cannot bind to the first listener's AF_UNIX path, and
+its failure must never remove the first socket. If the path is replaced
+while the old broker is running, the old instance detects the inode
+difference at shutdown and leaves the replacement intact.
+
+An uncatchable SIGKILL is different from SIGTERM: its socket pathname
+can remain stale. The second start MUST fail closed with SOCKET_OCCUPIED,
+rather than blindly unlinking and impersonating an old session. A future
+systemd-managed broker RuntimeDirectory and independently reviewed
+pre-start stale socket recovery are still needed for automatic crash
+recovery; that portion is not implemented or operationally PASS.
