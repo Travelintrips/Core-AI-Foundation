@@ -19,16 +19,16 @@ test("WAITING-only bootstrap unit requires no future job release to start stagin
  assert.match(unit,/ExecStopPost=\/usr\/bin\/python3 .*stage-credential-handoff\.py cleanup/);
  assert.match(unit,/src=\/run\/cst-onejob-stage-credentials,dst=\/run\/credentials\/cst-onejob-owner-stage\.service,readonly/);
  assert.doesNotMatch(unit,/src=%d,dst=\/run\/credentials\/cst-onejob-owner-stage\.service/);
- assert.match(unit,/--network cst-onejob-owner-stage-internal/);
+ assert.match(unit,/--network none --user 28502:28501 --group-add 33/);
  assert.match(unit,/ExecCondition=\/usr\/bin\/test -S \/run\/cst-onejob-stage-db\/pg-pooler\.sock/);
  assert.match(unit,/owner-stage-socket-acl-reviewed/);
  assert.match(unit,/CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED=true/);
- assert.doesNotMatch(unit,/--network (none|host)|--privileged/);
- assert.match(unit,/--publish 127\.0\.0\.1:18583:3000/);
+ assert.doesNotMatch(unit,/--network host|--privileged|--publish/);
+ assert.match(unit,/src=\/run\/cst-onejob-stage-http,dst=\/run\/cst-onejob-stage-http/);
  assert.match(unit,/--read-only/);
  assert.match(unit,/--cap-drop ALL/);
  assert.match(unit,/--security-opt no-new-privileges:true/);
- assert.match(unit,/cst-onejob-stage-dev:d3cd194b/);
+ assert.match(unit,/cst-onejob-stage-dev:e5f1643a/);
  assert.match(unit,/CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true/);
  for(const name of ["AI_DISPATCHER_ENABLED","AI_SCHEDULER_ENABLED",
   "OLLAMA_WORKER_RUNTIME_ENABLED","CST_DEV_ONEJOB_BROKER_ENABLED"])
@@ -42,7 +42,7 @@ test("staging entrypoint rejects untrusted credential paths, session issuer drif
   "database-url","session-secret","source_sha",
   "CST_TEAM_DEV_APPROVED_SOURCE_SHA","CST_DEV_ONEJOB_OPERATIONS_CANDIDATE_FINGERPRINT",
   "65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b",
-  "exec node scripts/hostinger-start.cjs",
+  "exec node /run/cst-stage-http-supervisor.cjs",
  ];
  for(const token of mandatory)assert.ok(entry.includes(token),token);
  assert.doesNotMatch(entry,/systemd-creds encrypt|openssl genpkey|ALTER ROLE|CREATE ROLE/);
@@ -77,7 +77,7 @@ test("future Nginx routing is Owner-guarded, same-origin, bounded, and NOT insta
  assert.match(nginx,/limit_except POST \{ deny all; \}/);
  assert.match(nginx,/limit_except GET \{ deny all; \}/);
  assert.match(nginx,/client_max_body_size 1k/);
- assert.match(nginx,/proxy_pass http:\/\/127\.0\.0\.1:18583\//);
+ assert.match(nginx,/proxy_pass http:\/\/unix:\/run\/cst-onejob-stage-http\/api\.sock:\//);
  assert.match(nginx,/location \^~ \/api\/ai\/dev\/onejob\/owner-approve-and-stage\//);
  const existing=load("artifacts/api-server/src/routes/jobs.ts");
  assert.match(existing,/requireCstOneJobStageOwner/);

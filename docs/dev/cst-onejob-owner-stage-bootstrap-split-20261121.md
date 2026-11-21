@@ -268,3 +268,23 @@ The four pure mock-based security tests PASS. This is not yet an operational
 controller or proof of transaction-pooler frontend drain. No PROD or shared
 runtime mutation. VPS free space is critically low; do not run another full
 Docker acceptance loop or build additional images for this source-only fix.
+
+## Owner WAITING HTTP ingress via Unix socket
+
+VPS Docker testing found that an internal=true bridge produced a
+3000/tcp: null mapping despite published localhost port configuration.
+The host could not reach it. Never open a general bridge as a shortcut.
+
+This source-only candidate instead uses Docker network none, a systemd
+runtime directory /run/cst-onejob-stage-http, owner UID 28502, nginx
+GID 33, mode 2750, and Unix socket api.sock mode 0660. The proxy inside
+the container dials only local loopback TCP 127.0.0.1:3000. The Nginx
+candidate uses exact Unix socket proxy_pass locations, not a host port.
+This HTTP socket is distinct from both PostgreSQL Gate A and Gate B.
+
+Disposable VPS test runs the exact source supervisor and confirms:
+no container network or published ports; HTTP access by nginx UID 33;
+expected socket ownership; socket cleanup after container stop.
+Parser QA for the candidate systemd and Nginx configs also passed.
+No live service or auth route was changed. NO-GO until genuine
+approved authority, session issuer, stage database and E2E are verified.

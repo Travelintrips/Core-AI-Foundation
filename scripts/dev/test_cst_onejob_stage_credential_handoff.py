@@ -93,7 +93,7 @@ class CredentialHandoffQa(unittest.TestCase):
                 "--tmpfs","/run:rw,nosuid,nodev,size=24m",
                 "--user","28502:28501",
                 "--mount",f"type=bind,src={self.dst},dst=/run/credentials/cst-onejob-owner-stage.service,readonly",
-                "--entrypoint","/bin/sh","cst-onejob-stage-dev:d3cd194b",
+                "--entrypoint","/bin/sh","node:22-alpine",
                 "-c",'''set -eu
                      test "$(id -u)" = 28502
                      test "$(id -g)" = 28501

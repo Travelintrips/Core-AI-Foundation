@@ -14,9 +14,11 @@ ConditionPathExists=/etc/credstore.encrypted/cst-onejob-owner-stage-database-url
 ConditionPathExists=/etc/credstore.encrypted/cst-onejob-owner-stage-session-secret
 
 [Service]
-RuntimeDirectory=cst-onejob-stage-credentials
+RuntimeDirectory=cst-onejob-stage-credentials cst-onejob-stage-http
 RuntimeDirectoryMode=0700
 # Root orchestrator; non-root application
+ExecStartPre=/usr/bin/chown 28502:33 /run/cst-onejob-stage-http
+ExecStartPre=/usr/bin/chmod 2750 /run/cst-onejob-stage-http
 ExecStartPre=/usr/bin/python3 /opt/cst-onejob-dev/bootstrap/stage-credential-handoff.py prepare
 ExecStopPost=/usr/bin/python3 /opt/cst-onejob-dev/bootstrap/stage-credential-handoff.py cleanup
 ExecCondition=/usr/bin/test -S /run/cst-onejob-stage-db/pg-pooler.sock
@@ -36,7 +38,7 @@ Environment=CST_DEV_ONEJOB_BROKER_ENABLED=false
 Environment=CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true
 Environment=CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED=true
 EnvironmentFile=/etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env
-ExecStart=/usr/bin/docker run --rm --name cst-onejob-owner-stage-bootstrap --network cst-onejob-owner-stage-internal --user 28502:28501 --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 900m --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /run:rw,nosuid,nodev,size=24m --publish 127.0.0.1:18583:3000 --mount type=bind,src=/run/cst-onejob-stage-db/pg-pooler.sock,dst=/run/cst-onejob-stage-db/pg-pooler.sock,readonly --mount type=bind,src=/run/cst-onejob-stage-credentials,dst=/run/credentials/cst-onejob-owner-stage.service,readonly --mount type=bind,src=/etc/cst-onejob-dev/trust/prod-ca-2021.crt,dst=/run/cst-onejob-dev-db/ca/prod-ca-2021.crt,readonly --mount type=bind,src=/opt/cst-onejob-dev/bootstrap/entrypoint-stage-only.sh,dst=/run/cst-stage-entrypoint.sh,readonly --env APP_ENV=development --env NODE_ENV=development --env SUPABASE_URL_DEV=https://xssrfshdrtdfupgqwfdw.supabase.co --env CREDENTIALS_DIRECTORY=/run/credentials/cst-onejob-owner-stage.service --env AI_DISPATCHER_ENABLED=false --env AI_SCHEDULER_ENABLED=false --env OLLAMA_WORKER_RUNTIME_ENABLED=false --env CST_DEV_ONEJOB_BROKER_ENABLED=false --env CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true --env CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED=true --env-file /etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env --entrypoint /bin/sh cst-onejob-stage-dev:d3cd194b /run/cst-stage-entrypoint.sh
+ExecStart=/usr/bin/docker run --rm --name cst-onejob-owner-stage-bootstrap --network none --user 28502:28501 --group-add 33 --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 900m --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /run:rw,nosuid,nodev,size=24m --mount type=bind,src=/run/cst-onejob-stage-http,dst=/run/cst-onejob-stage-http --mount type=bind,src=/run/cst-onejob-stage-db/pg-pooler.sock,dst=/run/cst-onejob-stage-db/pg-pooler.sock,readonly --mount type=bind,src=/run/cst-onejob-stage-credentials,dst=/run/credentials/cst-onejob-owner-stage.service,readonly --mount type=bind,src=/etc/cst-onejob-dev/trust/prod-ca-2021.crt,dst=/run/cst-onejob-dev-db/ca/prod-ca-2021.crt,readonly --mount type=bind,src=/opt/cst-onejob-dev/bootstrap/entrypoint-stage-only.sh,dst=/run/cst-stage-entrypoint.sh,readonly --mount type=bind,src=/opt/cst-onejob-dev/bootstrap/stage-http-unix-supervisor.cjs,dst=/run/cst-stage-http-supervisor.cjs,readonly --env APP_ENV=development --env NODE_ENV=development --env SUPABASE_URL_DEV=https://xssrfshdrtdfupgqwfdw.supabase.co --env CREDENTIALS_DIRECTORY=/run/credentials/cst-onejob-owner-stage.service --env AI_DISPATCHER_ENABLED=false --env AI_SCHEDULER_ENABLED=false --env OLLAMA_WORKER_RUNTIME_ENABLED=false --env CST_DEV_ONEJOB_BROKER_ENABLED=false --env CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true --env CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED=true --env-file /etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env --entrypoint /bin/sh cst-onejob-stage-dev:e5f1643a /run/cst-stage-entrypoint.sh
 ExecStop=/usr/bin/docker stop cst-onejob-owner-stage-bootstrap
 TimeoutStartSec=55
 TimeoutStopSec=18
@@ -46,5 +48,8 @@ ProtectHome=yes
 ProtectSystem=strict
 PrivateDevices=yes
 
+# HTTP ingress uses a separate Unix socket restricted to host nginx GID 33.
+# No Docker bridge, port publishing, public TCP, or external egress.
+# Runtime must verify the Nginx worker group and actual Unix socket ACL.
 # No Install section. This technical stage candidate cannot auto-enable.
 # Signer/dispatch remain OFF. One real Owner JWT permits only WAITING staging.
