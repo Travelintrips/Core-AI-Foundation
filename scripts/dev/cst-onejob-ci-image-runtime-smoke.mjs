@@ -62,6 +62,11 @@ const env={
  SUPABASE_URL_DEV:"https://xssrfshdrtdfupgqwfdw.supabase.co",
  AI_DEV_BACKGROUND_RUNTIME_ENABLED:"false",
  AI_SCHEDULER_ENABLED:"false",
+ // Exercise the actual read-only preview branch, not just its source tests.
+ // Missing/invalid flags abort the application before import-time DDL.
+ CST_DEV_ONEJOB_READONLY_PREVIEW:"true",
+ AI_CORE_DEV_CONTINUITY_ENABLED:"false",
+ AI_DEV_SAFE_WORKERS_ENABLED:"false",
  AI_INCIDENT_WATCHER_ENABLED:"false",
  AI_PROVIDER_BILLING_MONITOR_ENABLED:"false",
  AI_DISPATCHER_ENABLED:"false",
@@ -170,7 +175,7 @@ try{
   apiReadyz:200,anonymousOwnerGet:401,anonymousOwnerPost:401,
   spaDevOnejob:200,buildMetaMatches:true,
   actualAiPlatformUiSha256:sha256(uiJs),uiCssSha256:sha256(uiCss),
-  sameOriginFrontendAndApiVerified:true,
+  sameOriginFrontendAndApiVerified:true,readonlyPreviewGuardEnabled:true,
   sameOriginAnonymousGet:401,sameOriginAnonymousPost:401,
   ownerSessionAuthenticated:false,ownerApprovalCreated:false,
   dispatchPermitted:false,signerActivated:false,realE2EPass:false,

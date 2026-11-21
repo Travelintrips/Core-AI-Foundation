@@ -64,6 +64,9 @@ test("CI image checks ACTUAL routed Super Admin UI and CSS, not arbitrary SPA HT
   assert.match(smoke,/uiJs\.includes\("owner-approve-and-stage"\)/);
   assert.match(smoke,/SUPER_ADMIN_UI_MAIN_CSS_MISSING/);
   assert.match(smoke,/sameOriginFrontendAndApiVerified:true/);
+  assert.match(smoke,/CST_DEV_ONEJOB_READONLY_PREVIEW:"true"/);
+  assert.match(smoke,/AI_CORE_DEV_CONTINUITY_ENABLED:"false"/);
+  assert.match(smoke,/AI_DEV_SAFE_WORKERS_ENABLED:"false"/);
   assert.match(smoke,/SAME_ORIGIN_SUPER_ADMIN_JS_NOT_ROUTED/);
   assert.match(smoke,/SAME_ORIGIN_ANONYMOUS_APPROVAL_NOT_DENIED/);
   assert.match(smoke,/SAME_ORIGIN_ANONYMOUS_READINESS_NOT_DENIED/);
