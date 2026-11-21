@@ -11,6 +11,8 @@
  * the exact DEV HTTPS same-origin and use the dedicated transactional writer.
  */
 import jwt from "jsonwebtoken";
+import {CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256} from
+ "./cstOneJobOperationsRootCandidate.js";
 
 export const ONE_JOB_OWNER_STAGE_INTENT="APPROVE_ONE_NEW_CST_DEV_MODEL_JOB";
 const FRESH_SECONDS=20*60;
@@ -31,8 +33,12 @@ export function verifyFreshOneJobStageConsent(i:ConsentInput):boolean {
     typeof i.sessionSecret!=="string"||i.sessionSecret.length<32 ||
     !i.body||typeof i.body!=="object"||Array.isArray(i.body))return false;
  const body=i.body as Record<string,unknown>;
- if(Object.keys(body).length!==1||
-    body.intent!==ONE_JOB_OWNER_STAGE_INTENT)return false;
+ // The same Super Admin click binds exactly one publicly pinned
+ // Operations candidate identity, not an arbitrary client-selected key.
+ if(Object.keys(body).length!==2||
+    body.intent!==ONE_JOB_OWNER_STAGE_INTENT||
+    body.operationsRootFingerprint!==CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256)
+   return false;
  try {
   const claims=jwt.verify(i.sessionToken,i.sessionSecret,{
    algorithms:["HS256"],maxAge:"20m",clockTimestamp:now

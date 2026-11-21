@@ -26,6 +26,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"signed_preapproval_ready",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-preapproval-ready.test.mjs"]},
   {id:"owner_panel_one_click",argv:[node,"--test","scripts/dev/cst-onejob-owner-ready-panel.test.mjs"]},
   {id:"super_admin_single_human_authority",argv:[node,"--test","scripts/dev/cst-onejob-single-super-admin-authority.test.mjs"]},
+  {id:"super_admin_root_candidate_oneclick_ledger",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-superadmin-ops-root-ledger-review.test.mjs"]},
   {id:"one_canonical_owner_path",argv:[node,"--test","scripts/dev/cst-onejob-integrated-single-owner.test.mjs"]},
   {id:"owner_receipt_trust",argv:[node,"--test","scripts/dev/cst-team-onejob-owner-approval-receipt.test.mjs"]},
   {id:"host_gateway_denial",argv:[node,"--test","scripts/dev/cst-team-host-gateway-probe.test.mjs"]},
@@ -99,7 +100,7 @@ export function verifyManifest(exists=existsSync) {
       file.includes("..")||!exists(resolve(ROOT,file)))
       problems.push("MISSING_TEST:"+test.id);
   }
-  for(const mandatory of ["owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","one_canonical_owner_path","super_admin_single_human_authority",
+  for(const mandatory of ["owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","one_canonical_owner_path","super_admin_single_human_authority","super_admin_root_candidate_oneclick_ledger",
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
     "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",

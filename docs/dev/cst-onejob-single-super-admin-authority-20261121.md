@@ -95,3 +95,42 @@ signed QA PRE, Operations root/job release, admission capability, genuine
 authenticated Super Admin job and Final ACK are absent. Routing an
 unready button could break unrelated working DEV features; preserve the
 original site until the coherent cutover and rollback gates can pass.
+
+## No circular QA dependency before the one-click WAITING stage
+
+The single signed Super Admin session sends ONE explicit request containing
+the existing business intent plus a **public** Operations root candidate
+fingerprint. Exact source-pinned value:
+65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b.
+It identifies the already-encrypted dormant VPS candidate; no private key
+is imported into the application. The API checks the value EXACTLY, rejects
+admin/manager/unrecognized keys, and binds the choice to the new Company-1
+WAITING job, active owner, specific requestId/sourceSha/worker and the single
+transactional audit. The audit marks operationsRootTrusted=false,
+independentQaAdmissionVerified=false, dispatchPermitted=false.
+
+**Important sequencing correction:** the original pre-Owner QA receipt can
+attest general readiness, but **job-specific QA PRE cannot be issued for an
+unknown jobId/approvalId**. Therefore a missing QA preapproval must not
+block creation of the non-claimable WAITING job. The signed QA PRE, actual
+Operations signed job release, narrow independent DB admission capability,
+one-use nonce, authentic subscriber, 4-agent work and reviewer Final ACK
+remain mandatory **before queue promotion/dispatch**. The current worker
+claim query only selects QUEUED or due RETRYING jobs, never WAITING.
+
+The signed preapproval helper remains an advisory verifier, not bypassed or
+used as a fake authorization. The dedicated scoped staging database login,
+source pin, worker name, feature default-OFF, exact project, fresh Owner
+session and RLS must still pass for a WAITING job to be created.
+
+The one-click root selection is only an audit-bound public identifier. It
+does NOT approve the Operations private key, install the trusted public
+root, assert independent hardware custody, sign an Operations permit, or
+make a real database readback. The new pure
+cstOneJobOperationsRootSelectionReview module verifies matching fields
+from a *separately authenticated* database result and always returns
+operationsRootTrusted=false, authenticatedDbReadbackVerified=false and
+releaseDecision=NO_GO. A synthetic fixture is never E2E proof.
+
+No new login, OTP/TOTP, second human sign-off, KMS, grant widening,
+signer activation, active DEV cutover or PROD change is authorized.

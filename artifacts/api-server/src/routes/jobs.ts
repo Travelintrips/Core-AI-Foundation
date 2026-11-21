@@ -48,6 +48,7 @@ import { stageCstDevOneJobForVerifiedOwner, evaluateCstOneJobStageEnvironment } 
 import {reviewCstOneJobStageDatabaseConfig} from "../lib/cstOneJobStageDbConfig.js";
 import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";
 import {readIndependentlySignedPreapproval} from "../lib/cstOneJobPreapprovalReadiness.js";
+import {CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256} from "../lib/cstOneJobOperationsRootCandidate.js";
 import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 
@@ -342,7 +343,9 @@ router.get("/ai/dev/onejob/owner-stage-readiness",
     const qa=readIndependentlySignedPreapproval({
       sourceSha:sha,workerName:process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME??"",
     });
-    const blockers=[...envGate.blockers,...stageConfig.blockers,...qa.blockers];
+    // Advisory: QA PRE (job+approval-specific) remains mandatory at
+    // admission, not as a circular prerequisite to create WAITING.
+    const blockers=[...envGate.blockers,...stageConfig.blockers];
     if(blockers.length===0){
       try{
         const db=getCstOneJobStagingDatabase(process.env);
@@ -375,6 +378,10 @@ router.get("/ai/dev/onejob/owner-stage-readiness",
       project:"xssrfshdrtdfupgqwfdw",companyId:"1",modelId:"qwen2.5:3b",
       readyForOneOwnerClick:blockers.length===0,
       blockers:[...new Set(blockers)],
+      operationsRootCandidateSha256:CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256,
+      operationsRootTrusted:false,
+      qaTechnicalPreflightAdvisory:qa.verified,
+      signedQaAdmissionStillRequired:true,
       requiresNewPassword:false,secondOwnerApprovalRequired:false,
       dispatchPermitted:false,operationalE2EVerified:false,
     });

@@ -30,6 +30,8 @@ test("stage refuses unpinned runtime and all dispatching by default",()=>{
  assert.match(service,/!env\.SUPABASE_PROD_DATABASE_URL/);
  assert.match(service,/CST_TEAM_DEV_APPROVED_SOURCE_SHA/);
  assert.match(service,/CST_TEAM_DEV_APPROVED_WORKER_NAME/);
+ assert.match(service,/CST_DEV_ONEJOB_OPERATIONS_CANDIDATE_FINGERPRINT/);
+ assert.match(service,/operationsRootCandidateSha256/);
  assert.match(service,/DEV_SOURCE_SHA_NOT_PINNED/);
 });
 test("waiting job, approval FK and audit are atomic in same transaction",()=>{

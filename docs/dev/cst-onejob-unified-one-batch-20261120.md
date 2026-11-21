@@ -1,5 +1,22 @@
 # CST-DEV One-Job — Unified single-batch candidate (20 November 2026)
 
+
+## Update — 21 Nov: one-click root selection, WAITING before QA PRE
+
+The CURRENT one-human release design binds the candidate Operations public
+fingerprint to the existing authenticated Super Admin one-click action
+(**no second human decision**). The bounded dedicated stage writer creates
+one nonclaimable WAITING job and matching approval+audit in one transaction.
+Its request body contains exact intent plus public candidate fingerprint.
+Job-specific independently signed QA PRE necessarily occurs **after the
+real job and approval IDs exist**, not as a circular prerequisite for the
+WAITING stage. The old text below saying that the initial button requires
+QA PRE is a historical gate, now superseded only for the WAITING stage.
+Nothing here permits QUEUED admission before actual independent QA PRE,
+signed Operations authority, narrow DB capability and nonce consumption.
+The candidate root remains unapproved and cannot sign. Operational release
+NO-GO. See cst-onejob-single-super-admin-authority-20261121.md.
+
 **LATEST HUMAN-AUTHORITY DECISION — 21 NOV 2026:** **SUPER ADMIN ONLY.**
 The earlier Owner/Operations/Security reviewer wording below is historical
 where it implies **multiple human approvals**. For CST-DEV one-job, the

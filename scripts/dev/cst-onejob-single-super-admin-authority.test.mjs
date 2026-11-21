@@ -28,7 +28,7 @@ test("one Super Admin human: existing Core owner role, NOT generic admin or mana
 test("only one fresh Super Admin stage click, single scoped WAITING job, no second approval",()=>{
   assert.equal((jobs.match(/router.post\("\/ai\/dev\/onejob\/owner-approve-and-stage"/g)||[]).length,1);
   assert.match(jobs,/verifyFreshOneJobStageConsent/);
-  assert.match(consent,/Object\.keys\(body\)\.length!==1/);
+  assert.match(consent,/Object\.keys\(body\)\.length!==2/);
   assert.match(consent,/ONE_JOB_OWNER_STAGE_INTENT/);
   assert.match(stage,/status:"waiting" as const/);
   assert.match(stage,/cst_onejob_one_active_approval/);
@@ -43,6 +43,7 @@ test("UI says Super Admin but only privileged owner can see one action in DEV",(
   assert.match(nav,/user\?\.role==="owner"/);
   assert.match(nav,/Persetujuan Super Admin/);
   assert.match(ui,/APPROVE_ONE_NEW_CST_DEV_MODEL_JOB/);
+  assert.match(ui,/onejob-ops-candidate-fingerprint/);
   assert.match(ui,/disabled=\{!ready\|\|submitted\|\|loading\}/);
   assert.doesNotMatch(ui,/setInterval|autoRetry|type="password"/);
 });
@@ -60,7 +61,10 @@ test("non-owner session explains role and offers existing email-login account sw
 });
 test("single human decision does not forge Operations keys or bypass technical evidence",()=>{
   assert.match(reviewer,/APPROVED_OPS_ROOT_FINGERPRINT=null/);
-  assert.match(stage,/readIndependentlySignedPreapproval/);
+  assert.doesNotMatch(stage,/readIndependentlySignedPreapproval/);
+  assert.match(stage,/OPERATIONS_PUBLIC_CANDIDATE_NOT_MATCHED/);
+  assert.match(stage,/operationsRootCandidateSha256/);
+  assert.match(stage,/independentQaAdmissionVerified',false/);
   assert.match(stage,/dispatchPermitted:false/);
   assert.match(policy,/signature/);
   assert.match(policy,/NO-GO/);

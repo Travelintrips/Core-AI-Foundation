@@ -119,3 +119,15 @@ required because a role name cannot replace cryptographic verification.
 Those are programmatic separation-of-duties checks, not extra people.
 Do not claim that one shared VPS root provides independent hardware
 custody. See cst-onejob-single-super-admin-authority-20261121.md.
+
+## Real one-click source binding (21 November 2026)
+
+The dormant VPS Operations candidate has public fingerprint
+65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b.
+A single authenticated Core Super Admin click chooses it together with
+one Company-1 WAITING job, and records the fingerprint in an immutable
+transactional audit. The separate source pin APPROVED_OPERATIONS_ROOT_FINGERPRINT
+is still None/NULL. No signed job authorization exists before a real job ID
+and Owner approval ID. After actual signed QA PRE and independently checked
+DB/audit readback exist, per-stage technical permits can be evaluated, not
+preissued. No KMS, second person, self-approval or synthetic evidence.

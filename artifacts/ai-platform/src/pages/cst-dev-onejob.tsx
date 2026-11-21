@@ -15,12 +15,16 @@ import {useInternalAuth} from "@/hooks/use-internal-auth";
 type Readiness={
  project:string;companyId:string;modelId:string;
  readyForOneOwnerClick:boolean;blockers:string[];
+ operationsRootCandidateSha256:string;operationsRootTrusted:false;
+ qaTechnicalPreflightAdvisory:boolean;signedQaAdmissionStillRequired:true;
  requiresNewPassword:boolean;secondOwnerApprovalRequired:boolean;
  dispatchPermitted:false;operationalE2EVerified:false;
 };
 type Stage={
  jobId:number;jobCode:string;requestId:string;status:"waiting";
- expiresAt:string;dispatchPermitted:false;finalAckVerified:false;
+ expiresAt:string;operationsRootCandidateSha256:string;
+ operationsRootTrusted:false;independentQaAdmissionVerified:false;
+ dispatchPermitted:false;finalAckVerified:false;
 };
 const DEV_HOST="dev.cstlogistic.co.id";
 export default function CstDevOneJobPage(){
@@ -82,7 +86,10 @@ export default function CstDevOneJobPage(){
   try{
    const response=await apiFetch<Stage>("/api/ai/dev/onejob/owner-approve-and-stage",{
     method:"POST",
-    body:JSON.stringify({intent:"APPROVE_ONE_NEW_CST_DEV_MODEL_JOB"})
+    body:JSON.stringify({
+     intent:"APPROVE_ONE_NEW_CST_DEV_MODEL_JOB",
+     operationsRootFingerprint:readiness.data?.operationsRootCandidateSha256,
+   })
    });
    setResult(response);
   }catch(e){
@@ -109,8 +116,22 @@ export default function CstDevOneJobPage(){
     <CardContent className="space-y-4">
      <p className="text-sm text-muted-foreground">
       Model: qwen2.5:3b · Company 1 · CST-DEV. Verifikasi kesiapan menggunakan
-      bukti QA bertanda tangan, koneksi database khusus, dan satu sesi Super Admin yang sah.
+      koneksi database khusus dan satu sesi Super Admin yang sah.
+     Bukti QA bertanda tangan tetap wajib sebelum job masuk antrean,
+     bukan sebelum pembuatan job WAITING.
      </p>
+     {readiness.data?.operationsRootCandidateSha256&&(
+      <div className="rounded-md border p-3 text-xs">
+       <p>Kunci Operations kandidat yang termasuk dalam satu persetujuan ini:</p>
+       <p className="mt-1 break-all font-mono" data-testid="onejob-ops-candidate-fingerprint">
+        {readiness.data.operationsRootCandidateSha256}
+       </p>
+       <p className="mt-2 text-muted-foreground">
+        Kunci ini belum dipercaya untuk menandatangani izin. Persetujuan
+        hanya mencatat pilihan kandidat bersama satu job WAITING.
+       </p>
+      </div>
+     )}
      {readiness.isLoading&&<p className="text-sm">Memeriksa kesiapan…</p>}
      {readiness.isError&&<p className="text-sm text-destructive">Pemeriksaan belum dapat dibaca.</p>}
      {Array.isArray(readiness.data?.blockers)&&readiness.data!.blockers.length>0&&(
@@ -134,7 +155,8 @@ export default function CstDevOneJobPage(){
      {result&&<div className="text-sm">
       Persetujuan Super Admin telah dicatat. Job <strong>#{result.jobId}</strong>
       {" "}berstatus <strong>WAITING</strong>. Menunggu broker dan pengujian E2E,
-      belum dinyatakan PASS.
+      belum dinyatakan PASS. Kunci Operations tetap belum aktif; bukti QA
+      dan izin admission wajib diverifikasi sebelum job dijalankan.
      </div>}
      {error&&<div className="text-sm text-destructive">
       {error}. Jangan mengulangi klik sebelum status job diperiksa.

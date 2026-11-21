@@ -8,6 +8,8 @@ import {
  verifyFreshOneJobStageConsent,ONE_JOB_OWNER_STAGE_INTENT
 } from "../../artifacts/api-server/src/lib/cstOneJobFreshStageConsent.ts";
 
+import {CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256 as rootFingerprint}
+  from "../../artifacts/api-server/src/lib/cstOneJobOperationsRootCandidate.js";
 const now=Math.floor(Date.parse("2026-11-20T05:00:00.000Z")/1000);
 const secret="synthetic-test-only-dev-owner-session-"+("x".repeat(48));
 const token=(sub=19,issued=now-45,extra={})=>jwt.sign(
@@ -16,7 +18,8 @@ const input=(change={})=>({
  sessionToken:token(),sessionSecret:secret,
  ownerUserId:19,role:"owner",status:"active",accountType:"internal",
  mustChangePassword:false,nowSeconds:now,
- body:{intent:ONE_JOB_OWNER_STAGE_INTENT},...change,
+ body:{intent:ONE_JOB_OWNER_STAGE_INTENT,
+  operationsRootFingerprint:rootFingerprint},...change,
 });
 
 test("one explicit fresh Owner click accepts a signed numeric internal session",()=>{
@@ -43,12 +46,27 @@ test("same-session actor role, status and password-change guard remain mandatory
  }
 });
 test("only the exact one-job business intent is accepted, never an implicit empty POST",()=>{
- for(const body of [null,{},[],{intent:"APPROVE_ALL"},{intent:ONE_JOB_OWNER_STAGE_INTENT,other:true},
-  {actor:19,intent:ONE_JOB_OWNER_STAGE_INTENT},true]){
+ for(const body of [
+  null,{},[],{intent:"APPROVE_ALL"},
+  {intent:ONE_JOB_OWNER_STAGE_INTENT},
+  {intent:ONE_JOB_OWNER_STAGE_INTENT,operationsRootFingerprint:"a".repeat(64)},
+  {intent:ONE_JOB_OWNER_STAGE_INTENT,operationsRootFingerprint:rootFingerprint,other:true},
+  {intent:ONE_JOB_OWNER_STAGE_INTENT,operationsRootFingerprint:rootFingerprint,actor:19},
+  true
+ ]){
   assert.equal(verifyFreshOneJobStageConsent(input({body})),false);
  }
 });
 test("pure helper grants no DB role, OTP bypass, worker dispatch or Final ACK",()=>{
  const source=readFileSync(new URL("../../artifacts/api-server/src/lib/cstOneJobFreshStageConsent.ts",import.meta.url),"utf8");
  assert.doesNotMatch(source,/INSERT INTO|UPDATE ai_platform|CREATE ROLE|SET ROLE|dispatchPermitted:\s*true/);
+});
+
+test("one click binds exact dormant public Operations candidate without trusting it",()=>{
+ assert.match(rootFingerprint,/^[a-f0-9]{64}$/);
+ assert.equal(verifyFreshOneJobStageConsent(input()),true);
+ const source=readFileSync(new URL(
+  "../../artifacts/api-server/src/lib/cstOneJobOperationsRootCandidate.js",import.meta.url),"utf8");
+ assert.match(source,/CST_ONEJOB_OPERATIONS_ROOT_TRUSTED=false/);
+ assert.doesNotMatch(source,/PRIVATE KEY|BEGIN PRIVATE KEY|sign\(/);
 });

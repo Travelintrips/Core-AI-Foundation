@@ -11,7 +11,8 @@ import { resolve } from "node:path";
 import { sql } from "drizzle-orm";
 import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";
 import {CST_ONEJOB_STAGE_LOGIN} from "../lib/cstOneJobStageDbConfig.js";
-import {readIndependentlySignedPreapproval} from "../lib/cstOneJobPreapprovalReadiness.js";
+import {CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256} from
+ "../lib/cstOneJobOperationsRootCandidate.js";
 
 const SHA = /^[a-f0-9]{40}$/;
 const WORKER = /^cst-dev-dell-onejob-[0-9]{8}-[a-f0-9]{8}$/;
@@ -33,6 +34,9 @@ export function evaluateCstOneJobStageEnvironment(env: NodeJS.ProcessEnv, buildS
     "DEV_SOURCE_SHA_NOT_PINNED");
   check(WORKER.test(env.CST_TEAM_DEV_APPROVED_WORKER_NAME ?? ""),
     "ONEJOB_WORKER_NOT_PINNED");
+  check(env.CST_DEV_ONEJOB_OPERATIONS_CANDIDATE_FINGERPRINT===
+    CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256,
+    "OPERATIONS_PUBLIC_CANDIDATE_NOT_MATCHED");
   return {eligibleForWaitingStage:blockers.length===0,blockers};
 }
 
@@ -48,14 +52,10 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
   if(!gate.eligibleForWaitingStage)
     throw Error("ONEJOB_STAGE_NOT_READY:"+gate.blockers.join(","));
   const workerName=input.env.CST_TEAM_DEV_APPROVED_WORKER_NAME!;
-  // A QA-signed short-lived readiness record must already attest the
-  // broker ACL, dedicated DB transport, armed subscriber and independent
-  // agent/Final-ACK path. This does not replace the Owner click.
-  const prepared=readIndependentlySignedPreapproval({
-    sourceSha:buildSha,workerName,
-  });
-  if(!prepared.verified)
-    throw Error("ONEJOB_STAGE_NOT_READY:INDEPENDENT_QA_PREAPPROVAL_REQUIRED");
+  // Signed job-specific QA PRE cannot bind the real jobId/approvalId
+  // until the same Super Admin creates ONE nonclaimable WAITING job.
+  // Require genuine QA PRE, signed job release, limited capability and
+  // one-use nonce BEFORE WAITING->QUEUED; never bypass those gates.
   const requestId=PILOT_PREFIX+randomBytes(10).toString("hex");
   const jobCode="OLLAMA-"+randomBytes(4).toString("hex").toUpperCase();
   const payload={
@@ -191,11 +191,17 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
         jsonb_build_object('ownerUserId',${input.ownerUserId},
           'approvalId',${String(approval.id)},'requestId',${requestId},
           'workerName',${workerName},'sourceSha',${buildSha},
+          'operationsRootCandidateSha256',${CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256},
+          'sameSuperAdminRootSelection',true,
+          'operationsRootTrusted',false,
+          'independentQaAdmissionVerified',false,
           'dispatchPermitted',false))`);
     return {
       approvalId:String(approval.id),jobId,jobCode:String(job.job_code),
       requestId,workerName,status:"waiting" as const,
       expiresAt:String(approval.expires_at),
+      operationsRootCandidateSha256:CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256,
+      operationsRootTrusted:false,independentQaAdmissionVerified:false,
       admissionReady:false,dispatchPermitted:false,finalAckVerified:false,
     };
   });
