@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {QA_DOMAIN,qaCanonicalBytes} from "../../artifacts/api-server/src/lib/cstOneJobIndependentQaVerifier.ts";
-import {executeTrustedAdmissionTransaction,reviewBrokerEnvironment,LOCK_SQL,main}
-  from "./cst-onejob-trusted-admission-bridge.mjs";
+import {
+  executeTrustedAdmissionTransaction,reviewAdmissionBeforeDatabase,
+  reviewBrokerEnvironment,ADMISSION_SQL,main
+} from "./cst-onejob-trusted-admission-bridge.mjs";
 const hash=x=>createHash("sha256").update(x).digest("hex");
 const approvalId="123e4567-e89b-12d3-a456-426614174000";
 const requestId="cst-ai-team-company1-dev:pilot-"+"b".repeat(20);
@@ -41,16 +43,28 @@ function fixture(){
     publicKeyFingerprint:trust.fingerprint};
   return {row,signedReceipt};
 }
-class FakeClient{
-  constructor(row,{wrongRole=false}={}){this.row=row;this.queries=[];this.wrongRole=wrongRole}
+class FakeClient {
+  constructor({wrongRole=false,capabilityDenied=false,wrongJob=false,emptyResult=false}={}){
+    this.queries=[];
+    this.wrongRole=wrongRole;
+    this.capabilityDenied=capabilityDenied;
+    this.wrongJob=wrongJob;
+    this.emptyResult=emptyResult;
+  }
   async query(statement,parameters=[]){
     this.queries.push({statement,parameters});
+    if(statement.includes("FROM ai_platform.")||
+       statement.includes("FROM cst_onejob_private.verified_admission_receipts")||
+       statement.includes("FOR UPDATE"))
+      throw Error("BROKER_DIRECT_TABLE_ACCESS_FORBIDDEN");
     if(statement.includes("SELECT current_user AS role_name"))
       return {rows:[{role_name:this.wrongRole?"aicore_dev_runtime":"cst_onejob_admission_broker",
         login_name:"cst_onejob_broker_login",db:"postgres"}]};
-    if(statement===LOCK_SQL)return {rows:[this.row]};
-    if(statement.includes("SELECT cst_onejob_private.admit_verified_onejob"))
-      return {rows:[{job_id:483}]};
+    if(statement===ADMISSION_SQL){
+      if(this.capabilityDenied)throw Error("CAPABILITY_NOT_INSTALLED_OR_DENIED");
+      if(this.emptyResult)return {rows:[]};
+      return {rows:[{job_id:this.wrongJob?484:483}]};
+    }
     return {rows:[]};
   }
 }
@@ -58,40 +72,74 @@ const call=(client,receipt,patch={})=>executeTrustedAdmissionTransaction({
   client,jobId:483,signedReceipt:receipt,evidenceBytes:evidence,
   pinnedTrust:trust,approvedSourceSha:sourceSha,...patch
 });
-test("valid signed QA proof is checked after FOR UPDATE and before same-transaction consumption",async()=>{
+test("valid signed QA evidence is checked BEFORE SQL; broker calls ONLY bounded DB capability",async()=>{
   const {row,signedReceipt}=fixture();
-  const client=new FakeClient(row);
+  const client=new FakeClient();
+  const preflight=reviewAdmissionBeforeDatabase({
+    jobId:483,signedReceipt,evidenceBytes:evidence,pinnedTrust:trust,
+    approvedSourceSha:sourceSha
+  });
+  assert.deepEqual(preflight,{jobId:483,nonce:row.r_nonce,proofDigest:row.r_proof_digest});
   const result=await call(client,signedReceipt);
   assert.equal(result.status,"ADMISSION_COMMITTED");
   assert.equal(result.dispatchPermitted,false);
   assert.equal(result.finalAckIssued,false);
   const ops=client.queries.map(x=>x.statement);
-  const locked=ops.indexOf(LOCK_SQL);
-  const consumed=ops.findIndex(x=>x.includes("SELECT cst_onejob_private.admit_verified_onejob"));
-  assert.ok(ops[0]==="BEGIN"&&ops.includes("SET LOCAL ROLE cst_onejob_admission_broker"));
-  assert.ok(locked>0&&consumed>locked&&ops.at(-1)==="COMMIT");
-  assert.deepEqual(client.queries[consumed].parameters,[483,row.r_nonce,row.r_proof_digest]);
+  assert.deepEqual(ops,[
+    "BEGIN","SET TRANSACTION READ WRITE","SET LOCAL ROLE cst_onejob_admission_broker",
+    "SELECT current_user AS role_name,session_user AS login_name,current_database() AS db",
+    ADMISSION_SQL,"COMMIT"
+  ]);
+  assert.deepEqual(client.queries[4].parameters,[483,row.r_nonce,row.r_proof_digest]);
+  assert.equal(ops.some(x=>x.includes("FOR UPDATE")||
+    x.includes("FROM ai_platform.")||x.includes("UPDATE ai_platform")),false);
+  assert.equal(ops.includes("SELECT cst_onejob_private.admit_verified_onejob($1::integer,$2::text,$3::text) AS job_id"),false);
 });
-test("forged QA signature, changed bytes, wrong role and image SHA cannot reach broker SQL",async()=>{
-  const {row,signedReceipt}=fixture();
+test("fake, mutated, expired, wrong job, bad source, altered evidence: ZERO DB queries",async()=>{
+  const {signedReceipt}=fixture();
   const fake=generateKeyPairSync("ed25519");
   const forged={...signedReceipt,signatureBase64:sign(null,
     qaCanonicalBytes(signedReceipt.claims),fake.privateKey).toString("base64")};
-  for(const patch of [
-    {signedReceipt:forged},
-    {evidenceBytes:Buffer.from("TAMPERED")},
-    {approvedSourceSha:"b".repeat(40)},
-    {jobId:482}
-  ]){
-    const client=new FakeClient(row);
+  const mutated={...signedReceipt,claims:{...signedReceipt.claims,
+    requestId:"cst-ai-team-company1-dev:pilot-"+"d".repeat(20)}};
+  const expiredClaims={...signedReceipt.claims,
+    verifiedAt:new Date(Date.now()-360000).toISOString(),
+    expiresAt:new Date(Date.now()-60000).toISOString()};
+  const expired={...signedReceipt,claims:expiredClaims,
+    signatureBase64:sign(null,qaCanonicalBytes(expiredClaims),privateKey).toString("base64")};
+  const wrongProjectClaims={...signedReceipt.claims,project:"nzdweipzckfszczzqtuw"};
+  const wrongProject={...signedReceipt,claims:wrongProjectClaims,
+    signatureBase64:sign(null,qaCanonicalBytes(wrongProjectClaims),privateKey).toString("base64")};
+  const cases=[
+    {signedReceipt:forged},{signedReceipt:mutated},{signedReceipt:expired},
+    {signedReceipt:wrongProject},{evidenceBytes:Buffer.from("TAMPERED")},
+    {approvedSourceSha:"b".repeat(40)},{jobId:482},{jobId:484},
+    {pinnedTrust:{...trust,fingerprint:"f".repeat(64)}},
+    {pinnedTrust:{...trust,verifierId:"cst-independent-qa-wrong_verifier"}}
+  ];
+  for(const patch of cases){
+    const client=new FakeClient();
     await assert.rejects(call(client,signedReceipt,patch));
-    assert.equal(client.queries.some(x=>x.statement.includes("admit_verified_onejob")),false);
-    assert.equal(client.queries.some(x=>x.statement==="COMMIT"),false);
-    if(patch.jobId!==482)assert.equal(client.queries.at(-1).statement,"ROLLBACK");
+    assert.deepEqual(client.queries,[],"No SQL before trusted proof has passed");
   }
-  const client=new FakeClient(row,{wrongRole:true});
-  await assert.rejects(call(client,signedReceipt));
+});
+test("wrong dedicated DB identity denies capability call and rolls back",async()=>{
+  const {signedReceipt}=fixture();
+  const client=new FakeClient({wrongRole:true});
+  await assert.rejects(call(client,signedReceipt),/BROKER_SESSION_NOT_BOUND/);
   assert.equal(client.queries.at(-1).statement,"ROLLBACK");
+  assert.equal(client.queries.some(x=>x.statement===ADMISSION_SQL),false);
+});
+test("missing or denied capability, wrong or absent return fail closed with rollback",async()=>{
+  const {signedReceipt}=fixture();
+  for(const opts of [
+    {capabilityDenied:true},{wrongJob:true},{emptyResult:true}
+  ]){
+    const client=new FakeClient(opts);
+    await assert.rejects(call(client,signedReceipt));
+    assert.equal(client.queries.some(x=>x.statement==="COMMIT"),false);
+    assert.equal(client.queries.at(-1).statement,"ROLLBACK");
+  }
 });
 test("default-off dedicated broker config rejects missing credential, bad TLS or DEV mismatch",async()=>{
   const env={APP_ENV:"development",NODE_ENV:"development",

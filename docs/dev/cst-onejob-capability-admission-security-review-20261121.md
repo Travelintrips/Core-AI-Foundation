@@ -120,3 +120,55 @@ signature. If custody of the QA writer is compromised, the DB cannot distinguish
 a fabricated row from an authorized one. Security review must explicitly
 accept or harden that trust model before approving any change to live DEV.
 Operational release remains `NO_GO`; this document is NOT a migration.
+
+
+## Broker adapter compatibility repair — source-only (21 November 2026)
+
+The original broker adapter issued SELECT ... FOR UPDATE directly against
+Owner approval, job and PRE receipt tables. Live CST-DEV broker and dedicated
+login roles have **no SELECT** on those tables, and **no UPDATE** on jobs.
+The original query cannot succeed without unsafe additional grants. Those
+grants are explicitly **not** added.
+
+The revised candidate divides responsibilities without rebuilding previous
+Owner, receipt or job provisioning:
+
+1. **Before ANY database query**, the independent broker checks the
+   pre-pinned QA Ed25519 public key/fingerprint, full canonical PRE_ADMISSION
+   signature, project/Company-1/job/source pin, short expiry and actual
+   independently captured evidence bytes (not only a claimed digest).
+   Invalid input causes **zero database queries**.
+2. One dedicated TLS-pinned broker transaction checks session_user and
+   transaction-local role, then calls only
+   cst_onejob_private.admit_verified_onejob_capability(job_id, nonce, digest).
+   Broker does **not** SELECT, lock, UPDATE or INSERT underlying tables.
+3. A separately reviewed database capability must lock the real approval,
+   job and PRE receipt, verify fresh Owner approval and independently QA-issued
+   nonce/digest, and atomically consume/queue/audit/outbox, with rollback
+   on errors and replay denial. No capability is installed by this adapter.
+4. Signature checking by the application is **not** a database grant.
+   This database does not itself validate Ed25519: security depends on the
+   separately custodied, authenticated, append-only QA writer and signed
+   proof being unavailable to untrusted principals. This boundary requires
+   independent Security/Operations review.
+5. Root-owned broker-release.json configuration is **not** evidence of
+   externally signed Operations authorization. Before any operational rollout,
+   bind admission to the real cryptographically validated one-job release
+   batch, live Owner database approval, exact code SHA, and independent custody.
+   File ownership, CI PASS or synthetic receipt cannot replace authorization.
+
+### Bounded local evidence
+
+- Trusted admission adapter source tests: **5/5 PASS**; fake signature,
+  wrong identity and failed capability do not produce a commit.
+- Integrated independent QA-to-broker-to-subscriber source tests:
+  **5/5 PASS**; includes network-none PostgreSQL rehearsal.
+- Disposable PostgreSQL16 admission capability tests: **3/3 PASS**;
+  includes RLS/no raw broker DML, rollback, replay and concurrency.
+
+All these tests are disposable/synthetic: no real Owner session, signed
+Operations release, activated signer or live E2E. On CST-DEV, broker/login
+remain NOLOGIN, raw DML remains denied, and the scoped capability wrapper
+is **not installed**. A live admission attempt would fail closed.
+PR stays DRAFT. No runtime deployment, dispatch, signer enable, PROD change
+or operational PASS claim is authorized.

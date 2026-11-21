@@ -10,7 +10,7 @@ import {pullAndAcknowledgeOneJobCompletion,pullExactlyOneCstJobCompletion,
   discoverOneJobCompletion,ONE_JOB_COMPLETION_SOURCE_SQL,SUBSCRIBER_SOURCE_SQL,
   SUBSCRIBER_ROLE,SUBSCRIBER_LOGIN}
   from "./cst-onejob-independent-subscriber-pull.mjs";
-import {executeTrustedAdmissionTransaction,LOCK_SQL}
+import {executeTrustedAdmissionTransaction,ADMISSION_SQL}
   from "./cst-onejob-trusted-admission-bridge.mjs";
 import {CORE_RECONCILIATION_DOMAIN}
   from "./cst-onejob-final-ack-candidate.mjs";
@@ -78,30 +78,16 @@ class QaDb{
   }
 }
 class BrokerDb{
-  constructor(receipt){this.calls=[];this.receipt=receipt}
+  constructor(){this.calls=[]}
   async query(sql,params=[]){
     this.calls.push({sql,params});
     if(sql.includes("SELECT current_user AS role_name"))
       return {rows:[{role_name:"cst_onejob_admission_broker",
         login_name:"cst_onejob_broker_login",db:"postgres"}]};
-    if(sql===LOCK_SQL){
-      const a=approval(),j=job(),c=this.receipt.claims;
-      return {rows:[{
-        a_id:id,a_job_id:483,a_owner_id:1,a_status:a.status,
-        a_purpose:a.purpose,a_company_id:"1",a_model_id:a.modelId,
-        a_request_id:requestId,a_worker_name:worker,a_source_sha:sourceSha,
-        a_approved_at:a.approvedAt,a_expires_at:a.expiresAt,a_consumed_at:null,
-        j_id:483,j_status:j.status,j_type:j.jobType,j_capability:j.capability,
-        j_max_retry:j.maxRetry,j_request_id:requestId,j_model_id:j.modelId,
-        r_approval_id:id,r_job_id:483,r_company_id:"1",r_request_id:requestId,
-        r_worker_name:worker,r_source_sha:sourceSha,r_image_id:imageId,
-        r_verifier_id:verifierId,r_nonce:c.nonce,
-        r_proof_digest:sha(qaCanonicalBytes(c)),
-        r_verified_at:c.verifiedAt,r_expires_at:c.expiresAt,r_consumed_at:null
-      }]};
-    }
-    if(sql.includes("SELECT cst_onejob_private.admit_verified_onejob"))
-      return {rows:[{job_id:483}]};
+    if(sql===ADMISSION_SQL)return {rows:[{job_id:483}]};
+    if(sql.includes("FOR UPDATE")||sql.includes("FROM ai_platform.")||
+       sql.includes("FROM cst_onejob_private.verified_admission_receipts"))
+      throw Error("BROKER_DIRECT_TABLE_READ_DENIED");
     return {rows:[]};
   }
 }
@@ -149,6 +135,8 @@ test("recovered one-job chain: PRE QA -> locked broker -> PULL subscriber -> POS
   });
   assert.equal(admission.status,"ADMISSION_COMMITTED");
   assert.equal(admission.dispatchPermitted,false);
+  assert.equal(broker.calls.some(x=>x.sql===ADMISSION_SQL),true);
+  assert.equal(broker.calls.some(x=>x.sql.includes("FOR UPDATE")),false);
   const subscriberDb=new SubDb();
   const subStep=await pullExactlyOneCstJobCompletion({
     client:subscriberDb,jobId:483,expectedSubscriberId:subscriberId,

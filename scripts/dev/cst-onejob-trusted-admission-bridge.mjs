@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-/** Independently pinned QA receipt -> locked CST-DEV admission (candidate).
+/** Independently pinned QA receipt -> scoped CST-DEV admission (candidate).
  * Default DENY. No credentials, grants, migrations, dispatch or ACK issued.
  */
 import {openSync,readFileSync,closeSync,fstatSync,lstatSync,realpathSync,constants} from "node:fs";
-import {reviewOneJobSignedHandoff} from "./cst-onejob-signed-handoff-review.ts";
+import {createHash} from "node:crypto";
+import {reviewSignedIndependentQaReceipt} from
+  "../../artifacts/api-server/src/lib/cstOneJobIndependentQaVerifier.ts";
 import {readRootOwnedQaPublicTrust} from "./cst-onejob-qa-trust-custody.mjs";
 import {CST_ONEJOB_DEV_POOLER,createPinnedCstOneJobPgConnection}
   from "../../lib/db/src/cstOneJobPinnedSupabaseCa.ts";
@@ -36,73 +38,72 @@ export function reviewBrokerEnvironment(env){
   }catch{blockers.push("INVALID_BROKER_CONNECTION")}
   return {ready:blockers.length===0,blockers};
 }
-const date=x=>x instanceof Date?x.toISOString():typeof x==="string"?x:"";
-export const LOCK_SQL=[
- "SELECT a.id::text a_id,a.job_id a_job_id,a.approved_by_user_id a_owner_id,",
- "a.status a_status,a.purpose a_purpose,a.company_id a_company_id,a.model_id a_model_id,",
- "a.request_id a_request_id,a.worker_name a_worker_name,a.source_sha a_source_sha,",
- "a.approved_at a_approved_at,a.expires_at a_expires_at,a.consumed_at a_consumed_at,",
- "j.id j_id,j.status j_status,j.job_type j_type,j.required_capability j_capability,",
- "j.max_retry j_max_retry,j.payload_json->>'modelId' j_model_id,",
- "j.payload_json->>'requestId' j_request_id,",
- "r.approval_id::text r_approval_id,r.job_id r_job_id,r.company_id r_company_id,",
- "r.request_id r_request_id,r.worker_name r_worker_name,",
- "r.image_source_sha r_source_sha,r.image_id r_image_id,r.verifier_id r_verifier_id,",
- "r.nonce r_nonce,r.proof_digest r_proof_digest,r.verified_at r_verified_at,",
- "r.expires_at r_expires_at,r.consumed_at r_consumed_at",
- "FROM ai_platform.cst_onejob_owner_approvals a",
- "JOIN ai_platform.ai_jobs j ON j.id=a.job_id",
- "JOIN cst_onejob_private.verified_admission_receipts r ON r.approval_id=a.id AND r.job_id=j.id",
- "WHERE j.id=$1 FOR UPDATE OF a,j,r"
-].join(" ");
-export function mappedLockedRows(x){
-  return {
-    approval:{id:x.a_id,jobId:Number(x.a_job_id),approvedByUserId:Number(x.a_owner_id),
-      status:x.a_status,purpose:x.a_purpose,companyId:x.a_company_id,modelId:x.a_model_id,
-      requestId:x.a_request_id,workerName:x.a_worker_name,sourceSha:x.a_source_sha,
-      approvedAt:date(x.a_approved_at),expiresAt:date(x.a_expires_at),
-      consumedAt:x.a_consumed_at===null?null:date(x.a_consumed_at)},
-    job:{id:Number(x.j_id),status:x.j_status,jobType:x.j_type,
-      requiredCapability:x.j_capability,maxRetry:Number(x.j_max_retry),
-      requestId:x.j_request_id,modelId:x.j_model_id},
-    receiptRow:{approvalId:x.r_approval_id,jobId:Number(x.r_job_id),
-      companyId:x.r_company_id,requestId:x.r_request_id,workerName:x.r_worker_name,
-      imageSourceSha:x.r_source_sha,imageId:x.r_image_id,verifierId:x.r_verifier_id,
-      nonce:x.r_nonce,proofDigest:x.r_proof_digest,
-      verifiedAt:date(x.r_verified_at),expiresAt:date(x.r_expires_at),
-      consumedAt:x.r_consumed_at===null?null:date(x.r_consumed_at)}
-  };
-}
-export async function executeTrustedAdmissionTransaction({
-  client,jobId,signedReceipt,evidenceBytes,pinnedTrust,approvedSourceSha
+// This database capability is NOT installed by this script. A separately
+// approved migration must make it available only to the dedicated broker role.
+// Its SECURITY DEFINER executor (if approved) owns the row locks and checks.
+export const ADMISSION_SQL=
+  "SELECT cst_onejob_private.admit_verified_onejob_capability($1::integer,$2::text,$3::text) AS job_id";
+
+/**
+ * Detached QA proof and independently collected evidence are verified before
+ * ANY database query. There is deliberately no SELECT/FOR UPDATE or table DML
+ * in the broker. Database authority is separate: an independent QA writer
+ * must persist the PRE receipt, and the narrowly scoped capability must
+ * atomically recheck real Owner, job, receipt, nonce, RLS and replay state.
+ */
+export function reviewAdmissionBeforeDatabase({
+  jobId,signedReceipt,evidenceBytes,pinnedTrust,approvedSourceSha
 }){
-  if(!Number.isSafeInteger(jobId)||jobId<1||jobId===482)
+  if(!Number.isSafeInteger(jobId)||jobId<=482)
     throw Error("NEW_JOB_REQUIRED");
   if(!Buffer.isBuffer(evidenceBytes)||evidenceBytes.length<1||evidenceBytes.length>65536)
     throw Error("INDEPENDENT_EVIDENCE_REQUIRED");
   if(!SHA.test(approvedSourceSha||""))throw Error("PINNED_SHA_REQUIRED");
+  const c=signedReceipt?.claims;
+  if(!c||c.jobId!==jobId||c.sourceSha!==approvedSourceSha)
+    throw Error("RELEASE_QA_JOB_OR_SHA_MISMATCH");
+  if(!pinnedTrust||pinnedTrust.project!==PROJECT||
+     pinnedTrust.verifierId!==c.verifierId)
+    throw Error("INDEPENDENT_QA_TRUST_MISMATCH");
+  const review=reviewSignedIndependentQaReceipt(signedReceipt,{
+    project:PROJECT,approvalId:c.approvalId,jobId,
+    requestId:c.requestId,workerName:c.workerName,sourceSha:approvedSourceSha,
+    imageId:c.imageId,stage:"PRE_ADMISSION",verifierId:pinnedTrust.verifierId,
+    publicKeyPem:pinnedTrust.publicKeyPem,
+    trustedFingerprint:pinnedTrust.fingerprint,
+    nowIso:new Date().toISOString()
+  });
+  if(review.status!=="CRYPTOGRAPHIC_BINDING_VALID")
+    throw Error("SIGNED_QA_EVIDENCE_DENIED");
+  const observedDigest=createHash("sha256").update(evidenceBytes).digest("hex");
+  if(observedDigest!==c.evidenceDigest)
+    throw Error("INDEPENDENT_EVIDENCE_BYTES_DIGEST_MISMATCH");
+  // The digest is deterministic over the full Ed25519-signed canonical claims;
+  // DB must match this exact digest AND nonce against an independently written
+  // verified PRE receipt, not a row self-asserted by the broker.
+  return {jobId,nonce:c.nonce,proofDigest:review.canonicalDigest};
+}
+
+export async function executeTrustedAdmissionTransaction({
+  client,jobId,signedReceipt,evidenceBytes,pinnedTrust,approvedSourceSha
+}){
+  const preflight=reviewAdmissionBeforeDatabase({
+    jobId,signedReceipt,evidenceBytes,pinnedTrust,approvedSourceSha
+  });
   let begun=false;
   try{
     await client.query("BEGIN");begun=true;
     await client.query("SET TRANSACTION READ WRITE");
     await client.query("SET LOCAL ROLE "+ROLE);
-    const identity=await client.query("SELECT current_user AS role_name,session_user AS login_name,current_database() AS db");
+    const identity=await client.query(
+      "SELECT current_user AS role_name,session_user AS login_name,current_database() AS db");
     const i=identity.rows?.[0];
     if(identity.rows?.length!==1||i?.role_name!==ROLE||
        i?.login_name!==LOGIN||i?.db!=="postgres")
       throw Error("BROKER_SESSION_NOT_BOUND");
-    const result=await client.query(LOCK_SQL,[jobId]);
-    if(result.rows?.length!==1)throw Error("AUTHORITATIVE_LOCKED_ROWS_MISSING");
-    const data=mappedLockedRows(result.rows[0]);
-    if(data.approval.sourceSha!==approvedSourceSha)throw Error("IMAGE_SHA_NOT_APPROVED");
-    const review=reviewOneJobSignedHandoff({...data,signedReceipt,
-      qaPublicKey:pinnedTrust,independentlyCapturedEvidence:evidenceBytes});
-    if(review.status!=="BOUND_CRYPTO_REVIEW_ONLY")
-      throw Error("SIGNED_QA_EVIDENCE_DENIED");
-    const admitted=await client.query(
-      "SELECT cst_onejob_private.admit_verified_onejob($1::integer,$2::text,$3::text) AS job_id",
-      [jobId,data.receiptRow.nonce,data.receiptRow.proofDigest]
-    );
+    const admitted=await client.query(ADMISSION_SQL,[
+      preflight.jobId,preflight.nonce,preflight.proofDigest
+    ]);
     if(admitted.rows?.length!==1||Number(admitted.rows[0].job_id)!==jobId)
       throw Error("ATOMIC_JOB_ADMISSION_NOT_CONFIRMED");
     await client.query("COMMIT");begun=false;
