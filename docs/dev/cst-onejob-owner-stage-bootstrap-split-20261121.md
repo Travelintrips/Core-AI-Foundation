@@ -362,3 +362,13 @@ IMPORTANT: a receipt file existing is not proof of independent approval.
 Independent authority, key custody, source pin, network ACL, and JIT
 database LOGIN/relock remain required. Candidate is deliberately
 unstartable on this VPS. No source PASS confers release permission.
+
+## Gate A real kernel policy — disposable namespace QA
+
+On VPS, a separately isolated Docker namespace was given an nftables
+output policy allowing one mock destination on TCP 6543 and denying
+a second mock destination. The test observed the permitted and denied
+packets and the actual Gate-A Python kernel policy inspector returned PASS.
+The work did not authenticate to Supabase or change the host firewall.
+The script is listed as VPS-only QA rather than GitHub CI; it must not
+be treated as a signed Operations release or a real pooler ACL.

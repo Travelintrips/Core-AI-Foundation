@@ -97,6 +97,7 @@ export const VPS_ISOLATED_QA_GATES=Object.freeze([
  "scripts/dev/cst-team-onejob-operational-broker-no-network-qa.sh",
  "scripts/dev/cst-onejob-stage-http-uds-qa.sh",
  "scripts/dev/cst-onejob-stage-broker-rundir-restart-qa.sh",
+ "scripts/dev/cst-onejob-gatea-real-kernel-policy.disposable.sh",
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",
