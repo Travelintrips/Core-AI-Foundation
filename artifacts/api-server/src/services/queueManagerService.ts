@@ -16,6 +16,16 @@ import { db, aiJobsTable, aiExecutionPlansTable, aiDepartmentsTable } from "@wor
 import type { InsertAiJob } from "@workspace/db";
 import { computePriorityScore } from "./priorityEngine.js";
 import { logAudit } from "./aiAuditService.js";
+import {
+ isReservedOneJobPilotRequest,CST_ONEJOB_RESERVED_REQUEST_PREFIX
+} from "../lib/cstOneJobPilotEnqueueGuard.js";
+
+// A reserved one-job record may leave WAITING only through the verified
+// signed-admission DB function. Generic queue management cannot update it.
+// Restrictive CST-DEV RLS is independently enforced on the shared DEV role.
+const nonReservedPilotJob = sql`
+  COALESCE(${aiJobsTable.payloadJson}->>'requestId','') NOT LIKE
+    ${CST_ONEJOB_RESERVED_REQUEST_PREFIX + '%'}`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -79,6 +89,9 @@ async function resolveFactors(input: EnqueueJobInput) {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function enqueue(input: EnqueueJobInput) {
+  // Enforce namespace ownership for ALL service callers, not only HTTP.
+  if(isReservedOneJobPilotRequest(input.payloadJson))
+    throw Error("DEV_ONEJOB_OWNER_APPROVAL_REQUIRED");
   const { execPlanPriority, deptPriority } = await resolveFactors(input);
 
   const now = new Date();
@@ -197,7 +210,7 @@ export async function peek(n = 10) {
 }
 
 export async function pauseQueue(filter?: QueueFilter) {
-  const conditions = [eq(aiJobsTable.status, "queued")];
+  const conditions = [eq(aiJobsTable.status, "queued"),nonReservedPilotJob];
   if (filter?.departmentId) conditions.push(eq(aiJobsTable.departmentId, filter.departmentId));
   if (filter?.jobType) conditions.push(eq(aiJobsTable.jobType, filter.jobType));
 
@@ -216,7 +229,7 @@ export async function pauseQueue(filter?: QueueFilter) {
 }
 
 export async function resumeQueue(filter?: QueueFilter) {
-  const conditions = [eq(aiJobsTable.status, "waiting")];
+  const conditions = [eq(aiJobsTable.status, "waiting"),nonReservedPilotJob];
   if (filter?.departmentId) conditions.push(eq(aiJobsTable.departmentId, filter.departmentId));
   if (filter?.jobType) conditions.push(eq(aiJobsTable.jobType, filter.jobType));
 
@@ -236,7 +249,7 @@ export async function resumeQueue(filter?: QueueFilter) {
 
 export async function cancelQueue(filter?: QueueFilter) {
   const statuses = ["queued", "waiting"];
-  const conditions = [inArray(aiJobsTable.status, statuses)];
+  const conditions = [inArray(aiJobsTable.status, statuses),nonReservedPilotJob];
   if (filter?.departmentId) conditions.push(eq(aiJobsTable.departmentId, filter.departmentId));
   if (filter?.jobType) conditions.push(eq(aiJobsTable.jobType, filter.jobType));
 
@@ -265,6 +278,8 @@ export async function reprioritize(
     .where(eq(aiJobsTable.id, jobId));
 
   if (!existing) throw new Error(`Job ${jobId} not found`);
+  if(isReservedOneJobPilotRequest(existing.payloadJson))
+    throw Error("DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED");
 
   const { execPlanPriority, deptPriority } = await resolveFactors({
     jobType: existing.jobType,
@@ -293,8 +308,10 @@ export async function reprioritize(
       managerOverride: managerOverride !== undefined ? managerOverride : existing.managerOverride,
       updatedAt:      new Date(),
     })
-    .where(eq(aiJobsTable.id, jobId))
+    .where(and(eq(aiJobsTable.id, jobId),nonReservedPilotJob))
     .returning();
+  if(!updated)
+    throw Error("DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED");
 
   await logAudit("job-engine", "job_reprioritized", String(jobId), "ai_job", "success", {
     oldPriority: existing.priority,

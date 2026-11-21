@@ -3,7 +3,8 @@
  * General job enqueue must never turn a typed requestId into proof of Owner approval.
  * A future dedicated authenticated one-use approval transaction owns this namespace.
  */
-const PILOT_REQUEST_PREFIX = "cst-ai-team-company1-dev:pilot-";
+export const CST_ONEJOB_RESERVED_REQUEST_PREFIX = "cst-ai-team-company1-dev:pilot-";
+const PILOT_REQUEST_PREFIX = CST_ONEJOB_RESERVED_REQUEST_PREFIX;
 
 export function isReservedOneJobPilotRequest(payload: unknown): boolean {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;

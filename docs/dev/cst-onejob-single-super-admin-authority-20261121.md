@@ -295,3 +295,48 @@ and rollback, verifies Owner audit visibility, forged-root audit
 invisibility, no UPDATE/DELETE, duplicate migration denial, and
 post-approval rollback denial. Deploy only via verified CST-DEV
 migration tooling after source CI PASS.
+
+## Gate on ALL generic queue writes for reserved one-job namespace
+
+A separate source audit found that generic queueManagerService.resumeQueue
+previously selected *every* WAITING job and set status=QUEUED, without
+excluding reserved Company-1 GPT02 pilot request IDs. Even if the actual
+signed-admission function was absent, a future privileged generic queue
+writer could accidentally promote a new WAITING pilot. Generic bulk cancel,
+pause, priority update, manual retry and direct service enqueue also lacked
+consistent reserved-namespace checks.
+
+**Existing CST-DEV RLS does already prevent this specific promotion by
+aicore_dev_runtime right now**. The live role has column UPDATE(status)
+permission, but its only two permissive UPDATE policies allow coding
+workstream recovery and coding repository analyzer claims, never
+ollama_model_invocation. Consequently this is preventative application
+hardening, not a claim of a proven live RLS bypass. The historical
+Company-1 pilot job ID 482 is completed (18 Nov 2026) without a new
+owner approval; new signed staging requires jobId > 482. No active
+Owner approval or new pilot is present.
+
+The reusable reserved request prefix is kept in the existing one-job
+enqueue guard. Generic queue service now rejects direct reserved
+enqueue, and all bulk pause/resume/cancel and reprioritize updates
+exclude rows with that prefix in the SQL UPDATE predicate. Generic
+manual retry additionally rejects the reserved payload ID with 403
+before writing and protects the UPDATE WHERE against a race; generic
+single-job cancel excludes the reserved namespace. A legitimate job
+that has already entered worker execution may still follow the existing
+worker-side failure accounting; those methods were not rebuilt.
+
+The **only** designed path to move one new WAITING pilot to QUEUED
+remains the independently authenticated signed admission broker with
+verified QA PRE, one-use nonce and dedicated SQL capability. That
+function is still review-only and not deployed. Source tests exercise
+all generic writers; isolated PostgreSQL 16 network-none tests prove
+ordinary job resume and existing coding failure workflow continue
+while a reserved WAITING pilot cannot be promoted. The negative
+demonstration of a broader synthetic generic writer is rolled back
+in the disposable database.
+
+No additional database migration, role/login change, signer activation,
+owner approval or PROD update is required for these source defenses.
+Existing CST-DEV RLS, verified restricted audit reader, dormant
+one-Owner staging unit, and original production service remain untouched.

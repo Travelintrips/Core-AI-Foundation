@@ -40,7 +40,9 @@ import {
 } from "../services/jobWorkerService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
-import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.js";
+import {
+ isReservedOneJobPilotRequest,CST_ONEJOB_RESERVED_REQUEST_PREFIX
+} from "../lib/cstOneJobPilotEnqueueGuard.js";
 import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
 import { SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
 import { verifyFreshOneJobStageConsent } from "../lib/cstOneJobFreshStageConsent.js";
@@ -611,6 +613,12 @@ router.patch("/ai/jobs/:id/retry", async (req, res): Promise<void> => {
     .where(eq(aiJobsTable.id, id));
 
   if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  // Retrying a reserved pilot requires NEW signed one-job admission;
+  // generic manual retry must never mint queue authority.
+  if (isReservedOneJobPilotRequest(job.payloadJson)) {
+    res.status(403).json({error:"DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED"});
+    return;
+  }
 
   const retriable = ["failed", "blocked", "cancelled"].includes(job.status);
   if (!retriable) {
@@ -626,8 +634,14 @@ router.patch("/ai/jobs/:id/retry", async (req, res): Promise<void> => {
       nextRetryAt:  null,
       updatedAt:    new Date(),
     })
-    .where(eq(aiJobsTable.id, id))
+    .where(and(eq(aiJobsTable.id, id),sql`
+      COALESCE(${aiJobsTable.payloadJson}->>'requestId','') NOT LIKE
+      ${CST_ONEJOB_RESERVED_REQUEST_PREFIX+'%'}`))
     .returning();
+  if (!updated) {
+    res.status(409).json({error:"DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED"});
+    return;
+  }
 
   await logAudit("job-engine", "job_manual_retry", String(id), "ai_job", "success", {});
 
