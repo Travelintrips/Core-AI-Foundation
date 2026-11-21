@@ -25,7 +25,8 @@ BEGIN
  THEN RAISE EXCEPTION 'CST_DEV_ONEJOB_OWNER_PASSWORD_STATE_PREFLIGHT_DENIED'; END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_class
      WHERE oid='ai_platform.internal_users'::regclass
-       AND relrowsecurity AND relforcerowsecurity)
+       AND relrowsecurity
+       AND relowner='postgres'::regrole)
  OR NOT EXISTS(SELECT 1 FROM pg_policy
      WHERE polrelid='ai_platform.internal_users'::regclass
        AND polname='cst_onejob_stage_owner_select'

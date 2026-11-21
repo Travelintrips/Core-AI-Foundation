@@ -56,7 +56,8 @@ def main():
      (3,'admin','active','internal',false,'admin@example.invalid',null),
      (4,'owner','blocked','internal',false,'owner-blocked@example.invalid',null);
    ALTER TABLE ai_platform.internal_users ENABLE ROW LEVEL SECURITY;
-   ALTER TABLE ai_platform.internal_users FORCE ROW LEVEL SECURITY;
+   -- Match real CST-DEV: RLS enabled, NO FORCE, table owner postgres.
+   -- The stage writer is a distinct NOLOGIN/NOBYPASSRLS nonowner role.
    GRANT USAGE ON SCHEMA ai_platform
       TO cst_team_model_pilot_writer,cst_untrusted_client;
    GRANT SELECT(id,role,status,account_type)
@@ -65,6 +66,12 @@ def main():
      ON ai_platform.internal_users FOR SELECT
      TO cst_team_model_pilot_writer USING (
        role='owner' AND status='active' AND account_type='internal');""")
+  baseline=psql("""SELECT
+    relrowsecurity::text||'|'||relforcerowsecurity::text||'|'||
+    relowner::regrole::text
+    FROM pg_class WHERE oid='ai_platform.internal_users'::regclass;""").stdout.strip()
+  expect(baseline=='true|false|postgres',
+    'LIVE_PARITY_OWNER_AND_NONFORCED_RLS_NOT_VERIFIED')
   pre=psql("""BEGIN;
     SET TRANSACTION READ ONLY;
     SET LOCAL ROLE cst_team_model_pilot_writer;
