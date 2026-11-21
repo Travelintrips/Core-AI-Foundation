@@ -319,3 +319,24 @@ rather than blindly unlinking and impersonating an old session. A future
 systemd-managed broker RuntimeDirectory and independently reviewed
 pre-start stale socket recovery are still needed for automatic crash
 recovery; that portion is not implemented or operationally PASS.
+
+
+## systemd-managed broker socket restart rehearsal
+
+Real systemd v255 on VPS was used with two disposable root launcher services,
+unique /run RuntimeDirectory, RuntimeDirectoryPreserve=no, and non-root
+broker process UID 28500 / GID 28501 (via setpriv). Test A bound a synthetic
+PostgreSQL socket mode 0660. After systemctl kill --signal=SIGKILL, systemd
+removed the entire dedicated runtime directory. Test B recreated the same
+directory and socket without stale-path cleanup, and graceful stop removed it.
+
+IMPORTANT: systemd User=28500 FAILED with status 217/USER because the
+numeric UID has no installed NSS passwd entry. The QA instead gave the
+transient systemd root wrapper ownership of the runtime folder, then dropped
+privilege for the synthetic socket process. This is not a live identity or
+credential provisioning step; no OS accounts were installed.
+
+This proves systemd cleanup semantics only. It does NOT create an approved
+real broker unit, signed technical permit, kernel egress ACL, JIT database
+controller, or Supavisor drain proof. Until those independent prerequisites
+exist, operational Gate A remains NO-GO, with no automatic recovery claimed.
