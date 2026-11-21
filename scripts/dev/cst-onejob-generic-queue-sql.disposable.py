@@ -5,7 +5,7 @@ This tests the exact source SQL exclusion predicate plus a simplified
 replica of CST-DEV's already-existing coding-only UPDATE RLS. No actual
 Supabase project credentials, signers, Owner decisions or server ports.
 """
-import os,subprocess,time,json,sys
+import os,subprocess,time,json,sys,hashlib
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -13,12 +13,28 @@ SRC=(ROOT/"artifacts/api-server/src/services/queueManagerService.ts").read_text(
 PREFIX="cst-ai-team-company1-dev:pilot-"
 NAME="cst-onejob-generic-queue-sql-disposable-"+str(os.getpid())
 def run(args,stdin=None,allow=False):
- # Docker may pull the image on the first CI run; other SQL commands
- # stay strictly bounded to 25 seconds. No test assertion is relaxed.
+ # A stable command tag identifies the failing synthetic fixture operation
+ # without echoing its SQL or relying on CI runner timing.
+ tag=("Q"+hashlib.sha256(stdin.encode()).hexdigest()[:10].upper()
+   if stdin is not None else "DOCKER_"+(args[1].upper() if len(args)>1 else "CLI"))
+ if os.environ.get("CST_QA_TRACE")=="1":
+  print("DISPOSABLE_STEP_"+tag,flush=True)
  limit=90 if args[:2]==["docker","run"] else 25
- r=subprocess.run(args,input=stdin,text=True,capture_output=True,timeout=limit)
- if r.returncode!=0 and not allow:raise RuntimeError(
-  "SYNTHETIC_TEST_COMMAND_FAILED:"+r.stderr[-700:])
+ try:
+  r=subprocess.run(args,input=stdin,text=True,capture_output=True,timeout=limit)
+ except subprocess.TimeoutExpired:
+  raise RuntimeError("FIXTURE_"+tag+"_TIMEOUT")
+ if r.returncode!=0 and not allow:
+  msg=r.stderr.lower()
+  if "permission denied" in msg:category="PERMISSION"
+  elif "row-level security" in msg:category="RLS"
+  elif "syntax error" in msg:category="SQL_SYNTAX"
+  elif "does not exist" in msg:category="MISSING"
+  elif "not found" in msg:category="NOT_FOUND"
+  elif "error response from daemon" in msg:category="DOCKER_DAEMON"
+  elif "error:" in msg:category="PG_ERROR"
+  else:category="COMMAND_EXIT"
+  raise RuntimeError("FIXTURE_"+tag+"_"+category)
  return r
 def psql(q,allow=False):
  return run(["docker","exec","-i",NAME,"psql","-X","-qAt",
