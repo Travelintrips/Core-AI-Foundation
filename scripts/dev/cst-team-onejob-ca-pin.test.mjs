@@ -101,6 +101,21 @@ test("service principal allowlist never accepts shared runtime or unknown role",
   }
 });
 
+test("Owner readiness rejects missing runtime CA before attempting dedicated DB authentication",()=>{
+  const route=readFileSync(new URL(
+    "../../artifacts/api-server/src/routes/jobs.ts",import.meta.url),"utf8");
+  const segment=route.slice(route.indexOf('router.get("/ai/dev/onejob/owner-stage-readiness"'),
+                            route.indexOf('router.post("/ai/dev/onejob/owner-approve-and-stage"'));
+  const exportSurface=readFileSync(new URL("../../lib/db/src/index.ts",import.meta.url),"utf8");
+  assert.match(exportSurface,/loadPinnedCstDevSupabaseRootCa/);
+  assert.match(segment,/requireInternalRole\("owner"\)/);
+  assert.match(segment,/loadPinnedCstDevSupabaseRootCa\(\)/);
+  assert.match(segment,/STAGING_PINNED_CA_NOT_INSTALLED_OR_INVALID/);
+  assert.ok(segment.indexOf("loadPinnedCstDevSupabaseRootCa();") <
+            segment.indexOf("getCstOneJobStagingDatabase(process.env)"),
+            "PINNED_CA_MUST_BE_VERIFIED_BEFORE_DB_AUTH");
+  assert.doesNotMatch(segment,/rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED/);
+});
 test("direct staging and broker paths cannot lose CA via connectionString",()=>{
   const stage=readFileSync(new URL(
     "../../artifacts/api-server/src/lib/cstOneJobStagingDatabase.ts",import.meta.url),"utf8");

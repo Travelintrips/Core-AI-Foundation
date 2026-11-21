@@ -164,3 +164,30 @@ migration and guarded rollback, confirms success, fails on duplicate
 migration, confirms rollback only before any approval, and refuses wrong
 Operations fingerprint or forged trust booleans. This does not establish
 any live CST-DEV migration until separately applied and read back.
+
+## Runtime Supabase public CA preflight (21 November 2026)
+
+The actual VPS host already has the public Supabase Root 2021 CA at
+`/etc/cst-onejob-dev/trust/prod-ca-2021.crt`. A passwordless
+PostgreSQL SSLRequest + verified TLS 1.3 handshake to CST-DEV succeeded
+on the existing transaction pooler port 6543 and direct PostgreSQL
+port 5432. This proves network reachability and certificate trust,
+**not** role authentication, job approval or authority for dispatch.
+
+The dedicated one-job connection source intentionally loads that
+exact pinned public CA from the *container runtime* path
+`/run/cst-onejob-dev-db/ca/prod-ca-2021.crt`. It is **not mounted**
+in the original shared DEV container, whose stage URL/feature are also
+disabled. Before any future authorized separate DEV backend promotion,
+bind-mount the **public CA** read-only into that exact runtime path.
+Do not copy or move private credentials as part of this CA prerequisite.
+
+The authenticated Owner GET readiness endpoint now validates the
+source-pinned CA **before opening the dedicated staging DB connection**.
+If the runtime mount is missing, writable, a symlink, an invalid PEM,
+or a fingerprint mismatch, it reports
+`STAGING_PINNED_CA_NOT_INSTALLED_OR_INVALID` and remains NO-GO.
+It never falls back to system trust, disables TLS verification,
+tries shared-runtime DB credentials, or mistakes this for password failure.
+The existing feature flags, locked role login, Operations signing root
+and one-use real Owner approval remain independently required.

@@ -27,7 +27,7 @@ import {
   PauseQueueBody,
   ResumeQueueBody,
 } from "@workspace/api-zod";
-import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
+import { db, aiJobsTable, aiWorkersTable, loadPinnedCstDevSupabaseRootCa } from "@workspace/db";
 import {
   enqueue,
   reprioritize,
@@ -346,6 +346,15 @@ router.get("/ai/dev/onejob/owner-stage-readiness",
     // Advisory: QA PRE (job+approval-specific) remains mandatory at
     // admission, not as a circular prerequisite to create WAITING.
     const blockers=[...envGate.blockers,...stageConfig.blockers];
+    // Check the exact source-pinned public Supabase CA BEFORE attempting
+    // any dedicated-login network connection. A missing Docker bind mount
+    // must not be misdiagnosed as a password or Supavisor authentication bug.
+    // Never trust a peer certificate as an alternative CA or retry with
+    // rejectUnauthorized=false. This is a read-only runtime file check.
+    if(blockers.length===0){
+      try{loadPinnedCstDevSupabaseRootCa();}
+      catch{blockers.push("STAGING_PINNED_CA_NOT_INSTALLED_OR_INVALID");}
+    }
     if(blockers.length===0){
       try{
         const db=getCstOneJobStagingDatabase(process.env);
