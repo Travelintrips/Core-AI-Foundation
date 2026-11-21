@@ -264,8 +264,20 @@ class StageTests(unittest.TestCase):
                 post=self.permit("qa-post",raw2,"qa-post-raw")
                 (inbox/"qa-post.json").write_text(json.dumps(post))
                 (payloads/"qa-post.bin").write_bytes(raw2)
+                # CI runs unprivileged. Simulate only the *known temporary*
+                # approved PRE permit as root-owned for the replacement check.
+                # Do NOT relax the real root-owner enforcement in the installer.
+                actual_lstat=installer.os.lstat
+                root_owned_test_path=permits/"qa-evidence.json"
+                def fake_root_owned_permit_lstat(path):
+                    record=actual_lstat(path)
+                    if pathlib.Path(path)==root_owned_test_path:
+                        return types.SimpleNamespace(
+                            st_mode=record.st_mode,st_uid=0,st_nlink=record.st_nlink)
+                    return record
                 with mock.patch.object(installer,"check_prior_qa_consumed",
-                  return_value=None) as prior:
+                  return_value=None) as prior, mock.patch.object(
+                  installer.os,"lstat",side_effect=fake_root_owned_permit_lstat):
                     result=installer.install_stage("qa-post",self.manifest,self.public)
                     prior.assert_called_once()
                 self.assertEqual(result["stage"],"qa-post")
