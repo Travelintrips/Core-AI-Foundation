@@ -30,6 +30,8 @@ const env={
  PORT:"3000",
  SERVE_STATIC_FRONTEND:"true",
  HOSTINGER_FRONTEND:"ai-platform",
+ // Required DEV project pin. This is public URL data, not a credential.
+ SUPABASE_URL_DEV:"https://xssrfshdrtdfupgqwfdw.supabase.co",
  AI_DEV_BACKGROUND_RUNTIME_ENABLED:"false",
  AI_SCHEDULER_ENABLED:"false",
  AI_INCIDENT_WATCHER_ENABLED:"false",
@@ -96,7 +98,8 @@ try{
  const reason=e instanceof Error?e.message:"UNKNOWN";
  console.log(JSON.stringify({
   status:"CI_IMAGE_RUNTIME_SMOKE_FAILED",reason,
-  crashSigns:output.slice(-600).replaceAll(/postgres(?:ql)?:\/\/\S+/g,"REDACTED"),
+  crashSigns:(output.slice(0,550)+"\n"+output.slice(-900))
+    .replaceAll(/postgres(?:ql)?:\/\/\S+/g,"REDACTED"),
   releaseDecision:"NO_GO",
  }));
  process.exitCode=1;
