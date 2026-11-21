@@ -1,5 +1,7 @@
 # AI Core repository operating guidance
 
+**CST DEV development standard:** [CST Global Development SOP & Auto-Recovery](CST-GLOBAL-DEVELOPMENT-SOP.md). Use the versioned standard for job classification, DEV verification, recovery, and checkpoints. The communication SOP below governs authority and transport.
+
 **Canonical communication SOP:** [AI Core ↔ ChatGPT ↔ OpenClaw SOP](docs/SOP_AI_CORE_CHATGPT_OPENCLAW_COMMUNICATION.md). Read before dispatching jobs, reporting callback receipt, or claiming E2E verification. Specialized authority/protocol documents remain references; this Markdown is not executable enforcement.
 
 
