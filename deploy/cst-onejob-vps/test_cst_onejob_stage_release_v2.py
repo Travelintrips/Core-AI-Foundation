@@ -12,6 +12,13 @@ import types
 import unittest
 from unittest import mock
 
+# Python -m unittest <file-path> on hosted CI does not insert this script's
+# sibling directory into sys.path. Resolve only this versioned local test
+# module; do not depend on caller cwd or an ambient PYTHONPATH.
+ROOT=pathlib.Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0,str(ROOT))
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import cst_onejob_stage_release_v2 as v2
