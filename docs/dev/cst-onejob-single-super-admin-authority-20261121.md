@@ -191,3 +191,36 @@ It never falls back to system trust, disables TLS verification,
 tries shared-runtime DB credentials, or mistakes this for password failure.
 The existing feature flags, locked role login, Operations signing root
 and one-use real Owner approval remain independently required.
+
+## Existing systemd-encrypted stage credential — NO new password (21 Nov 2026)
+
+On VPS srv1792369, the previously staged encrypted dedicated Owner
+staging database URL is stored at
+/etc/credstore.encrypted/cst-onejob-owner-stage-database-url (root, 0600).
+Its encrypted LOGICAL name is database-url, NOT its ciphertext filename.
+Using the ciphertext filename as the credential identity produces the
+message "Embedded credential name 'database-url' does not match filename".
+That does not prove a wrong PostgreSQL password.
+
+For a future separately controlled stage-only systemd unit named
+cst-onejob-owner-stage.service, use the exact binding:
+
+    LoadCredentialEncrypted=database-url:/etc/credstore.encrypted/cst-onejob-owner-stage-database-url
+
+That unit injects CREDENTIALS_DIRECTORY under the pinned directory
+/run/credentials/cst-onejob-owner-stage.service. The existing stage code
+can now consume the private database-url file with strict descriptor
+checks (no symlinks, hard links, weak permissions or unbounded size),
+or accept its previous dedicated URL env for backward compatibility.
+Both sources together DENY, as does any alternate credential directory.
+The derived URL remains within the process; it is never returned in
+readiness JSON, logged, or copied into the shared Core AI pool.
+
+This source change does NOT enable the database LOGIN, install/start a
+systemd service, attempt authentication, publish a password, or alter the
+active Core container. Synthetic systemd credential identity checks and
+staging source tests PASS; LIVE database authentication with the
+dedicated NOLOGIN principal is still not verified. Only CST-DEV project
+xssrfshdrtdfupgqwfdw on the pinned transaction pooler port 6543 with
+TLS is allowed. Genuine signed PRE QA and controlled admission remain
+mandatory before any WAITING job becomes QUEUED.

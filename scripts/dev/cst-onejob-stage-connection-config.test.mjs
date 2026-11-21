@@ -1,9 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync,writeFileSync,chmodSync,symlinkSync,linkSync,
+  mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {
   reviewCstOneJobStageDatabaseConfig,
-  CST_ONEJOB_STAGE_URL_KEY
+  CST_ONEJOB_STAGE_URL_KEY,
+  CST_ONEJOB_STAGE_CREDENTIAL_DIRECTORY,
+  CST_ONEJOB_STAGE_CREDENTIAL_FILE,
+  CST_ONEJOB_STAGE_CREDENTIAL_NAME,
+  readCstOneJobProtectedCredentialFile,
+  resolveCstOneJobStageDatabaseCredential
 } from "../../artifacts/api-server/src/lib/cstOneJobStageDbConfig.ts";
 
 const ref="xssrfshdrtdfupgqwfdw";
@@ -91,4 +99,79 @@ test("stage only uses dedicated lazy connection and SET LOCAL inside transaction
  assert.match(pool,/reviewCstOneJobStageDatabaseConfig\(env\)/);
  assert.match(pool,/ONEJOB_STAGING_DATABASE_CREDENTIAL_CHANGED_RESTART_REQUIRED/);
  assert.doesNotMatch(pool,/resolveDatabaseUrl\(|SUPABASE_DEV_DATABASE_URL|SUPABASE_PROD_DATABASE_URL|from "@workspace\/db";\s*const \{\s*db\s*\}/);
+});
+
+test("existing encrypted systemd credential keeps its logical name database-url, not ciphertext basename",()=>{
+ assert.equal(CST_ONEJOB_STAGE_CREDENTIAL_NAME,"database-url");
+ assert.equal(CST_ONEJOB_STAGE_CREDENTIAL_DIRECTORY,
+   "/run/credentials/cst-onejob-owner-stage.service");
+ assert.equal(CST_ONEJOB_STAGE_CREDENTIAL_FILE,
+   "/run/credentials/cst-onejob-owner-stage.service/database-url");
+ const sys=readFileSync(new URL(
+   "../../artifacts/api-server/src/lib/cstOneJobStageDbConfig.ts",import.meta.url),"utf8");
+ assert.match(sys,/STAGING_SYSTEMD_UNIT_DIRECTORY_NOT_PINNED/);
+ assert.match(sys,/constants\.O_NOFOLLOW/);
+ assert.match(sys,/fstatSync\(fd\)/);
+ assert.match(sys,/realpathSync\(path\)===path/);
+});
+test("systemd stage source resolves only exact protected unit, never arbitrary dir or two sources",()=>{
+ let reads=0, last="";
+ const loader=(path)=>{reads++;last=path;return url};
+ const safe=(path)=>path===CST_ONEJOB_STAGE_CREDENTIAL_DIRECTORY;
+ const env={...good,[CST_ONEJOB_STAGE_URL_KEY]:"",
+    CREDENTIALS_DIRECTORY:CST_ONEJOB_STAGE_CREDENTIAL_DIRECTORY};
+ const parsed=resolveCstOneJobStageDatabaseCredential(env,loader,safe);
+ assert.equal(parsed.blocker,null);
+ assert.equal(parsed.value,url);
+ assert.equal(last,CST_ONEJOB_STAGE_CREDENTIAL_FILE);
+ assert.equal(reads,1);
+ const ok=reviewCstOneJobStageDatabaseConfig(env,loader,safe);
+ assert.equal(ok.readyForDedicatedConnection,true);
+ assert.deepEqual(ok.blockers,[]);
+ assert.doesNotMatch(JSON.stringify(ok),/synthetic-test-password/);
+ for(const [patch,why] of [
+  [{CREDENTIALS_DIRECTORY:"/tmp/untrusted"},"STAGING_SYSTEMD_UNIT_DIRECTORY_NOT_PINNED"],
+  [{[CST_ONEJOB_STAGE_URL_KEY]:url},"MULTIPLE_STAGING_CREDENTIAL_SOURCES"],
+  [{APP_ENV:"production"},"CST_DEV_ONLY"],
+ ]){
+  const count=reads;
+  const result=resolveCstOneJobStageDatabaseCredential({...env,...patch},loader,safe);
+  assert.equal(result.value,null);
+  assert.equal(result.blocker,why);
+  assert.equal(reads,count,"unsafe configuration must not access credential bytes");
+ }
+ const down=reviewCstOneJobStageDatabaseConfig(env,loader,()=>false);
+ assert.ok(down.blockers.includes("STAGING_SYSTEMD_DIRECTORY_UNSAFE"));
+ const missing=reviewCstOneJobStageDatabaseConfig(env,()=>{throw Error("synthetic file unavailable")},safe);
+ assert.ok(missing.blockers.includes("STAGING_SYSTEMD_CREDENTIAL_UNAVAILABLE"));
+ const poisoned=reviewCstOneJobStageDatabaseConfig(env,()=>url+"\nmore",safe);
+ assert.ok(poisoned.blockers.includes("STAGING_SYSTEMD_CREDENTIAL_INVALID"));
+});
+test("credential files enforce owner, regular file, single hard link, no symlink or weak permissions",()=>{
+ const dir=mkdtempSync(join(tmpdir(),"cstdev-synthetic-stage-file-"));
+ try{
+  const file=join(dir,"database-url");
+  writeFileSync(file,url,{mode:0o600,flag:"wx"});
+  assert.equal(readCstOneJobProtectedCredentialFile(file),url);
+  chmodSync(file,0o644);
+  assert.throws(()=>readCstOneJobProtectedCredentialFile(file));
+  chmodSync(file,0o600);
+  const alias=join(dir,"link");
+  symlinkSync(file,alias);
+  assert.throws(()=>readCstOneJobProtectedCredentialFile(alias));
+  const hardlink=join(dir,"hard");
+  linkSync(file,hardlink);
+  assert.throws(()=>readCstOneJobProtectedCredentialFile(file));
+ }finally{rmSync(dir,{recursive:true,force:true})}
+});
+test("shared DEV Core and unbound runtime remain denied without new password prompts",()=>{
+ const noSecret={...good,[CST_ONEJOB_STAGE_URL_KEY]:""};
+ const denied=reviewCstOneJobStageDatabaseConfig(noSecret);
+ assert.equal(denied.readyForDedicatedConnection,false);
+ assert.ok(denied.blockers.includes("DEDICATED_STAGING_DATABASE_URL_MISSING"));
+ const code=readFileSync(new URL("../../artifacts/api-server/src/lib/cstOneJobStagingDatabase.ts",import.meta.url),"utf8");
+ assert.match(code,/resolveCstOneJobStageDatabaseCredential\(env\)/);
+ assert.doesNotMatch(code,/env\[CST_ONEJOB_STAGE_URL_KEY\]!/);
+ assert.doesNotMatch(code,/console\.log\(url\)|logger\.info\(url\)/);
+ assert.match(code,/ONEJOB_STAGING_DATABASE_PROTECTED_CREDENTIAL_UNAVAILABLE/);
 });

@@ -11,7 +11,8 @@ import {createHash} from "node:crypto";
 import {drizzle} from "drizzle-orm/node-postgres";
 import {PostgresPool,createPinnedCstOneJobPgConnection} from "@workspace/db";
 import {
-  CST_ONEJOB_STAGE_URL_KEY,CST_ONEJOB_STAGE_LOGIN,
+  CST_ONEJOB_STAGE_LOGIN,
+  resolveCstOneJobStageDatabaseCredential,
   reviewCstOneJobStageDatabaseConfig,
 } from "./cstOneJobStageDbConfig.js";
 
@@ -24,7 +25,12 @@ export function getCstOneJobStagingDatabase(env:NodeJS.ProcessEnv) {
   const review=reviewCstOneJobStageDatabaseConfig(env);
   if(!review.readyForDedicatedConnection)
     throw Error("ONEJOB_STAGING_DATABASE_UNAVAILABLE:"+review.blockers.join(","));
-  const url=env[CST_ONEJOB_STAGE_URL_KEY]!;
+  // The existing systemd credential is delivered privately as
+  // CREDENTIALS_DIRECTORY/database-url. Never log or expose the string.
+  const resolved=resolveCstOneJobStageDatabaseCredential(env);
+  if(resolved.blocker||!resolved.value)
+    throw Error("ONEJOB_STAGING_DATABASE_PROTECTED_CREDENTIAL_UNAVAILABLE");
+  const url=resolved.value;
   const urlDigest=createHash("sha256").update(url).digest("hex");
   if(holder){
     if(holder.urlDigest!==urlDigest)
