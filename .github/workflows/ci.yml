@@ -42,14 +42,16 @@ jobs:
         run: node --test scripts/ci-quorum-row-lock.test.mjs
       - name: Verify scoped CST team DEV readiness is non-authorizing
         run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
-      - name: Verify read-only CST-DEV one-job pilot preflight cannot execute or sign
-        run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
-      - name: Verify QA image marker readback rejects stale or privileged image
-        run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
-      - name: Verify DEV QA image source marker is never stale
-        run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
-      - name: Verify scoped pilot RLS and rollback in disposable PostgreSQL
-        run: python3 scripts/dev/cst-team-dedicated-model-role-rehearsal.py
+      # Broker test uses the same pinned public-key verification library as
+      # the independent, disposable source QA. No private keys or live creds.
+      - name: Prepare isolated one-job broker QA dependency
+        run: |
+          python3 -m venv /tmp/cst-onejob-broker-ci-venv
+          /tmp/cst-onejob-broker-ci-venv/bin/python -m pip install --disable-pip-version-check cryptography==41.0.7
+      # All Owner, broker, RLS, subscriber and negative tests report as ONE
+      # fail-closed matrix. A green CI never authorizes actual DEV dispatch.
+      - name: Single-pass CST-DEV one-job offline acceptance (NO-GO operational)
+        run: node scripts/dev/cst-onejob-onepass-acceptance.mjs --offline
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap

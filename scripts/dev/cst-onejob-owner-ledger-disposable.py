@@ -1,0 +1,407 @@
+#!/usr/bin/env python3
+"""Disposable PostgreSQL 16 proof for the PROPOSED Owner one-job ledger.
+Never connects to CST-DEV or PROD, exposes no ports, uses --network none.
+"""
+from pathlib import Path
+import json, os, re, subprocess, sys, time
+
+ROOT=Path(__file__).resolve().parents[2]
+DDL=ROOT/"docs/dev/cst-onejob-owner-approval.PROPOSED.sql"
+BROKER=ROOT/"docs/dev/cst-onejob-waiting-admission-broker.PROPOSED.sql"
+RECEIPTS=ROOT/"docs/dev/cst-onejob-independent-receipts.PROPOSED.sql"
+ATOMIC_FIXTURE=ROOT/"scripts/dev/cst-onejob-atomic-transition.TESTONLY.sql"
+NAME=f"cst-onejob-owner-ledger-qa-{os.getpid()}"
+DB="cst_onejob_owner_ledger_fixture"
+
+def run(args,stdin=None,timeout=30):
+    p=subprocess.run(args,input=stdin,capture_output=True,text=True,timeout=timeout)
+    if p.returncode:
+        raise RuntimeError("COMMAND_FAILED "+args[0]+" "+(p.stderr[-800:] or p.stdout[-500:]))
+    return p.stdout
+
+def psql(script):
+    return run(["docker","exec","-i",NAME,"psql","-v","ON_ERROR_STOP=1",
+                "-U","postgres","-d",DB],script)
+
+def main():
+    report={"test":"CST_DEV_OWNER_ONEJOB_LEDGER_DISPOSABLE",
+            "db":"isolated_postgres16_network_none","devDbTouched":False,
+            "prodDbTouched":False,"result":"FAIL"}
+    started=False
+    try:
+        if not DDL.exists():
+            raise RuntimeError("DDL_NOT_FOUND")
+        run(["docker","run","-d","--rm","--name",NAME,"--network","none",
+             "--memory","384m","--cpus","1",
+             "-e","POSTGRES_DB="+DB,"-e","POSTGRES_HOST_AUTH_METHOD=trust",
+             "postgres:16-alpine"],timeout=20)
+        started=True
+        for _ in range(70):
+            logs=subprocess.run(["docker","logs",NAME],capture_output=True,text=True,timeout=3)
+            final="PostgreSQL init process complete; ready for start up." in (logs.stdout+logs.stderr)
+            if final:
+                p=subprocess.run(["docker","exec",NAME,"psql","-U","postgres","-d",DB,
+                    "-At","-c","SELECT 1"],capture_output=True,text=True,timeout=3)
+                if p.returncode==0 and p.stdout.strip()=="1":break
+            time.sleep(.4)
+        else:raise RuntimeError("PG16_FINAL_SERVER_NOT_READY")
+        psql("""CREATE SCHEMA ai_platform;
+        CREATE TABLE ai_platform.internal_users(id integer PRIMARY KEY);
+        CREATE TABLE ai_platform.ai_jobs(id integer PRIMARY KEY);
+        INSERT INTO ai_platform.internal_users VALUES (1);
+        INSERT INTO ai_platform.ai_jobs VALUES (483),(484),(485);
+        CREATE ROLE cst_onejob_unprivileged NOINHERIT LOGIN;""")
+        psql(DDL.read_text())
+        common="""'CST_DEV_ONEJOB_MODEL','APPROVED','1','qwen2.5:3b',
+            1,'cst-ai-team-company1-dev:pilot-aaaaaaaaaaaaaaaaaaaa',
+            'cst-dev-dell-onejob-20261119-abcdef12',
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',"""
+        psql(f"""INSERT INTO ai_platform.cst_onejob_owner_approvals
+          (purpose,status,company_id,model_id,approved_by_user_id,
+           request_id,worker_name,source_sha,job_id,expires_at)
+          VALUES ({common}483,now()+interval '20 minutes');""")
+        # No policy exists, so even explicit INSERT grants cannot bypass FORCE RLS.
+        psql("""GRANT USAGE ON SCHEMA ai_platform TO cst_onejob_unprivileged;
+            GRANT INSERT,SELECT ON ai_platform.cst_onejob_owner_approvals TO cst_onejob_unprivileged;
+            SET ROLE cst_onejob_unprivileged;
+            DO $deny$
+            BEGIN
+              BEGIN
+                INSERT INTO ai_platform.cst_onejob_owner_approvals
+                (company_id,model_id,approved_by_user_id,request_id,worker_name,
+                 source_sha,job_id,expires_at)
+                VALUES ('1','qwen2.5:3b',1,
+                 'cst-ai-team-company1-dev:pilot-bbbbbbbbbbbbbbbbbbbb',
+                 'cst-dev-dell-onejob-20261119-abcdef12',
+                 repeat('a',40),484,now()+interval '20 minutes');
+                RAISE EXCEPTION 'RLS_DENIAL_MISSING';
+              EXCEPTION WHEN insufficient_privilege THEN NULL;
+              END;
+            END $deny$;
+            RESET ROLE;""")
+        # Even different job IDs and independently random request IDs must
+        # not create a second active pilot. PostgreSQL's partial UNIQUE index
+        # enforces this across concurrent transactions, not application memory.
+        psql("""DO $single_active$
+        DECLARE failed_constraint text;
+        BEGIN
+          BEGIN
+            INSERT INTO ai_platform.cst_onejob_owner_approvals
+             (company_id,model_id,approved_by_user_id,request_id,worker_name,
+              source_sha,job_id,expires_at)
+            VALUES ('1','qwen2.5:3b',1,
+              'cst-ai-team-company1-dev:pilot-ffffffffffffffffffff',
+              'cst-dev-dell-onejob-20261119-abcdef12',
+              repeat('a',40),484,now()+interval '20 minutes');
+            RAISE EXCEPTION 'SECOND_ACTIVE_PILOT_WAS_ALLOWED';
+          EXCEPTION WHEN unique_violation THEN
+            GET STACKED DIAGNOSTICS failed_constraint=CONSTRAINT_NAME;
+            IF failed_constraint <> 'cst_onejob_one_active_approval'
+            THEN RAISE EXCEPTION 'WRONG_CONSTRAINT_BLOCKED_SECOND_PILOT: %',failed_constraint; END IF;
+          END;
+        END $single_active$;""")
+        # Simulate the same transaction shape as the staging service.
+        # The second approval must abort the transaction and roll back the
+        # newly created waiting job rather than leaving an orphan job row.
+        try:
+            psql("""BEGIN;
+              INSERT INTO ai_platform.ai_jobs(id) VALUES (486);
+              INSERT INTO ai_platform.cst_onejob_owner_approvals
+               (company_id,model_id,approved_by_user_id,request_id,worker_name,
+                source_sha,job_id,expires_at)
+              VALUES ('1','qwen2.5:3b',1,
+                'cst-ai-team-company1-dev:pilot-99999999999999999999',
+                'cst-dev-dell-onejob-20261119-abcdef12',
+                repeat('a',40),486,now()+interval '20 minutes');
+              COMMIT;""")
+            raise RuntimeError("SECOND_APPROVAL_TRANSACTION_UNEXPECTEDLY_COMMITTED")
+        except RuntimeError as e:
+            if 'duplicate key value violates unique constraint "cst_onejob_one_active_approval"' not in str(e):
+                raise
+        if "NO_ORPHAN_JOB_PASS" not in psql("""
+            SELECT CASE WHEN count(*)=0 THEN 'NO_ORPHAN_JOB_PASS'
+                   ELSE 'ORPHAN_JOB_FOUND' END
+            FROM ai_platform.ai_jobs WHERE id=486;"""):
+            raise RuntimeError("SECOND_APPROVAL_LEFT_ORPHAN_JOB")
+
+        # Close the active-only fixture before testing other independent
+        # constraints: otherwise the single-active unique index masks the FK
+        # and TTL violations that those tests are intended to exercise.
+        psql("""UPDATE ai_platform.cst_onejob_owner_approvals
+                SET status='EXPIRED' WHERE job_id=483;""")
+        # A privileged fixture owner must also be denied duplicate request/job,
+        # wrong owner, and excessive approval TTL by database constraints.
+        psql(f"""DO $deny$
+        BEGIN
+          BEGIN
+            INSERT INTO ai_platform.cst_onejob_owner_approvals
+             (purpose,status,company_id,model_id,approved_by_user_id,request_id,
+              worker_name,source_sha,job_id,expires_at)
+            VALUES ({common}484,now()+interval '20 minutes');
+            RAISE EXCEPTION 'DUPLICATE_REQUEST_ALLOWED';
+          EXCEPTION WHEN unique_violation THEN NULL; END;
+          BEGIN
+            INSERT INTO ai_platform.cst_onejob_owner_approvals
+             (company_id,model_id,approved_by_user_id,request_id,worker_name,
+              source_sha,job_id,expires_at)
+            VALUES ('1','qwen2.5:3b',1,
+              'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+              'cst-dev-dell-onejob-20261119-abcdef12',
+              repeat('a',40),483,now()+interval '20 minutes');
+            RAISE EXCEPTION 'DUPLICATE_JOB_ALLOWED';
+          EXCEPTION WHEN unique_violation THEN NULL; END;
+          BEGIN
+            INSERT INTO ai_platform.cst_onejob_owner_approvals
+             (company_id,model_id,approved_by_user_id,request_id,worker_name,
+              source_sha,job_id,expires_at)
+            VALUES ('1','qwen2.5:3b',999,
+              'cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+              'cst-dev-dell-onejob-20261119-abcdef12',
+              repeat('a',40),484,now()+interval '20 minutes');
+            RAISE EXCEPTION 'FORGED_OWNER_ALLOWED';
+          EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+          BEGIN
+            INSERT INTO ai_platform.cst_onejob_owner_approvals
+             (company_id,model_id,approved_by_user_id,request_id,worker_name,
+              source_sha,job_id,expires_at)
+            VALUES ('1','qwen2.5:3b',1,
+              'cst-ai-team-company1-dev:pilot-eeeeeeeeeeeeeeeeeeee',
+              'cst-dev-dell-onejob-20261119-abcdef12',
+              repeat('a',40),485,now()+interval '40 minutes');
+            RAISE EXCEPTION 'UNBOUNDED_TTL_ALLOWED';
+          EXCEPTION WHEN check_violation THEN NULL; END;
+        END $deny$;""")
+        state=psql("""SELECT
+          (SELECT count(*) FROM ai_platform.cst_onejob_owner_approvals)=1
+          AND (SELECT relrowsecurity AND relforcerowsecurity
+               FROM pg_class WHERE oid='ai_platform.cst_onejob_owner_approvals'::regclass)
+          AND (SELECT count(*) FROM pg_policies WHERE schemaname='ai_platform'
+               AND tablename='cst_onejob_owner_approvals')=0
+          AS pass;""")
+        if "t" not in state.split():
+            raise RuntimeError("LEDGER_POSTCONDITION_FAILED")
+        # Candidate admission broker is a separate NOLOGIN role without
+        # direct table grants. Even its verified caller must fail closed until
+        # independently persisted readiness receipts are implemented.
+        psql("""ALTER TABLE ai_platform.internal_users
+            ADD COLUMN role text DEFAULT 'owner',
+            ADD COLUMN status text DEFAULT 'active',
+            ADD COLUMN account_type text DEFAULT 'internal';
+          ALTER TABLE ai_platform.ai_jobs
+            ADD COLUMN status text DEFAULT 'waiting',
+            ADD COLUMN job_type text DEFAULT 'ollama_model_invocation',
+            ADD COLUMN required_capability text DEFAULT 'ollama_inference',
+            ADD COLUMN max_retry int DEFAULT 0,
+            ADD COLUMN payload_json jsonb DEFAULT '{}'::jsonb;
+          UPDATE ai_platform.ai_jobs SET payload_json=
+            jsonb_build_object('requestId',
+              'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+              'modelId','qwen2.5:3b')
+            WHERE id=484;
+          CREATE UNIQUE INDEX ai_jobs_company1_pilot_request_unique
+            ON ai_platform.ai_jobs((payload_json->>'requestId'))
+            WHERE payload_json->>'requestId'
+              LIKE 'cst-ai-team-company1-dev:pilot-%';""")
+        psql("""INSERT INTO ai_platform.cst_onejob_owner_approvals
+          (company_id,model_id,approved_by_user_id,request_id,worker_name,
+           source_sha,job_id,expires_at)
+          VALUES ('1','qwen2.5:3b',1,
+            'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+            'cst-dev-dell-onejob-20261119-abcdef12',
+            repeat('a',40),484,now()+interval '20 minutes');""")
+        psql(BROKER.read_text())
+        psql("""DO $assert$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles
+              WHERE rolname='cst_onejob_admission_broker' AND NOT rolcanlogin
+               AND NOT rolbypassrls AND NOT rolsuper AND NOT rolinherit)
+            THEN RAISE EXCEPTION 'BROKER_ROLE_UNSAFE'; END IF;
+            IF EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.roleid
+              WHERE r.rolname='cst_onejob_admission_broker')
+            THEN RAISE EXCEPTION 'BROKER_HAS_MEMBERS'; END IF;
+            IF has_table_privilege('cst_onejob_admission_broker',
+               'ai_platform.ai_jobs','UPDATE')
+             OR has_table_privilege('cst_onejob_admission_broker',
+               'ai_platform.cst_onejob_owner_approvals','UPDATE')
+            THEN RAISE EXCEPTION 'BROKER_HAS_DIRECT_WRITES'; END IF;
+          END $assert$;""")
+        approval_output=psql("""SELECT id FROM ai_platform.cst_onejob_owner_approvals
+          WHERE job_id=484;""")
+        ids=re.findall(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",approval_output)
+        if len(ids)!=1:
+            raise RuntimeError("BROKER_APPROVAL_FIXTURE_ID_INVALID")
+        approval_id=ids[0]
+        psql(f"""SET ROLE cst_onejob_unprivileged;
+          DO $deny$
+          BEGIN
+            BEGIN
+              PERFORM cst_onejob_private.admit_waiting_job(
+                '{approval_id}'::uuid,484,
+                'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+                'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
+              RAISE EXCEPTION 'UNPRIVILEGED_BROKER_CALL_ALLOWED';
+            EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+          END $deny$;
+          RESET ROLE;""")
+        psql(f"""SET ROLE cst_onejob_admission_broker;
+          DO $deny$
+          BEGIN
+            BEGIN
+              PERFORM cst_onejob_private.admit_waiting_job(
+                '{approval_id}'::uuid,484,
+                'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+                'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
+              RAISE EXCEPTION 'BROKER_DISPATCHED_WITHOUT_READINESS_PROOF';
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+                      WHEN raise_exception THEN
+              IF SQLERRM <> 'ONEJOB_INDEPENDENT_READINESS_PROOF_MISSING'
+              THEN RAISE; END IF;
+            END;
+          END $deny$;
+          RESET ROLE;""")
+        # Create the proposal in this disposable fixture only. Even a fully
+        # populated row of boolean readiness claims is NOT an attestation.
+        psql(RECEIPTS.read_text())
+        psql(f"""INSERT INTO cst_onejob_private.verified_admission_receipts
+          (approval_id,job_id,company_id,request_id,worker_name,
+           image_source_sha,image_id,isolated_network_verified,
+           scoped_dev_role_verified,event_audit_path_verified,
+           subscriber_path_verified,independent_qa_available,
+           nonce,proof_digest,verifier_id,verified_at,expires_at)
+          VALUES ('{approval_id}'::uuid,484,'1',
+           'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+           'cst-dev-dell-onejob-20261119-abcdef12',
+           repeat('a',40),'sha256:'||repeat('f',64),
+           true,true,true,true,true,repeat('c',64),repeat('e',64),
+           'cst-independent-qa-disposableonly',now(),now()+interval '4 minutes');""")
+        # SECURITY INVOKER denies lacking direct schema/table privileges;
+        # a later internal DENY is also acceptable, but neither may authorize.
+        # No broad writer grant or security-definer admission by row presence.
+        psql("""DO $receipt$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n
+            ON n.oid=c.relnamespace
+            WHERE n.nspname='cst_onejob_private'
+              AND c.relname='verified_admission_receipts'
+              AND c.relrowsecurity AND c.relforcerowsecurity)
+          THEN RAISE EXCEPTION 'RECEIPT_RLS_NOT_FORCED'; END IF;
+          IF has_table_privilege('cst_onejob_admission_broker',
+              'cst_onejob_private.verified_admission_receipts','INSERT')
+          THEN RAISE EXCEPTION 'BROKER_CAN_FORGE_RECEIPTS'; END IF;
+        END $receipt$;""")
+        psql(f"""SET ROLE cst_onejob_admission_broker;
+          DO $deny$
+          BEGIN
+            BEGIN
+              PERFORM cst_onejob_private.admit_waiting_job(
+                '{approval_id}'::uuid,484,
+                'cst-ai-team-company1-dev:pilot-cccccccccccccccccccc',
+                'cst-dev-dell-onejob-20261119-abcdef12',repeat('a',40));
+              RAISE EXCEPTION 'RECEIPT_ROW_GRANTED_DISPATCH';
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+                      WHEN raise_exception THEN
+              IF SQLERRM <> 'ONEJOB_ATOMIC_ADMISSION_NOT_YET_AUTHORIZED'
+              THEN RAISE; END IF;
+            END;
+          END $deny$;
+          RESET ROLE;""")
+        psql("""DO $deny$
+          BEGIN
+            BEGIN
+              UPDATE cst_onejob_private.verified_admission_receipts
+              SET expires_at=verified_at+interval '6 minutes'
+              WHERE job_id=484;
+              RAISE EXCEPTION 'RECEIPT_UNBOUNDED_TTL_ALLOWED';
+            EXCEPTION WHEN check_violation THEN NULL; END;
+          END $deny$;""")
+        # Row presence, valid-looking SHA, or booleans alone do not authorize.
+        state_broker=psql("""SELECT CASE WHEN
+           (SELECT status FROM ai_platform.ai_jobs WHERE id=484)='waiting'
+           AND (SELECT status FROM ai_platform.cst_onejob_owner_approvals
+                WHERE job_id=484)='APPROVED'
+           THEN 'BROKER_NO_SIDE_EFFECT_PASS' ELSE 'BROKER_MUTATED_DATA' END;""")
+        if "BROKER_NO_SIDE_EFFECT_PASS" not in state_broker:
+            raise RuntimeError("BROKER_UNAUTHORIZED_TRANSITION_LEFT_EFFECT")
+        # Disposable one-shot ledger test. THIS IS NOT proof of a trusted
+        # signature/issuer and NEVER authorizes a job transition.
+        psql("""INSERT INTO cst_onejob_private.admission_receipt_consumptions
+          (receipt_id,approval_id,job_id,project_id,verifier_id,nonce,proof_digest)
+          SELECT id,approval_id,job_id,'xssrfshdrtdfupgqwfdw',
+            verifier_id,nonce,proof_digest
+          FROM cst_onejob_private.verified_admission_receipts WHERE job_id=484;
+          UPDATE cst_onejob_private.verified_admission_receipts
+            SET consumed_at=clock_timestamp() WHERE job_id=484;
+          UPDATE ai_platform.cst_onejob_owner_approvals
+            SET status='EXPIRED' WHERE job_id=484;""")
+        # A fresh synthetic second job/approval/receipt may exist only after
+        # cleanup. Repeating the old nonce for a different receipt is blocked.
+        psql("""INSERT INTO ai_platform.cst_onejob_owner_approvals
+          (company_id,model_id,approved_by_user_id,request_id,worker_name,
+           source_sha,job_id,expires_at)
+          VALUES ('1','qwen2.5:3b',1,
+            'cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+            'cst-dev-dell-onejob-20261119-abcdef12',
+            repeat('a',40),485,now()+interval '20 minutes');
+          INSERT INTO cst_onejob_private.verified_admission_receipts
+          (approval_id,job_id,company_id,request_id,worker_name,
+           image_source_sha,image_id,isolated_network_verified,
+           scoped_dev_role_verified,event_audit_path_verified,
+           subscriber_path_verified,independent_qa_available,
+           nonce,proof_digest,verifier_id,verified_at,expires_at)
+          SELECT id,485,'1',
+            'cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+            worker_name,source_sha,'sha256:'||repeat('f',64),
+            true,true,true,true,true,repeat('d',64),repeat('f',64),
+            'cst-independent-qa-disposableonly',now(),now()+interval '4 minutes'
+          FROM ai_platform.cst_onejob_owner_approvals WHERE job_id=485;""")
+        psql("""DO $replay$
+          DECLARE named text;
+          BEGIN
+            BEGIN
+              INSERT INTO cst_onejob_private.admission_receipt_consumptions
+              (receipt_id,approval_id,job_id,project_id,verifier_id,nonce,proof_digest)
+              SELECT id,approval_id,job_id,'xssrfshdrtdfupgqwfdw',
+                verifier_id,repeat('c',64),proof_digest
+              FROM cst_onejob_private.verified_admission_receipts WHERE job_id=485;
+              RAISE EXCEPTION 'REPLAY_NONCE_WAS_ACCEPTED';
+            EXCEPTION WHEN unique_violation THEN
+              GET STACKED DIAGNOSTICS named=CONSTRAINT_NAME;
+              IF named NOT LIKE '%nonce_key'
+                THEN RAISE EXCEPTION 'WRONG_CONSTRAINT_BLOCKED_REPLAY: %',named; END IF;
+            END;
+          END $replay$;""")
+        replay=psql("""SELECT CASE WHEN
+           (SELECT count(*) FROM cst_onejob_private.admission_receipt_consumptions)=1
+           AND (SELECT status FROM ai_platform.ai_jobs WHERE id=485)='waiting'
+           AND (SELECT consumed_at FROM cst_onejob_private.verified_admission_receipts
+                WHERE job_id=485) IS NULL
+           THEN 'REPLAY_ROLLBACK_PASS' ELSE 'REPLAY_LEFT_SIDE_EFFECTS' END;""")
+        if "REPLAY_ROLLBACK_PASS" not in replay:
+            raise RuntimeError("REPLAY_NONCE_CONSUMPTION_LEFT_EFFECTS")
+        # Full atomic state-change exercise in network-none throwaway DB:
+        # five injected failures must leave no consumption/job/audit residue,
+        # then a synthetic success and replay must match exact row counts.
+        psql("""UPDATE ai_platform.ai_jobs SET
+           payload_json=jsonb_build_object(
+             'requestId','cst-ai-team-company1-dev:pilot-dddddddddddddddddddd',
+             'modelId','qwen2.5:3b')
+           WHERE id=485 AND status='waiting';""")
+        atomic_output=psql(ATOMIC_FIXTURE.read_text())
+        if "DO" not in atomic_output:
+            raise RuntimeError("DISPOSABLE_ATOMIC_FIXTURE_NOT_EXECUTED")
+        report.update(result="PASS",validRows=1,rlsForced=True,
+          userPolicyPresent=False,duplicateRequestDenied=True,
+          duplicateJobDenied=True,forgedOwnerDenied=True,excessiveTtlDenied=True,
+          unprivilegedWriterDenied=True,secondDistinctActivePilotDenied=True,secondApprovalRollbackNoOrphanJob=True,brokerNoLogin=True,brokerNoDirectWrites=True,brokerNoTransition=True,receiptRowNeverAuthorizes=True,receiptRlsForced=True,receiptShortTtlEnforced=True,replayNonceDenied=True,replayNoPartialConsume=True,atomicFaultRollbacks=5,atomicSuccessFixture=True,atomicReplayDenied=True)
+        print("ONEJOB_OWNER_LEDGER_DISPOSABLE_PASS",json.dumps(report))
+        return 0
+    except Exception as e:
+        report["error"]=str(e)[:700]
+        print("ONEJOB_OWNER_LEDGER_DISPOSABLE_FAIL",json.dumps(report))
+        return 1
+    finally:
+        if started:
+            subprocess.run(["docker","rm","-f",NAME],capture_output=True,text=True,timeout=15)
+
+if __name__=="__main__":
+    sys.exit(main())

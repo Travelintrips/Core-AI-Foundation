@@ -1,0 +1,342 @@
+# CST-DEV one-job — one Super Admin human approval
+
+**Decision confirmed 21 November 2026: Super Admin saja.**
+Scope: CST-DEV project xssrfshdrtdfupgqwfdw, Company 1, a single new
+qwen2.5:3b job (not historic #482). Draft Core PR #1769.
+
+## Exactly one human, one business action
+
+The existing Core AI application currently has database-backed internal
+roles: owner (one active user), admin (one active), manager (one active).
+Its current top-level route guard for this one-job pilot is
+requireInternalRole("owner"), and the app's signed session is rechecked
+against current internal_users. For THIS Core AI workflow, display
+**"Super Admin"** while preserving the pre-existing privileged role
+**owner** as the backend authorization mapping. An ordinary role admin,
+manager, generic API key, chat text, or a Hub role string is NOT implicitly
+equivalent to that verified Super Admin account. No new database role,
+user, password, OTP flow, TOTP, or impersonation is created here.
+
+The Super Admin sees exactly one button in the existing authenticated DEV
+session. A fresh session plus the exact intent
+APPROVE_ONE_NEW_CST_DEV_MODEL_JOB creates only a one-time Company-1 Owner
+approval record and new WAITING job atomically. A second click is rejected
+by the existing unique active-approval index. This is NOT general dispatch
+or a blanket authorization for a different job or tenant.
+
+**No additional human Security/Operations sign-off is requested.** Any
+earlier wording requiring a distinct human Security or Operations reviewer
+is superseded by this single Super Admin decision for the pilot.
+Security checks still happen, but as **technical gates**, not extra people
+or new approval screens.
+
+## Important technical boundaries that do not disappear
+
+- The independently verifiable Operations public-key signature on the
+  job authorization is a separate technical trust-root check. A logged-in
+  Super Admin's words or a mutable boolean are not a cryptographic signature.
+  Root custody, source pin, signed job claims, and per-stage permits require
+  truthful implementation and evidence; do not invent a root or self-issue
+  an "independent" reviewer attestation.
+- Existing independent QA PRE/POST receipts, dedicated NOLOGIN broker role,
+  RLS, one-use nonce, matching actual payload SHA, event/subscriber evidence,
+  four actual agent work records, reviewer Final ACK and relock remain.
+  The eight Linux signer keys on VPS are reused, not regenerated.
+- The signers and technical checks must never treat "same Super Admin human"
+  as proof of physically independent key custody; that property has NOT
+  been established and must be reflected truthfully in the audit.
+- The QA/Operations technical process can run under separately scoped
+  service identities with source-pinned signatures, without requiring
+  another person to click anything. It must fail closed if those verified
+  signatures or independent evidence are absent.
+- The current legacy Core role owner is not the same literal role string
+  as Hub super_admin. Cross-app role mapping cannot be assumed merely
+  because the user-facing label says "Super Admin". Cross-app authentication
+  must be verified before accepting a Hub session in Core.
+- No KMS, no second human approver, no redeploy to PROD, no extra signer
+  accounts, no DEV database privilege widening.
+
+## Source and live operational status
+
+The Core frontend and comments now say Super Admin, with existing owner-only
+database role gates unchanged. The one-human contract is covered by a
+source-only regression test added to the one-pass matrix.
+
+**Not yet deployed:** DEV website frontend still serves the older build.
+The real Operations signed root/job package and admission capability are
+missing, signer units inactive, and no Owner approval has yet been recorded.
+No user should be told to click an absent or disabled button. Real E2E and
+reviewer Final ACK remain **NO-GO** until verified with real data.
+
+## Actual DEV Nginx frontend and API route proof (21 Nov 2026)
+
+The public DEV Nginx server serves /dev-onejob and /assets/* from its
+AI Platform static root, and proxies only /api/* to the Core backend.
+The API's own bundled api-server/dist/public SPA is a DIFFERENT frontend:
+its HTTP 200 fallback does NOT establish that the Super Admin screen
+exists. The runtime image smoke therefore checks the actual compiled
+AI Platform index.html, uniquely referenced Super Admin JS and CSS,
+build metadata pinned to exact source SHA, and rehearses a combined
+same-origin static/API route in network-none Docker. The protected
+GET readiness and POST approval routes must both deny anonymous traffic.
+Do not advertise a button based solely on a generic SPA fallback.
+
+VPS proof, original official GitHub CI artifact head
+0bdf03f71fe6a7b3129e6a458e77dae57add2721:
+the ZIP, UI/API and rollback are staged in the existing
+/opt/cst-onejob-superadmin-dev-candidates/ private folder. The isolated
+--network none --read-only parallel combined route test returned
+CSTDEV_SUPER_ADMIN_PARALLEL_ROUTE_QA_PASS with exact frontend and backend
+hashes, expected HTTP 200 and anonymous 401. The container was removed.
+Neither public Nginx nor active shared Core was changed.
+
+Live cutover is NOT cleared: the dedicated staging login, independently
+signed QA PRE, Operations root/job release, admission capability, genuine
+authenticated Super Admin job and Final ACK are absent. Routing an
+unready button could break unrelated working DEV features; preserve the
+original site until the coherent cutover and rollback gates can pass.
+
+## No circular QA dependency before the one-click WAITING stage
+
+The single signed Super Admin session sends ONE explicit request containing
+the existing business intent plus a **public** Operations root candidate
+fingerprint. Exact source-pinned value:
+65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b.
+It identifies the already-encrypted dormant VPS candidate; no private key
+is imported into the application. The API checks the value EXACTLY, rejects
+admin/manager/unrecognized keys, and binds the choice to the new Company-1
+WAITING job, active owner, specific requestId/sourceSha/worker and the single
+transactional audit. The audit marks operationsRootTrusted=false,
+independentQaAdmissionVerified=false, dispatchPermitted=false.
+
+**Important sequencing correction:** the original pre-Owner QA receipt can
+attest general readiness, but **job-specific QA PRE cannot be issued for an
+unknown jobId/approvalId**. Therefore a missing QA preapproval must not
+block creation of the non-claimable WAITING job. The signed QA PRE, actual
+Operations signed job release, narrow independent DB admission capability,
+one-use nonce, authentic subscriber, 4-agent work and reviewer Final ACK
+remain mandatory **before queue promotion/dispatch**. The current worker
+claim query only selects QUEUED or due RETRYING jobs, never WAITING.
+
+The signed preapproval helper remains an advisory verifier, not bypassed or
+used as a fake authorization. The dedicated scoped staging database login,
+source pin, worker name, feature default-OFF, exact project, fresh Owner
+session and RLS must still pass for a WAITING job to be created.
+
+The one-click root selection is only an audit-bound public identifier. It
+does NOT approve the Operations private key, install the trusted public
+root, assert independent hardware custody, sign an Operations permit, or
+make a real database readback. The new pure
+cstOneJobOperationsRootSelectionReview module verifies matching fields
+from a *separately authenticated* database result and always returns
+operationsRootTrusted=false, authenticatedDbReadbackVerified=false and
+releaseDecision=NO_GO. A synthetic fixture is never E2E proof.
+
+No new login, OTP/TOTP, second human sign-off, KMS, grant widening,
+signer activation, active DEV cutover or PROD change is authorized.
+
+## Additional RLS enforcement: exact Operations candidate fingerprint
+
+The previous CST-DEV staging audit RLS allows an extra, unverified
+operationsRootCandidateSha256 JSON field. To avoid trusting arbitrary
+client or DB-writer text, add one **RESTRICTIVE INSERT-only** policy scoped
+to the already-existing NOLOGIN staging writer, as a separate migration:
+cst-onejob-ops-root-audit-guard.CSTDEV-ONLY.sql.
+
+It combines with (does not replace) the already-installed permissive
+staging audit policy, and allows only:
+- source-pinned candidate SHA-256
+  65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b
+- sameSuperAdminRootSelection=true
+- operationsRootTrusted=false
+- independentQaAdmissionVerified=false
+- dispatchPermitted=false
+- existing owner_approved_waiting_job audit identity and resource
+
+No new role/login, privileges, broad grants, RLS disable, signer activation
+or PROD change. The policy is a necessary row-integrity guard, not proof
+of a legitimate authenticated Owner session or of independent custody.
+A matching audit is not an Operations signature or a live E2E PASS.
+The guarded rollback refuses removal after any Owner approval exists.
+
+Disposable PostgreSQL 16 network-none evidence uses the exact DEV-only
+migration and guarded rollback, confirms success, fails on duplicate
+migration, confirms rollback only before any approval, and refuses wrong
+Operations fingerprint or forged trust booleans. This does not establish
+any live CST-DEV migration until separately applied and read back.
+
+## Runtime Supabase public CA preflight (21 November 2026)
+
+The actual VPS host already has the public Supabase Root 2021 CA at
+`/etc/cst-onejob-dev/trust/prod-ca-2021.crt`. A passwordless
+PostgreSQL SSLRequest + verified TLS 1.3 handshake to CST-DEV succeeded
+on the existing transaction pooler port 6543 and direct PostgreSQL
+port 5432. This proves network reachability and certificate trust,
+**not** role authentication, job approval or authority for dispatch.
+
+The dedicated one-job connection source intentionally loads that
+exact pinned public CA from the *container runtime* path
+`/run/cst-onejob-dev-db/ca/prod-ca-2021.crt`. It is **not mounted**
+in the original shared DEV container, whose stage URL/feature are also
+disabled. Before any future authorized separate DEV backend promotion,
+bind-mount the **public CA** read-only into that exact runtime path.
+Do not copy or move private credentials as part of this CA prerequisite.
+
+The authenticated Owner GET readiness endpoint now validates the
+source-pinned CA **before opening the dedicated staging DB connection**.
+If the runtime mount is missing, writable, a symlink, an invalid PEM,
+or a fingerprint mismatch, it reports
+`STAGING_PINNED_CA_NOT_INSTALLED_OR_INVALID` and remains NO-GO.
+It never falls back to system trust, disables TLS verification,
+tries shared-runtime DB credentials, or mistakes this for password failure.
+The existing feature flags, locked role login, Operations signing root
+and one-use real Owner approval remain independently required.
+
+## Existing systemd-encrypted stage credential — NO new password (21 Nov 2026)
+
+On VPS srv1792369, the previously staged encrypted dedicated Owner
+staging database URL is stored at
+/etc/credstore.encrypted/cst-onejob-owner-stage-database-url (root, 0600).
+Its encrypted LOGICAL name is database-url, NOT its ciphertext filename.
+Using the ciphertext filename as the credential identity produces the
+message "Embedded credential name 'database-url' does not match filename".
+That does not prove a wrong PostgreSQL password.
+
+For a future separately controlled stage-only systemd unit named
+cst-onejob-owner-stage.service, use the exact binding:
+
+    LoadCredentialEncrypted=database-url:/etc/credstore.encrypted/cst-onejob-owner-stage-database-url
+
+That unit injects CREDENTIALS_DIRECTORY under the pinned directory
+/run/credentials/cst-onejob-owner-stage.service. The existing stage code
+can now consume the private database-url file with strict descriptor
+checks (no symlinks, hard links, weak permissions or unbounded size),
+or accept its previous dedicated URL env for backward compatibility.
+Both sources together DENY, as does any alternate credential directory.
+The derived URL remains within the process; it is never returned in
+readiness JSON, logged, or copied into the shared Core AI pool.
+
+This source change does NOT enable the database LOGIN, install/start a
+systemd service, attempt authentication, publish a password, or alter the
+active Core container. Synthetic systemd credential identity checks and
+staging source tests PASS; LIVE database authentication with the
+dedicated NOLOGIN principal is still not verified. Only CST-DEV project
+xssrfshdrtdfupgqwfdw on the pinned transaction pooler port 6543 with
+TLS is allowed. Genuine signed PRE QA and controlled admission remain
+mandatory before any WAITING job becomes QUEUED.
+
+## Response-loss recovery — read-only GET, no second approval
+
+After the authenticated Super Admin submits a single one-job approval
+POST, the network response could be lost even if PostgreSQL committed
+the WAITING job, approval and audit atomically. Retrying that POST would
+be wrong: a second attempt could conflict with the single-active index
+and obscure the original result. The previous UI lacked readback.
+
+The same Owner page now provides a manual "Periksa status job sebelumnya"
+and attempts exactly one GET if the approval POST fails. The endpoint
+/api/ai/dev/onejob/owner-stage-status accepts only an authenticated
+internal Owner and uses the already-existing dedicated stage database
+LOGIN, SET TRANSACTION READ ONLY and SET LOCAL ROLE writer. It reads only
+columns already granted to that role under RLS, and verifies the
+Owner account plus matching one Company-1 approval and nonclaimable
+WAITING job. No new role, grant, credential or database migration.
+
+Current-source matching WAITING data can be displayed as a recovery
+readback. Expired, source-drifted, invisible, or inconsistent data
+remains uncertain and never authorizes a second POST. A row hidden by
+RLS is not proof that the original request failed. No automatic retry,
+signing, admission, queueing, dispatch, or Final ACK is performed.
+
+The disposable PostgreSQL16 network-none fixture now performs a real
+restricted SELECT as the synthetic stage LOGIN with SET LOCAL writer,
+then ROLLBACK, and verifies unchanged job/approval/audit counts.
+The image boot smoke requires HTTP 401 on anonymous GET for the new
+status route, including same-origin proxying.
+
+This is only source and isolated DEV QA. It is NOT promoted into the
+existing public read-only preview; live Super Admin still has not
+approved a one-job execution.
+
+## Real Owner audit readback — narrow scoped SELECT in CST-DEV
+
+To bind one authenticated Super Admin click to the Operations public
+candidate, an independent database readback must see the same job,
+Company-1 Owner approval and immutable owner_approved_waiting_job audit.
+Previously the stage writer could insert the audit, but had no SELECT
+permission on its details or the approval purpose, so source-only root
+evidence could never be checked by a scoped stage-login session.
+
+The new CST-DEV-only migration
+cst-onejob-stage-ops-root-audit-read.CSTDEV-ONLY.sql
+adds only column-level SELECT(purpose) to the existing Owner approval
+and SELECT(module,action,resource_type,resource_id,status,details) to
+the existing audit table, plus a single Owner-audit-specific SELECT
+RLS policy. The policy requires:
+- approved Company-1 single-job proof with matching job ID, Owner ID,
+  approval ID, request ID, worker and source SHA;
+- exact public Operations candidate fingerprint
+  65aa7599c60cc0acc71d72f9f3bd5bd810873aad725fa64856e36639c995f71b;
+- Operations-root-trusted=false, independent-QA-admission=false,
+  dispatch-permitted=false; all other audit types are invisible.
+
+The status recovery service uses the same signed Owner identity,
+existing dedicated staging connection, READ ONLY transaction and SET
+LOCAL writer, now reading that tightly bounded audit and passing its
+ledger fields to the existing pure matching helper. The UI may display
+"audit cocok" only if the Owner, approval, WAITING job and audit all
+match. This is not a trusted Operations root, signed release,
+subscriber delivery, QA PRE receipt, or authority to run the job.
+No credentials/role LOGIN, KMS, second human approval or PROD changes.
+
+The accompanying rollback requires the approval ledger to be empty.
+Disposable PostgreSQL16 network-none QA uses the exact migration
+and rollback, verifies Owner audit visibility, forged-root audit
+invisibility, no UPDATE/DELETE, duplicate migration denial, and
+post-approval rollback denial. Deploy only via verified CST-DEV
+migration tooling after source CI PASS.
+
+## Gate on ALL generic queue writes for reserved one-job namespace
+
+A separate source audit found that generic queueManagerService.resumeQueue
+previously selected *every* WAITING job and set status=QUEUED, without
+excluding reserved Company-1 GPT02 pilot request IDs. Even if the actual
+signed-admission function was absent, a future privileged generic queue
+writer could accidentally promote a new WAITING pilot. Generic bulk cancel,
+pause, priority update, manual retry and direct service enqueue also lacked
+consistent reserved-namespace checks.
+
+**Existing CST-DEV RLS does already prevent this specific promotion by
+aicore_dev_runtime right now**. The live role has column UPDATE(status)
+permission, but its only two permissive UPDATE policies allow coding
+workstream recovery and coding repository analyzer claims, never
+ollama_model_invocation. Consequently this is preventative application
+hardening, not a claim of a proven live RLS bypass. The historical
+Company-1 pilot job ID 482 is completed (18 Nov 2026) without a new
+owner approval; new signed staging requires jobId > 482. No active
+Owner approval or new pilot is present.
+
+The reusable reserved request prefix is kept in the existing one-job
+enqueue guard. Generic queue service now rejects direct reserved
+enqueue, and all bulk pause/resume/cancel and reprioritize updates
+exclude rows with that prefix in the SQL UPDATE predicate. Generic
+manual retry additionally rejects the reserved payload ID with 403
+before writing and protects the UPDATE WHERE against a race; generic
+single-job cancel excludes the reserved namespace. A legitimate job
+that has already entered worker execution may still follow the existing
+worker-side failure accounting; those methods were not rebuilt.
+
+The **only** designed path to move one new WAITING pilot to QUEUED
+remains the independently authenticated signed admission broker with
+verified QA PRE, one-use nonce and dedicated SQL capability. That
+function is still review-only and not deployed. Source tests exercise
+all generic writers; isolated PostgreSQL 16 network-none tests prove
+ordinary job resume and existing coding failure workflow continue
+while a reserved WAITING pilot cannot be promoted. The negative
+demonstration of a broader synthetic generic writer is rolled back
+in the disposable database.
+
+No additional database migration, role/login change, signer activation,
+owner approval or PROD update is required for these source defenses.
+Existing CST-DEV RLS, verified restricted audit reader, dormant
+one-Owner staging unit, and original production service remain untouched.

@@ -118,6 +118,7 @@ import AicodingDashboard from "@/pages/aicoding-dashboard";
 import AicodingDetailPage from "@/pages/aicoding-detail";
 import AiCoreChat from "@/pages/ai-core-chat";
 import AiCoreActivityPage from "@/pages/ai-core-activity";
+import CstDevOneJobPage from "@/pages/cst-dev-onejob";
 import McpPairApproval from "@/pages/mcp-pair";
 import UserManagement from "@/pages/user-management";
 
@@ -250,6 +251,7 @@ function AdminRouter() {
         <Route path="/pricing-calculator" component={PricingCalculator} />
         <Route path="/ai-core-chat" component={AiCoreChat} />
         <Route path="/ai-core-activity" component={AiCoreActivityPage} />
+        <Route path="/dev-onejob" component={CstDevOneJobPage} />
         <Route path="/mcp-pair" component={McpPairApproval} />
         <Route path="/coding-workspace/:id" component={CodingWorkspace} />
         <Route path="/coding-workspace" component={CodingWorkspace} />
