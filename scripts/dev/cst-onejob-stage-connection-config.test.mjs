@@ -101,7 +101,8 @@ test("stage only uses dedicated lazy connection and SET LOCAL inside transaction
  assert.doesNotMatch(pool,/resolveDatabaseUrl\(|SUPABASE_DEV_DATABASE_URL|from "@workspace\/db";\s*const \{\s*db\s*\}/);
  assert.match(pool,/!!env\.SUPABASE_PROD_DATABASE_URL/);
  assert.match(pool,/ONEJOB_STAGING_SOCKET_TRANSPORT_NOT_AUTHORIZED/);
- assert.match(pool,/stream:makeOneJobUnixSocketStream\(\)/);
+ assert.match(pool,/stream:makeOneJobUnixSocketStream\(CST_ONEJOB_OWNER_STAGE_SOCKET_PATH\)/);
+ assert.match(pool,/CST_ONEJOB_OWNER_STAGE_SOCKET_PATH/);
 });
 
 test("existing encrypted systemd credential keeps its logical name database-url, not ciphertext basename",()=>{

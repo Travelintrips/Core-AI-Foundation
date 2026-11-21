@@ -24,6 +24,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"owner_approval",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-owner-approval-review.test.mjs"]},
   {id:"owner_stage",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-contract.test.mjs"]},
   {id:"owner_stage_bootstrap_circular_gate_split",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-bootstrap-split.test.mjs"]},
+  {id:"preapproval_broker_separation",argv:[node,"--test","scripts/dev/cst-onejob-preapproval-broker-separation.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
   {id:"signed_preapproval_ready",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-preapproval-ready.test.mjs"]},
   {id:"owner_panel_one_click",argv:[node,"--test","scripts/dev/cst-onejob-owner-ready-panel.test.mjs"]},

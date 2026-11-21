@@ -21,9 +21,10 @@ test("dedicated stage pool has only fail-closed socket transport",()=>{
  assert.match(src,/CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED!=="true"/);
  assert.match(src,/ONEJOB_STAGING_SOCKET_TRANSPORT_NOT_AUTHORIZED/);
  assert.match(src,/CREDENTIALS_DIRECTORY!=="/);
- assert.match(src,/makeOneJobUnixSocketStream\(\)/);
- assert.match(src,/stream:makeOneJobUnixSocketStream\(\)/);
+ assert.match(src,/CST_ONEJOB_OWNER_STAGE_SOCKET_PATH/);
+ assert.match(src,/stream:makeOneJobUnixSocketStream\(CST_ONEJOB_OWNER_STAGE_SOCKET_PATH\)/);
  assert.match(exportsFile,/export \{makeOneJobUnixSocketStream, CST_ONEJOB_DEV_SOCKET_PATH\}/);
+ assert.match(src,/\/run\/cst-onejob-stage-db\/pg-pooler\.sock/);
  assert.doesNotMatch(src,/rejectUnauthorized:false|sslmode=disable|socketPath=process.env/);
 });
 test("pinned stage DSN retains dedicated role, real pooler hostname and TLS CA",()=>{

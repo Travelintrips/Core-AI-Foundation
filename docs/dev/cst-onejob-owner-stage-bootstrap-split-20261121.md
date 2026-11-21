@@ -102,3 +102,21 @@ to public Nginx before the numbered security gates pass.
 All existing DEV/PROD transactional features, eight signer units,
 review-only admission capability and existing public preview remain
 unchanged. Operator root/Final ACK/real E2E remain NO-GO.
+
+## Gate-A/Gate-B broker lifecycle separation (source-only)
+
+The existing operational broker scripts/dev/cst_team_onejob_operational_broker.py
+is Gate B, and cannot bootstrap a Gate-A Owner WAITING transaction. It demands
+jobId, ownerApprovalSha256, subscriberArmedSha256 in a signed manifest and
+forwards one PostgreSQL session, then exits. Those identifiers only exist
+after genuine Owner staging, and cannot be fabricated ahead of time.
+
+Gate A candidate socket is now /run/cst-onejob-stage-db/pg-pooler.sock.
+Gate B socket remains /run/cst-onejob-dev-db/pg-pooler.sock.
+Source QA asserts separate paths and fail-closed transport.
+
+A distinct, reviewed, pre-job stage-only broker with scoped egress,
+non-root peer identity, bounded LOGIN lease and automatic NOLOGIN relock
+is STILL MISSING. Also missing: verified Core session-secret custody and
+actual signed Super Admin test. Source-only PASS is NOT operational GO.
+No signed Gate-B permit is a substitute; keep signers/dispatch/PROD OFF.

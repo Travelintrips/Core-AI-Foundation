@@ -13,7 +13,7 @@ test("WAITING-only bootstrap unit requires no future job release to start stagin
  assert.match(unit,/LoadCredentialEncrypted=database-url:/);
  assert.match(unit,/LoadCredentialEncrypted=session-secret:/);
  assert.match(unit,/--network cst-onejob-owner-stage-internal/);
- assert.match(unit,/ConditionPathIsSocket/);
+ assert.match(unit,/ConditionPathIsSocket=\/run\/cst-onejob-stage-db\/pg-pooler\.sock/);
  assert.match(unit,/owner-stage-socket-acl-reviewed/);
  assert.match(unit,/CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED=true/);
  assert.doesNotMatch(unit,/--network (none|host)|--privileged/);

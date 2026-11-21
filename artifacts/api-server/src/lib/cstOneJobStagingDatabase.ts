@@ -16,6 +16,10 @@ import {
   reviewCstOneJobStageDatabaseConfig,
 } from "./cstOneJobStageDbConfig.js";
 
+// Gate-A pre-approval transport must NOT reuse Gate-B post-approval broker:
+// that broker requires an existing job approval and is single-use.
+export const CST_ONEJOB_OWNER_STAGE_SOCKET_PATH="/run/cst-onejob-stage-db/pg-pooler.sock";
+
 let holder:{
   urlDigest:string;
   database:ReturnType<typeof drizzle>;
@@ -51,7 +55,7 @@ export function getCstOneJobStagingDatabase(env:NodeJS.ProcessEnv) {
   const pinned=createPinnedCstOneJobPgConnection(url,CST_ONEJOB_STAGE_LOGIN);
   const pool=new PostgresPool({
     ...pinned,
-    stream:makeOneJobUnixSocketStream(),
+    stream:makeOneJobUnixSocketStream(CST_ONEJOB_OWNER_STAGE_SOCKET_PATH),
     max:1,
     min:0,
     idleTimeoutMillis:5_000,
