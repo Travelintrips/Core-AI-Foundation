@@ -165,6 +165,17 @@ if (message==='AI_CORE_CHATGPT_BROWSER_E2E') {
  if (safeCloseRequested) {
    message='This safe action is approved. Call your local exec tool and run exactly: powershell.exe -NoProfile -File C:\\Users\\user\\AppData\\Local\\Temp\\oc-close-notepad-12124-safe-20261011.ps1 . Do not use a simulation. Do not force kill Notepad. Only report completion if the tool outputs NOTEPAD_WINDOW_CLOSED_VERIFIED_PID_12124 or NOTEPAD_ALREADY_CLOSED; otherwise report the actual error and stop.';
  }
+ // Verify the server-pinned document before invoking the agent for a scoped DEV chat job.
+ let developmentSopVerified;
+ if (work.metadata?.developmentSop !== undefined &&
+     /^ai-core-chat-[a-f0-9]{64}$/.test(String(work.externalCommandId || ''))) {
+   const receipt = readCstDevelopmentSop(work);
+   if (!receipt.ok) {
+     return { ...receipt, details: { runtime:'openclaw-pc2', reason:receipt.message } };
+   }
+   const { version, commit, sha256 } = receipt.details.developmentSopCheckpoint;
+   developmentSopVerified = { version, commit, sha256 };
+ }
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ai-core-worker-'));
  const filename=path.join(dir,'instruction.txt');
  try {
@@ -178,7 +189,7 @@ if (message==='AI_CORE_CHATGPT_BROWSER_E2E') {
      : [entry,'agent','--agent','gpt02-dev','--session-key','agent:gpt02-dev:pc-work-'+work.commandId,'--message-file',filename,'--timeout','45','--json'];
    const run=spawnSync(node,args,{windowsHide:true,encoding:'utf8',timeout:safePcWork?60000:105000,maxBuffer:1024*1024});
   const output=String(run.stdout||run.stderr||run.error?.message||'').slice(-3000);
-  return {ok:run.status===0,message:output||'OpenClaw returned no output',details:{runtime:'openclaw-pc2',exitCode:run.status}};
+  return {ok:run.status===0,message:output||'OpenClaw returned no output',details:{runtime:'openclaw-pc2',exitCode:run.status,...(developmentSopVerified ? { developmentSopVerified } : {})}};
  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 }
 let idleDelayMs = 5000;
