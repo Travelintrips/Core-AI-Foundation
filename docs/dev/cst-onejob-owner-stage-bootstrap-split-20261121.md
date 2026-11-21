@@ -220,3 +220,18 @@ A separate forward_stage_with_lease function projects the signed manifest
 expiry to a monotonic deadline and terminates even under continuous traffic.
 Idle timeout and byte cap still apply. QA uses synthetic AF_UNIX socket pairs.
 This does not authorize real broker, database LOGIN, egress or dispatcher.
+
+## Isolated JIT relock proof, not permission to open the real role
+
+A source-only PostgreSQL 16 network-none test proves that a synthetic
+dedicated stage role can temporarily LOGIN with CONNECTION LIMIT 1, but
+merely setting NOLOGIN does NOT disconnect established sessions.
+Correct relock includes NOLOGIN, targeted pg_terminate_backend for
+that exact role, readback of zero residual role sessions, and denial
+of any fresh login. Shared Core and real CST-DEV remain untouched.
+
+A privileged time-bounded operational JIT controller with independently
+approved custody, automatic failure cleanup/relock, durable deadline,
+and Owner binding remains unimplemented. Zero backend sessions also
+does not independently verify Supavisor transaction-pooler frontends.
+Do not enable CST-DEV LOGIN from this isolated fixture proof.
