@@ -2,7 +2,7 @@ import { renderAiCoreBlockerSop } from "../services/aiCoreOperationalSop.js";
 import { readHandshakeSopSettings } from "../services/handshakeSopSettingsService.js";
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -212,6 +212,7 @@ const InboxReadRequest = z.object({
 }).strict();
 
 const ChatRequest = z.object({
+  submissionId: z.string().uuid().optional(),
   message: z.string().trim().min(1).max(50_000),
   mode: z.enum(["auto", "ask", "agent"]).default(DEFAULT_AI_CORE_CHAT_MODE),
   modelPolicy: z.enum(["economy", "smart", "auto", "cloud"]).default("smart"),
@@ -2623,6 +2624,7 @@ async function startSimpleChatGptWake(
 async function startExternalAgentWork(
   input: z.infer<typeof ChatRequest>,
   clientId: string,
+  authenticatedUserId?: string,
 ): Promise<Record<string, unknown>> {
   const directOpenClawPcCommand =
     clientId === OPENCLAW_AGENT_CLIENT_ID
@@ -2637,8 +2639,17 @@ async function startExternalAgentWork(
           ? "chat-no-tools"
           : "agent-tools";
 
+  // The same authenticated chat submission keeps its command identity across
+  // transport retries. Other callers retain their existing dispatch behavior.
+  const submissionKey =
+    clientId === OPENCLAW_AGENT_CLIENT_ID && authenticatedUserId && input.conversationId && input.submissionId
+      ? createHash("sha256")
+          .update(JSON.stringify([authenticatedUserId, input.conversationId, input.submissionId]))
+          .digest("hex")
+      : undefined;
   const dispatched = await dispatchExternalAgentWork({
     clientId,
+    ...(submissionKey ? { externalCommandId: `ai-core-chat-${submissionKey}` } : {}),
     instruction:
       clientId !== OPENCLAW_AGENT_CLIENT_ID
         ? input.message
@@ -3952,6 +3963,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       const result = await startExternalAgentWork(
         { ...parsed.data, message: safeMessage, context: safeContext },
         OPENCLAW_AGENT_CLIENT_ID,
+        req.internalUser ? String(req.internalUser.id) : undefined,
       );
       writeBufferedChatStream(res, result);
       return;
@@ -4172,7 +4184,11 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             inheritedDirectAccountRequest,
           )
         : directOpenClawPcCommand
-        ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)
+        ? await startExternalAgentWork(
+            effectiveInput,
+            OPENCLAW_AGENT_CLIENT_ID,
+            req.internalUser ? String(req.internalUser.id) : undefined,
+          )
         : directConversationEvent
         ? await executeDirectConversationEvent(directConversationEvent)
         : effectiveInput.mode !== "agent" &&

@@ -1500,6 +1500,7 @@ export default function AiCoreChat() {
       return;
     }
 
+    const submissionId = crypto.randomUUID();
     append({
       id: messageId(),
       role: "user",
@@ -1540,6 +1541,7 @@ export default function AiCoreChat() {
             signal: streamController.signal,
             body: JSON.stringify({
               message: submittedText,
+              submissionId,
               mode,
               modelPolicy: policy,
               conversationId,
@@ -1723,6 +1725,7 @@ export default function AiCoreChat() {
         method: "POST",
         body: JSON.stringify({
           message: submittedText,
+          submissionId,
           mode,
           modelPolicy: policy,
           conversationId,
