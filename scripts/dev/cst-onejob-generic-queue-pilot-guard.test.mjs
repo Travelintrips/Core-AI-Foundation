@@ -85,3 +85,12 @@ test("existing coding worker retry behavior untouched, signed admission remains 
  assert.match(admission,/admit_verified_onejob_capability/);
  assert.match(admission,/SECURITY DEFINER/);
 });
+test("network-none PostgreSQL fixture waits for FINAL TCP and atomically creates synthetic schema",()=>{
+ const fixture=read("scripts/dev/cst-onejob-generic-queue-sql.disposable.py");
+ assert.match(fixture,/pg_isready","-h","127\.0\.0\.1"/);
+ assert.match(fixture,/"-h","127\.0\.0\.1","-U","postgres"/);
+ assert.match(fixture,/schema_sql="""BEGIN;/);
+ assert.match(fixture,/COMMIT;"""/);
+ assert.match(fixture,/psql\(schema_sql\)/);
+ assert.doesNotMatch(fixture,/psql\("""CREATE SCHEMA/);
+});
