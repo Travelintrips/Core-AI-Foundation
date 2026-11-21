@@ -76,7 +76,7 @@ class StageBrokerTests(unittest.TestCase):
             if mutate=="wrong_port":candidate["nftables"][2]["rule"]["expr"][1]["match"]["right"]=5432
             if mutate=="missing_drop":candidate["nftables"].pop()
             if mutate=="extra_rule":candidate["nftables"].append(candidate["nftables"][3])
-            if mutate=="zero_counters":candidate["nftables"][2]["rule"]["expr"][2]["counter"]["packets"]=-1
+            if mutate=="zero_counters":candidate["nftables"][2]["rule"]["expr"][2]["counter"]["packets"]=0
             with self.subTest(mutate=mutate),self.assertRaises(RuntimeError):
                 b.kernel_egress_ready(self.m,candidate)
 

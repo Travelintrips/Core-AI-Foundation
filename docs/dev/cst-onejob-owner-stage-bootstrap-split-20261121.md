@@ -140,3 +140,11 @@ broker mandates an explicitly non-root stage peer; switching container user
 without a reviewed encrypted-credential delivery mechanism would break
 credential access. This identity/custody mismatch remains a hard NO-GO
 gate. Do not use Gate-B signed job permits for Gate A.
+
+## Systemd parser validation
+
+The original candidate used an unsupported ConditionPathIsSocket directive;
+systemd silently ignored that condition. It is replaced by the supported
+ExecCondition=/usr/bin/test -S /run/cst-onejob-stage-db/pg-pooler.sock
+in the source-only unit. Systemd parser review and absence handling must
+pass before any installation. No unit was installed or started.

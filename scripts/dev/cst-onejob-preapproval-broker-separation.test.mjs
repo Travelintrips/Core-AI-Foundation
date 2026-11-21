@@ -9,7 +9,7 @@ const postBroker=read("scripts/dev/cst_team_onejob_operational_broker.py");
 test("Gate A dedicated stage socket cannot be confused with Gate B admission socket",()=>{
  assert.match(stage,/CST_ONEJOB_OWNER_STAGE_SOCKET_PATH="\/run\/cst-onejob-stage-db\/pg-pooler\.sock"/);
  assert.match(stage,/makeOneJobUnixSocketStream\(CST_ONEJOB_OWNER_STAGE_SOCKET_PATH\)/);
- assert.match(candidateUnit,/ConditionPathIsSocket=\/run\/cst-onejob-stage-db\/pg-pooler\.sock/);
+ assert.match(candidateUnit,/ExecCondition=\/usr\/bin\/test -S \/run\/cst-onejob-stage-db\/pg-pooler\.sock/);
  assert.match(candidateUnit,/src=\/run\/cst-onejob-stage-db\/pg-pooler\.sock/);
  assert.doesNotMatch(candidateUnit,/src=\/run\/cst-onejob-dev-db\/pg-pooler\.sock/);
  assert.match(postBroker,/SOCKET="\/run\/cst-onejob-dev-db\/pg-pooler\.sock"/);

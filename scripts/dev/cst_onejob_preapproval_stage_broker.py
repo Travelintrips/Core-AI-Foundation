@@ -151,6 +151,8 @@ def kernel_egress_ready(m, output=None):
         if not isinstance(c,dict) or not all(
           type(c.get(k)) is int and c[k]>=0 for k in ("packets","bytes")):
             deny("KERNEL_COUNTER_MISSING")
+        if c["packets"]<1 or c["bytes"]<1:
+            deny("ALLOW_AND_DENY_KERNEL_TRAFFIC_NOT_PROVEN")
     return True
 
 def serve_stage_once(m):
