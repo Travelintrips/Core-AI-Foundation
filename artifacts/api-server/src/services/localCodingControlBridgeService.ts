@@ -237,8 +237,14 @@ export async function submitCodingBridgeCommand(input: {
       authorityJson: input.authority ?? {},
       metadataJson,
     })
+    .onConflictDoNothing({
+      target: [
+        aiCodingBridgeCommandsTable.source,
+        aiCodingBridgeCommandsTable.externalCommandId,
+      ],
+    })
     .returning();
-  if (!command) throw new Error("Failed to persist bridge command");
+  if (!command) return null;
 
   stage = "ACK_INSERT_FAILED";
   await tx.insert(aiCodingBridgeResponsesTable).values({
@@ -257,6 +263,24 @@ export async function submitCodingBridgeCommand(input: {
 
   return command;
   });
+  if (!command) {
+    // A concurrent submit won the unique key. Its transaction persists the
+    // command and its initial ACK together before this insert can return.
+    stage = "CONCURRENT_COMMAND_LOOKUP_FAILED";
+    const [winner] = await db
+      .select()
+      .from(aiCodingBridgeCommandsTable)
+      .where(
+        and(
+          eq(aiCodingBridgeCommandsTable.source, source),
+          eq(aiCodingBridgeCommandsTable.externalCommandId, input.externalCommandId),
+        ),
+      )
+      .limit(1);
+    if (!winner) throw new Error("Concurrent bridge command is missing");
+    return { command: winner, created: false };
+  }
+
   stage = "EVENT_PUBLISH_FAILED";
   publishSafe({
     eventType: "coding.bridge.command.received",
