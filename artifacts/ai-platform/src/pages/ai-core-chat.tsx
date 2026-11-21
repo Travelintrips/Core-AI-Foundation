@@ -92,6 +92,7 @@ type ChatResponse = {
 type ExternalWorkState = {
   command: {
     id: string;
+    externalCommandId?: string;
     status: string;
     metadataJson?: Record<string, unknown>;
   };
@@ -1446,10 +1447,25 @@ export default function AiCoreChat() {
               responseId,
             },
           }));
+          if (
+            state.command.externalCommandId?.startsWith("ai-core-chat-") &&
+            !state.latestResponse.acknowledgedAt &&
+            state.latestResponse.kind === status
+          ) {
+            void apiFetch<{ acknowledged: boolean }>(
+              `/api/ai/core-chat/external-work/${commandId}/ack`,
+              {
+                method: "POST",
+                body: JSON.stringify({ responseId, conversationId }),
+              },
+            ).catch((error: unknown) => {
+              console.warn("AI Core callback acknowledgment failed", error);
+            });
+          }
           return;
         }
       } catch {
-        // Keep polling transient read failures; the original routing ACK remains visible.
+        // Keep polling transient read failures; the original routing ACK remains visible.; the original routing ACK remains visible.
       }
 
       if (attempts >= maxAttempts) {
