@@ -23,7 +23,7 @@ import {
 // A reserved one-job record may leave WAITING only through the verified
 // signed-admission DB function. Generic queue management cannot update it.
 // Restrictive CST-DEV RLS is independently enforced on the shared DEV role.
-const nonReservedPilotJob = sql`
+const nonReservedPilotJob = () => sql`
   COALESCE(${aiJobsTable.payloadJson}->>'requestId','') NOT LIKE
     ${CST_ONEJOB_RESERVED_REQUEST_PREFIX + '%'}`;
 
@@ -210,7 +210,7 @@ export async function peek(n = 10) {
 }
 
 export async function pauseQueue(filter?: QueueFilter) {
-  const conditions = [eq(aiJobsTable.status, "queued"),nonReservedPilotJob];
+  const conditions = [eq(aiJobsTable.status, "queued"),nonReservedPilotJob()];
   if (filter?.departmentId) conditions.push(eq(aiJobsTable.departmentId, filter.departmentId));
   if (filter?.jobType) conditions.push(eq(aiJobsTable.jobType, filter.jobType));
 
@@ -229,7 +229,7 @@ export async function pauseQueue(filter?: QueueFilter) {
 }
 
 export async function resumeQueue(filter?: QueueFilter) {
-  const conditions = [eq(aiJobsTable.status, "waiting"),nonReservedPilotJob];
+  const conditions = [eq(aiJobsTable.status, "waiting"),nonReservedPilotJob()];
   if (filter?.departmentId) conditions.push(eq(aiJobsTable.departmentId, filter.departmentId));
   if (filter?.jobType) conditions.push(eq(aiJobsTable.jobType, filter.jobType));
 
@@ -249,7 +249,7 @@ export async function resumeQueue(filter?: QueueFilter) {
 
 export async function cancelQueue(filter?: QueueFilter) {
   const statuses = ["queued", "waiting"];
-  const conditions = [inArray(aiJobsTable.status, statuses),nonReservedPilotJob];
+  const conditions = [inArray(aiJobsTable.status, statuses),nonReservedPilotJob()];
   if (filter?.departmentId) conditions.push(eq(aiJobsTable.departmentId, filter.departmentId));
   if (filter?.jobType) conditions.push(eq(aiJobsTable.jobType, filter.jobType));
 
@@ -308,7 +308,7 @@ export async function reprioritize(
       managerOverride: managerOverride !== undefined ? managerOverride : existing.managerOverride,
       updatedAt:      new Date(),
     })
-    .where(and(eq(aiJobsTable.id, jobId),nonReservedPilotJob))
+    .where(and(eq(aiJobsTable.id, jobId),nonReservedPilotJob()))
     .returning();
   if(!updated)
     throw Error("DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED");

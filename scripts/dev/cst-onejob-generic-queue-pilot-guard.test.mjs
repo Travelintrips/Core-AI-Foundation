@@ -32,6 +32,9 @@ test("generic enqueue rejects a reserved namespace before resolving DB prioritie
 });
 test("resume, pause, bulk cancel and reprioritize cannot mutate reserved pilot",()=>{
  const q=read("artifacts/api-server/src/services/queueManagerService.ts");
+ // No module-import-time Drizzle SQL/schema evaluation. Previous CI mock
+ // imports of queueManagerService must not access missing mock exports.
+ assert.match(q,/const nonReservedPilotJob = \(\) => sql/);
  assert.match(q,/COALESCE\([\s\S]{0,110}payloadJson[\s\S]{0,120}requestId/);
  assert.match(q,/CST_ONEJOB_RESERVED_REQUEST_PREFIX \+ '%'/);
  const ranges=[
@@ -48,7 +51,7 @@ test("resume, pause, bulk cancel and reprioritize cannot mutate reserved pilot",
  }
  const priority=q.slice(q.indexOf("export async function reprioritize("));
  assert.match(priority,/isReservedOneJobPilotRequest\(existing\.payloadJson\)/);
- assert.match(priority,/where\(and\(eq\(aiJobsTable\.id, jobId\),nonReservedPilotJob\)\)/);
+ assert.match(priority,/where\(and\(eq\(aiJobsTable\.id, jobId\),nonReservedPilotJob\(\)\)\)/);
  assert.match(priority,/if\(!updated\)/);
  assert.match(priority,/DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED/);
 });
