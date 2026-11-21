@@ -30,6 +30,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"gate_a_nonroot_sigterm_socket_cleanup",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_broker_signal_qa.py"]},
   {id:"gate_a_runtime_directory_crash_recovery_contract",argv:[node,"--test","scripts/dev/cst-onejob-stage-broker-rundir-contract.test.mjs"]},
   {id:"gate_a_source_only_systemd_unit_preflight",argv:[node,"--test","scripts/dev/cst-onejob-gatea-broker-unit-candidate.test.mjs"]},
+  {id:"gate_a_nonroot_signed_manifest_acl_disposable",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_nonroot_manifest_disposable.py"]},
   {id:"nonroot_stage_credential_handoff",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_credential_handoff.py"]},
   {id:"stage_jit_relock_residual_sessions_pg16",argv:["python3","-B","scripts/dev/cst-onejob-stage-jit-relock.disposable.py"]},
   {id:"stage_relock_idempotent_controller_pg16",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_relock_controller.py"]},

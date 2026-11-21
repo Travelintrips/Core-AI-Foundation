@@ -372,3 +372,21 @@ packets and the actual Gate-A Python kernel policy inspector returned PASS.
 The work did not authenticate to Supabase or change the host firewall.
 The script is listed as VPS-only QA rather than GitHub CI; it must not
 be treated as a signed Operations release or a real pooler ACL.
+
+## Signed public manifest must be readable by actual broker identity
+
+The Gate-A unit previously validated root-owned manifest/key as root in
+ExecCondition and then attempted to read the same files as UID 28500.
+A root-only directory or mode 0600 manifest passes root but fails at
+nonroot broker start. Candidate now has a second ExecCondition using the
+same exact nonroot UID/GID as ExecStart and validating the same signed
+source-pinned manifest. Root-owned PUBLIC key/manifest should use 0644
+with root-owned traversable directories (0755). These are public
+verification materials, NOT secret signing keys or database credentials.
+
+Isolated test generates a fresh disposable Ed25519 key and scope manifest;
+validates as root and 28500 with public readable ACL; then proves 0600
+manifest or 0700 parent fail specifically for UID 28500 while root
+continues to validate. The synthetic private key never becomes an
+approved Operations authority. No actual trust root or role LOGIN is
+created, installed or enabled.

@@ -23,6 +23,8 @@ test("kernel network namespace and fixed stage runtime directory cannot silently
 test("one broker process has explicit non-root security and no automatic restart",()=>{
  assert.match(source,/ExecStart=\/usr\/bin\/setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups/);
  assert.match(source,/ExecCondition=\/usr\/bin\/python3 -B .*preapproval_stage_broker\.py validate/);
+ assert.match(source,/ExecCondition=\/usr\/bin\/setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups .*preapproval_stage_broker\.py validate/);
+ assert.equal([...source.matchAll(/^ExecCondition=.*preapproval_stage_broker\.py validate/gm)].length,2,"root and nonroot must independently validate");
  assert.match(source,/ExecStart=.*preapproval_stage_broker\.py run/);
  assert.match(source,/Restart=no/);
  assert.match(source,/KillMode=control-group/);
