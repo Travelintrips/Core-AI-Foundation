@@ -86,3 +86,23 @@ References:
 - Microsoft CryptProtectData: https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata
 - Microsoft DataProtectionScope: https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.dataprotectionscope
 - Microsoft DPAPI profile/recovery caveats: https://learn.microsoft.com/en-us/windows/win32/seccrypto/example-c-program-using-cryptprotectdata
+
+## Read-only official signing receipt check — no activation
+
+The additional standalone helper
+scripts/dev/cst-onejob-signed-artifact-readonly-review.ps1
+reads the nonsecret Desktop review bundle, verifies that its original ZIP
+matches the pinned SHA-256, compares every on-disk file to the immutable
+manifest inside that ZIP, and examines two later official Authenticode-signed
+artifacts if independently returned by CST Security/Operations. It never
+executes native code, signs any binary or starts a service.
+
+Direct DELL read-only QA: original review package PASS; no signed artifacts
+means PENDING_OFFICIAL_SIGNING; copied UNSIGNED originals in a temporary
+review directory are DENIED; a changed manifest is DENIED. The temporary
+copies were removed after testing. Any future Authenticode-valid artifacts
+remain only SIGNATURES_VERIFIED_RELEASE_NOT_AUTHORIZED until independent
+change approval, OS per-role custody and actual DEV E2E are completed.
+
+There is no supported Smart App Control bypass or self-issued local code
+signing certificate in this workflow. NO-GO remains the mandatory result.

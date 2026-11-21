@@ -7,6 +7,7 @@ on:
       - "scripts/dev/cst-onejob-dell-signer-*"
       - "scripts/dev/cst-onejob-dell-dpapi-custody.cs"
       - "scripts/dev/cst-onejob-native-signer-*"
+      - "scripts/dev/cst-onejob-signed-artifact-readonly-review.ps1"
       - "docs/dev/cst-onejob-dell-*"
   workflow_dispatch:
 
@@ -115,6 +116,36 @@ jobs:
           }
           Write-Output 'SIGNED_ARTIFACT_HASH_TRUST_CONTRACT_SOURCE_PASS'
           Write-Output 'NO_SIGNING_KEY_NO_CERT_ISSUANCE_NO_SERVICE_INSTALL'
+      - name: Signed-artifact package verifier source and default-deny QA
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = '.\scripts\dev\cst-onejob-signed-artifact-readonly-review.ps1'
+          $tokens = $null; $errors = $null
+          [Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $file), [ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw 'SIGNING_REVIEW_SCRIPT_PARSE_FAILED' }
+          $source = Get-Content $file -Raw
+          $required = @('REVIEW_MANIFEST_NOT_EQUAL_TO_PINNED_ZIP',
+            'INVALID_AUTHENTICODE_SIGNED_ARTIFACT',
+            'INDEPENDENT_APPROVED_CHANGE_AND_CUSTODY_STILL_REQUIRED',
+            'SIGNATURES_VERIFIED_RELEASE_NOT_AUTHORIZED')
+          foreach ($control in $required) {
+            if (-not $source.Contains($control)) {
+              throw ('REQUIRED_SOURCE_GATE_MISSING: ' + $control)
+            }
+          }
+          if ($source -match '(?m)^\s*(?:Enable-LocalUser|Start-Service|New-Service|New-LocalUser|Set-AuthenticodeSignature|Set-LocalUser)\b') {
+            throw 'SOURCE_SIGNING_VERIFIER_HAS_WRITER_OPERATIONS'
+          }
+          $result = & $file -ReviewFolder (Join-Path $env:RUNNER_TEMP 'NONEXISTENT_CSTDEV_SIGNING_REVIEW')
+          $proof = $result | ConvertFrom-Json
+          if ($proof.status -ne 'DENIED' -or
+              $proof.releaseDecision -ne 'NO_GO' -or
+              $proof.smartAppControlChanged -ne $false) {
+            throw 'NO_PACKAGE_MUST_DENY_WITHOUT_AUTHORITY'
+          }
+          Write-Output 'CSTDEV_SIGNED_ARTIFACT_READONLY_SOURCE_GATE_PASS'
       - name: Default-deny QA scope
         shell: pwsh
         run: |
