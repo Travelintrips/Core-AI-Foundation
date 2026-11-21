@@ -3,6 +3,7 @@
 import base64
 import json
 import os
+import socket
 import sys
 import tempfile
 import unittest
@@ -111,6 +112,52 @@ class StageBrokerTests(unittest.TestCase):
         self.assertIn("--expected-source-sha",source)
         self.assertIn("PINNED_SOURCE_MISMATCH",source)
         self.assertNotIn("APPROVED_OPERATIONS_ROOT_FINGERPRINT=None",source)
+
+    def test_expired_lease_denied_before_any_upstream_dial(self):
+        called=[]
+        with self.assertRaisesRegex(RuntimeError,"SESSION_LEASE_EXPIRED"):
+            b.forward_stage_with_lease(None,self.m,
+                dial=lambda: called.append("dial"),
+                epoch=lambda: b.exact_timestamp(self.m["expiresAt"]).timestamp()+1)
+        self.assertEqual(called,[])
+
+    def test_one_session_forwards_bytes_via_mock_unix_sockets(self):
+        client,client_peer=socket.socketpair()
+        upstream,upstream_peer=socket.socketpair()
+        try:
+            client_peer.sendall(b"STAGING_QA_ONLY")
+            client_peer.shutdown(socket.SHUT_WR)
+            b.forward_stage_with_lease(client,self.m,dial=lambda:upstream)
+            self.assertEqual(upstream_peer.recv(64),b"STAGING_QA_ONLY")
+            self.assertEqual(upstream.fileno(),-1)
+        finally:
+            client.close()
+            client_peer.close()
+            upstream_peer.close()
+
+    def test_absolute_expiry_ends_idle_session_without_tcp_access(self):
+        client,client_peer=socket.socketpair()
+        upstream,upstream_peer=socket.socketpair()
+        ticks=[0.0]
+        def advance():
+            ticks[0]+=0.15
+            return ticks[0]
+        try:
+            with self.assertRaisesRegex(RuntimeError,"SESSION_LEASE_OR_IDLE_TIMEOUT"):
+                b.forward_stage_with_lease(client,self.m,dial=lambda:upstream,
+                    epoch=lambda:b.exact_timestamp(self.m["expiresAt"]).timestamp()-0.8,
+                    monotonic=advance)
+            self.assertEqual(upstream.fileno(),-1)
+        finally:
+            client.close()
+            client_peer.close()
+            upstream_peer.close()
+
+    def test_never_reuses_rolling_gate_b_forwarder(self):
+        source=Path(b.__file__).read_text()
+        self.assertIn("forward_stage_with_lease(client,m)",source)
+        self.assertNotIn("forward_once(client,m)",source)
+        self.assertIn("absolute_end = tick()+remaining",source)
 
     def test_import_has_no_auto_start_or_live_broker(self):
         source=Path(b.__file__).read_text()

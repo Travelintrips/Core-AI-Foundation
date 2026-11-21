@@ -212,3 +212,11 @@ public Nginx route stays read-only until the existing Core session
 credential, bounded DB lease and fixed-egress network are safely
 provisioned, and all end-to-end authorizations are independently
 verified. No KMS, second human Owner consent, or PROD changes.
+
+## Gate A session hard stop
+
+Gate A no longer reuses Gate B's rolling-idle-only PostgreSQL forwarder.
+A separate forward_stage_with_lease function projects the signed manifest
+expiry to a monotonic deadline and terminates even under continuous traffic.
+Idle timeout and byte cap still apply. QA uses synthetic AF_UNIX socket pairs.
+This does not authorize real broker, database LOGIN, egress or dispatcher.

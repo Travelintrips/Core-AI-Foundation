@@ -13,6 +13,8 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import selectors
+import time
 import socket
 import stat
 import subprocess
@@ -21,7 +23,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 
 from cst_team_onejob_operational_broker import (
-    exact_timestamp, hex_lower, read_regular, forward_once,
+    exact_timestamp, hex_lower, read_regular,
 )
 from cst_team_onejob_peercred import verify_unix_peer
 from cryptography.hazmat.primitives import serialization
@@ -155,6 +157,72 @@ def kernel_egress_ready(m, output=None):
             deny("ALLOW_AND_DENY_KERNEL_TRAFFIC_NOT_PROVEN")
     return True
 
+def forward_stage_with_lease(client, m, *, dial=None, epoch=None, monotonic=None):
+    """One DB session, hard stop at signed expiry, even under continuous traffic.
+
+    The Gate-B forwarder has a rolling 12s idle deadline; do NOT reuse it
+    for preapproval, where the signed 10-minute ceiling is mandatory. The
+    deadline is also projected onto a monotonic clock to resist wall-clock
+    changes after the session starts. No DB content is parsed or logged.
+    """
+    now = epoch or time.time
+    tick = monotonic or time.monotonic
+    remaining = exact_timestamp(m["expiresAt"]).timestamp()-now()
+    if remaining <= 0 or remaining > 600:
+        deny("SESSION_LEASE_EXPIRED_OR_UNBOUNDED")
+    absolute_end = tick()+remaining
+    connect = dial or (lambda: socket.socket(socket.AF_INET,socket.SOCK_STREAM))
+    upstream=connect()
+    selector=None
+    try:
+        if dial is None:
+            upstream.settimeout(min(3.0,max(0.001,absolute_end-tick())))
+            upstream.connect((m["allowedDestinationIp"],m["destinationPort"]))
+        if tick()>=absolute_end:
+            deny("SESSION_LEASE_EXPIRED")
+        upstream.setblocking(False)
+        client.setblocking(False)
+        selector=selectors.DefaultSelector()
+        selector.register(upstream,selectors.EVENT_READ,client)
+        selector.register(client,selectors.EVENT_READ,upstream)
+        idle_end=min(tick()+12,absolute_end)
+        total=0
+        while True:
+            rem=min(absolute_end,idle_end)-tick()
+            if rem<=0:
+                deny("SESSION_LEASE_OR_IDLE_TIMEOUT")
+            for key,_ in selector.select(timeout=min(rem,0.25)):
+                if tick()>=absolute_end:
+                    deny("SESSION_LEASE_EXPIRED")
+                src=key.fileobj
+                dst=key.data
+                try:
+                    buf=src.recv(8192)
+                except BlockingIOError:
+                    continue
+                if not buf:
+                    return
+                total+=len(buf)
+                if total>32*1024*1024:
+                    deny("SESSION_MAX_BYTES")
+                rem=absolute_end-tick()
+                if rem<=0:
+                    deny("SESSION_LEASE_EXPIRED")
+                dst.setblocking(True)
+                try:
+                    dst.settimeout(min(1,rem))
+                    dst.sendall(buf)
+                finally:
+                    dst.setblocking(False)
+                if tick()>=absolute_end:
+                    deny("SESSION_LEASE_EXPIRED")
+                idle_end=min(tick()+12,absolute_end)
+    finally:
+        if selector is not None:
+            selector.close()
+        upstream.close()
+
+
 def serve_stage_once(m):
     """Will not listen unless authorized non-root identity and kernel ACL pass."""
     if (os.geteuid()!=m["brokerUid"] or os.getegid()!=m["brokerGid"]
@@ -188,7 +256,7 @@ def serve_stage_once(m):
                     continue
                 # Recheck real kernel rules immediately before making a socket.
                 kernel_egress_ready(m)
-                forward_once(client,m)
+                forward_stage_with_lease(client,m)
                 return
         deny("LEASE_EXPIRED_NO_SESSION")
     finally:
