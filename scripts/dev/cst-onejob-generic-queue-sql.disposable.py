@@ -13,7 +13,10 @@ SRC=(ROOT/"artifacts/api-server/src/services/queueManagerService.ts").read_text(
 PREFIX="cst-ai-team-company1-dev:pilot-"
 NAME="cst-onejob-generic-queue-sql-disposable-"+str(os.getpid())
 def run(args,stdin=None,allow=False):
- r=subprocess.run(args,input=stdin,text=True,capture_output=True,timeout=25)
+ # Docker may pull the image on the first CI run; other SQL commands
+ # stay strictly bounded to 25 seconds. No test assertion is relaxed.
+ limit=90 if args[:2]==["docker","run"] else 25
+ r=subprocess.run(args,input=stdin,text=True,capture_output=True,timeout=limit)
  if r.returncode!=0 and not allow:raise RuntimeError(
   "SYNTHETIC_TEST_COMMAND_FAILED:"+r.stderr[-700:])
  return r
