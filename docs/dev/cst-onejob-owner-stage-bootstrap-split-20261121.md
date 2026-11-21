@@ -288,3 +288,19 @@ expected socket ownership; socket cleanup after container stop.
 Parser QA for the candidate systemd and Nginx configs also passed.
 No live service or auth route was changed. NO-GO until genuine
 approved authority, session issuer, stage database and E2E are verified.
+
+## Broker process termination and socket cleanup
+
+The Gate-A source broker now traps SIGTERM and SIGINT, marks the session
+as stopped, prevents any new upstream connection, interrupts ongoing
+forwarding on a bounded selector poll, and unlinks its Unix socket in
+finally. The old default SIGTERM path could strand a socket on disk
+and block the next authorized one-session attempt.
+
+A standalone disposable VPS test launches the real Gate-A listener under
+UID 28500/GID 28501, uses a private /tmp AF_UNIX socket, sends SIGTERM,
+and verifies a nonzero stop verdict with no leftover socket. Kernel
+egress is **mocked only in the disposable test**, no real pooler or
+signed authorization exists; this does NOT approve a live broker.
+An in-memory socketpair test also verifies signal interruption of an
+already-open synthetic forwarded connection and upstream closure.

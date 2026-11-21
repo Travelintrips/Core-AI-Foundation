@@ -153,9 +153,39 @@ class StageBrokerTests(unittest.TestCase):
             client_peer.close()
             upstream_peer.close()
 
+    def test_stop_request_aborts_active_mock_session(self):
+        client,peer=socket.socketpair()
+        up,other=socket.socketpair()
+        try:
+            dialled=[]
+            with self.assertRaisesRegex(RuntimeError,"SESSION_STOP_REQUESTED"):
+                b.forward_stage_with_lease(client,self.m,
+                    dial=lambda:(dialled.append(True),up)[1],stopped=lambda:True)
+            self.assertEqual(dialled,[],"stop must prevent upstream dial")
+        finally:
+            client.close()
+            peer.close()
+            other.close()
+
+    def test_signal_during_open_mock_session_closes_upstream(self):
+        client,peer=socket.socketpair()
+        upstream,remote=socket.socketpair()
+        calls=[0]
+        def stopped():
+            calls[0]+=1
+            return calls[0]>=3
+        try:
+            with self.assertRaisesRegex(RuntimeError,"SESSION_STOP_REQUESTED"):
+                b.forward_stage_with_lease(client,self.m,dial=lambda:upstream,stopped=stopped)
+            self.assertEqual(upstream.fileno(),-1)
+        finally:
+            client.close()
+            peer.close()
+            remote.close()
+
     def test_never_reuses_rolling_gate_b_forwarder(self):
         source=Path(b.__file__).read_text()
-        self.assertIn("forward_stage_with_lease(client,m)",source)
+        self.assertIn("forward_stage_with_lease(client,m,stopped=lambda:stop_requested)",source)
         self.assertNotIn("forward_once(client,m)",source)
         self.assertIn("absolute_end = tick()+remaining",source)
 

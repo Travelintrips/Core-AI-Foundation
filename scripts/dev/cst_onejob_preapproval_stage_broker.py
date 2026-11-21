@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import signal
 import time
 import socket
 import stat
@@ -157,7 +158,7 @@ def kernel_egress_ready(m, output=None):
             deny("ALLOW_AND_DENY_KERNEL_TRAFFIC_NOT_PROVEN")
     return True
 
-def forward_stage_with_lease(client, m, *, dial=None, epoch=None, monotonic=None):
+def forward_stage_with_lease(client, m, *, dial=None, epoch=None, monotonic=None, stopped=None):
     """One DB session, hard stop at signed expiry, even under continuous traffic.
 
     The Gate-B forwarder has a rolling 12s idle deadline; do NOT reuse it
@@ -167,6 +168,8 @@ def forward_stage_with_lease(client, m, *, dial=None, epoch=None, monotonic=None
     """
     now = epoch or time.time
     tick = monotonic or time.monotonic
+    if stopped is not None and stopped():
+        deny("SESSION_STOP_REQUESTED")
     remaining = exact_timestamp(m["expiresAt"]).timestamp()-now()
     if remaining <= 0 or remaining > 600:
         deny("SESSION_LEASE_EXPIRED_OR_UNBOUNDED")
@@ -188,10 +191,14 @@ def forward_stage_with_lease(client, m, *, dial=None, epoch=None, monotonic=None
         idle_end=min(tick()+12,absolute_end)
         total=0
         while True:
+            if stopped is not None and stopped():
+                deny("SESSION_STOP_REQUESTED")
             rem=min(absolute_end,idle_end)-tick()
             if rem<=0:
                 deny("SESSION_LEASE_OR_IDLE_TIMEOUT")
             for key,_ in selector.select(timeout=min(rem,0.25)):
+                if stopped is not None and stopped():
+                    deny("SESSION_STOP_REQUESTED")
                 if tick()>=absolute_end:
                     deny("SESSION_LEASE_EXPIRED")
                 src=key.fileobj
@@ -237,6 +244,12 @@ def serve_stage_once(m):
     if Path(SOCKET_PATH).exists() or Path(SOCKET_PATH).is_symlink():
         deny("SOCKET_OCCUPIED")
     os.umask(0o117)
+    stop_requested=False
+    def request_stop(_signum,_frame):
+        nonlocal stop_requested
+        stop_requested=True
+    previous_term=signal.signal(signal.SIGTERM,request_stop)
+    previous_int=signal.signal(signal.SIGINT,request_stop)
     server=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     try:
         server.bind(SOCKET_PATH)
@@ -245,10 +258,13 @@ def serve_stage_once(m):
         # Exact signed lease enforced; never start a general permanent broker.
         end=exact_timestamp(m["expiresAt"]).timestamp()
         import time
-        while time.time()<end:
+        while not stop_requested and time.time()<end:
             server.settimeout(min(0.5,max(0.01,end-time.time())))
             try:client,_=server.accept()
             except socket.timeout:continue
+            if stop_requested:
+                client.close()
+                break
             with client:
                 verdict=verify_unix_peer(client,expected_uid=m["stageClientUid"],
                                         expected_gid=m["stageClientGid"])
@@ -256,12 +272,16 @@ def serve_stage_once(m):
                     continue
                 # Recheck real kernel rules immediately before making a socket.
                 kernel_egress_ready(m)
-                forward_stage_with_lease(client,m)
+                forward_stage_with_lease(client,m,stopped=lambda:stop_requested)
                 return
-        deny("LEASE_EXPIRED_NO_SESSION")
+        deny("STOP_REQUESTED" if stop_requested else "LEASE_EXPIRED_NO_SESSION")
     finally:
         server.close()
-        Path(SOCKET_PATH).unlink(missing_ok=True)
+        try:
+            Path(SOCKET_PATH).unlink(missing_ok=True)
+        finally:
+            signal.signal(signal.SIGTERM,previous_term)
+            signal.signal(signal.SIGINT,previous_int)
 
 def main():
     parser=argparse.ArgumentParser()
