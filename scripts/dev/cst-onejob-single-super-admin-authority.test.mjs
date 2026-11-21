@@ -16,7 +16,7 @@ test("one Super Admin human: existing Core owner role, NOT generic admin or mana
   const s=jobs.slice(jobs.indexOf('router.get("/ai/dev/onejob/owner-stage-readiness"'),
     jobs.indexOf('router.post("/ai/jobs"'));
   // Readiness GET, recovery GET and one approval POST all share Owner gate.
-  assert.equal((s.match(/requireInternalRole\("owner"\)/g)||[]).length,3);
+  assert.equal((s.match(/requireCstOneJobStageOwner/g)||[]).length,3);
   assert.doesNotMatch(s,/requireInternalRole\("admin"\)/);
   assert.doesNotMatch(s,/requireInternalRole\("manager"\)/);
   assert.match(consent,/i\.role!=="owner"/);

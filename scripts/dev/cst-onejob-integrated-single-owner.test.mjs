@@ -9,9 +9,7 @@ test("only canonical one-tap Owner staging API is registered",()=>{
  const routes=read("artifacts/api-server/src/routes/index.ts");
  const owner=jobs.split('router.post("/ai/dev/onejob/owner-approve-and-stage"');
  assert.equal(owner.length,2,"one canonical staging endpoint only");
- assert.match(owner[1],/requireAuth/);
- assert.match(owner[1],/requireInternalRole\("owner"\)/);
- assert.match(owner[1],/requirePasswordChanged/);
+ assert.match(owner[1],/requireCstOneJobStageOwner/);
  assert.match(owner[1],/verifyFreshOneJobStageConsent/);
  assert.match(owner[1],/FRESH_EXPLICIT_OWNER_STAGE_CONSENT_REQUIRED/);
  assert.doesNotMatch(routes,/cstTeamOneJobOwnerConsentRouter/);

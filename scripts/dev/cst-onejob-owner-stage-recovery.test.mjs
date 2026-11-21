@@ -91,7 +91,7 @@ test("recovery API enforces real internal Owner, no second POST, sanitizes DB er
  assert.ok(start>0&&end>start);
  const code=route.slice(start,end);
  for(const token of [
-  'requireAuth,requireInternalRole("owner"),requirePasswordChanged',
+  'requireCstOneJobStageOwner',
   "ownerUserId:actor.id","Cache-Control","no-store","status(503)",
   "automaticRetryAllowed:false"
  ])assert.ok(code.includes(token),token);

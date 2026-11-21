@@ -102,3 +102,50 @@ to public Nginx before the numbered security gates pass.
 All existing DEV/PROD transactional features, eight signer units,
 review-only admission capability and existing public preview remain
 unchanged. Operator root/Final ACK/real E2E remain NO-GO.
+
+## Isolated Owner-session reader: NO second shared Core database pool
+
+The bootstrap source previously imported the ordinary requireAuth,
+requireInternalRole(owner), and requirePasswordChanged helpers.
+Those helpers query getInternalUserById through the shared Core database
+pool. The isolated stage unit injects only the dedicated encrypted DB
+credential, not the shared runtime DB. Thus the first signed Owner
+request would otherwise require broad DB access or fail unnecessarily.
+
+The three canonical DEV onejob paths now use only
+requireCstOneJobStageOwner, a dedicated stage-only middleware.
+Ordinary Core AI login, roles, sessions and other routes are unchanged.
+
+Before any DB access this verifies the EXISTING internal_session cookie
+signature with exact HS256 and the EXISTING Core SESSION_SECRET. It
+rejects magic/reset tokens, role claims, nonnumeric user IDs and
+expired, forged or anonymous cookies. It does not issue a new session.
+The separate stage feature/environment gate remains fail-closed.
+
+After cryptographic verification the dedicated stage connection uses
+SET TRANSACTION READ ONLY and SET LOCAL ROLE
+cst_team_model_pilot_writer, validates the exact PostgreSQL stage
+session/current role and database, then RLS-selects only the signed
+user's id,role,status,account_type,must_change_password. Only a
+currently active internal Owner with must_change_password=false can
+proceed to the existing readiness, recovery or stage handler. The
+POST independently requires a fresh (20-minute) Core cookie and exact
+same-origin intent, then rechecks Owner and job indexes in the atomic
+WAITING-only transaction. No extra Owner action is added.
+
+Only one missing column SELECT grant is required:
+must_change_password on the existing ai_platform.internal_users
+table for the already-provisioned NOLOGIN writer. The candidate
+cst-onejob-stage-owner-password-state-read.CSTDEV-ONLY.sql verifies
+exact roles, session count, forced RLS and zero approvals before
+installing; it does NOT allow email, password_hash, UPDATE, DELETE or
+LOGIN. The rollback is denied after any genuine Owner approval/session.
+
+A PG16 Docker network-none test exercises the EXACT grant/revoke,
+source tests cover JWT claim shape, three route bindings, missing
+Owner, wrong role, suspended users, password-change pending and
+no shared-pool fallback. The live stage remains NOLOGIN and its
+public Nginx route stays read-only until the existing Core session
+credential, bounded DB lease and fixed-egress network are safely
+provisioned, and all end-to-end authorizations are independently
+verified. No KMS, second human Owner consent, or PROD changes.

@@ -13,7 +13,7 @@ test("one Super Admin WAITING click checks dedicated DB scope but defers job-spe
  assert.ok(pos>0&&post>pos);
  const read=jobs.slice(pos,post);
  for(const pattern of [
-  /requireAuth/,/requireInternalRole\("owner"\)/,/requirePasswordChanged/,
+  /requireCstOneJobStageOwner/,
   /readIndependentlySignedPreapproval/,/getCstOneJobStagingDatabase/,
   /SET TRANSACTION READ ONLY/,/scoped_membership/,
   /readyForOneOwnerClick:blockers\.length===0/,
