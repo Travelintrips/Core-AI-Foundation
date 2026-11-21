@@ -8,6 +8,7 @@ on:
       - "scripts/dev/stamp-dev-build-sha.mjs"
       - "scripts/dev/stamp-dev-build-sha.test.mjs"
       - "scripts/dev/cst-onejob-ci-image-runtime-smoke.mjs"
+      - "scripts/dev/cst-onejob-readonly-preview-startup.test.mjs"
       - "artifacts/api-server/**"
       - "lib/db/**"
       - "pnpm-lock.yaml"
@@ -42,6 +43,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Test fail-closed source stamping
         run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
+      - name: Deny startup database DDL in one-job read-only preview
+        run: node --experimental-strip-types --test scripts/dev/cst-onejob-readonly-preview-startup.test.mjs
       - name: Verify runtime smoke denies execution outside isolated QA
         shell: bash
         run: |
