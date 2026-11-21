@@ -137,7 +137,7 @@ Only one missing column SELECT grant is required:
 must_change_password on the existing ai_platform.internal_users
 table for the already-provisioned NOLOGIN writer. The candidate
 cst-onejob-stage-owner-password-state-read.CSTDEV-ONLY.sql verifies
-exact roles, session count, forced RLS and zero approvals before
+exact roles, session count, enabled RLS with table owner postgres and zero approvals before
 installing; it does NOT allow email, password_hash, UPDATE, DELETE or
 LOGIN. The rollback is denied after any genuine Owner approval/session.
 

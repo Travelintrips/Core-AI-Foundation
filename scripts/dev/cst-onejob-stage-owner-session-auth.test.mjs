@@ -85,7 +85,8 @@ test("minimal schema grant covers only Owner password-change flag, never full us
   "CANONICAL_OWNER_RLS_REQUIRED",
   "GRANT SELECT (must_change_password)",
   "cst_onejob_stage_owner_select",
-  "relforcerowsecurity",
+  "relrowsecurity",
+  "relowner='postgres'::regrole",
   "CST_DEV_ONEJOB_OWNER_PASSWORD_STATE_POSTFLIGHT_DENIED",
  ])assert.ok(migration.includes(token),token);
  assert.doesNotMatch(migration,/GRANT ALL|GRANT UPDATE|GRANT SELECT ON ai_platform\.internal_users|ALTER ROLE .*LOGIN|CREATE ROLE/);
