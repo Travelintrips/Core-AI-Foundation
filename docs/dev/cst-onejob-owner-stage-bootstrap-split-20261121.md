@@ -103,6 +103,69 @@ All existing DEV/PROD transactional features, eight signer units,
 review-only admission capability and existing public preview remain
 unchanged. Operator root/Final ACK/real E2E remain NO-GO.
 
+## Gate-A/Gate-B broker lifecycle separation (source-only)
+
+The existing operational broker scripts/dev/cst_team_onejob_operational_broker.py
+is Gate B, and cannot bootstrap a Gate-A Owner WAITING transaction. It demands
+jobId, ownerApprovalSha256, subscriberArmedSha256 in a signed manifest and
+forwards one PostgreSQL session, then exits. Those identifiers only exist
+after genuine Owner staging, and cannot be fabricated ahead of time.
+
+Gate A candidate socket is now /run/cst-onejob-stage-db/pg-pooler.sock.
+Gate B socket remains /run/cst-onejob-dev-db/pg-pooler.sock.
+Source QA asserts separate paths and fail-closed transport.
+
+A distinct, reviewed, pre-job stage-only broker with scoped egress,
+non-root peer identity, bounded LOGIN lease and automatic NOLOGIN relock
+is STILL MISSING. Also missing: verified Core session-secret custody and
+actual signed Super Admin test. Source-only PASS is NOT operational GO.
+No signed Gate-B permit is a substitute; keep signers/dispatch/PROD OFF.
+
+## Gate A technical broker source candidate (not installed)
+
+scripts/dev/cst_onejob_preapproval_stage_broker.py is a new independent
+Gate-A pre-approval transport candidate. It accepts a **technical** Ed25519
+manifest with scope PREAPPROVAL_STAGE_ONLY, not an Owner/QA job-specific
+manifest, checks a separately pinned public key, exact source SHA, fixed
+CST-DEV transaction pooler destination, peer UID/GID, current Linux network
+namespace and already installed default-deny kernel egress rules. Signed
+leases are at most 10 minutes; it forwards one connection then exits.
+No database URL/secret, approval, role alteration, or dispatcher is created.
+
+Critically, **source tests are not operational permission**. No trusted
+technical public key, signed Gate-A manifest, root-owned source receipt,
+reviewed kernel ACL or real non-root staging peer have been installed.
+Current candidate bootstrap Docker container defaults to root while this
+broker mandates an explicitly non-root stage peer; switching container user
+without a reviewed encrypted-credential delivery mechanism would break
+credential access. This identity/custody mismatch remains a hard NO-GO
+gate. Do not use Gate-B signed job permits for Gate A.
+
+## Systemd parser validation
+
+The original candidate used an unsupported ConditionPathIsSocket directive;
+systemd silently ignored that condition. It is replaced by the supported
+ExecCondition=/usr/bin/test -S /run/cst-onejob-stage-db/pg-pooler.sock
+in the source-only unit. Systemd parser review and absence handling must
+pass before any installation. No unit was installed or started.
+
+## Gate-A non-root staging client and systemd credential handoff
+
+Source-only stage-credential-handoff.py prepares the two existing systemd
+decrypted credentials in a fresh private /run (tmpfs) directory, UID 28502,
+GID 28501, directory 0700 and files 0400. It rejects symlinks, stale paths,
+unsafe source permissions and unexpected cleanup targets, and never logs
+credential bytes. ExecStopPost removes only the managed temporary copies.
+
+Candidate Docker client now runs --user 28502:28501. The host systemd
+wrapper remains root only for Docker and encrypted credential staging.
+Gate-A broker runs as distinct UID 28500/GID 28501 and checks SO_PEERCRED.
+
+Synthetic systemd credential ownership and handoff tests PASS. No real
+credentials were accessed. Actual unit credential lifecycle, non-root Docker
+mount accessibility, session issuer custody, network egress, JIT LOGIN/relock
+and real Owner approval remain NO-GO until independently tested.
+
 ## Isolated Owner-session reader: NO second shared Core database pool
 
 The bootstrap source previously imported the ordinary requireAuth,
@@ -149,3 +212,11 @@ public Nginx route stays read-only until the existing Core session
 credential, bounded DB lease and fixed-egress network are safely
 provisioned, and all end-to-end authorizations are independently
 verified. No KMS, second human Owner consent, or PROD changes.
+
+## Gate A session hard stop
+
+Gate A no longer reuses Gate B's rolling-idle-only PostgreSQL forwarder.
+A separate forward_stage_with_lease function projects the signed manifest
+expiry to a monotonic deadline and terminates even under continuous traffic.
+Idle timeout and byte cap still apply. QA uses synthetic AF_UNIX socket pairs.
+This does not authorize real broker, database LOGIN, egress or dispatcher.

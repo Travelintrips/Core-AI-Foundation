@@ -58,6 +58,8 @@ def main():
   # Docker's bootstrap PostgreSQL temporarily listens on a UNIX socket.
   # Only the final TCP listener can authorize fixture SQL setup.
   for _ in range(90):
+   # A TCP pg_isready check cannot succeed against the temporary bootstrap
+   # Unix-only PostgreSQL server; it confirms durable post-init readiness.
    h=run(["docker","exec",NAME,"pg_isready","-h","127.0.0.1",
      "-U","postgres","-d","postgres"],allow=True)
    if h.returncode==0:

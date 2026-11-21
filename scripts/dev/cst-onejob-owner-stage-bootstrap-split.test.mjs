@@ -12,7 +12,17 @@ test("WAITING-only bootstrap unit requires no future job release to start stagin
  assert.doesNotMatch(unit,/RefuseManualStart=yes|\[Install\]/);
  assert.match(unit,/LoadCredentialEncrypted=database-url:/);
  assert.match(unit,/LoadCredentialEncrypted=session-secret:/);
- assert.match(unit,/--network cst-onejob-owner-stage-egress/);
+ assert.match(unit,/--user 28502:28501/);
+ assert.match(unit,/RuntimeDirectory=cst-onejob-stage-credentials/);
+ assert.match(unit,/RuntimeDirectoryMode=0700/);
+ assert.match(unit,/ExecStartPre=\/usr\/bin\/python3 .*stage-credential-handoff\.py prepare/);
+ assert.match(unit,/ExecStopPost=\/usr\/bin\/python3 .*stage-credential-handoff\.py cleanup/);
+ assert.match(unit,/src=\/run\/cst-onejob-stage-credentials,dst=\/run\/credentials\/cst-onejob-owner-stage\.service,readonly/);
+ assert.doesNotMatch(unit,/src=%d,dst=\/run\/credentials\/cst-onejob-owner-stage\.service/);
+ assert.match(unit,/--network cst-onejob-owner-stage-internal/);
+ assert.match(unit,/ExecCondition=\/usr\/bin\/test -S \/run\/cst-onejob-stage-db\/pg-pooler\.sock/);
+ assert.match(unit,/owner-stage-socket-acl-reviewed/);
+ assert.match(unit,/CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED=true/);
  assert.doesNotMatch(unit,/--network (none|host)|--privileged/);
  assert.match(unit,/--publish 127\.0\.0\.1:18583:3000/);
  assert.match(unit,/--read-only/);
