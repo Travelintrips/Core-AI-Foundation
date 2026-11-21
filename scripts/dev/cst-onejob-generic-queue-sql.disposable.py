@@ -53,6 +53,14 @@ def main():
   # Cold CI image startup may take longer than warm VPS startup.
   # Keep all assertions identical; only the bounded readiness poll changes.
   for _ in range(90):
+   # The official postgres entrypoint starts a temporary init server, then
+   # shuts it down before launching the durable final server. A successful
+   # first SELECT against that temporary server is NOT durable readiness.
+   logs=run(["docker","logs",NAME],allow=True)
+   if "PostgreSQL init process complete; ready for start up." not in (
+       logs.stdout+"\n"+logs.stderr):
+    time.sleep(.3)
+    continue
    r=psql("SELECT 1;",True)
    if r.returncode==0 and r.stdout.strip()=="1":ready=True;break
    time.sleep(.3)

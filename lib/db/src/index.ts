@@ -144,6 +144,7 @@ export const db = drizzle(pool, { schema });
 // Additional admin read connections use the same installed Postgres driver.
 export { Pool as PostgresPool } from "pg";
 export { createPinnedCstOneJobPgConnection, loadPinnedCstDevSupabaseRootCa } from "./cstOneJobPinnedSupabaseCa";
+export {makeOneJobUnixSocketStream, CST_ONEJOB_DEV_SOCKET_PATH} from "./cstOneJobDevSocketTransport";
 
 export * from "./schema";
 export * from "./env";

@@ -9,7 +9,7 @@
  */
 import {createHash} from "node:crypto";
 import {drizzle} from "drizzle-orm/node-postgres";
-import {PostgresPool,createPinnedCstOneJobPgConnection} from "@workspace/db";
+import {PostgresPool,createPinnedCstOneJobPgConnection,makeOneJobUnixSocketStream} from "@workspace/db";
 import {
   CST_ONEJOB_STAGE_LOGIN,
   resolveCstOneJobStageDatabaseCredential,
@@ -40,9 +40,18 @@ export function getCstOneJobStagingDatabase(env:NodeJS.ProcessEnv) {
   // Keep the validated URL out of node-postgres: its sslmode query option
   // overrides an explicit ssl.ca. A missing or mismatched pinned CA fails
   // closed before any network connection.
+  // This isolated staging service has --network none. Never fall back to TCP.
+  // The fixed, separately authorized host broker must mount its Unix socket
+  // at the pinned path. No broker, no DB connection, no job writes.
+  if(env.CST_DEV_ONEJOB_STAGE_SOCKET_TRANSPORT_ENABLED!=="true" ||
+     env.APP_ENV!=="development" || env.NODE_ENV!=="development" ||
+     env.CREDENTIALS_DIRECTORY!=="/run/credentials/cst-onejob-owner-stage.service" ||
+     !!env.SUPABASE_PROD_DATABASE_URL)
+    throw Error("ONEJOB_STAGING_SOCKET_TRANSPORT_NOT_AUTHORIZED");
   const pinned=createPinnedCstOneJobPgConnection(url,CST_ONEJOB_STAGE_LOGIN);
   const pool=new PostgresPool({
     ...pinned,
+    stream:makeOneJobUnixSocketStream(),
     max:1,
     min:0,
     idleTimeoutMillis:5_000,
