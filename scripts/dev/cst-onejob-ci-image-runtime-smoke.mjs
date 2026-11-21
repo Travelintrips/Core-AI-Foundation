@@ -44,7 +44,7 @@ const env={
    "aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=verify-full",
 };
 let stopped=false,output="";
-const server=spawn(process.execPath,["/app/api-server/dist/index.mjs"],{
+const server=spawn(process.execPath,["/app/artifacts/api-server/dist/index.mjs"],{
  env,stdio:["ignore","pipe","pipe"]
 });
 const collect=chunk=>{output=(output+String(chunk)).slice(-16000)};
