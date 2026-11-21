@@ -31,10 +31,12 @@ def main():
   "-e","POSTGRES_HOST_AUTH_METHOD=trust","postgres:16-alpine"])
  try:
   ready=False
-  for _ in range(35):
+  # Cold CI image startup may take longer than warm VPS startup.
+  # Keep all assertions identical; only the bounded readiness poll changes.
+  for _ in range(90):
    r=psql("SELECT 1;",True)
    if r.returncode==0 and r.stdout.strip()=="1":ready=True;break
-   time.sleep(.2)
+   time.sleep(.3)
   require(ready,"DISPOSABLE_POSTGRES_NOT_READY")
   psql("""CREATE SCHEMA ai_platform;
    CREATE TABLE ai_platform.ai_jobs(
