@@ -5,7 +5,7 @@ This tests the exact source SQL exclusion predicate plus a simplified
 replica of CST-DEV's already-existing coding-only UPDATE RLS. No actual
 Supabase project credentials, signers, Owner decisions or server ports.
 """
-import os,subprocess,time,json,sys,hashlib
+import os,subprocess,time,json,sys,hashlib,re
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -26,7 +26,9 @@ def run(args,stdin=None,allow=False):
   raise RuntimeError("FIXTURE_"+tag+"_TIMEOUT")
  if r.returncode!=0 and not allow:
   msg=r.stderr.lower()
-  if "permission denied" in msg:category="PERMISSION"
+  state=re.search(r"\bERROR:\s*([0-9A-Z]{5}):",r.stderr)
+  if state:category="PG_SQLSTATE_"+state.group(1)
+  elif "permission denied" in msg:category="PERMISSION"
   elif "row-level security" in msg:category="RLS"
   elif "syntax error" in msg:category="SQL_SYNTAX"
   elif "does not exist" in msg:category="MISSING"
@@ -38,7 +40,8 @@ def run(args,stdin=None,allow=False):
  return r
 def psql(q,allow=False):
  return run(["docker","exec","-i",NAME,"psql","-X","-qAt",
-  "-v","ON_ERROR_STOP=1","-U","postgres","-d","postgres"],q,allow)
+  "-v","ON_ERROR_STOP=1","-v","VERBOSITY=verbose",
+  "-U","postgres","-d","postgres"],q,allow)
 def require(ok,code):
  if not ok:raise RuntimeError(code)
 def main():
