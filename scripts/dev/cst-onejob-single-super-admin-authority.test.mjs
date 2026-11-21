@@ -46,6 +46,18 @@ test("UI says Super Admin but only privileged owner can see one action in DEV",(
   assert.match(ui,/disabled=\{!ready\|\|submitted\|\|loading\}/);
   assert.doesNotMatch(ui,/setInterval|autoRetry|type="password"/);
 });
+test("non-owner session explains role and offers existing email-login account switch",()=>{
+  assert.match(ui,/Sesi saat ini:/);
+  assert.match(ui,/user\.email/);
+  assert.match(ui,/user\.role/);
+  assert.match(ui,/Role admin dan manager tidak otomatis menjadi Super Admin/);
+  assert.match(ui,/logout\(\)/);
+  assert.match(ui,/window\.location\.assign\("\/login"\)/);
+  assert.match(ui,/Ganti akun melalui link login email/);
+  assert.match(ui,/Preview masih baca-saja/);
+  assert.match(ui,/enabled:dev&&owner/);
+  assert.doesNotMatch(ui,/updateRole|createUser|setUser\(/);
+});
 test("single human decision does not forge Operations keys or bypass technical evidence",()=>{
   assert.match(reviewer,/APPROVED_OPS_ROOT_FINGERPRINT=null/);
   assert.match(stage,/readIndependentlySignedPreapproval/);

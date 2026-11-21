@@ -24,7 +24,7 @@ type Stage={
 };
 const DEV_HOST="dev.cstlogistic.co.id";
 export default function CstDevOneJobPage(){
- const {user}=useInternalAuth();
+ const {user,logout,loading:authLoading}=useInternalAuth();
  const dev=typeof window!=="undefined"&&window.location.hostname===DEV_HOST;
  const owner=!!user&&user.role==="owner"&&user.status==="active"&&
    user.accountType==="internal"&&!user.mustChangePassword;
@@ -38,9 +38,36 @@ export default function CstDevOneJobPage(){
   enabled:dev&&owner,
   retry:false,refetchOnWindowFocus:false,refetchInterval:false,staleTime:0,
  });
- if(!dev||!owner){
+ if(!dev){
   return <div className="p-8 text-sm text-muted-foreground">
-   Halaman persetujuan satu job ini hanya untuk Super Admin CST-DEV (role internal owner).
+   Persetujuan Super Admin — CST-DEV hanya tersedia pada host DEV resmi.
+  </div>;
+ }
+ if(!owner){
+  return <div className="mx-auto max-w-xl space-y-4 p-8 text-sm">
+   <h1 className="text-xl font-semibold">Persetujuan Super Admin — CST-DEV</h1>
+   <p className="text-muted-foreground">
+    Halaman persetujuan satu job ini hanya untuk Super Admin CST-DEV (role internal owner).
+   </p>
+   {authLoading?<p>Memeriksa sesi login…</p>:user?(
+    <p>Sesi saat ini: <strong>{user.email}</strong> dengan role
+     {" "}<strong>{user.role}</strong>. Akun ini tidak memiliki hak persetujuan satu job.
+    </p>
+   ):<p>Belum ada sesi internal yang aktif.</p>}
+   <p className="text-muted-foreground">
+    Gunakan akun internal <strong>owner</strong> melalui link login email yang sudah ada.
+    Role admin dan manager tidak otomatis menjadi Super Admin.
+   </p>
+   {user?<Button variant="outline" disabled={loading}
+    onClick={()=>void logout()
+      .then(()=>window.location.assign("/login"))
+      .catch(()=>setError("Gagal keluar. Silakan gunakan halaman login yang sudah tersedia."))}>
+    Ganti akun melalui link login email
+   </Button>:<a className="underline" href="/login">Masuk melalui link login email</a>}
+   {error&&<p className="text-destructive">{error}</p>}
+   <p className="text-muted-foreground">
+    Preview masih baca-saja. Tidak ada job atau persetujuan yang dibuat otomatis.
+   </p>
   </div>;
  }
  const ready=readiness.data?.readyForOneOwnerClick===true&&
