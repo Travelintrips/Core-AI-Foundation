@@ -1,0 +1,49 @@
+# CST-DEV SOURCE CANDIDATE ONLY. Not installed, not enabled, not started.
+# A real Operations-reviewed authority, kernel ACL, namespace, and JIT
+# database lease must exist independently before any service activation.
+[Unit]
+Description=CST-DEV one-Owner WAITING-only Gate A DB broker (NO-GO candidate)
+After=network.target
+ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem
+ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json
+ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
+ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/independent-gatea-approval.json
+ConditionPathExists=/run/netns/cst-onejob-gatea-reviewed
+ConditionPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py
+ConditionPathExists=/opt/cst-onejob-dev/bootstrap/cst_team_onejob_operational_broker.py
+ConditionPathExists=/opt/cst-onejob-dev/bootstrap/cst_team_onejob_peercred.py
+
+[Service]
+Type=simple
+User=root
+Group=root
+RuntimeDirectory=cst-onejob-stage-db
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=no
+# No default host networking; namespace must be installed and reviewed
+# externally with a single public pooler-IP:6543 egress ACL.
+NetworkNamespacePath=/run/netns/cst-onejob-gatea-reviewed
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
+ExecStartPre=/usr/bin/chown 28500:28501 /run/cst-onejob-stage-db
+ExecStartPre=/usr/bin/chmod 0750 /run/cst-onejob-stage-db
+# The source broker validates the real kernel ACL and the signed manifest
+# before binding a socket. The root-only signed admission validation is
+# needed independently; source tests do NOT confer authorization.
+ExecCondition=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py validate --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
+ExecStart=/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups /usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py run --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
+Restart=no
+TimeoutStartSec=20
+TimeoutStopSec=8
+KillMode=control-group
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# No [Install] section. Never enable via systemctl enable.

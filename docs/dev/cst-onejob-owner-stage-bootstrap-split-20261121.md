@@ -340,3 +340,25 @@ This proves systemd cleanup semantics only. It does NOT create an approved
 real broker unit, signed technical permit, kernel egress ACL, JIT database
 controller, or Supavisor drain proof. Until those independent prerequisites
 exist, operational Gate A remains NO-GO, with no automatic recovery claimed.
+
+## Gate A broker systemd source-only candidate, not installed
+
+The new cst-onejob-gatea-preapproval-broker.service.CANDIDATE source template
+requires independently provided and reviewed technical trust material,
+signed exact-scope staging permit, and independently reviewed network
+namespace at /run/netns/cst-onejob-gatea-reviewed. The unit does not
+generate trust material or network policy. It uses systemd RuntimeDirectory
+with preserve=no and the proven root-wrapper-to-setpriv UID28500/GID28501
+pattern; direct User=28500 failed under systemd 255 because the numeric
+UID lacks an NSS account.
+
+ExecCondition validates the technical manifest, pinned public key and
+source commitment before privilege drop; the same validation is repeated
+by the nonroot broker on run. The broker verifies real kernel nftables
+default-drop policy and peer credentials before a single connection.
+No Install section, Restart=no, no live service installation.
+
+IMPORTANT: a receipt file existing is not proof of independent approval.
+Independent authority, key custody, source pin, network ACL, and JIT
+database LOGIN/relock remain required. Candidate is deliberately
+unstartable on this VPS. No source PASS confers release permission.
