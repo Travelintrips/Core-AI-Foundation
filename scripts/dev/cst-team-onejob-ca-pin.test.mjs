@@ -108,7 +108,7 @@ test("Owner readiness rejects missing runtime CA before attempting dedicated DB 
                             route.indexOf('router.post("/ai/dev/onejob/owner-approve-and-stage"'));
   const exportSurface=readFileSync(new URL("../../lib/db/src/index.ts",import.meta.url),"utf8");
   assert.match(exportSurface,/loadPinnedCstDevSupabaseRootCa/);
-  assert.match(segment,/requireInternalRole\("owner"\)/);
+  assert.match(segment,/requireCstOneJobStageOwner/);
   assert.match(segment,/loadPinnedCstDevSupabaseRootCa\(\)/);
   assert.match(segment,/STAGING_PINNED_CA_NOT_INSTALLED_OR_INVALID/);
   assert.ok(segment.indexOf("loadPinnedCstDevSupabaseRootCa();") <
