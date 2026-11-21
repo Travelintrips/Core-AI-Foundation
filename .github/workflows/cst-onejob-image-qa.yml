@@ -7,6 +7,7 @@ on:
       - "deploy/hostinger-dev/**"
       - "scripts/dev/stamp-dev-build-sha.mjs"
       - "scripts/dev/stamp-dev-build-sha.test.mjs"
+      - "scripts/dev/cst-onejob-ci-image-runtime-smoke.mjs"
       - "artifacts/api-server/**"
       - "lib/db/**"
       - "pnpm-lock.yaml"
@@ -41,6 +42,17 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Test fail-closed source stamping
         run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
+      - name: Verify runtime smoke denies execution outside isolated QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/dev/cst-onejob-ci-image-runtime-smoke.mjs
+          set +e
+          node scripts/dev/cst-onejob-ci-image-runtime-smoke.mjs > /tmp/cst-smoke-deny.txt 2>&1
+          code=$?
+          set -e
+          test "$code" -eq 2
+          grep -qx "CI_RUNTIME_SMOKE_DENIED_INVALID_SCOPE" /tmp/cst-smoke-deny.txt
       - name: Build actual image with exact checked-out commit
         shell: bash
         env:
@@ -72,6 +84,27 @@ jobs:
           echo "CST_DEV_QA_IMAGE_SOURCE_PROVENANCE_PASS"
           echo "Image digest: $IMAGE_ID"
           echo "Source: $QA_SOURCE_SHA"
+      - name: Smoke actual Super Admin UI plus API in zero-network QA image
+        shell: bash
+        env:
+          QA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          # No host port, credentials, DB network, signer or PROD access.
+          docker run --rm --network none --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=48m \
+            --tmpfs /run:rw,nosuid,nodev,size=24m \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --pids-limit 100 --memory 750m \
+            -e CST_ONEJOB_IMAGE_SMOKE_QA=true \
+            -e QA_SOURCE_SHA="$QA_SOURCE_SHA" \
+            -e APP_ENV=development -e NODE_ENV=development \
+            -e AI_DISPATCHER_ENABLED=false \
+            -e OLLAMA_WORKER_RUNTIME_ENABLED=false \
+            -e CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=false \
+            -e CST_DEV_ONEJOB_BROKER_ENABLED=false \
+            --entrypoint node cst-core-onejob-dev-image-qa:local \
+            /app/scripts/dev/cst-onejob-ci-image-runtime-smoke.mjs
       - name: Prevent accidental QA image deployment
         shell: bash
         run: |
