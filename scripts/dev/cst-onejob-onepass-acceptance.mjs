@@ -28,7 +28,6 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"gate_a_preapproval_stage_broker_security",argv:["python3","-B","scripts/dev/test_cst_onejob_preapproval_stage_broker.py"]},
   {id:"nonroot_stage_credential_handoff",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_credential_handoff.py"]},
   {id:"owner_stage_scoped_jwt_readonly_auth",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-owner-session-auth.test.mjs"]},
-  {id:"owner_stage_scoped_jwt_readonly_auth",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-owner-session-auth.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
   {id:"signed_preapproval_ready",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-preapproval-ready.test.mjs"]},
   {id:"owner_panel_one_click",argv:[node,"--test","scripts/dev/cst-onejob-owner-ready-panel.test.mjs"]},
