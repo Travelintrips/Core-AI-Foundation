@@ -30,7 +30,7 @@ import {
   User,
   Zap,
 } from "lucide-react";
-import { apiEventStream, apiFetch } from "@/lib/apiFetch";
+import { apiEventStream, apiFetch, HttpError } from "@/lib/apiFetch";
 import { formatAiCoreInboxForChat } from "@/lib/aiCoreChatResultSummary";
 import { externalJobStatusLabel, externalWorkRouteLabel, isExternalJobTerminal, type ExternalJobStatus } from "@/lib/aiCoreExternalWorkState";
 import { useToast } from "@/hooks/use-toast";
@@ -41,6 +41,20 @@ import {
   getDeferredPwaInstallPrompt,
   type BeforeInstallPromptEvent,
 } from "@/lib/pwaInstall";
+
+async function retryOpenClawSubmission<T>(
+  submit: () => Promise<T>,
+  canRetry: () => boolean,
+): Promise<T> {
+  try {
+    return await submit();
+  } catch (error) {
+    const transient = error instanceof TypeError ||
+      (error instanceof HttpError && [502, 503, 504].includes(error.status));
+    if (!transient || !canRetry()) throw error;
+    return submit();
+  }
+}
 
 type ChatMode = "auto" | "ask" | "agent";
 type ModelPolicy = "economy" | "smart" | "auto" | "cloud";
@@ -1517,6 +1531,8 @@ export default function AiCoreChat() {
     }
 
     const submissionId = crypto.randomUUID();
+    // The explicit pipe command is scoped and deduplicated by the server.
+    const canRetrySubmission = !image && inputSource === "text" && /^\s*@?\s*\|\s*\S/.test(submittedText);
     append({
       id: messageId(),
       role: "user",
@@ -1542,6 +1558,7 @@ export default function AiCoreChat() {
       setStreamingMessageId(assistantId);
 
       let completeStreamReply = "";
+      let observedStreamEvent = false;
       const streamController = new AbortController();
       streamAbortRef.current = streamController;
       streamInterruptedRef.current = false;
@@ -1550,7 +1567,7 @@ export default function AiCoreChat() {
       resumeListeningAfterSpeechRef.current = false;
 
       try {
-        await apiEventStream(
+        await retryOpenClawSubmission(() => apiEventStream(
           "/api/ai/core-chat/messages/stream",
           {
             method: "POST",
@@ -1571,6 +1588,7 @@ export default function AiCoreChat() {
             }),
           },
           ({ event: streamEvent, data }) => {
+            observedStreamEvent = true;
             const value =
               data && typeof data === "object" && !Array.isArray(data)
                 ? (data as Record<string, unknown>)
@@ -1700,7 +1718,7 @@ export default function AiCoreChat() {
               }
             }
           },
-        );
+        ), () => canRetrySubmission && !observedStreamEvent && !streamController.signal.aborted);
       } catch (error) {
         const interrupted =
           streamInterruptedRef.current ||
@@ -1737,7 +1755,7 @@ export default function AiCoreChat() {
     }
 
     try {
-      const response = await apiFetch<ChatResponse>("/api/ai/core-chat/messages", {
+      const response = await retryOpenClawSubmission(() => apiFetch<ChatResponse>("/api/ai/core-chat/messages", {
         method: "POST",
         body: JSON.stringify({
           message: submittedText,
@@ -1753,7 +1771,7 @@ export default function AiCoreChat() {
           branch: branch.trim(),
           priority,
         }),
-      });
+      }), () => canRetrySubmission);
 
       const spokenReply = response.reply;
       const assistantId = messageId();
