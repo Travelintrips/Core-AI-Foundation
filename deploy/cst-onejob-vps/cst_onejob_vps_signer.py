@@ -155,16 +155,29 @@ def recv_exact(conn,n):
     return data
 
 def consume_nonce(root, nonce):
+    # No path traversal even if accidentally called outside validate_permit().
+    if not isinstance(nonce, str) or not SHA.fullmatch(nonce):
+        deny("PERSISTENT_NONCE_FORMAT_INVALID")
     path=pathlib.Path(root)
     if not path.is_dir() or path.is_symlink() or path.stat().st_uid != os.getuid() or path.stat().st_mode & 0o077:
         deny("PERSISTENT_NONCE_DIRECTORY_UNSAFE")
     file=path/(nonce+".used")
     fd=os.open(file,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
     try:
-        os.write(fd,b"consumed\n")
+        consumed=b"consumed\n"
+        if os.write(fd,consumed)!=len(consumed):
+            deny("PERSISTENT_NONCE_WRITE_INCOMPLETE")
         os.fsync(fd)
     finally:
         os.close(fd)
+    # File fsync alone does not guarantee persistence of the new directory
+    # entry across an abrupt host crash: fsync the containing directory too.
+    # A failure is fail-closed; the already-created nonce file is not deleted.
+    dir_fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
 
 def serve(role,socket_path):
     if os.uname().nodename.split(".")[0]!=HOST or os.getuid() == 0:

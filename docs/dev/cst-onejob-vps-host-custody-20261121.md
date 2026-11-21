@@ -52,3 +52,31 @@ public root paths must **not** be populated from fake placeholders; this audit
 cannot issue trusted release approval or replace the real Owner session.
 Full operational E2E still requires approved independent trust, a new
 Company-1 job, verified service identities and signed Hub 4+1 Final ACK.
+
+
+## Durable anti-replay journal fix (source-only candidate, 21 Nov 2026)
+
+The original signer journal used atomic `O_EXCL` creation and `fsync` on
+the nonce file, but did **not** synchronize the containing directory. An
+unexpected VPS power loss can lose the new directory entry even after the
+file contents were synchronized, creating a replay window after restart.
+
+The candidate signer source now validates the nonce against exactly 64
+lowercase hexadecimal characters, rejects short journal writes, synchronizes
+**both the file and the containing directory**, and retains fail-closed
+behavior if either synchronization raises an exception. It never deletes a
+failed nonce record to retry. Invalid nonce paths, symlinks and world-writable
+ledger directories are rejected.
+
+Disposable VPS regression tests use only temporary journal paths and no
+operational signer key: successful private `0600` ledger creation, replay
+denial, file+directory fsync order, simulated failures of each fsync, short
+write, invalid/traversal nonce, symlink directory and unsafe permissions.
+
+**Source-versus-installed-code distinction:** the live dormant VPS
+`/opt/cst-onejob-dev/bin/cst_onejob_vps_signer.py` is NOT changed by this
+source-only PR patch. The signed, independently authorized source release
+must explicitly pin and validate the new candidate SHA before any possible
+operational service start. The existing encrypted credentials are preserved.
+No service activation, public approval-root promotion, Owner approval, job
+dispatch, PROD write or real Final ACK is authorized by these tests.
