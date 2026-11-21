@@ -1,0 +1,132 @@
+{
+  "approvedChangeSignaturePresent": false,
+  "authorizedReleaseFilesWritten": false,
+  "cloudKmsDependency": false,
+  "companyId": "1",
+  "custody": {
+    "encryptedPrivateContentsRead": false,
+    "liveSignaturesIssued": 0,
+    "model": "SYSTEMD_HOST_BOUND_ENCRYPTED_CREDENTIALS_SHARED_ROOT_DOMAIN",
+    "roles": [
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-agent-coding-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-coding",
+        "publicSpkiSha256": "18f22d189ebb45a8bf59684abfb495392f38ad86d11fa01b002dcd5a7041b108",
+        "role": "agent-coding",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-agent-coding.service"
+      },
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-agent-infrastructure-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-infra",
+        "publicSpkiSha256": "d7163a7fe90fc4a1dacb86a634caefea29676bd75ab3f493ac8bd2deb4970738",
+        "role": "agent-infrastructure",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-agent-infrastructure.service"
+      },
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-agent-qa-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-agentqa",
+        "publicSpkiSha256": "6825420312bd46e99e2e96d18cbc832b2c232c565e1f1cec1554405dc4ec4631",
+        "role": "agent-qa",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-agent-qa.service"
+      },
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-agent-security-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-security",
+        "publicSpkiSha256": "b34f04aa828194db902b3e1a4c130eae8df2ae722a3f8a585df2bef28e2736a0",
+        "role": "agent-security",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-agent-security.service"
+      },
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-core-reconciliation-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-core",
+        "publicSpkiSha256": "47cbeb19ebb53f7e8068d4f5ea6fce0c4bb9026290d6172c09c633f08b08aacb",
+        "role": "core-reconciliation",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-core-reconciliation.service"
+      },
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-qa-evidence-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-qa-evidence",
+        "publicSpkiSha256": "1eae96e32b2fd417825c92295f13f2bc2e5f551f8d7608371bfbc31b4706118c",
+        "role": "qa-evidence",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-qa-evidence.service"
+      },
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-reviewer-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-reviewer",
+        "publicSpkiSha256": "60ea3c1ed63b80f00fcb7d9def304f528c5850e006640d14a830aa043afaadd0",
+        "role": "reviewer",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-reviewer.service"
+      },
+      {
+        "approvedForSigning": false,
+        "encryptedCredentialFilename": "cst-onejob-subscriber-ack-private-key.pkcs8",
+        "linuxIdentity": "cst1j-sig-subscriber",
+        "publicSpkiSha256": "65c2b20d402e5e8df904ebebf79d8a6360e8c0dc20317d021a88ef182a47645b",
+        "role": "subscriber-ack",
+        "serviceRunning": false,
+        "systemdUnit": "cst-onejob-signer-subscriber-ack.service"
+      }
+    ],
+    "sharedHostRootRisk": "REQUIRES_EXPLICIT_ACCEPTANCE"
+  },
+  "environment": "DEV",
+  "host": "srv1792369",
+  "officialReleaseRootPresent": false,
+  "originalSignerUnitsModified": false,
+  "project": "xssrfshdrtdfupgqwfdw",
+  "purpose": "INDEPENDENT_SECURITY_AND_OPERATIONS_REVIEW_ONLY",
+  "releaseDecision": "NO_GO",
+  "requiredIndependentOperationsAuthorization": [
+    "Named CST Security/Operations approver approves shared-VPS-root risk",
+    "An independently controlled operator Ed25519 public trust root and its custody are recorded",
+    "All 8 approved public-key pins are bound to an immutable approved source and change ID",
+    "Per-role short-lived signed release is independently issued and verified for one real Owner-approved new job",
+    "No raw broker UPDATE, unreviewed SECURITY DEFINER change, or unauthorized DB role LOGIN",
+    "An authenticated new Company-1 Owner approval, real source ledger readback, nonce replay denial, independent agent work and Hub reviewer Final ACK are evidenced",
+    "Prove relock/rollback without touching PROD or historic job 482"
+  ],
+  "reviewedBlockedReleaseArtifacts": [
+    "/etc/cst-onejob-dev/operator-trust/release-public.pem",
+    "/etc/cst-onejob-dev/approved-public/agent-coding.json",
+    "/etc/cst-onejob-dev/approved-public/agent-infrastructure.json",
+    "/etc/cst-onejob-dev/approved-public/agent-qa.json",
+    "/etc/cst-onejob-dev/approved-public/agent-security.json",
+    "/etc/cst-onejob-dev/approved-public/core-reconciliation.json",
+    "/etc/cst-onejob-dev/approved-public/qa-evidence.json",
+    "/etc/cst-onejob-dev/approved-public/reviewer.json",
+    "/etc/cst-onejob-dev/approved-public/subscriber-ack.json",
+    "/etc/cst-onejob-dev/authorized-releases/agent-coding.json",
+    "/etc/cst-onejob-dev/authorized-releases/agent-infrastructure.json",
+    "/etc/cst-onejob-dev/authorized-releases/agent-qa.json",
+    "/etc/cst-onejob-dev/authorized-releases/agent-security.json",
+    "/etc/cst-onejob-dev/authorized-releases/core-reconciliation.json",
+    "/etc/cst-onejob-dev/authorized-releases/qa-evidence.json",
+    "/etc/cst-onejob-dev/authorized-releases/reviewer.json",
+    "/etc/cst-onejob-dev/authorized-releases/subscriber-ack.json"
+  ],
+  "schema": "cst-onejob-vps-unsigned-security-change-request/v1",
+  "signerServicesStarted": false,
+  "source": {
+    "coreDraftPR": 1769,
+    "coreHeadAtReview": "e9612942188c4f0931bc5c4c92fcc0aa5a09387d",
+    "hubDraftPR": 202,
+    "hubHeadAtReview": "19c32886ea73932f8864529dfa732b88d6a1ec25",
+    "installedVpsSignerSourceSha256": "cb24077b4ae31c1de24f365046a274d74e7249a3b05ab46dcb2d5880cef31702",
+    "stagedPublicManifestSha256": "c6fcd5a41e3ac64b10ce88d05385e7d7f2fbb0cee9ed7ab4a60bc723a01bc315"
+  },
+  "status": "UNSIGNED_REVIEW_REQUEST_NOT_RELEASE"
+}
