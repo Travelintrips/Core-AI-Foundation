@@ -215,10 +215,18 @@ export async function submitCodingBridgeCommand(input: {
 
   const { operationalSop, operationalSopSource, replyTemplates } =
     await readHandshakeSopSettings();
+  const bundledDevelopmentSop =
+    process.env["APP_ENV"] === "development" &&
+    process.env["NODE_ENV"] !== "production" &&
+    input.source === "ai-core-chat" &&
+    typeof input.metadata?.["chatSubmissionOwnerId"] === "string"
+      ? process.env.CST_BUNDLED_DEV_SOP
+      : undefined;
   const metadataJson = {
     ...(input.metadata ?? {}),
     operationalSop,
     operationalSopSource,
+    ...(bundledDevelopmentSop ? { developmentSop: JSON.parse(bundledDevelopmentSop) } : {}),
     ...(input.assignedClientId
       ? { assignedClientId: input.assignedClientId }
       : {}),
