@@ -116,6 +116,34 @@ class TestRunner(unittest.TestCase):
         self.assertIn("DROP FUNCTION cst_gatea_relock_private.relock_stage_now()",text)
         self.assertIn("SELECT 1 FROM ai_platform.cst_gatea_stage_leases",text)
         self.assertNotIn("DROP TABLE ai_platform.cst_gatea_stage_leases",text)
+    def test_reviewed_global_pooler_ipv4_required_without_dns(self):
+        self.assertEqual(runner.validate_reviewed_pooler_ipv4(
+            "52.65.247.42"),"52.65.247.42")
+        for invalid in (None,"","127.0.0.53","10.1.2.3","192.168.1.1",
+                        "169.254.1.2","224.1.2.3","::1",
+                        "52.65.247.42/32","52.65.247.42:6543",
+                        "aws-1-ap-southeast-2.pooler.supabase.com"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(runner.WatchdogRunnerDenied):
+                    runner.validate_reviewed_pooler_ipv4(invalid)
+
+    def test_connect_preserves_verify_full_hostname_and_uses_pinned_hostaddr(self):
+        with patch.dict(os.environ,{"CST_GATEA_POOLER_IPV4":"52.65.247.42"}):
+            with patch("psycopg.connect") as connect:
+                runner._connect("postgresql://unconnected-example","/qa/root.pem")
+                connect.assert_called_once()
+                args,kw=connect.call_args
+                self.assertEqual(args,("postgresql://unconnected-example",))
+                self.assertEqual(kw["hostaddr"],"52.65.247.42")
+                self.assertEqual(kw["sslmode"],"verify-full")
+                self.assertEqual(kw["sslrootcert"],"/qa/root.pem")
+                self.assertEqual(kw["gssencmode"],"disable")
+        with patch.dict(os.environ,{"CST_GATEA_POOLER_IPV4":"127.0.0.53"}):
+            with patch("psycopg.connect") as connect:
+                with self.assertRaises(runner.WatchdogRunnerDenied):
+                    runner._connect("dummy","/qa/root.pem")
+                connect.assert_not_called()
+
     def test_credential_scope_and_tls_reject_unauthorized_destination(self):
         dsn=("postgresql://"+runner.ADMIN_USERNAME+":"
              +("p"*24)+"@"+runner.HOST+":6543/postgres?sslmode=verify-full")

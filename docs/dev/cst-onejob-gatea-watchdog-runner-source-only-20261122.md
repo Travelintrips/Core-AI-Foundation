@@ -34,9 +34,11 @@ opening manifest**, because it must remain available after opening authority
 expires. Opening/dispatch still require separate signed authorization.
 The watchdog requires pinned source configuration, a reviewed cgroup
 `IPAddressDeny=any` plus narrowly scoped per-host `IPAddressAllow` drop-in,
-a relock-only credential and pinned CA. A persistent network namespace is
-not required because the cgroup ACL was verified on the actual VPS.
-This candidate is NOT installed, and service security still requires review.
+**and** an isolated network namespace with an independent nftables rule
+allowing only the approved pooler IP on TCP/6543. This ensures the port is
+restricted even though systemd IPAddressAllow limits only destination IP.
+The narrow relock credential and pinned CA are separate requirements.
+This candidate is NOT installed; all operational layers still require review.
 
 ## Resilience
 
@@ -76,14 +78,23 @@ This candidate is NOT installed, and service security still requires review.
 ## Operational network limitation
 
 The candidate unit has **no default outbound allowlist**. A separately
-reviewed `IPAddressAllow` drop-in must permit exactly the local DNS stub and
-the currently verified Supavisor IPv4 records, with no broad CIDRs. DNS/IP
-changes require a controlled refresh; stale addresses must cause a failed
-connection and retry, not bypass `IPAddressDeny=any` or TLS verification.
-`IPAccounting=yes` allows observing traffic for an installed service.
-No persistent netns, host firewall modifications, or Docker service are
-required by this source-only design. A real restart/relock test is still
-mandatory before enabling the watchdog.
+reviewed `IPAddressAllow` drop-in must permit the exact current pooler IP,
+while the reviewed namespace's nftables OUTPUT policy must permit that IP
+**only on TCP/6543**. There is no host-wide firewall change.
+
+**A second independent problem was found:** on this VPS, `getaddrinfo(host)`
+requires DNS to `127.0.0.53`. The cgroup-only QA shows a narrow DNS stub
+exception works in the HOST namespace, but a separate isolated netns cannot
+reach the host's loopback DNS stub. Therefore the real Python watchdog uses
+libpq `hostaddr` from reviewed PUBLIC `CST_GATEA_POOLER_IPV4` configuration,
+while retaining the fixed DSN `host` for `sslmode=verify-full` and TLS SNI.
+`hostaddr` must match the cgroup/nft allowlist. If that IP changes, the
+connection must fail closed and a new reviewed allowlist is needed. No DNS
+exception is required inside the isolated namespace.
+
+`IPAccounting=yes` provides service network metrics. A real host-restart,
+authenticated Supavisor backend-drain test and a credential custody check
+are still mandatory before enabling the watchdog.
 
 Final release remains **NO-GO**. The staged 7-day Owner business approval
 is independent of the short-lived technical DB LOGIN lease.

@@ -12,6 +12,7 @@ by importing this module. Synthetic QA injects the fixed-query callback.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -150,12 +151,32 @@ def validate_pinned_ca(raw):
         raise WatchdogRunnerDenied("RUNNER_CA_NOT_PINNED") from None
     return raw
 
+def validate_reviewed_pooler_ipv4(value):
+    """Use the reviewed numeric egress target, never DNS inside isolated netns.
+
+    The hostname still comes from the scoped DSN for TLS verify-full/SNI.
+    This value is NOT an authorization; missing/stale allowlist fails closed.
+    """
+    try:
+        addr=ipaddress.ip_address(value)
+    except (ValueError,TypeError):
+        raise WatchdogRunnerDenied("RUNNER_REVIEWED_POOLER_IP_REQUIRED") from None
+    if (not isinstance(addr,ipaddress.IPv4Address) or not addr.is_global
+        or addr.is_multicast or addr.is_reserved or addr.is_unspecified):
+        raise WatchdogRunnerDenied("RUNNER_REVIEWED_POOLER_IP_DENIED")
+    return str(addr)
+
 def _connect(dsn, ca_path):
-    # Imported only after source/identity/pinning preflight. No fallback TLS
-    # settings, no self-signed CA from an untrusted remote connection.
+    # A reviewed per-host, source-pinned PUBLIC env value selects the numeric
+    # pooler address also permitted by cgroup + nftables on TCP port 6543.
+    # libpq hostaddr avoids DNS in the isolated netns while retaining the DSN
+    # hostname for TLS verify-full and SNI. No fallback to insecure DNS/SSL.
+    hostaddr=validate_reviewed_pooler_ipv4(
+        os.environ.get("CST_GATEA_POOLER_IPV4"))
     import psycopg
     return psycopg.connect(
-        dsn, sslmode="verify-full", sslrootcert=ca_path,
+        dsn, hostaddr=hostaddr, sslmode="verify-full", sslrootcert=ca_path,
+        gssencmode="disable",
         connect_timeout=5, application_name="cst_gatea_watchdog_relock",
         autocommit=True,
     )

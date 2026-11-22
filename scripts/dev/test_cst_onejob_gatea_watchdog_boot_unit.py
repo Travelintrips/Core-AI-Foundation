@@ -19,7 +19,7 @@ class WatchdogBootCandidateTests(unittest.TestCase):
     def test_candidate_cannot_be_auto_loaded_as_installed_unit(self):
         self.assertTrue(str(UNIT).endswith(".service.CANDIDATE"))
         self.assertIn("DO NOT install, enable or start",RAW)
-        self.assertIn("source-only runner is not installed or enabled",RAW)
+        self.assertIn("source-only runner now exists",RAW)
     def test_boot_activation_contract_is_explicit(self):
         self.assertEqual(field("WantedBy"),["multi-user.target"])
         self.assertEqual(field("Wants"),["network-online.target"])
@@ -36,20 +36,23 @@ class WatchdogBootCandidateTests(unittest.TestCase):
           "/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env",
           "/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential",
           "/etc/cst-onejob-dev/gatea-watchdog/supabase-root-2021.pem",
+          "/run/netns/cst-onejob-gatea-watchdog-reviewed",
           "/opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py"
         ):
             with self.subTest(required=required):
                 self.assertIn(required,asserts)
-    def test_cgroup_network_deny_does_not_require_a_persistent_namespace(self):
-        self.assertEqual(field("NetworkNamespacePath"),[])
-        self.assertEqual(field("IPAddressDeny"),["any"])
-        self.assertEqual(field("IPAccounting"),["yes"])
+    def test_watchdog_has_independent_namespace(self):
+        self.assertEqual(field("NetworkNamespacePath"),
+                         ["/run/netns/cst-onejob-gatea-watchdog-reviewed"])
+        self.assertNotIn("cst-onejob-gatea-reviewed",field("NetworkNamespacePath")[0])
     def test_outbound_network_defaults_to_deny_all(self):
         self.assertEqual(field("IPAddressDeny"),["any"])
+        self.assertEqual(field("IPAccounting"),["yes"])
         self.assertEqual(field("IPAddressAllow"),[])
-        self.assertIn("local\n# DNS stub (127.0.0.53/32",RAW)
-        self.assertIn("current Supavisor pooler IPs",RAW)
-        self.assertNotIn("IPAddressAllow=127.0.0.53/32",RAW)
+        self.assertIn("CST_GATEA_POOLER_IPV4",RAW)
+        self.assertIn("libpq hostaddr",RAW)
+        self.assertIn("NetworkNamespacePath=/run/netns/cst-onejob-gatea-watchdog-reviewed",RAW)
+        self.assertIn("reviewed numeric pooler addresses",RAW.lower())
         self.assertNotIn("IPAddressAllow=any",RAW)
     def test_admin_credential_is_separate_and_systemd_loaded(self):
         self.assertEqual(field("LoadCredential"),
