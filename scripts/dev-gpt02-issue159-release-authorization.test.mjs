@@ -27,7 +27,7 @@ const binding={
   ownerChannel:OWNER,targetConversationId:CONV,gatewayAgentId:"gpt02-approved",
   provider:"openai",principalFingerprint:"d".repeat(64),
   credentialStatus:"VERIFIED",proofSource:"authorized-provider-identity-check",
-  proofId:PROOF,
+  proofId:PROOF, signingKeyId:"dev-gateway-key-1",
 };
 function setup() {
   const release={
@@ -149,6 +149,7 @@ function gatewayFixture(work) {
   const calls={send:0,lookup:0,callback:0,ack:0};
   const runId="11111111-2222-4333-8444-555555555555";
   const sessionKey=gatewaySessionKey(binding,work);
+  const assistantText = "synthetic [AI_CORE_ATTEST_ACK:" + work.challenge + "]";
   const store={
     async reserve(key,row) {if(data.has(key))return {created:false,record:structuredClone(data.get(key))};data.set(key,structuredClone(row));return {created:true,record:structuredClone(row)};},
     async transition(key,from,to,patch) {const current=data.get(key);assert.equal(current?.status,from);data.set(key,{...current,...patch,status:to});},
@@ -165,7 +166,7 @@ function gatewayFixture(work) {
       provider:binding.provider,gatewayAgentId:binding.gatewayAgentId,
       principalFingerprint:binding.principalFingerprint,
       role:"assistant",final:true,messageId:"22222222-3333-4333-8444-555555555555",
-      text:"synthetic [AI_CORE_ATTEST_ACK:"+work.challenge+"]"};},
+      text:assistantText};},
   };
   const callback={
     async submit({receipt}) {calls.callback++;assert.equal(receipt.commandId,CMD);
@@ -173,6 +174,8 @@ function gatewayFixture(work) {
     async lookup(){return {accepted:true,eventId:work.eventId,commandId:CMD};},
     async readFinalAck(){calls.ack++;return {state:"COMPLETED",
       eventId:work.eventId,commandId:CMD,attestationVerified:true,
+      runId,sessionKey,transport:"openclaw-gateway",
+      assistantResponseHash:hash(assistantText),signingKeyId:binding.signingKeyId,
       ackId:"33333333-4444-4333-8444-555555555555"};},
   };
   return {work,binding,store,gateway,callback,privateKey:assistant.privateKey,calls};

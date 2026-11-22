@@ -19,6 +19,7 @@ const binding = {
   gatewayAgentId: "gpt02-approved",
   provider: "openai",
   principalFingerprint: "d".repeat(64),
+  signingKeyId: "dev-gateway-key-1",
   credentialStatus: "VERIFIED",
   proofSource: "authorized-provider-identity-check",
   proofId: "44444444-5555-4333-8444-555555555555",
@@ -98,12 +99,15 @@ function fixture({ b = binding, w = work, send = null, observe = null,
       calls.lookup++;
       return { accepted: true, eventId: w.eventId, commandId: w.commandId };
     },
-    async readFinalAck() {
+    async readFinalAck(key) {
       calls.finalAck++;
-      return ack ? ack() : {
+      const result = {
         state: "COMPLETED", eventId: w.eventId, commandId: w.commandId,
-        attestationVerified: true, ackId,
+        attestationVerified: true, ackId, transport: "openclaw-gateway",
+        runId, sessionKey: gatewaySessionKey(b, w), signingKeyId: b.signingKeyId,
+        assistantResponseHash: data.get(key)?.receipt?.assistantResponseHash,
       };
+      return ack ? ack(result) : result;
     },
   };
   return { work: w, binding: b, gateway, callback, store, calls, data,
@@ -312,22 +316,31 @@ test("signed receipt content cannot change without hash verification failure", a
     ...stored.receipt, assistantResponseText: "different",
   }, f.publicKey, expected), checkCode("ATTESTATION_CONTEXT_MISMATCH"));
 });
-test("final ACK on a different event or command is never marked complete", async () => {
-  for (const ackPatch of [
-    { eventId: "f".repeat(64) },
-    { commandId: "99999999-9999-4999-8999-999999999999" },
-    { state: "FAILED" },
+test("incomplete or mismatched final ACK stays at callback acceptance", async () => {
+  for (const patch of [
+    { eventId: "f".repeat(64) }, { commandId: messageId }, { state: "FAILED" },
+    { ackId: undefined }, { ackId: "  " }, { runId: messageId },
+    { sessionKey: "another-session" }, { assistantResponseHash: "0".repeat(64) },
+    { signingKeyId: "another-key" }, { transport: undefined },
   ]) {
-    const f = fixture({ ack: () => ({
-      state: "COMPLETED", eventId: work.eventId,
-      commandId: work.commandId, attestationVerified: true,
-      ackId, ...ackPatch,
-    }) });
+    const f = fixture({ ack: valid => ({ ...valid, ...patch }) });
     await dispatch(f);
-    assert.deepEqual(await recover(f), {
-      status: "CALLBACK_ACCEPTED", finalAckVerified: false,
-    });
+    assert.deepEqual(await recover(f), { status: "CALLBACK_ACCEPTED", finalAckVerified: false });
+    assert.equal((await f.store.read(runKey(work, binding))).status, "CALLBACK_ACCEPTED");
   }
+});
+
+test("recovering a cached final ACK rechecks the same server receipt without another send", async () => {
+  let changed = false;
+  const f = fixture({ ack: valid => changed ? { ...valid, ackId: messageId } : valid });
+  await dispatch(f);
+  assert.equal((await recover(f)).finalAckVerified, true);
+  changed = true;
+  assert.deepEqual(await recover(f), { status: "CALLBACK_ACCEPTED", finalAckVerified: false });
+  changed = false;
+  assert.equal((await recover(f)).finalAckVerified, true);
+  assert.equal(f.calls.send, 1);
+  assert.equal(f.calls.callback, 1);
 });
 
 test("same event with different command ID cannot create a second Gateway submission", async () => {
