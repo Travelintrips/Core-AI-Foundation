@@ -45,6 +45,12 @@ class WatchdogBootCandidateTests(unittest.TestCase):
         self.assertEqual(field("NetworkNamespacePath"),
                          ["/run/netns/cst-onejob-gatea-watchdog-reviewed"])
         self.assertNotIn("cst-onejob-gatea-reviewed",field("NetworkNamespacePath")[0])
+    def test_outbound_network_defaults_to_deny_all(self):
+        self.assertEqual(field("IPAddressDeny"),["any"])
+        self.assertEqual(field("IPAddressAllow"),[])
+        self.assertIn("NetworkNamespacePath=/run/netns/cst-onejob-gatea-watchdog-reviewed",RAW)
+        self.assertIn("reviewed numeric pooler addresses",RAW.lower())
+        self.assertNotIn("IPAddressAllow=any",RAW)
     def test_admin_credential_is_separate_and_systemd_loaded(self):
         self.assertEqual(field("LoadCredential"),
                          ["watchdog-db:/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential",

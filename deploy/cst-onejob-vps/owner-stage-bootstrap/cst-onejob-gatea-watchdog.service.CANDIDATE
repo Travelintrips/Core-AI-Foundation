@@ -30,6 +30,11 @@ RuntimeDirectory=cst-onejob-gatea-watchdog
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=no
 NetworkNamespacePath=/run/netns/cst-onejob-gatea-watchdog-reviewed
+# Fail closed even if the network namespace is accidentally over-permissive.
+# Reviewed numeric pooler addresses must be supplied separately as a bounded
+# IPAddressAllow drop-in. No default outbound network permission is granted.
+# Public cloud load-balancer IPs can rotate: stale allowlists deny connectivity.
+IPAddressDeny=any
 Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
 LoadCredential=watchdog-db:/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential

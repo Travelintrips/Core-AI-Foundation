@@ -61,6 +61,21 @@ installed, and its separate service security must pass review.
   zero sessions. Watcher cannot directly ALTER ROLE, CREATE ROLE or read
   unrelated tables; rollback is tested and denies removal with active lease.
 - systemd source unit syntax and credential custody tested separately.
+- Transient VPS cgroup network QA runs with `DynamicUser=yes` and
+  `IPAddressDeny=any`; no connection works by default. Temporarily allowing
+  only one DNS-resolved pooler IPv4 permits certificate-pinned PostgreSQL TLS,
+  while a second address remains denied. The test uses only the public CA,
+  has no PostgreSQL credentials, and makes no host-wide firewall changes.
+  Evidence: `scripts/dev/cst-onejob-gatea-egress-cgroup-vps-qa.sh`.
+
+## Operational network limitation
+
+The candidate unit has **no default outbound allowlist**. A separate
+reviewed, per-host `IPAddressAllow` policy is required alongside its
+approved network namespace before installation. Supabase uses a cloud load
+balancer whose DNS IPs can change; test-time addresses must NOT be treated
+as permanent. A stale/missing allowlist must fail closed and report NO-GO,
+never silently bypass IP restrictions or disable TLS verification.
 
 Final release remains **NO-GO**. The staged 7-day Owner business approval
 is independent of the short-lived technical DB LOGIN lease.
