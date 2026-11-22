@@ -41,6 +41,7 @@ import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { logger } from "../lib/logger.js";
 import { isDevSafeRuntimeEnabled } from "./devRuntimeSafety.js";
+import { excludeHealthyCstDevPilotFromAgeOnlyRecovery } from "../lib/cstOneJobLiveWorkerRecoveryPredicate.js";
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -671,6 +672,7 @@ export async function recover(): Promise<void> {
             AND started_at < ${jobCutoff}::timestamptz
           )
         )
+        ${excludeHealthyCstDevPilotFromAgeOnlyRecovery(process.env)}
     `);
     const stuckJobs = (rawStuck as unknown as { rows: Record<string, unknown>[] }).rows ?? [];
 

@@ -442,9 +442,10 @@ router.post("/ai/dev/onejob/owner-approve-and-stage",
        !req.is("application/json")){
       res.status(403).json({error:"DEV_OWNER_ORIGIN_REQUIRED"});return;
     }
-    // One Owner action, no second confirmation after staging. The existing
-    // signed session must have been issued recently; an old 12h cookie,
-    // generic admin key, password-reset token or forged actor never suffices.
+    // One explicit Owner click, not a timer tied to when the user logged in.
+    // An existing unexpired, correctly scoped app session is sufficient;
+    // generic admin keys, expired cookies, spoofed actors and reset tokens
+    // remain denied. This does not lengthen the short technical DB lease.
     const actor=req.internalUser;
     const sessionToken=(req.cookies as Record<string,string>|undefined)?.[SESSION_COOKIE_NAME];
     if(!actor || !verifyFreshOneJobStageConsent({

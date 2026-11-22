@@ -15,7 +15,10 @@ import {CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256} from
  "./cstOneJobOperationsRootCandidate.js";
 
 export const ONE_JOB_OWNER_STAGE_INTENT="APPROVE_ONE_NEW_CST_DEV_MODEL_JOB";
-const FRESH_SECONDS=20*60;
+// The click is the fresh business decision. Do not impose a separate 20-minute
+// login-age window: a verified, unexpired 12-hour app session may approve once.
+// This does not extend the session, signed stage permit or DB LOGIN lease.
+const MAX_APP_SESSION_SECONDS=12*60*60;
 
 type ConsentInput={
  sessionToken:unknown; sessionSecret:unknown;
@@ -41,14 +44,15 @@ export function verifyFreshOneJobStageConsent(i:ConsentInput):boolean {
    return false;
  try {
   const claims=jwt.verify(i.sessionToken,i.sessionSecret,{
-   algorithms:["HS256"],maxAge:"20m",clockTimestamp:now
+   algorithms:["HS256"],clockTimestamp:now
   });
   if(!claims||typeof claims!=="object"||Array.isArray(claims))return false;
   const fields=Object.keys(claims).sort();
   if(fields.join(",")!=="exp,iat,sub")return false;
   return typeof claims.sub==="number"&&claims.sub===i.ownerUserId &&
     typeof claims.iat==="number"&&claims.iat<=now &&
-    now-claims.iat<=FRESH_SECONDS &&
-    typeof claims.exp==="number"&&claims.exp>now;
+    typeof claims.exp==="number"&&claims.exp>now &&
+    claims.exp>claims.iat &&
+    claims.exp-claims.iat<=MAX_APP_SESSION_SECONDS;
  }catch{return false;}
 }
