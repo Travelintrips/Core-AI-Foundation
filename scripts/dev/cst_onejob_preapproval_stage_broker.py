@@ -47,6 +47,36 @@ FIELDS = (
 def deny(code):
     raise RuntimeError("CST_STAGE_BROKER_"+code)
 
+def read_regular(path, max_bytes, exact_owner=0):
+    """Gate-A public trust files: one no-follow fd, verified after open.
+
+    Do not use Gate-B's two-step lstat/open on a technical authorization
+    file: the pathname could be swapped after the pre-open lstat. Keep
+    this change local to Gate A; do not alter proven Gate-B readers.
+    """
+    parent=Path(path).parent
+    ps=parent.lstat()
+    if (not stat.S_ISDIR(ps.st_mode) or ps.st_uid!=0
+            or ps.st_mode & 0o022):
+        deny("PUBLIC_TRUST_PARENT_DENIED")
+    try:
+        fd=os.open(path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
+    except OSError:
+        deny("PUBLIC_TRUST_OPEN_DENIED")
+    try:
+        info=os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022
+            or info.st_size<=0 or info.st_size>max_bytes
+            or (exact_owner is not None and info.st_uid!=exact_owner)):
+            deny("PUBLIC_TRUST_FILE_DENIED")
+        with os.fdopen(fd,"rb",closefd=False) as f:
+            payload=f.read(max_bytes+1)
+        if len(payload)!=info.st_size:
+            deny("PUBLIC_TRUST_CONTENT_CHANGED")
+        return payload
+    finally:
+        os.close(fd)
+
 def validate_scope(m, now=None):
     if not isinstance(m,dict) or tuple(m)!=FIELDS:
         deny("SCHEMA_DENIED")

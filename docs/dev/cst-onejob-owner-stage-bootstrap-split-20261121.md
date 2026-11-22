@@ -390,3 +390,15 @@ manifest or 0700 parent fail specifically for UID 28500 while root
 continues to validate. The synthetic private key never becomes an
 approved Operations authority. No actual trust root or role LOGIN is
 created, installed or enabled.
+
+## Gate A signed public trust file race hardening
+
+Gate-A manifest/public-key reader is now a scoped helper using O_NOFOLLOW
+for the open file descriptor, followed by fstat on that same descriptor.
+It verifies root ownership, regular-file type, size, and no group/world
+write permissions, plus a root-owned non-writable parent directory.
+This replaces the risky two-step lstat-then-open pattern *only for Gate A*;
+Gate B remains untouched. A symlink, writable trust directory/file,
+empty file, or changed file length is a hard failure. Synthetic tests
+include direct manifest signing/validation with UID28500, as before.
+This is source security hardening, not creation of a real Operations key.

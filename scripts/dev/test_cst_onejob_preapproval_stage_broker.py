@@ -31,6 +31,33 @@ class StageBrokerTests(unittest.TestCase):
             when(self.now+timedelta(minutes=5)),"e"*32
         ]))
 
+    def test_public_trust_reader_rejects_symlink_and_untrusted_parent(self):
+        if os.geteuid()!=0:
+            self.skipTest("root-only public trust ownership QA")
+        with tempfile.TemporaryDirectory(prefix="gatea-trust-reader-") as temp:
+            root=Path(temp)
+            root.chmod(0o755)
+            public=root/"trusted.pem"
+            public.write_bytes(b"synthetic-public-material")
+            os.chown(public,0,0)
+            public.chmod(0o644)
+            self.assertEqual(b.read_regular(str(public),8192),b"synthetic-public-material")
+            link=root/"alias.pem"
+            link.symlink_to(public)
+            with self.assertRaisesRegex(RuntimeError,"PUBLIC_TRUST_OPEN_DENIED"):
+                b.read_regular(str(link),8192)
+            public.chmod(0o666)
+            with self.assertRaisesRegex(RuntimeError,"PUBLIC_TRUST_FILE_DENIED"):
+                b.read_regular(str(public),8192)
+            public.chmod(0o644)
+            root.chmod(0o777)
+            with self.assertRaisesRegex(RuntimeError,"PUBLIC_TRUST_PARENT_DENIED"):
+                b.read_regular(str(public),8192)
+            root.chmod(0o755)
+            public.write_bytes(b"")
+            with self.assertRaisesRegex(RuntimeError,"PUBLIC_TRUST_FILE_DENIED"):
+                b.read_regular(str(public),8192)
+
     def test_gate_a_accepts_scope_without_nonexistent_job_id(self):
         self.assertEqual(b.validate_scope(self.m,self.now),self.m)
         for k in ["jobId","ownerApprovalSha256","subscriberArmedSha256","requestId"]:
