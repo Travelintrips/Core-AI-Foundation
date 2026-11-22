@@ -1,0 +1,71 @@
+# CST-DEV Gate A watchdog systemd SOURCE CANDIDATE ONLY.
+# DO NOT install, enable or start. This unit requires independent authorization,
+# dedicated PostgreSQL administrative credentials, verified source and network ACL.
+# The referenced operational runner deliberately does NOT exist yet.
+# Restart after a process crash is NOT proof of a full VPS power-off relock.
+[Unit]
+Description=CST-DEV independent Gate A lease relock watchdog (NO-GO candidate)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/independent-gatea-approval.json
+AssertPathExists=/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential
+AssertPathExists=/run/netns/cst-onejob-gatea-watchdog-reviewed
+AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py
+AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py
+
+[Service]
+Type=simple
+# The numeric watchdog identity has no NSS passwd entry on the VPS.
+# Direct User=28502 causes systemd status=217/USER. Follow the already
+# proven root wrapper -> setpriv -> nonroot pattern; never run Python root.
+User=root
+Group=root
+UMask=0077
+WorkingDirectory=/opt/cst-onejob-dev/bootstrap
+RuntimeDirectory=cst-onejob-gatea-watchdog
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=no
+NetworkNamespacePath=/run/netns/cst-onejob-gatea-watchdog-reviewed
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
+LoadCredential=watchdog-db:/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential
+# The existing signed-manifest validator is reused; no new trust authority.
+# Run the check as the eventual watchdog identity, not root.
+ExecStartPre=/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28502 --regid=28503 --clear-groups /usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py validate --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
+# A root-delivered LoadCredential is not assumed readable after setpriv.
+# Until independent credential custody grants UID 28502 read-only access,
+# this nonroot ExecStartPre must fail rather than start with wrong credentials.
+ExecStartPre=/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28502 --regid=28503 --clear-groups /usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-db
+# The operational runner is intentionally NOT supplied by this candidate.
+# Its future implementation must fail closed on DB unavailability and use
+# ONLY a separately scoped relock credential, never the JIT-opening credential.
+ExecStart=/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28502 --regid=28503 --clear-groups /usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py --credential-file ${CREDENTIALS_DIRECTORY}/watchdog-db --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=20s
+TimeoutStopSec=8s
+KillMode=control-group
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+MemoryMax=192M
+TasksMax=16
+
+# Future install contract only. Never enabled until an independent approved
+# relock runner, credential scope, network ACL and host-reboot test are PASS.
+[Install]
+WantedBy=multi-user.target
