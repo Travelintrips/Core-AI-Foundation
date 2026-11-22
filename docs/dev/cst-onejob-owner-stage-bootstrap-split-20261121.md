@@ -492,3 +492,26 @@ role, key, or service. No production credential or signed authority is
 present. The actual approved systemd StateDirectory, single-flight
 session controller and independent SIGKILL/host-restart relock runner
 remain operational NO-GO prerequisites.
+
+## Gate-A JIT heartbeat watchdog policy (source candidate, no daemon)
+
+Source-only cst_onejob_stage_watchdog_candidate.py requires independent
+trusted SQL and durable lease readers, a pinned source SHA and UTC clock.
+A lease must have the correct CST-DEV project/source, unique signed nonce,
+ACTIVE state, valid <=10-minute grant, and heartbeat newer than 15 seconds.
+Missing/expired/stale lease, orphaned stage session or privilege drift
+triggers the already-tested NOLOGIN-and-session-termination primitive.
+A valid lease yields OBSERVATION_ONLY and never grants operational GO.
+
+Ten unit tests prove heartbeat timeout, wrong project/source, missing lease,
+multi-session containment, security drift, and fail-closed on DB errors.
+A disposable PostgreSQL 16 container with --network none demonstrates an
+open dedicated stage role, live session and durable SQL heartbeat row:
+the stale heartbeat leads to NOLOGIN, 0 sessions and denial of new login.
+No connected CST-DEV database, PROD or real credentials were used.
+
+IMPORTANT: This QA invokes the watchdog policy explicitly; it DOES NOT
+prove an independent persistent service, crash/SIGKILL restart, outage
+recovery, authoritative DB clock, real admin SQL custody, nor Supavisor
+frontend draining. Those are still required for operational GO. The
+watchdog has no CLI that can connect to Supabase or activate LOGIN.
