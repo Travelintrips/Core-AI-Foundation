@@ -47,6 +47,8 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"stage_relock_role_drift_failclosed_no_docker",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_relock_failclosed.py"]},
   {id:"gate_a_lease_reader_contract",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_lease_reader.py"]},
   {id:"gate_a_lease_schema_disposable_pg16",argv:["python3","-B","scripts/dev/cst-onejob-gatea-lease-store.disposable.py"]},
+  {id:"gate_a_lease_acl_role_isolation_disposable_pg16",argv:["python3","-B","scripts/dev/cst-onejob-gatea-lease-acl.disposable.py"]},
+
   {id:"stage_jit_heartbeat_watchdog_source",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_watchdog_candidate.py"]},
   {id:"gate_a_independent_watchdog_runner",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_watchdog_runner.py"]},
   {id:"stage_jit_watchdog_stale_pg16",argv:["python3","-B","scripts/dev/cst-onejob-stage-watchdog.disposable.py"]},
@@ -141,7 +143,7 @@ export function verifyManifest(exists=existsSync) {
   for(const mandatory of ["generic_queue_pilot_status_guard","generic_queue_pilot_sql_disposable_pg","owner_stage_bootstrap_circular_gate_split","owner_stage_scoped_jwt_readonly_auth","owner_session_rls_single_column_pg","owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","owner_stage_readonly_recovery","one_canonical_owner_path","super_admin_single_human_authority","super_admin_root_candidate_oneclick_ledger",
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
-    "operational_broker_signed_manifest","stage_pooler_tls","gate_a_lease_reader_contract","gate_a_lease_schema_disposable_pg16","stage_jit_durable_nonce_signer_primitive_reuse","stage_jit_exclusive_multi_process_single_flight","stage_jit_signed_open_source_contract","stage_jit_signed_open_disposable_pg16","qa_signature",
+    "operational_broker_signed_manifest","stage_pooler_tls","gate_a_lease_reader_contract","gate_a_lease_schema_disposable_pg16","gate_a_lease_acl_role_isolation_disposable_pg16","stage_jit_durable_nonce_signer_primitive_reuse","stage_jit_exclusive_multi_process_single_flight","stage_jit_signed_open_source_contract","stage_jit_signed_open_disposable_pg16","qa_signature",
      "signed_locked_binding","broker_fail_closed","signed_operations_release_broker",
     "vps_stage_jit_v2_source_only",
     "independent_qa_pull_subscriber_writers",

@@ -637,3 +637,31 @@ migration, issues a narrowly scoped lease reader/writer policy, separately
 provisions the watchdog relock-only administrative credential and network
 ACL, and tests the actual CST-DEV runtime after a crash and Supavisor
 drain. Do not apply this proposal to PROD or directly to CST-DEV yet.
+
+
+## Gate A lease ACL: separate NOLOGIN read and write groups (source-only)
+
+The previously proposed one-row Gate-A lease table intentionally had no
+policy, so the source watchdog could not read it under a narrow runtime role.
+A second **unapplied** SQL proposal,
+`docs/dev/cst-onejob-gatea-lease-access.PROPOSED.sql`, adds only the
+minimal fixed-project policies and per-column privileges:
+`cst_gatea_watchdog_lease_reader` may SELECT the seven lease fields;
+`cst_gatea_stage_lease_writer` may insert/refresh an exact-project lease
+and cannot DELETE, TRUNCATE or read unrelated tables. Both must already
+exist as NOLOGIN, NOINHERIT, NOBYPASSRLS, nonsuperuser roles. This migration
+does NOT create roles, login credentials, membership, keys, admin relock
+rights, policies on other tables, or HTTP/Data API access.
+
+The separate `scripts/dev/cst-onejob-gatea-lease-acl.disposable.py`
+executes both proposed migrations only on PostgreSQL16 Docker `--network
+none`. It proves missing/LOGIN roles fail preflight, SELECT-only reader
+cannot INSERT/UPDATE, writer cannot DELETE or exceed bounded lease
+constraints, FORCE RLS remains active, anon/authenticated/shared Core
+roles have zero table privileges, and the exact source lease reader
+successfully reads its fields and UTC DB clock as the limited reader role.
+
+**This is necessary data ACL, NOT relock authority.** Actual watchdog
+role administration, a genuine signed Gate-A technical permit and a
+source-approved live lease writer remain separate NO-GO prerequisites.
+Do not install these proposals on connected CST-DEV or PROD as QA evidence.

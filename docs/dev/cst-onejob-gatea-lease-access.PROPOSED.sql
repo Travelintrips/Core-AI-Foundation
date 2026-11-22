@@ -1,0 +1,84 @@
+-- CST-DEV GATE A LEASE ACL ONLY. PROPOSED / NOT APPROVED / NOT DEPLOYED.
+-- Requires the separately reviewed Gate-A stage lease table to exist.
+-- NO role creation, LOGIN, user account, GRANT membership, password, token,
+-- SECURITY DEFINER, elevated administrative permission or Data API access.
+--
+-- These are dedicated NOLOGIN privilege groups, not login credentials:
+-- cst_gatea_watchdog_lease_reader: fixed-project SELECT only
+-- cst_gatea_stage_lease_writer: fixed-project SELECT/INSERT/bounded UPDATE.
+-- The watchdog's separate role relock permission is NOT conferred here.
+BEGIN;
+DO $scope$
+DECLARE name text;
+BEGIN
+  IF current_setting('cst_gatea.reviewed_dev_migration', true) IS DISTINCT FROM 'true'
+    OR to_regclass('ai_platform.cst_gatea_stage_leases') IS NULL
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_class
+      WHERE oid=to_regclass('ai_platform.cst_gatea_stage_leases')
+      AND relkind='r' AND relrowsecurity AND relforcerowsecurity
+    ) THEN
+    RAISE EXCEPTION 'CST_GATEA_LEASE_ACL_REVIEW_OR_RLS_REQUIRED';
+  END IF;
+  IF EXISTS (
+     SELECT 1 FROM pg_policies WHERE schemaname='ai_platform'
+       AND tablename='cst_gatea_stage_leases'
+  ) THEN
+    RAISE EXCEPTION 'CST_GATEA_UNEXPECTED_EXISTING_LEASE_POLICY';
+  END IF;
+  FOR name IN
+    SELECT unnest(ARRAY[
+      'cst_gatea_watchdog_lease_reader',
+      'cst_gatea_stage_lease_writer'])
+  LOOP
+    IF NOT EXISTS (
+       SELECT 1 FROM pg_catalog.pg_roles
+       WHERE rolname=name
+         AND NOT rolcanlogin AND NOT rolsuper AND NOT rolbypassrls
+         AND NOT rolcreaterole AND NOT rolcreatedb
+         AND NOT rolinherit AND NOT rolreplication
+    ) THEN
+      RAISE EXCEPTION 'CST_GATEA_NOLOGIN_SCOPED_ROLE_REQUIRED: %',name;
+    END IF;
+  END LOOP;
+END $scope$;
+
+REVOKE ALL ON TABLE ai_platform.cst_gatea_stage_leases FROM PUBLIC;
+GRANT USAGE ON SCHEMA ai_platform TO
+  cst_gatea_watchdog_lease_reader, cst_gatea_stage_lease_writer;
+
+CREATE POLICY gatea_watchdog_lease_read
+ON ai_platform.cst_gatea_stage_leases
+FOR SELECT TO cst_gatea_watchdog_lease_reader
+USING (project='xssrfshdrtdfupgqwfdw');
+
+GRANT SELECT (project,nonce,source_sha,issued_at,expires_at,heartbeat_at,state)
+ON ai_platform.cst_gatea_stage_leases
+TO cst_gatea_watchdog_lease_reader;
+
+CREATE POLICY gatea_stage_lease_write_read
+ON ai_platform.cst_gatea_stage_leases
+FOR SELECT TO cst_gatea_stage_lease_writer
+USING (project='xssrfshdrtdfupgqwfdw');
+
+CREATE POLICY gatea_stage_lease_write_insert
+ON ai_platform.cst_gatea_stage_leases
+FOR INSERT TO cst_gatea_stage_lease_writer
+WITH CHECK (project='xssrfshdrtdfupgqwfdw');
+
+CREATE POLICY gatea_stage_lease_write_update
+ON ai_platform.cst_gatea_stage_leases
+FOR UPDATE TO cst_gatea_stage_lease_writer
+USING (project='xssrfshdrtdfupgqwfdw')
+WITH CHECK (project='xssrfshdrtdfupgqwfdw');
+
+GRANT SELECT (project,nonce,source_sha,issued_at,expires_at,heartbeat_at,state),
+      INSERT (project,nonce,source_sha,issued_at,expires_at,heartbeat_at,state),
+      UPDATE (nonce,source_sha,issued_at,expires_at,heartbeat_at,state)
+ON ai_platform.cst_gatea_stage_leases
+TO cst_gatea_stage_lease_writer;
+
+-- The caller must still verify a genuine signed Gate-A permit and reserve
+-- a durable nonce atomically BEFORE writing a lease. This ACL is necessary
+-- but never sufficient authorization to enable database LOGIN.
+COMMIT;
