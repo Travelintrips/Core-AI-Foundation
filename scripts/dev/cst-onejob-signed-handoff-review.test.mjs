@@ -73,6 +73,14 @@ test("synthetic signature + locked row + independently rehashed evidence match, 
  assert.equal(result.dispatchPermitted,false);
  assert.equal(result.finalAckVerified,false);
 });
+test("fresh independent signed QA proof may bind one multi-day WAITING business decision",()=>{
+ const extended={...approval,approvedAt:iso(now-5*24*60*60_000),
+   expiresAt:iso(now+2*24*60*60_000)};
+ const r=reviewOneJobSignedHandoff({...baseline,approval:extended});
+ assert.equal(r.status,"BOUND_CRYPTO_REVIEW_ONLY");
+ assert.equal(r.queueTransitionAuthorized,false);
+ assert.equal(r.finalAckVerified,false);
+});
 test("forged, wrong-stage, wrong-project, stale QA proof do not authorize",()=>{
  denied({signedReceipt:signReceipt(claims,forged.privateKey)},
    "INDEPENDENT_QA_SIGNATURE_NOT_VALID");

@@ -29,6 +29,14 @@ test("matching evidence is review-only, never permission to execute",()=>{
  assert.equal(r.dispatchPermitted,false);
  assert.equal(r.finalAckVerified,false);
 });
+test("same one-use Owner approval survives multiple days of isolated QA but stays review only",()=>{
+ const longer={...approval,expiresAt:"2026-11-26T15:00:00.000Z"};
+ const r=reviewCstDevOneJobOwnerApproval({...valid,approval:longer,
+   nowIso:"2026-11-24T15:00:00.000Z"});
+ assert.equal(r.status,"REVIEW_INPUTS_MATCH");
+ assert.equal(r.dispatchPermitted,false);
+ assert.equal(r.finalAckVerified,false);
+});
 test("no session, arbitrary admin, deactivated or client-spoofed actor denied",()=>{
  deny({actor:null},"VERIFIED_OWNER_SESSION_REQUIRED");
  deny({actor:{...actor,role:"admin"}},"VERIFIED_OWNER_SESSION_REQUIRED");
@@ -40,7 +48,7 @@ test("only exact development, unexpired one-use approval with pinned scope accep
  deny({appEnv:"production"},"DEV_ONLY");
  deny({approval:{...approval,consumedAt:"2026-11-19T15:04:00.000Z"}},"APPROVAL_ALREADY_CONSUMED");
  deny({nowIso:"2026-11-19T15:21:00.000Z"},"APPROVAL_EXPIRED_OR_UNBOUNDED");
- deny({approval:{...approval,expiresAt:"2026-11-19T17:00:00.000Z"}},"APPROVAL_EXPIRED_OR_UNBOUNDED");
+ deny({approval:{...approval,expiresAt:"2026-11-27T15:00:00.000Z"}},"APPROVAL_EXPIRED_OR_UNBOUNDED");
  deny({approval:{...approval,sourceSha:"c".repeat(40)}},"APPROVAL_SOURCE_MISMATCH");
  deny({approval:{...approval,companyId:"3"}},"APPROVAL_COMPANY_OR_MODEL_MISMATCH");
  deny({approval:{...approval,workerName:"other"}},"REQUEST_OR_WORKER_IDENTITY_INVALID");
@@ -53,6 +61,22 @@ test("job identity, type, freshness and request binding cannot be substituted",(
  deny({job:{...job,jobType:"ollama_powershell_execution"}},"BOUND_JOB_NOT_QUEUED_MODEL");
  deny({job:{...job,requestId:"different"}},"APPROVAL_JOB_BINDING_MISMATCH");
  deny({approval:{...approval,jobId:482}},"APPROVAL_JOB_ID_INVALID");
+});
+test("multi-day DEV approval migration keeps one-use scope and no privileged role grants",()=>{
+ const stage=readFileSync(new URL("../../artifacts/api-server/src/services/cstOneJobOwnerApprovalStageService.ts",import.meta.url),"utf8");
+ const migration=readFileSync(new URL("../../docs/dev/cst-onejob-owner-approval-seven-day.CSTDEV-ONLY.sql",import.meta.url),"utf8");
+ const rollback=readFileSync(new URL("../../docs/dev/cst-onejob-owner-approval-seven-day.ROLLBACK-CSTDEV-ONLY.sql",import.meta.url),"utf8");
+ assert.match(stage,/now\(\)\+interval '7 days'/);
+ for(const invariant of [
+  "cst_onejob_stage_approval_insert","cst_team_model_pilot_writer",
+  "expires_at<=approved_at+interval '7 days'",
+  "j.status='waiting'","u.status='active'"
+ ]){
+  assert.ok(migration.includes(invariant),invariant);
+ }
+ assert.match(migration,/ACTIVE_STAGE_OR_APPROVAL_DENIED/);
+ assert.match(rollback,/ROLLBACK_LONG_APPROVALS_PRESENT/);
+ assert.doesNotMatch(migration,/GRANT ALL|ALTER ROLE .* LOGIN|SET ROLE .*superuser/);
 });
 test("helper is not an HTTP approval route, role grant or DB mutation",()=>{
  const s=readFileSync(new URL("../../artifacts/api-server/src/lib/cstOneJobOwnerApprovalReview.ts",import.meta.url),"utf8");

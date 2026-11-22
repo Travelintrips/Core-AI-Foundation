@@ -177,7 +177,7 @@ export async function stageCstDevOneJobForVerifiedOwner(input:{
         request_id,worker_name,source_sha,job_id,expires_at)
       VALUES ('CST_DEV_ONEJOB_MODEL','APPROVED','1','qwen2.5:3b',
        ${input.ownerUserId},${requestId},${workerName},${buildSha},
-       ${jobId},now()+interval '20 minutes')
+       ${jobId},now()+interval '7 days')
       RETURNING id,expires_at`);
     const approval=approvals.rows[0] as Record<string,unknown> | undefined;
     if(!approval?.id)throw Error("OWNER_APPROVAL_NOT_PERSISTED");

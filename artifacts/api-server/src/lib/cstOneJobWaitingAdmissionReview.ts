@@ -49,7 +49,7 @@ export function reviewOneJobWaitingAdmission(input:OneJobAdmissionReview) {
     check(REQUEST.test(a.requestId) && WORKER.test(a.workerName),"APPROVAL_IDENTITIES_INVALID");
     check(Number.isSafeInteger(a.approvedByUserId) && a.approvedByUserId>0,"APPROVER_MISSING");
     check(Number.isFinite(t) && Number.isFinite(start) && Number.isFinite(end) &&
-      start<=t && t<end && end>start && end-start<=30*60*1000,"APPROVAL_EXPIRED");
+      start<=t && t<end && end>start && end-start<=7*24*60*60*1000,"APPROVAL_EXPIRED");
     check(SHA.test(input.candidateBuildSha) && a.sourceSha===input.candidateBuildSha,
       "APPROVAL_SOURCE_SHA_MISMATCH");
     check(a.workerName===input.expectedWorkerName,"WORKER_MISMATCH");

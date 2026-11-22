@@ -28,14 +28,14 @@ signer, broker, dispatcher activation and database migrations are out of scope.
 
 ## Known limitation not waived
 
-The currently persisted `cst_onejob_owner_approvals` entry has a 20-minute
-`expires_at`. The CST-DEV DB CHECK constraint currently also requires
-`expires_at <= approved_at + interval '30 minutes'`. The independent QA
-admission/signed approval checks still enforce that expiration. This turn did
-**not** silently extend or bypass it, since that would change a one-use
-authorization boundary requiring separate schema/transaction review.
-A previously staged WAITING approval that expires before admission is NOT
-automatically treated as new consent.
+The historical baseline of `cst_onejob_owner_approvals` used a 20-minute
+approval, and the live CST-DEV DB CHECK/RLS still limits it to 30 minutes.
+A later **source-only seven-day approval candidate** changes the prospective
+one-use business decision, with an explicit reversible CST-DEV-only migration
+and bound approval/QA reviews. It has NOT been deployed to the live database.
+See `cst-onejob-owner-approval-seven-day.README.md` before any rollout.
+A previously expired WAITING approval is never silently renewed or replaced
+by synthetic consent; the signed technical lease remains independently short.
 
 The remote Ollama invocation's own 50-second model-call bound also remains
 unchanged for this source-only change. The 20-minute PostgreSQL disposable

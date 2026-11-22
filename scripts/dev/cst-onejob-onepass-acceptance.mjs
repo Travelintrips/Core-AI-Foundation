@@ -113,6 +113,7 @@ export const VPS_ISOLATED_QA_GATES=Object.freeze([
  "scripts/dev/cst-onejob-gatea-real-kernel-policy.disposable.sh",
  "scripts/dev/cst-onejob-gatea-watchdog-dynamic-credential.disposable.sh",
  "scripts/dev/cst-onejob-pilot-live-heartbeat-age-recovery.disposable.py",
+ "scripts/dev/cst-onejob-owner-approval-seven-day.disposable.py",
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",

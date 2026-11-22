@@ -75,7 +75,7 @@ export function reviewOneJobSignedHandoff(input:ReviewOneJobSignedHandoff){
       "OWNER_APPROVAL_IDENTITY_INVALID");
     const approved=Date.parse(a.approvedAt),expiry=Date.parse(a.expiresAt);
     check(Number.isFinite(approved)&&Number.isFinite(expiry)&&
-      approved<=now&&now<expiry&&expiry-approved<=30*60*1000&&expiry>approved,
+      approved<=now&&now<expiry&&expiry-approved<=7*24*60*60*1000&&expiry>approved,
       "OWNER_APPROVAL_EXPIRED");
   }
   if(j&&a){
