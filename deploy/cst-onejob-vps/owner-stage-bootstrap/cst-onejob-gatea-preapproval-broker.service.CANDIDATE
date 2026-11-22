@@ -30,13 +30,13 @@ ExecStartPre=/usr/bin/chmod 0750 /run/cst-onejob-stage-db
 # The source broker validates the real kernel ACL and the signed manifest
 # before binding a socket. The root-only signed admission validation is
 # needed independently; source tests do NOT confer authorization.
-ExecCondition=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py validate --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
+ExecStartPre=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py validate --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
 # The root validation above is insufficient: the same root-owned *public*
 # manifest/key must be readable by the actual nonroot broker identity. A
 # second independent ExecCondition fails closed on ACL/path traversal denial.
 # The root trust directory must remain owned by root and publicly traversable
 # (0755); public PEM and signed manifest must be root-owned mode 0644.
-ExecCondition=/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups /usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py validate --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
+ExecStartPre=/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups /usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py validate --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
 ExecStart=/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28500 --regid=28501 --clear-groups /usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py run --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
 Restart=no
 TimeoutStartSec=20

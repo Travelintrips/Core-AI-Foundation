@@ -402,3 +402,14 @@ Gate B remains untouched. A symlink, writable trust directory/file,
 empty file, or changed file length is a hard failure. Synthetic tests
 include direct manifest signing/validation with UID28500, as before.
 This is source security hardening, not creation of a real Operations key.
+
+## Gate A authorization failure reporting — systemd semantics
+
+Actual transient systemd tests showed ExecCondition exit nonzero can cause
+the stage to be skipped while systemd reports successful/clean completion.
+This hides invalid signed permits behind a misleading success-looking state.
+The source-only Gate A unit now uses ExecStartPre for both root and
+UID28500 signed manifest validation. Nonzero validation errors must
+fail the start rather than skip it. Missing independent trust material is
+still checked with ConditionPathExists; no operational unit is installed.
+The active staging service and DEV database are unchanged.
