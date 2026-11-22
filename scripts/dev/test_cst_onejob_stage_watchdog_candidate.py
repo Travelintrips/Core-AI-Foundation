@@ -77,6 +77,23 @@ class Tests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.check()
         self.assertEqual((self.db.login,self.db.sessions),(0,0))
+    def test_lease_reader_exception_still_relocks(self):
+        def unavailable():
+            raise RuntimeError("DURABLE_LEASE_UNAVAILABLE")
+        with self.assertRaisesRegex(RuntimeError,"DURABLE_LEASE_UNAVAILABLE"):
+            w.check_once(self.db.query,unavailable,now=self.now,
+                         approved_source_sha="b"*40)
+        self.assertEqual((self.db.login,self.db.sessions),(0,0))
+        self.assertIn(NOLOGIN_QUERY,self.db.commands)
+
+    def test_lease_reader_exception_and_failed_relock_never_pass(self):
+        self.db.relock_fails=True
+        with self.assertRaisesRegex(RuntimeError,"ADMIN_DB_UNAVAILABLE"):
+            w.check_once(self.db.query,
+                         lambda: (_ for _ in ()).throw(RuntimeError("LEASE_UNAVAILABLE")),
+                         now=self.now,approved_source_sha="b"*40)
+        self.assertIn(NOLOGIN_QUERY,self.db.commands)
+
     def test_relock_db_failure_never_returns_pass(self):
         self.db.relock_fails=True
         self.lease["heartbeatAt"]=self.now-timedelta(seconds=20)

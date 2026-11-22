@@ -515,3 +515,24 @@ prove an independent persistent service, crash/SIGKILL restart, outage
 recovery, authoritative DB clock, real admin SQL custody, nor Supavisor
 frontend draining. Those are still required for operational GO. The
 watchdog has no CLI that can connect to Supabase or activate LOGIN.
+
+## Watchdog lease read failure and separate launcher SIGKILL QA
+
+Watchdog policy previously raised immediately when a durable lease reader
+threw an exception. A still reachable administrative connection could then
+leave an open LOGIN role unchanged. Gate-A source policy now attempts the
+existing fail-closed relock (NOLOGIN, targeted session termination, readback)
+before rethrowing the lease reader error. The original error never yields
+PASS; if relock itself fails, that failure is also propagated explicitly.
+
+An isolated PostgreSQL16 network-none test now launches a separate
+synthetic JIT process which actually runs LOGIN and creates a long
+PostgreSQL session. The JIT process is SIGKILLed; an established session
+is independently observed to survive the killed process. A new Python
+watchdog process uses a fresh admin SQL callback and persisted SQL
+heartbeat row to relock the role and end that orphaned session. New login
+is denied and an unrelated role remains unchanged.
+
+This is process-isolation QA, NOT a persistent watchdog systemd service,
+VM host crash recovery, actual approved DB custody, or Supavisor frontend
+drain proof. A DB/network outage can prevent relock; continue NO-GO.

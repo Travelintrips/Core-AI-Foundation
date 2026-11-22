@@ -48,28 +48,72 @@ def main():
         sql("INSERT INTO qa_stage_lease VALUES ('"+w.PROJECT+"','"+("e"*32)+"','"+("b"*40)
             +"','"+fmt(now-timedelta(seconds=50))+"','"+fmt(now+timedelta(minutes=3))
             +"','"+fmt(now-timedelta(seconds=25))+"','ACTIVE');")
-        sql("ALTER ROLE cst_team_model_pilot_stage_login LOGIN VALID UNTIL '2099-01-01';")
-        run(["docker","exec","-d",NAME,"psql","-U","cst_team_model_pilot_stage_login",
-             "-d","postgres","-c","SELECT pg_sleep(55)"])
-        for _ in range(40):
-            if query(w.ACTIVE_QUERY)==[["1"]]:break
-            time.sleep(.1)
-        else:raise RuntimeError("ORPHAN_SESSION_NOT_OBSERVED")
-        # This callback reads the durable lease through a separate
-        # administrative SQL transaction, not Python process memory.
-        def lease():
-            rows=query("SELECT project,nonce,source_sha,issued_at,expires_at,"
-                       "heartbeat_at,state FROM qa_stage_lease;")
-            verify(len(rows)==1,"LEASE_ROW_COUNT")
-            values=rows[0]
-            return dict(zip(("project","nonce","sourceSha","issuedAt","expiresAt",
-                             "heartbeatAt","state"),[
-                values[0],values[1],values[2],
-                *(datetime.fromisoformat(v.replace(" ","T")) for v in values[3:6]),
-                values[6]]))
-        before=query(w.ROLE_QUERY)
-        verdict=w.check_once(query,lease,now=now,approved_source_sha="b"*40)
-        verify(verdict["status"]=="RELOCKED_STALE_OR_ABSENT_LEASE","NOT_RELOCKED")
+        # Separate synthetic JIT launcher opens the role, starts a real
+        # database session and remains alive. It is then SIGKILLed before
+        # a DIFFERENT watchdog process does all of the cleanup.
+        launcher_child=r"""
+import subprocess,sys,time
+container=sys.argv[1]
+def run(args,statement=None):
+    p=subprocess.run(args,input=statement,text=True,capture_output=True,timeout=20)
+    if p.returncode:raise RuntimeError("SYNTHETIC_LAUNCHER_SQL_FAILED")
+run(["docker","exec","-i",container,"psql","-X","-qAt",
+     "-v","ON_ERROR_STOP=1","-U","postgres","-d","postgres"],
+    "ALTER ROLE cst_team_model_pilot_stage_login LOGIN VALID UNTIL '2099-01-01';")
+run(["docker","exec","-d",container,"psql",
+     "-U","cst_team_model_pilot_stage_login","-d","postgres",
+     "-c","SELECT pg_sleep(55)"])
+print("SYNTHETIC_LAUNCHER_OPENED_ROLE",flush=True)
+time.sleep(60)
+"""
+        launcher=subprocess.Popen([sys.executable,"-B","-c",launcher_child,NAME],
+                                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        try:
+            verify(launcher.stdout.readline().strip()=="SYNTHETIC_LAUNCHER_OPENED_ROLE",
+                   "LAUNCHER_DID_NOT_OPEN_ROLE")
+            for _ in range(40):
+                if query(w.ACTIVE_QUERY)==[["1"]]:break
+                time.sleep(.1)
+            else:raise RuntimeError("ORPHAN_SESSION_NOT_OBSERVED")
+            before=query(w.ROLE_QUERY)
+            launcher.kill()
+            launcher.wait(timeout=5)
+            verify(launcher.returncode==-9,"LAUNCHER_SIGKILL_NOT_OBSERVED")
+            verify(query(w.ACTIVE_QUERY)==[["1"]],
+                   "ORPHAN_DID_NOT_SURVIVE_LAUNCHER_SIGKILL")
+        finally:
+            if launcher.poll() is None:
+                launcher.kill()
+                launcher.wait(timeout=5)
+        # A separate watchdog process now reads the durable SQL heartbeat
+        # and terminates the orphaned session left by the killed launcher.
+        watchdog_child=r"""
+import sys,subprocess,json
+from datetime import datetime,timezone
+sys.path.insert(0,sys.argv[1])
+import cst_onejob_stage_watchdog_candidate as w
+container=sys.argv[2]
+def query(statement):
+    p=subprocess.run(["docker","exec","-i",container,"psql","-X","-qAt",
+      "-F","|","-v","ON_ERROR_STOP=1","-U","postgres","-d","postgres"],
+      input=statement,text=True,capture_output=True,timeout=20)
+    if p.returncode:raise RuntimeError("DISPOSABLE_CHILD_SQL_DENIED")
+    return [line.strip().split("|") for line in p.stdout.splitlines() if line.strip()]
+def lease():
+    rows=query("SELECT project,nonce,source_sha,issued_at,expires_at,heartbeat_at,state FROM qa_stage_lease")
+    if len(rows)!=1:raise RuntimeError("DISPOSABLE_CHILD_LEASE_INVALID")
+    v=rows[0]
+    return dict(zip(("project","nonce","sourceSha","issuedAt","expiresAt","heartbeatAt","state"),
+     [v[0],v[1],v[2],*(datetime.fromisoformat(t.replace(" ","T")) for t in v[3:6]),v[6]]))
+status=w.check_once(query,lease,now=datetime.now(timezone.utc),approved_source_sha="b"*40)
+if status["status"]!="RELOCKED_STALE_OR_ABSENT_LEASE":
+    raise RuntimeError("DISPOSABLE_CHILD_NOT_RELOCKED")
+print("INDEPENDENT_WATCHDOG_CHILD_RELOCK_PASS")
+"""
+        child=run([sys.executable,"-B","-c",watchdog_child,
+                   str(Path(__file__).resolve().parent),NAME],timeout=40)
+        verify("INDEPENDENT_WATCHDOG_CHILD_RELOCK_PASS" in child.stdout,
+               "INDEPENDENT_WATCHDOG_DID_NOT_RELOCK")
         verify(query(w.ROLE_QUERY)==[["0","0","0","0","1"]],"ROLE_STILL_OPEN")
         verify(query(w.ACTIVE_QUERY)==[["0"]],"LIVE_SESSION_REMAINS")
         verify(sql("SELECT 1;",user="cst_team_model_pilot_stage_login",allowed=True).returncode!=0,"NEW_LOGIN_ALLOWED")
@@ -79,6 +123,8 @@ def main():
             "roleInitiallyOpen":before[0][0]=="1",
             "orphanedSessionObserved":True,"durableLeaseReadFromSql":True,
             "staleHeartbeatRejected":True,"roleRelocked":True,
+            "jitLauncherSigkillObserved":True,
+            "separateWatchdogPythonProcessRelocked":True,
             "residualStageSessions":0,"newLoginDenied":True,
             "unrelatedRoleUnchanged":True,"realCstDevTouched":False,
             "prodTouched":False,"operationalDecision":"NO_GO"},sort_keys=True))

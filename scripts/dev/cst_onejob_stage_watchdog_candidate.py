@@ -51,7 +51,14 @@ def check_once(query, read_lease, *, now, approved_source_sha, relock=relock_onc
     if not secure:
         relock(query)
         raise WatchdogDenied("WATCHDOG_ROLE_SECURITY_DRIFT_CONTAINED")
-    lease=read_lease()
+    # A lease read error is NOT an active lease. Attempt containment while
+    # the independent administrator query still works, then propagate
+    # the original error. Do not falsely report clean relock if it fails.
+    try:
+        lease=read_lease()
+    except Exception:
+        relock(query)
+        raise
     valid=False
     if isinstance(lease,dict) and set(lease)=={
         "project","nonce","sourceSha","issuedAt","expiresAt","heartbeatAt","state"}:
