@@ -69,12 +69,17 @@ WITH CHECK (project='xssrfshdrtdfupgqwfdw');
 CREATE POLICY gatea_stage_lease_write_update
 ON ai_platform.cst_gatea_stage_leases
 FOR UPDATE TO cst_gatea_stage_lease_writer
-USING (project='xssrfshdrtdfupgqwfdw')
-WITH CHECK (project='xssrfshdrtdfupgqwfdw');
+USING (project='xssrfshdrtdfupgqwfdw'
+       AND state='ACTIVE' AND expires_at>clock_timestamp())
+WITH CHECK (project='xssrfshdrtdfupgqwfdw'
+            AND state='ACTIVE' AND expires_at>clock_timestamp());
 
+-- Immutability is enforced by column grants. After insertion, this role
+-- CANNOT change signed nonce, pinned source, issuance, expiry, or state.
+-- Only the heartbeat may advance inside the original signed lease window.
 GRANT SELECT (project,nonce,source_sha,issued_at,expires_at,heartbeat_at,state),
       INSERT (project,nonce,source_sha,issued_at,expires_at,heartbeat_at,state),
-      UPDATE (nonce,source_sha,issued_at,expires_at,heartbeat_at,state)
+      UPDATE (heartbeat_at)
 ON ai_platform.cst_gatea_stage_leases
 TO cst_gatea_stage_lease_writer;
 

@@ -104,6 +104,10 @@ def main():
              "WRITER_HAS_DELETE")
         need(rows("SELECT has_column_privilege('"+WRITER+"','"+TABLE+"','heartbeat_at','UPDATE')::int")==[["1"]],
              "WRITER_CANNOT_HEARTBEAT")
+        need(rows("SELECT "+",".join(
+             "has_column_privilege('"+WRITER+"','"+TABLE+"','"+field+"','UPDATE')::int"
+             for field in ("project","nonce","source_sha","issued_at","expires_at","state")
+             ))==[["0"]*6],"WRITER_CAN_MUTATE_SIGNED_LEASE_FIELDS")
         need(rows("SELECT has_table_privilege('"+WRITER+"','"+TABLE+"','TRUNCATE')::int")==[["0"]],
              "WRITER_CAN_TRUNCATE")
         need(rows("SELECT relrowsecurity::int, relforcerowsecurity::int "
@@ -137,8 +141,16 @@ def main():
         need(as_role(WRITER,"UPDATE "+TABLE+" SET heartbeat_at=now() WHERE project='"+PROJECT+"';"
                      " SELECT count(*) FROM "+TABLE).stdout.strip()=="1",
              "WRITER_CANNOT_REFRESH_HEARTBEAT")
-        need(as_role(WRITER,"UPDATE "+TABLE+" SET project='other-project'",
-                     allow=True).returncode!=0,"WRITER_PROJECT_EDIT_ALLOWED")
+        for statement in (
+             "UPDATE "+TABLE+" SET nonce='"+("c"*32)+"'",
+             "UPDATE "+TABLE+" SET source_sha='"+("c"*40)+"'",
+             "UPDATE "+TABLE+" SET issued_at=now()",
+             "UPDATE "+TABLE+" SET expires_at=now()+interval '2 minutes'",
+             "UPDATE "+TABLE+" SET state='CLOSED'",
+             "UPDATE "+TABLE+" SET project='other-project'",
+        ):
+            need(as_role(WRITER,statement,allow=True).returncode!=0,
+                 "WRITER_CAN_CHANGE_SIGNED_LEASE_OR_STATE")
         need(as_role(WRITER,"UPDATE "+TABLE+" SET expires_at=now()+interval '11 minutes'",
                      allow=True).returncode!=0,"UNBOUNDED_WRITE_ALLOWED")
         need(as_role(WRITER,"DELETE FROM "+TABLE,
@@ -158,6 +170,7 @@ def main():
           "postgres":16,"network":"none","exactProjectOnly":True,
           "readerLogin":False,"writerLogin":False,"readerWritesDenied":True,
           "writerCanInsertAndHeartbeat":True,"writerCannotDelete":True,
+          "writerImmutableSignedFields":True,"writerCannotExtendLease":True,
           "forcedRls":True,"unrelatedTableDenied":True,
           "actualSourceReaderAndDbClockRoleScoped":True,
           "anonAuthenticatedSharedCoreDenied":True,

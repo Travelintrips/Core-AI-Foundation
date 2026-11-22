@@ -665,3 +665,48 @@ successfully reads its fields and UTC DB clock as the limited reader role.
 role administration, a genuine signed Gate-A technical permit and a
 source-approved live lease writer remain separate NO-GO prerequisites.
 Do not install these proposals on connected CST-DEV or PROD as QA evidence.
+
+
+## Narrowed Gate-A lease heartbeat UPDATE grant (source-only)
+
+Security review found the draft lease writer could update nonce,
+source_sha, issued_at and expires_at after insertion, potentially
+extending a lease by rewriting its original 10-minute time window.
+The source ACL now permits UPDATE **only of heartbeat_at**, and only
+while state=ACTIVE and the original lease has not expired. Signed
+nonce/source/issuance/expiry and state are immutable for this role;
+a fresh authorization/lease requires a separate reviewed operation,
+not a heartbeat update. PostgreSQL 16 disposable QA verifies all six
+forbidden UPDATE columns and bounded heartbeat behavior.
+
+No table, role, policy or grant in connected CST-DEV is changed by
+this source correction; the operational gate remains NO-GO.
+
+
+## Atomic NOLOGIN lease principals and reversible CST-DEV ACL (source-only)
+
+To avoid a split role-and-grant installation, the exact hardened lease
+ACL is packaged with the two no-login group definitions in one guarded
+transaction at
+`docs/dev/cst-onejob-gatea-lease-acl-provision.CSTDEV-ONLY.sql`.
+It verifies the empty exact-seven-column lease table and constraints,
+forced RLS, no existing policies/roles, and the stage LOGIN still locked.
+Neither group can authenticate or inherit rights, and **no memberships
+or passwords** are created. The stage writer can INSERT one exact-project
+lease and UPDATE **only heartbeat_at** while the initial signed lease
+remains ACTIVE and unexpired. It cannot alter nonce/source/issuance/expiry
+or state after insertion. The watchdog reader is SELECT-only.
+
+`docs/dev/cst-onejob-gatea-lease-acl-rollback.CSTDEV-ONLY.sql`
+removes the four specific policies, column grants and the two new
+NOLOGIN groups, but **never** removes the existing lease table.
+Rollback refuses if a lease row, role membership/session, unexpected
+policy or permission drift exists; it must not revoke an in-use release.
+
+The disposable `scripts/dev/cst-onejob-gatea-lease-provision.disposable.py`
+applies source SQL on PostgreSQL16 network-none, proves transaction
+ROLLBACK leaves no principal or policy, installs roles/ACL, denies a
+duplicate application, rejects rollback with a lease row present, and
+then safely rolls back once empty. This source-only proof does not
+constitute a signed operational Gate-A approval or authorize the
+migration in a live database by itself.
