@@ -595,3 +595,45 @@ exist on this VPS, nor do the signed Gate-A permit/public root, reviewed
 watchdog network namespace, real watchdog runner, startup release decision,
 Supavisor drain or host power-loss relock proof. Do not install or start
 the candidate; operational decision remains NO-GO.
+
+
+## Dedicated Gate-A persisted lease — minimal PostgreSQL16 candidate (source only)
+
+Read-only CST-DEV catalog inspection confirmed no existing dedicated Gate-A
+stage lease table. The unrelated GPT02 recovery leases are deliberately
+**not reused or changed**. The new proposed file
+`docs/dev/cst-onejob-gatea-stage-lease.PROPOSED.sql` is NOT a live
+migration or authorization receipt. It only defines one fixed-project
+lease slot in `ai_platform.cst_gatea_stage_leases`; its primary key
+prevents concurrent rows for the same CST-DEV project. Constraints require
+a 32-hex signed nonce, 40-hex pinned source, bounded <=10-minute expiry,
+heartbeat within the lease, and state ACTIVE/CLOSED.
+
+RLS is enabled and **forced**, public privileges revoked and **no RLS
+policies, GRANTs, LOGIN roles, passwords, functions, signers or schedulers**
+are created. The proposal fails without an explicit local migration review
+marker or if a table of the same name already exists. The marker is
+*only a safety check in QA*, not proof of approved deployment.
+
+A read-only `scripts/dev/cst_onejob_gatea_lease_reader.py` retrieves
+exactly the project lease and UTC database clock through a separately
+supplied trusted query callback. Bad scope, malformed timestamps, duplicate
+rows or database failures are not converted to a valid lease. It has no
+network, credential reader or CLI. The watchdog's existing fail-closed
+policy must consume the clock and lease snapshot; the module itself does
+not issue relock SQL.
+
+`scripts/dev/cst-onejob-gatea-lease-store.disposable.py` verified the
+actual DDL on isolated PostgreSQL16 with Docker `--network none`:
+unapproved DDL denied, RLS forced, no policies, accidental reader GRANT
+still returned zero rows, unauthorized UPDATE denied, wrong project/nonce
+or >10-minute lease denied, one lease per project, database UTC clock
+readback, and stale heartbeat -> targeted role NOLOGIN + session termination
+with zero residual sessions. A separate import-only reader suite covers
+malformed SQL results and no-secret/no-network behavior.
+
+**Operational NO-GO remains** until real release authority reviews the
+migration, issues a narrowly scoped lease reader/writer policy, separately
+provisions the watchdog relock-only administrative credential and network
+ACL, and tests the actual CST-DEV runtime after a crash and Supavisor
+drain. Do not apply this proposal to PROD or directly to CST-DEV yet.
