@@ -710,3 +710,20 @@ duplicate application, rejects rollback with a lease row present, and
 then safely rolls back once empty. This source-only proof does not
 constitute a signed operational Gate-A approval or authorize the
 migration in a live database by itself.
+
+
+## Coexistence with separately reviewed relock-only Gate A policy
+
+During the controlled DEV migration rehearsal an independent watchdog
+actor installed the fixed-project read policy
+`cst_gatea_watchdog_exact_lease_read` for existing NOLOGIN role
+`cst_gatea_watchdog_relock`. The ACL installation now admits **only**
+that exact known SELECT policy, verifying its role, project predicate,
+and permission flags. Unknown/broader policies continue to fail closed.
+
+The guarded rollback removes **only** the four lease reader/writer ACL
+policies and two principals created by this change. If the relock-only
+policy was present before installation it remains untouched afterward.
+PostgreSQL disposable QA verifies the safe coexistence, an unexpected
+policy denial, and preservation on rollback. No live policies are
+altered by this source-only reconciliation.

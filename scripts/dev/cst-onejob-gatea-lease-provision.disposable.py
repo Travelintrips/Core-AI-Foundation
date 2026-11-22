@@ -126,9 +126,47 @@ def main():
         need(rows("SELECT rolcanlogin::int FROM pg_roles "
           "WHERE rolname='cst_team_model_pilot_stage_login'")==[["0"]],
           "STAGE_LOGIN_MUTATED")
+        # An unrelated or overly broad policy MUST block this role ACL.
+        sql("CREATE POLICY qa_unknown_broad_policy "
+            "ON ai_platform.cst_gatea_stage_leases "
+            "FOR SELECT TO PUBLIC USING (true);")
+        drift=sql(APPLY,allow=True)
+        need(drift.returncode!=0 and
+             "CST_DEV_GATEA_LEASE_MIGRATION_PREFLIGHT_DENIED" in drift.stderr,
+             "UNTRUSTED_POLICY_NOT_REJECTED")
+        sql("DROP POLICY qa_unknown_broad_policy "
+            "ON ai_platform.cst_gatea_stage_leases;")
+
+        # The separate technical relock-only watchdog may already have
+        # installed this EXACT fixed-project read policy. Preserve it.
+        sql("CREATE ROLE cst_gatea_watchdog_relock "
+            "NOLOGIN NOINHERIT NOBYPASSRLS;")
+        sql("CREATE POLICY cst_gatea_watchdog_exact_lease_read "
+            "ON ai_platform.cst_gatea_stage_leases "
+            "FOR SELECT TO cst_gatea_watchdog_relock "
+            "USING (project='xssrfshdrtdfupgqwfdw');")
+        sql(APPLY)
+        need(rows("SELECT count(*) FROM pg_policies "
+                  "WHERE tablename='cst_gatea_stage_leases'")==[["5"]],
+             "INDEPENDENT_POLICY_ADDED_GATEA_ACL_FAILED")
+        sql(ROLLBACK)
+        need(rows("SELECT policyname FROM pg_policies "
+          "WHERE tablename='cst_gatea_stage_leases'")==[["cst_gatea_watchdog_exact_lease_read"]],
+          "ROLLBACK_REMOVED_INDEPENDENT_WATCHDOG_POLICY")
+        need(rows("SELECT count(*) FROM pg_roles WHERE rolname IN "
+             "('cst_gatea_watchdog_lease_reader','cst_gatea_stage_lease_writer')")==[["0"]],
+             "ROLLBACK_WITH_INDEPENDENT_ROLE_LEFT_ACL_PRINCIPALS")
+        need(rows("SELECT rolcanlogin::int FROM pg_roles "
+             "WHERE rolname='cst_gatea_watchdog_relock'")==[["0"]],
+             "INDEPENDENT_WATCHDOG_ROLE_CHANGED")
+        sql("DROP POLICY cst_gatea_watchdog_exact_lease_read "
+            "ON ai_platform.cst_gatea_stage_leases;")
+        sql("DROP ROLE cst_gatea_watchdog_relock;")
         print("CST_GATEA_ATOMIC_ROLE_ACL_ROLLBACK_DISPOSABLE_PASS "+json.dumps({
            "postgres":16,"network":"none","baseTablePreserved":True,
-           "twoNoLoginRoles":True,"atomicApply":True,
+           "twoNoLoginRoles":True,
+           "trustedIndependentWatchdogPolicyPreserved":True,
+           "unexpectedExistingPolicyRejected":True,"atomicApply":True,
            "dryrunRollbackNoResidue":True,
            "duplicateApplyDenied":True,
            "nonEmptyRollbackDeniedWithoutPartialChanges":True,

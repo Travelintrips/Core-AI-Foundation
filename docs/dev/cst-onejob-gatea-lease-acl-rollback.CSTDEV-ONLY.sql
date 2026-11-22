@@ -43,8 +43,27 @@ BEGIN
    'gatea_stage_lease_write_insert',
    'gatea_stage_lease_write_read',
    'gatea_stage_lease_write_update',
+   'gatea_watchdog_lease_read']::text[]
+ AND policies IS DISTINCT FROM ARRAY[
+   'cst_gatea_watchdog_exact_lease_read',
+   'gatea_stage_lease_write_insert',
+   'gatea_stage_lease_write_read',
+   'gatea_stage_lease_write_update',
    'gatea_watchdog_lease_read']::text[] THEN
    RAISE EXCEPTION 'CST_DEV_GATEA_ACL_ROLLBACK_POLICY_DRIFT';
+ END IF;
+ IF 'cst_gatea_watchdog_exact_lease_read'=ANY(policies)
+ AND NOT EXISTS (
+     SELECT 1 FROM pg_catalog.pg_policies p
+     WHERE p.schemaname='ai_platform'
+       AND p.tablename='cst_gatea_stage_leases'
+       AND p.policyname='cst_gatea_watchdog_exact_lease_read'
+       AND p.cmd='SELECT' AND p.permissive='PERMISSIVE'
+       AND p.roles::text='{cst_gatea_watchdog_relock}'
+       AND p.qual='(project = ''xssrfshdrtdfupgqwfdw''::text)'
+       AND p.with_check IS NULL
+ ) THEN
+   RAISE EXCEPTION 'CST_DEV_GATEA_OTHER_WATCHDOG_POLICY_CHANGED';
  END IF;
 END $rollback_guard$;
 

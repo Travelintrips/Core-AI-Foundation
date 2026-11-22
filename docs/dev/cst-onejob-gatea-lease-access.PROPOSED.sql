@@ -20,9 +20,28 @@ BEGIN
     ) THEN
     RAISE EXCEPTION 'CST_GATEA_LEASE_ACL_REVIEW_OR_RLS_REQUIRED';
   END IF;
+  -- A separately reviewed Gate-A relock-only policy may already exist.
+  -- It belongs to a different NOLOGIN role and MUST remain untouched.
+  -- Reject all other policy drift (even under a matching policy name).
   IF EXISTS (
-     SELECT 1 FROM pg_policies WHERE schemaname='ai_platform'
-       AND tablename='cst_gatea_stage_leases'
+     SELECT 1 FROM pg_policies p WHERE p.schemaname='ai_platform'
+       AND p.tablename='cst_gatea_stage_leases'
+       AND NOT (
+         p.policyname='cst_gatea_watchdog_exact_lease_read'
+         AND p.cmd='SELECT' AND p.permissive='PERMISSIVE'
+         AND p.roles::text='{cst_gatea_watchdog_relock}'
+         AND p.qual='(project = ''xssrfshdrtdfupgqwfdw''::text)'
+         AND p.with_check IS NULL
+       )
+  ) OR (
+     EXISTS (SELECT 1 FROM pg_policies p
+       WHERE p.schemaname='ai_platform'
+         AND p.tablename='cst_gatea_stage_leases'
+         AND p.policyname='cst_gatea_watchdog_exact_lease_read')
+     AND NOT EXISTS (SELECT 1 FROM pg_roles r
+       WHERE r.rolname='cst_gatea_watchdog_relock'
+         AND NOT r.rolcanlogin AND NOT r.rolinherit AND NOT r.rolsuper
+         AND NOT r.rolcreaterole AND NOT r.rolbypassrls)
   ) THEN
     RAISE EXCEPTION 'CST_GATEA_UNEXPECTED_EXISTING_LEASE_POLICY';
   END IF;
