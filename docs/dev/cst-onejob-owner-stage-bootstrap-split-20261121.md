@@ -471,3 +471,24 @@ actual multi-process durable storage and authorized broker JIT custody
 are not provided by this source, and source PASS cannot enable LOGIN.
 An independent SIGKILL relock watchdog and Supavisor frontend draining
 remain required before any live DEV approval.
+
+
+## Reuse existing durable signer nonce primitive for Gate A (source only)
+
+The existing VPS signer `consume_nonce` already has Linux O_EXCL,
+file+directory fsync and fail-closed replay tests. New Gate-A source-only
+adapter `scripts/dev/cst_onejob_stage_nonce_adapter.py` reuses that
+exact primitive with a domain-separated digest for the *project+signed
+nonce*. It requires a separate persistent, owner-only Gate-A directory:
+the working signer ledgers are never modified. The same signed nonce is
+rejected across distinct Gate-A source releases.
+
+Disposable tests verify root/nonroot compatible directory ownership,
+mode/symlink rejection, file+directory fsync failure (record stays
+consumed), four competing processes with exactly one success, replay
+after process exit, and integration as the JIT controller's callback.
+This changes no signer code and creates no operational database table,
+role, key, or service. No production credential or signed authority is
+present. The actual approved systemd StateDirectory, single-flight
+session controller and independent SIGKILL/host-restart relock runner
+remain operational NO-GO prerequisites.
