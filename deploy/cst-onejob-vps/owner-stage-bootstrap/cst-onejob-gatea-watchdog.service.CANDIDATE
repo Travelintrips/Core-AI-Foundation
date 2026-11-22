@@ -2,7 +2,8 @@
 # DO NOT install, enable or start. This unit requires narrowly authorized
 # relock-only credentials, verified source and reviewed network ACL.
 # Closing LOGIN must NOT require an unexpired manifest for opening LOGIN.
-# A source-only runner now exists; no operational unit, credential or network ACL is installed.
+# The source-only runner is not installed or enabled. A reviewed cgroup DNS
+# and pooler-IP drop-in is mandatory for outbound connectivity.
 # Restart after a process crash is NOT proof of a full VPS power-off relock.
 [Unit]
 Description=CST-DEV independent Gate A lease relock watchdog (NO-GO candidate)
@@ -13,7 +14,6 @@ StartLimitIntervalSec=0
 AssertPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
 AssertPathExists=/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential
 AssertPathExists=/etc/cst-onejob-dev/gatea-watchdog/supabase-root-2021.pem
-AssertPathExists=/run/netns/cst-onejob-gatea-watchdog-reviewed
 AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py
 
 [Service]
@@ -29,12 +29,13 @@ WorkingDirectory=/opt/cst-onejob-dev/bootstrap
 RuntimeDirectory=cst-onejob-gatea-watchdog
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=no
-NetworkNamespacePath=/run/netns/cst-onejob-gatea-watchdog-reviewed
-# Fail closed even if the network namespace is accidentally over-permissive.
-# Reviewed numeric pooler addresses must be supplied separately as a bounded
-# IPAddressAllow drop-in. No default outbound network permission is granted.
-# Public cloud load-balancer IPs can rotate: stale allowlists deny connectivity.
+# Dedicated DynamicUser + cgroup egress ACL suffice without a persistent
+# network namespace. No host firewall modification or Docker dependency.
+# A separately reviewed IPAddressAllow drop-in must permit ONLY the local
+# DNS stub (127.0.0.53/32 on this VPS) and current Supavisor pooler IPs.
+# A stale/missing allowlist fails closed. Never allow 0.0.0.0/0 or ::/0.
 IPAddressDeny=any
+IPAccounting=yes
 Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
 LoadCredential=watchdog-db:/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential

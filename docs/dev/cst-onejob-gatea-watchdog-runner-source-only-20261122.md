@@ -32,9 +32,11 @@ Do not reuse GPT02 auditor, postgres superuser or a PROD credential.
 The closing-only watchdog **must NOT require a still-valid signed Gate A
 opening manifest**, because it must remain available after opening authority
 expires. Opening/dispatch still require separate signed authorization.
-The watchdog requires pinned source configuration, a reviewed default-deny
-network namespace, narrow credential and pinned CA. This candidate is NOT
-installed, and its separate service security must pass review.
+The watchdog requires pinned source configuration, a reviewed cgroup
+`IPAddressDeny=any` plus narrowly scoped per-host `IPAddressAllow` drop-in,
+a relock-only credential and pinned CA. A persistent network namespace is
+not required because the cgroup ACL was verified on the actual VPS.
+This candidate is NOT installed, and service security still requires review.
 
 ## Resilience
 
@@ -61,21 +63,27 @@ installed, and its separate service security must pass review.
   zero sessions. Watcher cannot directly ALTER ROLE, CREATE ROLE or read
   unrelated tables; rollback is tested and denies removal with active lease.
 - systemd source unit syntax and credential custody tested separately.
-- Transient VPS cgroup network QA runs with `DynamicUser=yes` and
-  `IPAddressDeny=any`; no connection works by default. Temporarily allowing
-  only one DNS-resolved pooler IPv4 permits certificate-pinned PostgreSQL TLS,
-  while a second address remains denied. The test uses only the public CA,
-  has no PostgreSQL credentials, and makes no host-wide firewall changes.
+- Transient VPS cgroup network QA uses `DynamicUser=yes` with
+  `IPAddressDeny=any`; without exceptions all outbound TCP is denied.
+  The host uses `systemd-resolved` stub `127.0.0.53`: allowing only pooler
+  IPs is NOT sufficient, because Python/libpq hostname resolution fails.
+  Permitting only the DNS stub `127.0.0.53/32` and the currently resolved
+  Supavisor IPv4 addresses lets `getaddrinfo(hostname)` and certificate-
+  pinned PostgreSQL TLS by hostname pass; another public address is denied.
+  This uses only the public CA, no password and no host firewall changes.
   Evidence: `scripts/dev/cst-onejob-gatea-egress-cgroup-vps-qa.sh`.
 
 ## Operational network limitation
 
-The candidate unit has **no default outbound allowlist**. A separate
-reviewed, per-host `IPAddressAllow` policy is required alongside its
-approved network namespace before installation. Supabase uses a cloud load
-balancer whose DNS IPs can change; test-time addresses must NOT be treated
-as permanent. A stale/missing allowlist must fail closed and report NO-GO,
-never silently bypass IP restrictions or disable TLS verification.
+The candidate unit has **no default outbound allowlist**. A separately
+reviewed `IPAddressAllow` drop-in must permit exactly the local DNS stub and
+the currently verified Supavisor IPv4 records, with no broad CIDRs. DNS/IP
+changes require a controlled refresh; stale addresses must cause a failed
+connection and retry, not bypass `IPAddressDeny=any` or TLS verification.
+`IPAccounting=yes` allows observing traffic for an installed service.
+No persistent netns, host firewall modifications, or Docker service are
+required by this source-only design. A real restart/relock test is still
+mandatory before enabling the watchdog.
 
 Final release remains **NO-GO**. The staged 7-day Owner business approval
 is independent of the short-lived technical DB LOGIN lease.
