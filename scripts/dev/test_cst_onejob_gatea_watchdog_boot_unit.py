@@ -65,19 +65,21 @@ class WatchdogBootCandidateTests(unittest.TestCase):
         self.assertNotIn(" LOGIN VALID UNTIL ",RAW)
         self.assertNotIn("cst_onejob_stage_jit_open_controller.py",RAW)
     def test_nonroot_runtime_identity(self):
-        # systemd 255 fails numeric User=28502 without an NSS entry
-        # (217/USER). Root wrapper must immediately drop UID/GID.
-        self.assertEqual(field("User"),["root"])
-        self.assertEqual(field("Group"),["root"])
+        # A systemd-managed transient identity works without a permanent
+        # passwd entry and can read its own LoadCredential directly.
+        self.assertEqual(field("DynamicUser"),["yes"])
+        self.assertEqual(field("User"),["cst-onejob-gatea-watchdog"])
+        self.assertEqual(field("Group"),[])
         runner=field("ExecStart")[0]
-        self.assertTrue(runner.startswith("/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28502 --regid=28503 --clear-groups /usr/bin/python3 -B "))
+        self.assertTrue(runner.startswith("/usr/bin/python3 -B "))
+        self.assertNotIn("setpriv",RAW)
         self.assertEqual(field("NoNewPrivileges"),["yes"])
-    def test_nonroot_identity_verifies_manifest_and_credential_access(self):
+    def test_dynamic_identity_verifies_manifest_and_credential_access(self):
         pre=field("ExecStartPre")
         self.assertEqual(len(pre),2)
-        self.assertTrue(all(cmd.startswith("/usr/bin/setpriv --no-new-privs --bounding-set=-all --reuid=28502 --regid=28503 --clear-groups ") for cmd in pre))
+        self.assertTrue(pre[0].startswith("/usr/bin/python3 -B "))
         self.assertIn("cst_onejob_preapproval_stage_broker.py validate",pre[0])
-        self.assertIn("/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-db",pre[1])
+        self.assertEqual(pre[1],"/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-db")
         self.assertEqual(field("CapabilityBoundingSet"),[""])
         self.assertEqual(field("AmbientCapabilities"),[""])
     def test_runtime_and_disk_permissions(self):

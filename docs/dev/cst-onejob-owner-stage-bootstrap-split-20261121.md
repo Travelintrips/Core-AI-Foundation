@@ -561,3 +561,37 @@ DB relock or a permanent watchdog; the next eligible launch must also
 perform the existing NOLOGIN baseline/readback, and an independent
 watchdog must contain stale sessions before operational GO. No signed
 Operations authority, secret custody or reviewed namespace is installed.
+
+
+## Watchdog credential delivery simplified with native systemd DynamicUser (source only)
+
+The first watchdog unit candidate used numeric `User=28502` without a
+passwd/NSS entry, causing `217/USER`. A later root-wrapper/`setpriv`
+candidate fixed the process identity but still could not prove access to
+root-delivered `LoadCredential` after dropping UID. No root-run Python or
+manual copying of database credentials should be needed.
+
+The new **uninstalled** watchdog unit uses `DynamicUser=yes` with
+`User=cst-onejob-gatea-watchdog`: systemd creates an ephemeral, non-login
+service identity and makes its own `LoadCredential=watchdog-db:...`
+readable by that identity. Both signed public manifest validation and
+the hypothetical relock-only runner execute as that same non-root identity.
+No persistent Linux user, external KMS, root process wrapper or additional
+human approval is introduced.
+
+On VPS, the disposable test
+`scripts/dev/cst-onejob-gatea-watchdog-dynamic-credential.disposable.sh`
+ran a transient protected systemd service with a **synthetic credential**
+(mode 0600 at its root-only source): the dynamic UID was non-root, the
+systemd-delivered copy was readable, and no permanent passwd entry remained.
+A second negative startup test with a deliberately absent synthetic
+credential source is denied rather than silently launching. The tests did
+not read or transfer actual passwords or access Supabase. The source-only
+unit parser and static policy suite pass.
+
+This establishes **credential delivery mechanics only**. A narrowly scoped,
+independently authorized watchdog administrative credential does not yet
+exist on this VPS, nor do the signed Gate-A permit/public root, reviewed
+watchdog network namespace, real watchdog runner, startup release decision,
+Supavisor drain or host power-loss relock proof. Do not install or start
+the candidate; operational decision remains NO-GO.
