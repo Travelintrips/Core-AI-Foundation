@@ -4,9 +4,10 @@ import json
 import os
 import sys
 import unittest
+from types import SimpleNamespace
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import cst_onejob_stage_watchdog_runner as runner
@@ -128,8 +129,12 @@ class TestRunner(unittest.TestCase):
                     runner.validate_reviewed_pooler_ipv4(invalid)
 
     def test_connect_preserves_verify_full_hostname_and_uses_pinned_hostaddr(self):
-        with patch.dict(os.environ,{"CST_GATEA_POOLER_IPV4":"52.65.247.42"}):
-            with patch("psycopg.connect") as connect:
+        # CI source-only jobs deliberately do not install psycopg: a module
+        # fake verifies kwargs without importing or connecting to PostgreSQL.
+        connect=Mock()
+        fake_psycopg=SimpleNamespace(connect=connect)
+        with patch.dict(sys.modules,{"psycopg":fake_psycopg}):
+            with patch.dict(os.environ,{"CST_GATEA_POOLER_IPV4":"52.65.247.42"}):
                 runner._connect("postgresql://unconnected-example","/qa/root.pem")
                 connect.assert_called_once()
                 args,kw=connect.call_args
@@ -138,8 +143,8 @@ class TestRunner(unittest.TestCase):
                 self.assertEqual(kw["sslmode"],"verify-full")
                 self.assertEqual(kw["sslrootcert"],"/qa/root.pem")
                 self.assertEqual(kw["gssencmode"],"disable")
-        with patch.dict(os.environ,{"CST_GATEA_POOLER_IPV4":"127.0.0.53"}):
-            with patch("psycopg.connect") as connect:
+            connect.reset_mock()
+            with patch.dict(os.environ,{"CST_GATEA_POOLER_IPV4":"127.0.0.53"}):
                 with self.assertRaises(runner.WatchdogRunnerDenied):
                     runner._connect("dummy","/qa/root.pem")
                 connect.assert_not_called()
