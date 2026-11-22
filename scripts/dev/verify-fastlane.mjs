@@ -10,7 +10,8 @@ const profiles = {
   },
   "sport-center": {
     repository: "Travelintrips/Sport-Center-Admin",
-    branch: "develop",
+    // The shared VPS DEV service runs the canonical main source.
+    branch: "main",
     workflows: ["sport-center-ci.yml"],
     healthUrl: "http://127.0.0.1:3218/healthz",
     liveSha: (_response, body) => body.git_commit,
@@ -62,7 +63,7 @@ async function verify(profile, candidate) {
     exactRuntimeSha: liveSha === sha,
     e2e: "not_checked",
   };
-  return { sha, liveSha, checks, status };
+  return { branch: profile.branch, sha, liveSha, checks, status };
 }
 
 const [profileName, sha, ...extra] = process.argv.slice(2);
