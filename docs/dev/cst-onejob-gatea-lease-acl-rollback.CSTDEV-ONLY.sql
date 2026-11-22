@@ -1,5 +1,6 @@
 -- CST-DEV GATE A lease policy/role rollback (ONLY while no lease rows,
--- membership or activity exist). Keeps the original schema untouched.
+-- unexpected memberships or active sessions exist). The expected PostgreSQL17
+-- postgres ADMIN grant (NO INHERIT/SET) is allowed. Keeps schema untouched.
 -- Never use against PROD, never grants LOGIN, never alters GPT02 recovery.
 BEGIN;
 SET LOCAL statement_timeout='30s';
@@ -18,14 +19,29 @@ BEGIN
           AND NOT rolcanlogin AND NOT rolinherit AND NOT rolsuper
           AND NOT rolcreaterole AND NOT rolcreatedb AND NOT rolreplication
           AND NOT rolbypassrls)<>2
+    -- PostgreSQL 17 / Supabase automatically grants the role creator
+    -- ADMIN OPTION on a newly created role. That expected, non-inheriting,
+    -- non-SET membership belongs only to postgres and is safe to drop.
+    -- Deny every OTHER membership (including any service actor).
     OR EXISTS (
-       SELECT 1 FROM pg_catalog.pg_auth_members m
-       WHERE m.roleid IN (SELECT oid FROM pg_catalog.pg_roles
-          WHERE rolname IN ('cst_gatea_watchdog_lease_reader',
-                             'cst_gatea_stage_lease_writer'))
-         OR m.member IN (SELECT oid FROM pg_catalog.pg_roles
-          WHERE rolname IN ('cst_gatea_watchdog_lease_reader',
-                             'cst_gatea_stage_lease_writer'))
+       SELECT 1
+       FROM pg_catalog.pg_auth_members m
+       JOIN pg_catalog.pg_roles target ON target.oid=m.roleid
+       JOIN pg_catalog.pg_roles member ON member.oid=m.member
+       JOIN pg_catalog.pg_roles grantor ON grantor.oid=m.grantor
+       WHERE (
+         target.rolname IN ('cst_gatea_watchdog_lease_reader',
+                            'cst_gatea_stage_lease_writer')
+         OR member.rolname IN ('cst_gatea_watchdog_lease_reader',
+                               'cst_gatea_stage_lease_writer')
+       )
+       AND NOT (
+          target.rolname IN ('cst_gatea_watchdog_lease_reader',
+                             'cst_gatea_stage_lease_writer')
+          AND member.rolname='postgres'
+          AND grantor.rolname IN ('postgres','supabase_admin')
+          AND m.admin_option AND NOT m.inherit_option AND NOT m.set_option
+       )
     )
     OR EXISTS (
        SELECT 1 FROM pg_catalog.pg_stat_activity
