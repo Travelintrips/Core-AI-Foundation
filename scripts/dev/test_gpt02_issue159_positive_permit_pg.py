@@ -431,13 +431,14 @@ def main():
         permit_expiry_ms = int(sql("""SELECT floor(extract(epoch from expires_at)*1000)
           FROM gpt02_private.positive_dispatch_permits
           WHERE command_id='"""+CMD+"'").stdout.strip())
-        now_ms=int(time.time()*1000)
-        issued_ms=now_ms-500
-        expires_ms=min(now_ms+3000,permit_expiry_ms-150)
-        ensure(expires_ms>now_ms+1200,
-               "DISPOSABLE_CLAIM_FIXTURE_EXPIRED_BEFORE_RESERVATION")
         def claim_sql(event_id=event,challenge_id=challenge,
                       command=CMD,packet_sha="a"*64,release_sha="d"*64):
+            # Each independent check uses its own short claim window.
+            now_ms = time.time_ns() // 1_000_000
+            issued_ms = now_ms - 500
+            expires_ms = min(now_ms + 3000, permit_expiry_ms - 150)
+            ensure(expires_ms > now_ms + 1200,
+                   "DISPOSABLE_CLAIM_FIXTURE_EXPIRED_BEFORE_RESERVATION")
             args=[
                 "'"+command+"'::uuid", "'"+permit+"'::uuid",
                 "'"+packet_sha+"'", "'"+release_sha+"'", "repeat('e',64)",
@@ -525,14 +526,14 @@ def main():
 
         bad_event = sql(claim_sql(event_id="0"*64),
                         "dev_gpt02_claim_gate_login",required=False)
-        ensure(bad_event.returncode!=0 and
-               "RELEASE_CLAIM_SIGNED_CONTEXT_OR_LEASE_MISMATCH" in bad_event.stderr,
-               "FORGED_RELEASE_EVENT_ACCEPTED: rc="+str(bad_event.returncode)+
-               " stderr="+bad_event.stderr[-1200:])
-        # Two simultaneous admission attempts, one immutable claim row.
+        ensure(bad_event.returncode != 0, "FORGED_RELEASE_EVENT_ACCEPTED")
+        ensure("RELEASE_CLAIM_SIGNED_CONTEXT_OR_LEASE_MISMATCH" in bad_event.stderr,
+               "UNEXPECTED_RELEASE_EVENT_REJECTION: " + bad_event.stderr[-1200:])
+        # Submit the same claim twice, including its timestamps.
+        concurrent_claim = claim_sql()
         with ThreadPoolExecutor(max_workers=2) as pool:
             claim_attempts=list(pool.map(lambda _:
-                sql(claim_sql(),"dev_gpt02_claim_gate_login",required=False),
+                sql(concurrent_claim,"dev_gpt02_claim_gate_login",required=False),
                 range(2)))
         ensure(sum(x.returncode==0 for x in claim_attempts)==1,
                "RELEASE_CLAIM_CONCURRENT_EXACTLY_ONCE_FAILED")
