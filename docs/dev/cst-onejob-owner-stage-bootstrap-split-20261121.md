@@ -536,3 +536,28 @@ is denied and an unrelated role remains unchanged.
 This is process-isolation QA, NOT a persistent watchdog systemd service,
 VM host crash recovery, actual approved DB custody, or Supavisor frontend
 drain proof. A DB/network outage can prevent relock; continue NO-GO.
+
+
+## Gate A single-flight protection for independently signed permits (source-only)
+
+Signed nonce replay prevention does NOT prevent two different valid permits
+from racing on the same stage LOGIN. The JIT positive-path source now
+requires an `acquire_single_flight` exclusive context callback. The lock
+covers the original baseline query, durable nonce reservation, temporary
+LOGIN, stage action and forced relock/readback. Without the callback,
+source fails closed before any SQL.
+
+`scripts/dev/cst_onejob_stage_single_flight.py` supplies an OS `flock`
+adapter on a separate non-symlink, owner-only 0700 state directory and
+0600 singleton file. It uses O_NOFOLLOW, fstat identity/link-count
+verification, nonblocking kernel flock and finally release; no account,
+credential, network, signer, or service is created. Four real Linux
+processes competing for the same lock yield exactly one winner. A
+distinct-valid-nonce attempt while another launcher holds the lock
+cannot even issue its first SQL read or reserve its nonce.
+
+SIGKILL automatically releases a kernel lock. That is NOT proof of safe
+DB relock or a permanent watchdog; the next eligible launch must also
+perform the existing NOLOGIN baseline/readback, and an independent
+watchdog must contain stale sessions before operational GO. No signed
+Operations authority, secret custody or reviewed namespace is installed.

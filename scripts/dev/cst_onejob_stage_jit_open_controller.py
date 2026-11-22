@@ -9,6 +9,7 @@ approved privileged watchdog: absent that, operational deployment is NO-GO.
 
 query: trusted, independently authorized administrative SQL callback.
 reserve_nonce: externally authorized atomic durable one-use reservation callback.
+acquire_single_flight: cross-process exclusive stage context from trusted runner.
 stage_once: one permitted, bounded broker-session action; not a dispatch.
 Neither callback is provided by this module. No DB/network access occurs
 when imported or executed, and it cannot mint a permit or enable itself.
@@ -38,7 +39,7 @@ def _one_int(query, statement, label):
         raise JitStageDenied("JIT_"+label+"_CATALOG_INVALID") from None
 
 def run_signed_one_stage(
-    query, stage_once, *, reserve_nonce,
+    query, stage_once, *, reserve_nonce, acquire_single_flight,
     envelope_path, public_key_path, approved_public_pin,
     approved_source_sha, now=None, relock=relock_once,
 ):
@@ -65,6 +66,16 @@ def run_signed_one_stage(
     lease_end=exact_timestamp(permit["expiresAt"])
     if not current < lease_end or not 0 < (lease_end-current).total_seconds() <= 600:
         raise JitStageDenied("JIT_LEASE_EXPIRED_OR_UNBOUNDED")
+    if not callable(acquire_single_flight):
+        raise JitStageDenied("JIT_INDEPENDENT_SINGLE_FLIGHT_LOCK_REQUIRED")
+    # The lock MUST cover baseline, nonce consumption, LOGIN and forced relock
+    # as one exclusive region. Different valid nonces are not sufficient to
+    # prevent two concurrent launchers opening the same role.
+    with acquire_single_flight():
+        return _run_locked_one_stage(query,stage_once,reserve_nonce,
+                                      permit,approved_source_sha,lease_end,relock)
+
+def _run_locked_one_stage(query,stage_once,reserve_nonce,permit,approved_source_sha,lease_end,relock):
     existing_sessions=_one_int(query,ACTIVE_QUERY,"ACTIVE")
     role_state=query(ROLE_QUERY)
     baseline=role_state in ([[0,0,0,0,1]],[["0","0","0","0","1"]])

@@ -8,6 +8,7 @@ import json, os, subprocess, sys, time
 from pathlib import Path
 from datetime import datetime,timedelta,timezone
 from unittest.mock import patch
+from contextlib import nullcontext
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import cst_onejob_stage_jit_open_controller as j
 
@@ -75,7 +76,7 @@ def test():
             return query(statement)==[[nonce]]
         with patch.object(j,"read_signed_manifest",return_value=permit):
             result=j.run_signed_one_stage(query,one_session,
-                reserve_nonce=mock_reserve,
+                reserve_nonce=mock_reserve,acquire_single_flight=nullcontext,
                 envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                 approved_public_pin="b"*64,approved_source_sha="a"*40,now=now)
         assert_true(result["status"]=="SOURCE_ONLY_RELOCKED","NOT_RELOCKED")
@@ -84,7 +85,7 @@ def test():
         with patch.object(j,"read_signed_manifest",return_value=permit):
             try:
                 j.run_signed_one_stage(query,lambda:replay_calls.append(True),
-                    reserve_nonce=mock_reserve,envelope_path="SYNTHETIC",
+                    reserve_nonce=mock_reserve,acquire_single_flight=nullcontext,envelope_path="SYNTHETIC",
                     public_key_path="SYNTHETIC",approved_public_pin="b"*64,
                     approved_source_sha="a"*40,now=now)
             except j.JitStageDenied as exc:

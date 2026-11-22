@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import stat
 import sys
+from contextlib import nullcontext
 import tempfile
 import unittest
 from datetime import datetime, timezone, timedelta
@@ -127,14 +128,14 @@ class DurableGateANonce(unittest.TestCase):
             raise AssertionError("UNEXPECTED_SQL")
         with patchit.object(jit,"read_signed_manifest",return_value=manifest):
             result=jit.run_signed_one_stage(query,lambda:None,
-                reserve_nonce=self.reserve,envelope_path="SYNTHETIC",
+                reserve_nonce=self.reserve,acquire_single_flight=nullcontext,envelope_path="SYNTHETIC",
                 public_key_path="SYNTHETIC",approved_public_pin="c"*64,
                 approved_source_sha=SHA,now=now)
             self.assertEqual(result["releaseDecision"],"NO_GO")
             self.assertEqual(role[0],0)
             with self.assertRaisesRegex(jit.JitStageDenied,"NONCE_ALREADY_RESERVED"):
                 jit.run_signed_one_stage(query,lambda:None,
-                    reserve_nonce=self.reserve,envelope_path="SYNTHETIC",
+                    reserve_nonce=self.reserve,acquire_single_flight=nullcontext,envelope_path="SYNTHETIC",
                     public_key_path="SYNTHETIC",approved_public_pin="c"*64,
                     approved_source_sha=SHA,now=now)
 

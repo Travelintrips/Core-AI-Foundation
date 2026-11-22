@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Isolated callback tests; no live Supabase, issuer, or technical approval."""
 import sys, unittest
+from contextlib import nullcontext
 from pathlib import Path
 from datetime import datetime,timedelta,timezone
 from unittest.mock import patch
@@ -30,6 +31,7 @@ class JitContract(unittest.TestCase):
     def setUp(self):
         self.now=datetime(2026,11,22,2,0,tzinfo=timezone.utc)
         self.nonces=set()
+        self.stage_lock=nullcontext
         self.manifest={"sourceSha":"a"*40,"project":j.PROJECT,"nonce":"e"*32,
                        "expiresAt":(self.now+timedelta(minutes=5)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
         self.db=FakeAdmin()
@@ -43,7 +45,7 @@ class JitContract(unittest.TestCase):
         reserve=self.reserve_nonce if reservation is None else reservation
         with patch.object(j,"read_signed_manifest",return_value=manifest or self.manifest) as verified:
             out=j.run_signed_one_stage(
-                self.db.query,action,reserve_nonce=reserve,envelope_path="SYNTHETIC",
+                self.db.query,action,reserve_nonce=reserve,acquire_single_flight=self.stage_lock,envelope_path="SYNTHETIC",
                 public_key_path="SYNTHETIC",approved_public_pin="b"*64,
                 approved_source_sha="a"*40,now=self.now)
         self.assertEqual(verified.call_count,1)
@@ -87,7 +89,7 @@ class JitContract(unittest.TestCase):
         with patch.object(j,"read_signed_manifest") as verify:
             with self.assertRaisesRegex(j.JitStageDenied,"SOURCE_PIN_REQUIRED"):
                 j.run_signed_one_stage(self.db.query,lambda:None,
-                  reserve_nonce=self.reserve_nonce,envelope_path="unused",public_key_path="unused",
+                  reserve_nonce=self.reserve_nonce,acquire_single_flight=self.stage_lock,envelope_path="unused",public_key_path="unused",
                   approved_public_pin="b"*64,approved_source_sha="invalid")
         verify.assert_not_called()
     def test_same_signed_nonce_cannot_open_twice(self):
@@ -113,6 +115,34 @@ class JitContract(unittest.TestCase):
         self.assertEqual(called,[])
         self.assertNotIn("LOGIN VALID UNTIL",str(self.db.commands))
 
+    def test_missing_single_flight_lock_denies_before_db_queries(self):
+        with patch.object(j,"read_signed_manifest",return_value=self.manifest):
+            with self.assertRaisesRegex(j.JitStageDenied,"SINGLE_FLIGHT_LOCK_REQUIRED"):
+                j.run_signed_one_stage(
+                    self.db.query,lambda:None,reserve_nonce=self.reserve_nonce,
+                    acquire_single_flight=None,envelope_path="SYNTHETIC",
+                    public_key_path="SYNTHETIC",approved_public_pin="b"*64,
+                    approved_source_sha="a"*40,now=self.now)
+        self.assertEqual(self.db.commands,[])
+        self.assertEqual(self.nonces,set())
+
+    def test_lock_covers_action_and_relock(self):
+        state={"locked":False}
+        from contextlib import contextmanager
+        @contextmanager
+        def exclusive():
+            state["locked"]=True
+            try: yield
+            finally:
+                self.assertEqual((self.db.enabled,self.db.sessions),(0,0))
+                state["locked"]=False
+        self.stage_lock=exclusive
+        def action():
+            self.assertTrue(state["locked"])
+            self.db.sessions=1
+        self.invoke(action)
+        self.assertFalse(state["locked"])
+
     def test_no_cli_or_credential_reader(self):
         s=Path(j.__file__).read_text()
         for forbidden in ("psycopg.connect(","os.environ","DATABASE_URL",
@@ -124,7 +154,7 @@ class JitContract(unittest.TestCase):
         with patch.object(j,"read_signed_manifest",return_value=self.manifest):
             with self.assertRaisesRegex(RuntimeError,"RELOCK_FAILED"):
                 j.run_signed_one_stage(self.db.query,lambda:None,
-                    reserve_nonce=self.reserve_nonce,envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
+                    reserve_nonce=self.reserve_nonce,acquire_single_flight=self.stage_lock,envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                     approved_public_pin="b"*64,approved_source_sha="a"*40,
                     now=self.now,relock=fail_relock)
 
