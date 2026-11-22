@@ -48,6 +48,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"gate_a_lease_reader_contract",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_lease_reader.py"]},
   {id:"gate_a_lease_schema_disposable_pg16",argv:["python3","-B","scripts/dev/cst-onejob-gatea-lease-store.disposable.py"]},
   {id:"stage_jit_heartbeat_watchdog_source",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_watchdog_candidate.py"]},
+  {id:"gate_a_independent_watchdog_runner",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_watchdog_runner.py"]},
   {id:"stage_jit_watchdog_stale_pg16",argv:["python3","-B","scripts/dev/cst-onejob-stage-watchdog.disposable.py"]},
   {id:"owner_stage_scoped_jwt_readonly_auth",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-owner-session-auth.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
