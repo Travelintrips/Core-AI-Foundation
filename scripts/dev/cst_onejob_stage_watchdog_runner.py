@@ -24,9 +24,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 from cst_onejob_gatea_lease_reader import (
     CLOCK_SQL, LEASE_SQL, read_database_utc_clock, read_project_lease,
 )
-from cst_onejob_stage_relock_controller import (
-    ROLE_QUERY, ACTIVE_QUERY, NOLOGIN_QUERY, TERMINATE_QUERY, relock_once,
-)
+from cst_onejob_stage_relock_controller import ROLE_QUERY, ACTIVE_QUERY
 from cst_onejob_stage_watchdog_candidate import check_once
 from cst_onejob_preapproval_stage_broker import PROJECT
 
@@ -34,8 +32,12 @@ HOST = "aws-1-ap-southeast-2.pooler.supabase.com"
 ROLE = "cst_gatea_watchdog_relock"
 ADMIN_USERNAME = ROLE + "." + PROJECT
 CA_SHA256 = "807025AD50D4ED219D2C9C7D299C004F824EB00CF7F65AFEF607D07B72E6CAFA"
+RELOCK_ONLY_SQL = (
+    "SELECT role_login::int,remaining_sessions,scope_ok::int "
+    "FROM cst_gatea_relock_private.relock_stage_now()"
+)
 ALLOWED_SQL = frozenset((
-    CLOCK_SQL, LEASE_SQL, ROLE_QUERY, ACTIVE_QUERY, NOLOGIN_QUERY, TERMINATE_QUERY,
+    CLOCK_SQL, LEASE_SQL, ROLE_QUERY, ACTIVE_QUERY, RELOCK_ONLY_SQL,
 ))
 INTERVAL_SECONDS = 5
 
@@ -46,6 +48,23 @@ def validate_source_sha(value):
     if not isinstance(value,str) or re.fullmatch(r"[a-f0-9]{40}",value) is None:
         raise WatchdogRunnerDenied("RUNNER_SOURCE_PIN_REQUIRED")
     return value
+
+def relock_exact(query):
+    """Call only the zero-argument, scoped SECURITY DEFINER relock entrypoint.
+
+    The DB role has NO CREATEROLE, cannot issue ALTER ROLE directly, and has
+    no arbitrary terminate privilege. The function commits NOLOGIN before
+    this callback can report success. Any residual session is a failure.
+    """
+    rows=query(RELOCK_ONLY_SQL)
+    try:
+        parsed=tuple(tuple(int(v) for v in row) for row in rows)
+    except (ValueError,TypeError):
+        raise WatchdogRunnerDenied("RELOCK_ONLY_READBACK_INVALID") from None
+    if parsed!=((0,0,1),):
+        raise WatchdogRunnerDenied("RELOCK_ONLY_READBACK_NOT_CLEAN")
+    return {"status":"PASS","roleLogin":False,
+            "residualRoleSessions":0,"operationalPermission":False}
 
 def run_watchdog_check(query, source_sha):
     """One independent tick; database UTC controls all time comparisons.
@@ -65,6 +84,7 @@ def run_watchdog_check(query, source_sha):
         scoped_query,
         lambda: read_project_lease(scoped_query),
         now=now, approved_source_sha=source_sha,
+        relock=relock_exact,
     )
 
 def _read_regular(path, maximum, *, owner=None):
@@ -162,7 +182,7 @@ def run_loop(source_sha, dsn, ca_path, *, connect=_connect, stop=None):
         # LOGIN. Attempt a fresh, fixed-query administrative relock even if
         # a previous observation or connection failed. Never hide failures.
         with connect(dsn, ca_path) as conn:
-            relock_once(lambda statement: query_with_connection(conn,statement))
+            relock_exact(lambda statement: query_with_connection(conn,statement))
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description="CST-DEV relock-only watchdog")

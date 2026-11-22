@@ -11,9 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import cst_onejob_stage_watchdog_runner as runner
 from cst_onejob_gatea_lease_reader import CLOCK_SQL,LEASE_SQL
-from cst_onejob_stage_relock_controller import (
-    ROLE_QUERY,ACTIVE_QUERY,NOLOGIN_QUERY,TERMINATE_QUERY,
-)
+from cst_onejob_stage_relock_controller import ROLE_QUERY,ACTIVE_QUERY
 
 class Db:
     def __init__(self):
@@ -31,12 +29,10 @@ class Db:
         if sql==LEASE_SQL:return [self.lease] if self.lease is not None else []
         if sql==ROLE_QUERY:return [[self.login,0,0,0,1]]
         if sql==ACTIVE_QUERY:return [[self.sessions]]
-        if sql==NOLOGIN_QUERY:
+        if sql==runner.RELOCK_ONLY_SQL:
             self.login=0
-            return []
-        if sql==TERMINATE_QUERY:
             self.sessions=0
-            return [[True]]
+            return [[0,0,1]]
         raise AssertionError("UNEXPECTED_SQL")
 
 class TestRunner(unittest.TestCase):
@@ -49,15 +45,14 @@ class TestRunner(unittest.TestCase):
         self.assertEqual(res["status"],"LEASE_VALID_OBSERVATION_ONLY")
         self.assertTrue(res["roleLogin"])
         self.assertEqual(res["releaseDecision"],"NO_GO")
-        self.assertNotIn(NOLOGIN_QUERY,self.db.commands)
+        self.assertNotIn(runner.RELOCK_ONLY_SQL,self.db.commands)
         self.assertTrue(set(self.db.commands)<=runner.ALLOWED_SQL)
     def test_stale_heartbeat_relocks_and_kills_session(self):
         self.db.lease[5]="2026-11-22T23:59:20.000Z"
         res=self.tick()
         self.assertEqual(res["status"],"RELOCKED_STALE_OR_ABSENT_LEASE")
         self.assertEqual((self.db.login,self.db.sessions),(0,0))
-        self.assertIn(NOLOGIN_QUERY,self.db.commands)
-        self.assertIn(TERMINATE_QUERY,self.db.commands)
+        self.assertIn(runner.RELOCK_ONLY_SQL,self.db.commands)
     def test_missing_lease_relocks(self):
         self.db.lease=None
         res=self.tick()
@@ -81,9 +76,46 @@ class TestRunner(unittest.TestCase):
         with self.assertRaisesRegex(runner.WatchdogRunnerDenied,"SQL_READER_REQUIRED"):
             runner.run_watchdog_check(None,"b"*40)
         self.assertEqual(self.db.commands,[])
+    def test_relock_only_rejects_unclean_readback_without_faking_pass(self):
+        for invalid in ([[0,1,1]],[[1,0,1]],[[0,0,0]],[],[[0,0]]):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(runner.WatchdogRunnerDenied):
+                    runner.relock_exact(lambda _stmt:invalid)
     def test_unlisted_sql_denied(self):
-        with self.assertRaisesRegex(runner.WatchdogRunnerDenied,"SQL_OUTSIDE_RELOCK_ALLOWLIST"):
-            runner.query_with_connection(None,"ALTER ROLE some_other_user LOGIN")
+        for statement in ("ALTER ROLE cst_team_model_pilot_stage_login NOLOGIN",
+                          "ALTER ROLE cst_team_model_pilot_stage_login LOGIN",
+                          "SELECT pg_terminate_backend(1)"):
+            with self.subTest(statement=statement),self.assertRaisesRegex(
+                 runner.WatchdogRunnerDenied,"SQL_OUTSIDE_RELOCK_ALLOWLIST"):
+                runner.query_with_connection(None,statement)
+        self.assertNotIn("CREATEROLE",str(runner.ALLOWED_SQL))
+    def test_relock_only_migration_never_grants_role_administration(self):
+        source=Path(__file__).resolve().parents[2]/"docs/dev/cst-gatea-relock-only.CSTDEV-ONLY.PROPOSED.sql"
+        text=source.read_text()
+        for required in (
+            "CREATE ROLE cst_gatea_watchdog_relock NOLOGIN NOINHERIT",
+            "NOCREATEROLE","NOBYPASSRLS",
+            "CREATE SCHEMA cst_gatea_relock_private",
+            "LANGUAGE plpgsql SECURITY DEFINER",
+            "SET search_path = pg_catalog, pg_temp",
+            "IF SESSION_USER <> 'cst_gatea_watchdog_relock'",
+            "ALTER ROLE cst_team_model_pilot_stage_login NOLOGIN CONNECTION LIMIT 1",
+            "REVOKE ALL ON FUNCTION cst_gatea_relock_private.relock_stage_now() FROM PUBLIC",
+            "GRANT EXECUTE ON FUNCTION cst_gatea_relock_private.relock_stage_now()",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required,text)
+        self.assertNotIn("GRANT CREATEROLE",text)
+        self.assertNotIn("ALTER ROLE cst_team_model_pilot_stage_login LOGIN",text)
+        self.assertNotIn("CREATE FUNCTION public.",text)
+    def test_relock_only_rollback_denies_active_stage_and_lease(self):
+        source=Path(__file__).resolve().parents[2]/"docs/dev/cst-gatea-relock-only.ROLLBACK-CSTDEV-ONLY.sql"
+        text=source.read_text()
+        self.assertIn("CST_GATEA_RELOCK_ROLLBACK_ACTIVE_OR_DRIFTED",text)
+        self.assertIn("DROP ROLE cst_gatea_watchdog_relock",text)
+        self.assertIn("DROP FUNCTION cst_gatea_relock_private.relock_stage_now()",text)
+        self.assertIn("SELECT 1 FROM ai_platform.cst_gatea_stage_leases",text)
+        self.assertNotIn("DROP TABLE ai_platform.cst_gatea_stage_leases",text)
     def test_credential_scope_and_tls_reject_unauthorized_destination(self):
         dsn=("postgresql://"+runner.ADMIN_USERNAME+":"
              +("p"*24)+"@"+runner.HOST+":6543/postgres?sslmode=verify-full")

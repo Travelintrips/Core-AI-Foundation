@@ -6,8 +6,9 @@ provision a database role, open LOGIN, disable RLS, or change PROD.
 Source: `scripts/dev/cst_onejob_stage_watchdog_runner.py` combines
 the existing `cst_onejob_gatea_lease_reader.py` (database-authoritative
 UTC clock and one durable lease), `cst_onejob_stage_watchdog_candidate.py`
-(heartbeat fail-closed policy) and `cst_onejob_stage_relock_controller.py`
-(NOLOGIN plus terminate/readback). It does not implement another relock policy.
+(heartbeat fail-closed policy) and a private, zero-argument relock-only SQL
+function. The older relock controller remains independently tested, but the
+watchdog no longer needs raw ALTER ROLE or pg_terminate_backend permissions.
 
 ## Authentication and authority contract
 
@@ -20,16 +21,20 @@ The DB JSON contains exactly `version=1`, project
 `sslmode=verify-full`. Passwords never enter Git or logs. CA certificate
 must match the pinned Supabase Root 2021 SHA-256 fingerprint.
 
-The dedicated PostgreSQL role **does not yet exist** and credentials are
-**not provisioned**. Its future privilege boundary must be independently
-reviewed: it needs only the ability to read the exact lease + role/session
-catalog, execute fixed NOLOGIN for the stage role and terminate only its
-backends. Do not reuse GPT02 auditor, postgres superuser, or any PROD secret
-as a workaround. The runner rejects unexpected SQL statements.
+The dedicated PostgreSQL role **has not been provisioned in live CST-DEV**
+and credentials are **not provisioned**. The proposed role is NOLOGIN and has
+no CREATEROLE, SUPERUSER or BYPASSRLS. It may read the exact lease and invoke
+only a private, fixed, owner-reviewed SECURITY DEFINER function that closes
+LOGIN and terminates this specific stage role's backends. No dynamic SQL
+parameters, no public function grant, no direct ALTER ROLE permission.
+Do not reuse GPT02 auditor, postgres superuser or a PROD credential.
 
-The operational service also requires independently reviewed Ed25519
-manifest/authority source pin, default-deny network namespace and CA
-credential. All are still release blockers. This candidate is NOT installed.
+The closing-only watchdog **must NOT require a still-valid signed Gate A
+opening manifest**, because it must remain available after opening authority
+expires. Opening/dispatch still require separate signed authorization.
+The watchdog requires pinned source configuration, a reviewed default-deny
+network namespace, narrow credential and pinned CA. This candidate is NOT
+installed, and its separate service security must pass review.
 
 ## Resilience
 
@@ -49,9 +54,12 @@ credential. All are still release blockers. This candidate is NOT installed.
 - Unit tests: credential/TLS/project/source rejection, fixed SQL allowlist,
   missing and stale lease, database clock failure, read error containment,
   graceful stop and error stop relock.
-- PostgreSQL 16 disposable with `--network none`: reuses the official
-  durable lease SQL fixture and actually runs the composed runner against
-  an orphaned SQL session; NOLOGIN and 0 residual sessions confirmed.
+- PostgreSQL 16 disposable with `--network none`: existing lease/heartbeat
+  and old controller QA remains PASS without rewriting proven functionality.
+- PostgreSQL 17 disposable with `--network none`: the actual runner executes
+  the fixed relock-only SECURITY DEFINER function and proves NOLOGIN with
+  zero sessions. Watcher cannot directly ALTER ROLE, CREATE ROLE or read
+  unrelated tables; rollback is tested and denies removal with active lease.
 - systemd source unit syntax and credential custody tested separately.
 
 Final release remains **NO-GO**. The staged 7-day Owner business approval

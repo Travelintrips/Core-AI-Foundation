@@ -1,6 +1,7 @@
 # CST-DEV Gate A watchdog systemd SOURCE CANDIDATE ONLY.
-# DO NOT install, enable or start. This unit requires independent authorization,
-# dedicated PostgreSQL administrative credentials, verified source and network ACL.
+# DO NOT install, enable or start. This unit requires narrowly authorized
+# relock-only credentials, verified source and reviewed network ACL.
+# Closing LOGIN must NOT require an unexpired manifest for opening LOGIN.
 # A source-only runner now exists; no operational unit, credential or network ACL is installed.
 # Restart after a process crash is NOT proof of a full VPS power-off relock.
 [Unit]
@@ -9,14 +10,10 @@ Wants=network-online.target
 After=network-online.target
 StartLimitIntervalSec=0
 # Retry indefinitely after temporary database failure; each retry fails closed.
-AssertPathExists=/etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem
-AssertPathExists=/etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json
 AssertPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
-AssertPathExists=/etc/cst-onejob-dev/gatea-authority/independent-gatea-approval.json
 AssertPathExists=/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential
 AssertPathExists=/etc/cst-onejob-dev/gatea-watchdog/supabase-root-2021.pem
 AssertPathExists=/run/netns/cst-onejob-gatea-watchdog-reviewed
-AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py
 AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py
 
 [Service]
@@ -37,19 +34,16 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
 LoadCredential=watchdog-db:/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential
 LoadCredential=watchdog-ca:/etc/cst-onejob-dev/gatea-watchdog/supabase-root-2021.pem
-# The existing signed-manifest validator is reused; no new trust authority.
-# Run the check as the eventual watchdog identity, not root.
-ExecStartPre=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py validate --envelope /etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json --public-key /etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem --pinned-sha256 ${CST_GATEA_APPROVED_PUBKEY_SHA256} --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
-# LoadCredential is owned by systemd's transient service identity, and
-# the validator/runner share that identity. If the credential is missing,
-# the nonroot ExecStartPre fails before running any database action.
+# Gate A opening still verifies a fresh signed permit separately. This
+# closing-only watchdog must survive that permit's expiry and keep relocking.
+# Missing systemd credentials fail before a database query is attempted.
 ExecStartPre=/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-db
 ExecStartPre=/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-ca
 # The runner exists as source only. It rejects unpinned TLS, unknown DB roles,
 # URLs outside CST-DEV, and SQL outside the fixed relock query allowlist.
 # No real relock-only credential or grant has been approved/provisioned.
 ExecStart=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py --credential-file ${CREDENTIALS_DIRECTORY}/watchdog-db --ca-file ${CREDENTIALS_DIRECTORY}/watchdog-ca --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
-Restart=on-failure
+Restart=always
 RestartSec=5s
 TimeoutStartSec=20s
 TimeoutStopSec=8s

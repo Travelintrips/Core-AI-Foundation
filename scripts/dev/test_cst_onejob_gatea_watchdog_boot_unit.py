@@ -25,7 +25,7 @@ class WatchdogBootCandidateTests(unittest.TestCase):
         self.assertEqual(field("Wants"),["network-online.target"])
         self.assertEqual(field("After"),["network-online.target"])
     def test_recovery_after_watchdog_process_failure(self):
-        self.assertEqual(field("Restart"),["on-failure"])
+        self.assertEqual(field("Restart"),["always"])
         self.assertEqual(field("RestartSec"),["5s"])
         self.assertEqual(field("KillMode"),["control-group"])
         self.assertEqual(field("StartLimitIntervalSec"),["0"])
@@ -33,10 +33,7 @@ class WatchdogBootCandidateTests(unittest.TestCase):
     def test_missing_independent_trust_blocks_start(self):
         asserts=set(field("AssertPathExists"))
         for required in (
-          "/etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem",
-          "/etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json",
           "/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env",
-          "/etc/cst-onejob-dev/gatea-authority/independent-gatea-approval.json",
           "/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential",
           "/etc/cst-onejob-dev/gatea-watchdog/supabase-root-2021.pem",
           "/run/netns/cst-onejob-gatea-watchdog-reviewed",
@@ -55,12 +52,11 @@ class WatchdogBootCandidateTests(unittest.TestCase):
         self.assertIn("${CREDENTIALS_DIRECTORY}/watchdog-db",field("ExecStart")[0])
         self.assertIn("${CREDENTIALS_DIRECTORY}/watchdog-ca",field("ExecStart")[0])
         self.assertNotIn("DATABASE_URL",RAW)
-    def test_reuses_existing_signature_validator_and_source_pin(self):
-        pre=field("ExecStartPre")
-        self.assertEqual(len(pre),3)
-        self.assertIn("cst_onejob_preapproval_stage_broker.py validate",pre[0])
-        self.assertIn("${CST_GATEA_APPROVED_PUBKEY_SHA256}",pre[0])
-        self.assertIn("${CST_GATEA_PINNED_SOURCE_SHA}",pre[0])
+    def test_close_only_watchdog_has_no_expiring_open_permit_dependency(self):
+        self.assertNotIn("signed-gatea-manifest.json",RAW)
+        self.assertNotIn("independent-gatea-approval.json",RAW)
+        self.assertNotIn("preapproval_stage_broker.py validate",RAW)
+        self.assertIn("${CST_GATEA_PINNED_SOURCE_SHA}",field("ExecStart")[0])
         self.assertIn("EnvironmentFile=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env",RAW)
     def test_unit_does_not_create_authorization_or_login(self):
         self.assertEqual(len(field("ExecStart")),1)
@@ -78,13 +74,11 @@ class WatchdogBootCandidateTests(unittest.TestCase):
         self.assertTrue(runner.startswith("/usr/bin/python3 -B "))
         self.assertNotIn("setpriv",RAW)
         self.assertEqual(field("NoNewPrivileges"),["yes"])
-    def test_dynamic_identity_verifies_manifest_and_credential_access(self):
+    def test_dynamic_identity_verifies_both_relock_credentials(self):
         pre=field("ExecStartPre")
-        self.assertEqual(len(pre),3)
-        self.assertTrue(pre[0].startswith("/usr/bin/python3 -B "))
-        self.assertIn("cst_onejob_preapproval_stage_broker.py validate",pre[0])
-        self.assertEqual(pre[1],"/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-db")
-        self.assertEqual(pre[2],"/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-ca")
+        self.assertEqual(len(pre),2)
+        self.assertEqual(pre[0],"/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-db")
+        self.assertEqual(pre[1],"/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-ca")
         self.assertEqual(field("CapabilityBoundingSet"),[""])
         self.assertEqual(field("AmbientCapabilities"),[""])
     def test_runtime_and_disk_permissions(self):

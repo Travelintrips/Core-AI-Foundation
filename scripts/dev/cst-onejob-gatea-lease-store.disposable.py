@@ -18,7 +18,6 @@ from datetime import timezone
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import cst_onejob_gatea_lease_reader as lease
 import cst_onejob_stage_watchdog_candidate as watchdog
-import cst_onejob_stage_watchdog_runner as runner
 
 NAME="cst-gatea-lease-qa-"+str(os.getpid())
 ROOT=Path(__file__).resolve().parents[2]
@@ -153,9 +152,10 @@ def main():
             if query(watchdog.ACTIVE_QUERY)==[["1"]]:break
             time.sleep(.1)
         else:raise RuntimeError("GATEA_QA_STAGE_SESSION_NOT_OBSERVED")
-        # Exercise the actual runner's composed fixed-query path and real
-        # disposable SQL lease/readback, not only the watchdog policy stub.
-        outcome=runner.run_watchdog_check(query,"b"*40)
+        # Legacy disposable schema QA still exercises the existing policy;
+        # restricted-runner integration is separately proven on PG17.
+        outcome=watchdog.check_once(query,lambda:lease.read_project_lease(query),
+            now=lease.read_database_utc_clock(query),approved_source_sha="b"*40)
         need(outcome["status"]=="RELOCKED_STALE_OR_ABSENT_LEASE",
              "LIVE_DISPOSABLE_HEARTBEAT_NOT_RELOCKED")
         need(query(watchdog.ROLE_QUERY)==[["0","0","0","0","1"]],
