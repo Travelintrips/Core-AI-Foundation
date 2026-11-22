@@ -1,17 +1,19 @@
 # CST-DEV SOURCE CANDIDATE ONLY. Not installed, not enabled, not started.
+# Missing independent trust or namespace must FAIL the start assertion,
+# not silently skip under ConditionPathExists. systemd AssertResult=no.
 # A real Operations-reviewed authority, kernel ACL, namespace, and JIT
 # database lease must exist independently before any service activation.
 [Unit]
 Description=CST-DEV one-Owner WAITING-only Gate A DB broker (NO-GO candidate)
 After=network.target
-ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem
-ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json
-ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
-ConditionPathExists=/etc/cst-onejob-dev/gatea-authority/independent-gatea-approval.json
-ConditionPathExists=/run/netns/cst-onejob-gatea-reviewed
-ConditionPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py
-ConditionPathExists=/opt/cst-onejob-dev/bootstrap/cst_team_onejob_operational_broker.py
-ConditionPathExists=/opt/cst-onejob-dev/bootstrap/cst_team_onejob_peercred.py
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/independent-gatea-approval.json
+AssertPathExists=/run/netns/cst-onejob-gatea-reviewed
+AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_preapproval_stage_broker.py
+AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_team_onejob_operational_broker.py
+AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_team_onejob_peercred.py
 
 [Service]
 Type=simple
