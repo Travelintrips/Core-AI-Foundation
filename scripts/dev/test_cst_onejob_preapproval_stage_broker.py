@@ -123,10 +123,20 @@ class StageBrokerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             pub=Path(tmp)/"pub.pem";env=Path(tmp)/"envelope.json"
             pub.write_bytes(public);env.write_text(json.dumps({"manifest":self.m,"signatureBase64":signed}))
+            # The cryptographic fixture is owned by the current test user.
+            # Simulate ONLY the root-owned parent metadata required by the
+            # trust boundary; preserve the real O_NOFOLLOW/fstat/read code.
+            # Actual root-owned, symlink and mode checks have separate tests.
             real=b.read_regular
+            real_lstat=Path.lstat
+            def fixture_parent_lstat(path):
+                st=real_lstat(path)
+                if Path(path)==Path(tmp):
+                    return SimpleNamespace(st_mode=st.st_mode,st_uid=0)
+                return st
             def reader(path,*args):
                 return real(path,*args[:1],exact_owner=None)
-            with patch.object(b,"read_regular",side_effect=reader):
+            with patch.object(Path,"lstat",autospec=True,side_effect=fixture_parent_lstat), patch.object(b,"read_regular",side_effect=reader):
                 self.assertEqual(b.read_signed_manifest(str(env),str(pub),pin,self.now),self.m)
                 with self.assertRaisesRegex(RuntimeError,"TRUST_KEY_PIN"):
                     b.read_signed_manifest(str(env),str(pub),"0"*64,self.now)
