@@ -47,6 +47,15 @@ class Tests(unittest.TestCase):
         self.assertTrue(result["roleLogin"])
         self.assertEqual(result["releaseDecision"],"NO_GO")
         self.assertNotIn(NOLOGIN_QUERY,self.db.commands)
+    def test_future_dated_heartbeat_force_relock(self):
+        # Database writer must reject a future timestamp; the already-PASS
+        # independent watchdog also rejects it if a row somehow exists.
+        self.lease["heartbeatAt"]=self.now+timedelta(seconds=30)
+        result=self.check()
+        self.assertEqual(result["status"],"RELOCKED_STALE_OR_ABSENT_LEASE")
+        self.assertEqual((self.db.login,self.db.sessions),(0,0))
+        self.assertIn(TERMINATE_QUERY,self.db.commands)
+
     def test_stale_heartbeat_force_relock(self):
         self.lease["heartbeatAt"]=self.now-timedelta(seconds=16)
         result=self.check()
