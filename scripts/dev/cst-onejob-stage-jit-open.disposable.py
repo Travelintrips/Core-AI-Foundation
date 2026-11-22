@@ -47,8 +47,13 @@ def test():
         else:raise RuntimeError("DISPOSABLE_DB_NOT_READY")
         sql("CREATE ROLE cst_team_model_pilot_stage_login NOLOGIN NOINHERIT NOBYPASSRLS CONNECTION LIMIT 1;")
         sql("CREATE ROLE cst_onejob_qa_unrelated NOLOGIN NOBYPASSRLS;")
+        # Disposable PostgreSQL unique-index reservation: separate psql
+        # connections contend for the same signed nonce; no host DB touched.
+        sql("CREATE TABLE qa_once_nonce (project text NOT NULL, nonce text NOT NULL,"
+            " source_sha text NOT NULL, expires_at timestamptz NOT NULL,"
+            " PRIMARY KEY(project, nonce));")
         now=datetime.now(timezone.utc)
-        permit={"sourceSha":"a"*40,"project":j.PROJECT,
+        permit={"sourceSha":"a"*40,"project":j.PROJECT,"nonce":"e"*32,
                 "expiresAt":(now+timedelta(minutes=5)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
         def one_session():
             assert_true(query(j.ROLE_QUERY)==[["1","0","0","0","1"]],"LOGIN_MISSING")
@@ -59,11 +64,36 @@ def test():
                 if query(j.ACTIVE_QUERY)==[["1"]]:break
                 time.sleep(.1)
             else:raise RuntimeError("DISPOSABLE_STAGE_SESSION_MISSING")
+        def mock_reserve(project,nonce,source,deadline):
+            # Synthetic immutable literal fields, no untrusted interpolation
+            # in operational SQL. This is an isolated no-network database.
+            assert project==j.PROJECT and nonce=="e"*32 and source=="a"*40
+            statement=("INSERT INTO qa_once_nonce(project,nonce,source_sha,expires_at)"
+                       " VALUES ('"+project+"','"+nonce+"','"+source+"',"
+                       " '"+deadline.strftime("%Y-%m-%d %H:%M:%S+00")+"')"
+                       " ON CONFLICT(project,nonce) DO NOTHING RETURNING nonce;")
+            return query(statement)==[[nonce]]
         with patch.object(j,"read_signed_manifest",return_value=permit):
             result=j.run_signed_one_stage(query,one_session,
+                reserve_nonce=mock_reserve,
                 envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                 approved_public_pin="b"*64,approved_source_sha="a"*40,now=now)
         assert_true(result["status"]=="SOURCE_ONLY_RELOCKED","NOT_RELOCKED")
+        # A replay from a separate SQL connection must fail before reopening.
+        replay_calls=[]
+        with patch.object(j,"read_signed_manifest",return_value=permit):
+            try:
+                j.run_signed_one_stage(query,lambda:replay_calls.append(True),
+                    reserve_nonce=mock_reserve,envelope_path="SYNTHETIC",
+                    public_key_path="SYNTHETIC",approved_public_pin="b"*64,
+                    approved_source_sha="a"*40,now=now)
+            except j.JitStageDenied as exc:
+                assert_true("NONCE_ALREADY_RESERVED" in str(exc),"REPLAY_WRONG_ERROR")
+            else:raise RuntimeError("REPLAY_NOT_REJECTED")
+        assert_true(not replay_calls,"REPLAY_STAGE_EXECUTED")
+        assert_true(query("SELECT count(*) FROM qa_once_nonce")==[["1"]],
+                    "NONCE_DUPLICATE_STORED")
+
         assert_true(query(j.ROLE_QUERY)==[["0","0","0","0","1"]],"ROLE_DRIFT")
         assert_true(query(j.ACTIVE_QUERY)==[["0"]],"RESIDUAL_STAGE_SESSION")
         assert_true(sql("SELECT 1;",user=j.ROLE,allow=True).returncode!=0,"LOGIN_NOT_DENIED")
@@ -73,6 +103,7 @@ def test():
           "openTemporarily":True,"oneStageSessionObserved":True,
           "newLoginAfterRelockDenied":True,"residualSessions":0,
           "unrelatedRoleUnchanged":True,"relockConfirmed":True,
+          "databaseUniqueNonceReplayDenied":True,
           "signedPermit":"SYNTHETIC_QA_ONLY","realOperationalApproval":False,
           "connectedCstDevTouched":False,"prodTouched":False,
           "releaseDecision":"NO_GO"},sort_keys=True))

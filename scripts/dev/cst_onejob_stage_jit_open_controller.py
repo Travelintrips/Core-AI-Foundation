@@ -8,6 +8,7 @@ exception after an opening attempt. SIGKILL recovery requires a separately
 approved privileged watchdog: absent that, operational deployment is NO-GO.
 
 query: trusted, independently authorized administrative SQL callback.
+reserve_nonce: externally authorized atomic durable one-use reservation callback.
 stage_once: one permitted, bounded broker-session action; not a dispatch.
 Neither callback is provided by this module. No DB/network access occurs
 when imported or executed, and it cannot mint a permit or enable itself.
@@ -37,7 +38,7 @@ def _one_int(query, statement, label):
         raise JitStageDenied("JIT_"+label+"_CATALOG_INVALID") from None
 
 def run_signed_one_stage(
-    query, stage_once, *,
+    query, stage_once, *, reserve_nonce,
     envelope_path, public_key_path, approved_public_pin,
     approved_source_sha, now=None, relock=relock_once,
 ):
@@ -45,7 +46,8 @@ def run_signed_one_stage(
 
     The source does not connect to Supabase, read credentials, generate keys,
     install a service, or authorize a real Owner. A future operational runner
-    must guarantee SIGKILL/host-crash relock independently.
+    must guarantee SIGKILL/host-crash relock independently AND provide an
+    atomic durable nonce reservation across all launcher processes.
     """
     if (not isinstance(approved_source_sha,str)
         or re.fullmatch(r"[0-9a-f]{40}",approved_source_sha) is None):
@@ -72,6 +74,19 @@ def run_signed_one_stage(
         # Never treat recovery of unsafe baseline as a successful new stage.
         relock(query)
         raise JitStageDenied("JIT_UNEXPECTED_LOGIN_OR_SESSIONS_CONTAINED")
+    # A valid Ed25519 signature does not make a reusable manifest a one-shot
+    # permit. Reserve its signed nonce atomically and DURABLY BEFORE LOGIN.
+    # The caller must supply independent storage that rejects duplicates
+    # across *all* worker processes. In-memory test stubs are QA ONLY.
+    nonce=permit.get("nonce")
+    if (not isinstance(nonce,str) or
+        re.fullmatch(r"[0-9a-f]{32}",nonce) is None):
+        raise JitStageDenied("JIT_SIGNED_NONCE_REQUIRED")
+    if not callable(reserve_nonce):
+        raise JitStageDenied("JIT_DURABLE_RESERVATION_REQUIRED")
+    reserved=reserve_nonce(PROJECT,nonce,approved_source_sha,lease_end)
+    if reserved is not True:
+        raise JitStageDenied("JIT_NONCE_ALREADY_RESERVED_OR_DENIED")
     # UTC timestamp constructed solely from a parsed signed lease. No SQL
     # caller-controlled identifier or raw string enters the statement.
     until=lease_end.strftime("%Y-%m-%d %H:%M:%S+00")

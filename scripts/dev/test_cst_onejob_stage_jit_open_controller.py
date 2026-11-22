@@ -29,13 +29,21 @@ class FakeAdmin:
 class JitContract(unittest.TestCase):
     def setUp(self):
         self.now=datetime(2026,11,22,2,0,tzinfo=timezone.utc)
-        self.manifest={"sourceSha":"a"*40,"project":j.PROJECT,
+        self.nonces=set()
+        self.manifest={"sourceSha":"a"*40,"project":j.PROJECT,"nonce":"e"*32,
                        "expiresAt":(self.now+timedelta(minutes=5)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
         self.db=FakeAdmin()
-    def invoke(self, action=lambda:None, manifest=None):
+    def reserve_nonce(self,project,nonce,source,deadline):
+        assert project==j.PROJECT and source=="a"*40
+        if nonce in self.nonces:return False
+        self.nonces.add(nonce)
+        return True
+
+    def invoke(self, action=lambda:None, manifest=None, reservation=None):
+        reserve=self.reserve_nonce if reservation is None else reservation
         with patch.object(j,"read_signed_manifest",return_value=manifest or self.manifest) as verified:
             out=j.run_signed_one_stage(
-                self.db.query,action,envelope_path="SYNTHETIC",
+                self.db.query,action,reserve_nonce=reserve,envelope_path="SYNTHETIC",
                 public_key_path="SYNTHETIC",approved_public_pin="b"*64,
                 approved_source_sha="a"*40,now=self.now)
         self.assertEqual(verified.call_count,1)
@@ -79,9 +87,32 @@ class JitContract(unittest.TestCase):
         with patch.object(j,"read_signed_manifest") as verify:
             with self.assertRaisesRegex(j.JitStageDenied,"SOURCE_PIN_REQUIRED"):
                 j.run_signed_one_stage(self.db.query,lambda:None,
-                  envelope_path="unused",public_key_path="unused",
+                  reserve_nonce=self.reserve_nonce,envelope_path="unused",public_key_path="unused",
                   approved_public_pin="b"*64,approved_source_sha="invalid")
         verify.assert_not_called()
+    def test_same_signed_nonce_cannot_open_twice(self):
+        self.invoke()
+        opens_before=sum("LOGIN VALID UNTIL" in v for v in self.db.commands)
+        with self.assertRaisesRegex(j.JitStageDenied,"NONCE_ALREADY_RESERVED"):
+            self.invoke()
+        self.assertEqual(opens_before,1)
+        self.assertEqual(sum("LOGIN VALID UNTIL" in v for v in self.db.commands),1)
+        self.assertEqual(self.db.enabled,0)
+
+    def test_failed_reservation_does_not_open_login(self):
+        with self.assertRaisesRegex(j.JitStageDenied,"NONCE_ALREADY_RESERVED"):
+            self.invoke(reservation=lambda *_:False)
+        self.assertNotIn("LOGIN VALID UNTIL",str(self.db.commands))
+        self.assertEqual(self.db.enabled,0)
+
+    def test_signed_nonce_missing_rejected_before_reservation(self):
+        called=[]
+        with self.assertRaisesRegex(j.JitStageDenied,"SIGNED_NONCE_REQUIRED"):
+            self.invoke(manifest={k:v for k,v in self.manifest.items() if k!="nonce"},
+                        reservation=lambda *_:called.append(True))
+        self.assertEqual(called,[])
+        self.assertNotIn("LOGIN VALID UNTIL",str(self.db.commands))
+
     def test_no_cli_or_credential_reader(self):
         s=Path(j.__file__).read_text()
         for forbidden in ("psycopg.connect(","os.environ","DATABASE_URL",
@@ -93,7 +124,7 @@ class JitContract(unittest.TestCase):
         with patch.object(j,"read_signed_manifest",return_value=self.manifest):
             with self.assertRaisesRegex(RuntimeError,"RELOCK_FAILED"):
                 j.run_signed_one_stage(self.db.query,lambda:None,
-                    envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
+                    reserve_nonce=self.reserve_nonce,envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                     approved_public_pin="b"*64,approved_source_sha="a"*40,
                     now=self.now,relock=fail_relock)
 

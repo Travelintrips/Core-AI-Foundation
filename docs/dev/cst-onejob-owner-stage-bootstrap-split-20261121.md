@@ -452,3 +452,22 @@ Gate-A independent trust/source/namespace path preconditions now use
 `AssertPathExists` in the uninstalled candidate. Signed manifest content
 validation continues to use `ExecStartPre`, where any bad signature
 produces a failed start. Neither change confers operational approval.
+
+## Gate A signed nonce must be atomically single-use before JIT LOGIN
+
+The signed JIT-open candidate now REQUIRES an independent `reserve_nonce`
+callback before issuing `ALTER ROLE ... LOGIN`. The callback receives the
+verified project, 32-character hex signed nonce, pinned source and lease
+expiry and must return the boolean `True` only after an atomic durable
+reservation. Failure, duplicate, missing nonce or any non-True result
+denies the stage before LOGIN. A successful stage consumes its nonce even
+if the action later fails; a retry must use a separately authorized permit.
+
+Source test includes replay and denied reservation. PostgreSQL 16 in a
+Docker network-none container proves a unique-indexed nonce cannot be
+reused through a new database connection after successful relock. The
+real Operations manifest verification is still MOCKED in disposable QA;
+actual multi-process durable storage and authorized broker JIT custody
+are not provided by this source, and source PASS cannot enable LOGIN.
+An independent SIGKILL relock watchdog and Supavisor frontend draining
+remain required before any live DEV approval.
