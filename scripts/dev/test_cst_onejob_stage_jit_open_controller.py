@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Isolated callback tests; no live Supabase, issuer, or technical approval."""
+import sys, unittest
+from pathlib import Path
+from datetime import datetime,timedelta,timezone
+from unittest.mock import patch
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+import cst_onejob_stage_jit_open_controller as j
+
+class FakeAdmin:
+    def __init__(self):
+        self.enabled=0
+        self.sessions=0
+        self.commands=[]
+    def query(self,statement):
+        self.commands.append(statement)
+        if statement==j.ROLE_QUERY:return [[self.enabled,0,0,0,1]]
+        if statement==j.ACTIVE_QUERY:return [[self.sessions]]
+        if statement==j.relock_once.__globals__["NOLOGIN_QUERY"]:
+            self.enabled=0
+            return []
+        if statement==j.relock_once.__globals__["TERMINATE_QUERY"]:
+            self.sessions=0
+            return [[True]]
+        if statement.startswith("ALTER ROLE "+j.ROLE+" LOGIN VALID UNTIL '"):
+            self.enabled=1
+            return []
+        raise AssertionError("UNEXPECTED_SQL")
+class JitContract(unittest.TestCase):
+    def setUp(self):
+        self.now=datetime(2026,11,22,2,0,tzinfo=timezone.utc)
+        self.manifest={"sourceSha":"a"*40,"project":j.PROJECT,
+                       "expiresAt":(self.now+timedelta(minutes=5)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
+        self.db=FakeAdmin()
+    def invoke(self, action=lambda:None, manifest=None):
+        with patch.object(j,"read_signed_manifest",return_value=manifest or self.manifest) as verified:
+            out=j.run_signed_one_stage(
+                self.db.query,action,envelope_path="SYNTHETIC",
+                public_key_path="SYNTHETIC",approved_public_pin="b"*64,
+                approved_source_sha="a"*40,now=self.now)
+        self.assertEqual(verified.call_count,1)
+        return out
+    def test_one_bounded_open_then_existing_relock(self):
+        def action():
+            self.assertEqual(self.db.enabled,1)
+            self.db.sessions=1
+        result=self.invoke(action)
+        self.assertEqual(result["status"],"SOURCE_ONLY_RELOCKED")
+        self.assertEqual(result["releaseDecision"],"NO_GO")
+        self.assertEqual((self.db.enabled,self.db.sessions),(0,0))
+        self.assertEqual(sum("LOGIN VALID UNTIL" in v for v in self.db.commands),1)
+    def test_action_failure_still_relocks(self):
+        def fail():
+            self.db.sessions=1
+            raise ValueError("DISPOSABLE_QA_ERROR")
+        with self.assertRaisesRegex(ValueError,"DISPOSABLE_QA_ERROR"):
+            self.invoke(fail)
+        self.assertEqual((self.db.enabled,self.db.sessions),(0,0))
+    def test_wrong_source_denied_before_sql(self):
+        with self.assertRaisesRegex(j.JitStageDenied,"MISMATCH"):
+            self.invoke(manifest={**self.manifest,"sourceSha":"f"*40})
+        self.assertEqual(self.db.commands,[])
+    def test_session_already_open_denied(self):
+        self.db.sessions=1
+        with self.assertRaisesRegex(j.JitStageDenied,"CONTAINED"):
+            self.invoke()
+        self.assertEqual((self.db.enabled,self.db.sessions),(0,0))
+    def test_existing_role_login_denied(self):
+        self.db.enabled=1
+        with self.assertRaisesRegex(j.JitStageDenied,"CONTAINED"):
+            self.invoke()
+        self.assertEqual((self.db.enabled,self.db.sessions),(0,0))
+        self.assertNotIn("LOGIN VALID UNTIL",str(self.db.commands))
+    def test_expired_lease_denied(self):
+        with self.assertRaisesRegex(j.JitStageDenied,"EXPIRED"):
+            self.invoke(manifest={**self.manifest,"expiresAt":self.now.isoformat(timespec="milliseconds").replace("+00:00","Z")})
+        self.assertEqual(self.db.commands,[])
+    def test_source_missing_rejected_without_permit_read(self):
+        with patch.object(j,"read_signed_manifest") as verify:
+            with self.assertRaisesRegex(j.JitStageDenied,"SOURCE_PIN_REQUIRED"):
+                j.run_signed_one_stage(self.db.query,lambda:None,
+                  envelope_path="unused",public_key_path="unused",
+                  approved_public_pin="b"*64,approved_source_sha="invalid")
+        verify.assert_not_called()
+    def test_no_cli_or_credential_reader(self):
+        s=Path(j.__file__).read_text()
+        for forbidden in ("psycopg.connect(","os.environ","DATABASE_URL",
+                          "CREATE ROLE","password_hash","SUPABASE_PROD"):
+            self.assertNotIn(forbidden,s)
+    def test_relock_failure_never_returns_success(self):
+        def fail_relock(_query):
+            raise RuntimeError("RELOCK_FAILED")
+        with patch.object(j,"read_signed_manifest",return_value=self.manifest):
+            with self.assertRaisesRegex(RuntimeError,"RELOCK_FAILED"):
+                j.run_signed_one_stage(self.db.query,lambda:None,
+                    envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
+                    approved_public_pin="b"*64,approved_source_sha="a"*40,
+                    now=self.now,relock=fail_relock)
+
+if __name__=="__main__": unittest.main(verbosity=2)

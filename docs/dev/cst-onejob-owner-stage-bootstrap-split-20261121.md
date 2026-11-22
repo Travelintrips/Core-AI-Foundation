@@ -413,3 +413,42 @@ UID28500 signed manifest validation. Nonzero validation errors must
 fail the start rather than skip it. Missing independent trust material is
 still checked with ConditionPathExists; no operational unit is installed.
 The active staging service and DEV database are unchanged.
+
+
+## JIT stage LOGIN positive-path source candidate (2026-11-22)
+
+The earlier Gate-A acceptance only proved NOLOGIN relock and crash cleanup;
+there was no source-controlled positive LOGIN lease. New import-only
+`scripts/dev/cst_onejob_stage_jit_open_controller.py` reuses existing
+Gate-A Ed25519 manifest verification and relock_once. It rejects a wrong
+project/source, expired lease, active old sessions and incorrect role flags.
+A verified scoped lease can open the exact stage login with a PostgreSQL
+VALID UNTIL not later than the signed 10-minute limit; the action runs once,
+then the existing NOLOGIN + terminate-backends reader is always called.
+An unsafe pre-existing login/session is first contained, never reused.
+No other role or shared Core pool is modified.
+
+Unit tests verify positive, denial, exception and relock failure behavior.
+The PostgreSQL16 disposable test proves a real LOGIN, one session, forced
+NOLOGIN, zero residual sessions, and denial of new login on a container
+with network=none. Its permit is mocked for QA; it is NOT a real Operations
+signature. This module has NO CLI, database credentials or operational
+runner and returns NO_GO even on a passing test.
+
+**Still blocking live rollout:** authorized admin DB credential custody,
+independently signed technical manifest, pinned trusted key, namespace/ACL,
+a single-flight launcher, and a separate crash/SIGKILL relock watchdog.
+Python try/finally cannot guarantee cleanup after SIGKILL or host failure.
+No service is installed, no real stage role is opened, and DEV/PROD
+operational state remains unchanged.
+
+## Missing technical authority must be an assertion failure
+
+Systemd v255 test on the VPS proved `ConditionPathExists` missing paths
+can skip startup, while `AssertPathExists` causes the start job to fail
+with `AssertResult=no`. It is important not to rely on `Result` alone,
+which can still show `success` for an assertion-prevented job. All eight
+Gate-A independent trust/source/namespace path preconditions now use
+`AssertPathExists` in the uninstalled candidate. Signed manifest content
+validation continues to use `ExecStartPre`, where any bad signature
+produces a failed start. Neither change confers operational approval.
