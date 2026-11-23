@@ -23,7 +23,15 @@ class WatchdogBootCandidateTests(unittest.TestCase):
     def test_boot_activation_contract_is_explicit(self):
         self.assertEqual(field("WantedBy"),["multi-user.target"])
         self.assertEqual(field("Wants"),["network-online.target"])
-        self.assertEqual(field("After"),["network-online.target"])
+        dependencies=field("After")
+        self.assertEqual(len(dependencies),1)
+        self.assertEqual(set(dependencies[0].split()),{
+            "network-online.target",
+            "cst-onejob-gatea-stage-stop-bridge.socket",
+        })
+        self.assertEqual(field("Requires"),[
+            "cst-onejob-gatea-stage-stop-bridge.socket",
+        ])
     def test_recovery_after_watchdog_process_failure(self):
         self.assertEqual(field("Restart"),["always"])
         self.assertEqual(field("RestartSec"),["5s"])
