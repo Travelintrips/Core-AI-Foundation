@@ -164,7 +164,7 @@ class JitContract(unittest.TestCase):
                 j.run_signed_one_stage(self.db.query,lambda:None,
                     reserve_nonce=self.reserve_nonce,acquire_single_flight=self.stage_lock,envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                     approved_public_pin="b"*64,approved_source_sha="a"*40,
-                    ,relock=fail_relock)
+                    relock=fail_relock)
 
     def test_database_clock_is_used_before_signed_permit(self):
         self.invoke()
