@@ -1,0 +1,28 @@
+name: GPT02 Issue159 Approval Provenance Store
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/ai-coding-standalone-dev/gpt02_issue159_approval_store.py'
+      - 'deploy/ai-coding-standalone-dev/test_gpt02_issue159_approval_store.py'
+      - '.github/workflows/gpt02-issue159-approval-provenance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  approval-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify append-only AAL2 approval provenance
+        working-directory: deploy/ai-coding-standalone-dev
+        run: python -m unittest -v test_gpt02_issue159_approval_store.py
+      - name: Compile approval provenance module
+        working-directory: deploy/ai-coding-standalone-dev
+        run: python -m py_compile gpt02_issue159_approval_store.py test_gpt02_issue159_approval_store.py
