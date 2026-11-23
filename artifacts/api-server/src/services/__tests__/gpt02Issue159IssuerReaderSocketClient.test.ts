@@ -36,6 +36,8 @@ const health = {
   issuerRole: "gpt02_issuer_evidence_reader",
   readerReady: true,
   tlsVerified: true,
+  clientTlsVerified: true,
+  backendTlsVerified: false,
   readOnly: true,
   signingPermitted: false,
   authorizationGranted: false,
@@ -77,6 +79,8 @@ function socketFixture(responsePatch: Record<string, unknown> = {}) {
             environment: "DEV",
             reason: "ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE",
             readOnlySessionVerified: true,
+            clientTlsVerified: true,
+            backendTlsVerified: false,
             issuerLedgerMatched: false,
             persistedTrustedReadProven: false,
             cryptographicSignaturesVerified: false,
@@ -130,6 +134,8 @@ describe("GPT02 Issue159 issuer-reader Unix socket client", () => {
       });
       expect(result.nativeRoleAuthenticated).toBe(true);
       expect(result.tlsVerified).toBe(true);
+      expect(result.clientTlsVerified).toBe(true);
+      expect(result.backendTlsVerified).toBe(false);
       expect(result.readOnlySessionVerified).toBe(true);
       expect(result.businessEvidenceRead).toBe(false);
       expect(result.persistedTrustedReadProven).toBe(false);
@@ -153,6 +159,8 @@ describe("GPT02 Issue159 issuer-reader Unix socket client", () => {
       expect(result.ok).toBe(false);
       expect(result.reason).toBe("ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE");
       expect(result.readOnlySessionVerified).toBe(true);
+      expect(result.clientTlsVerified).toBe(true);
+      expect(result.backendTlsVerified).toBe(false);
       expect(result.issuerLedgerMatched).toBe(false);
       expect(result.persistedTrustedReadProven).toBe(false);
       expect(result.signingPermitted).toBe(false);

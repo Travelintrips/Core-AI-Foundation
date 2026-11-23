@@ -141,6 +141,8 @@ class RuntimeBoundaryTest(unittest.TestCase):
             "result": {
                 "reason": "ISSUER_LEDGER_MISSING_OR_NOT_UNIQUE",
                 "readOnlySessionVerified": True,
+                "clientTlsVerified": True,
+                "backendTlsVerified": False,
                 "issuerLedgerMatched": False,
                 "persistedTrustedReadProven": False,
                 "signingPermitted": False,
@@ -270,8 +272,7 @@ class RuntimeBoundaryTest(unittest.TestCase):
             "BindReadOnlyPaths=/run/gpt02-issuer-reader",
             "ConditionPathExists=/run/gpt02-reader/reader.sock",
             "ConditionPathExists=/run/gpt02-issuer-reader/reader.sock",
-            "Requires=gpt02-issue159-issuer-reader.service",
-            "PartOf=gpt02-issue159-issuer-reader.service",
+            "Wants=gpt02-issue159-reader.service gpt02-issue159-issuer-reader.service",
             "MemoryDenyWriteExecute=yes",
         ):
             self.assertIn(required, unit, required)
