@@ -10,6 +10,7 @@ from datetime import datetime,timedelta,timezone
 from unittest.mock import patch
 from contextlib import nullcontext
 sys.path.insert(0,str(Path(__file__).resolve().parent))
+from cst_onejob_gatea_lease_reader import read_database_utc_clock
 import cst_onejob_stage_jit_open_controller as j
 
 NAME="cst-onejob-jit-open-qa-"+str(os.getpid())
@@ -53,7 +54,7 @@ def test():
         sql("CREATE TABLE qa_once_nonce (project text NOT NULL, nonce text NOT NULL,"
             " source_sha text NOT NULL, expires_at timestamptz NOT NULL,"
             " PRIMARY KEY(project, nonce));")
-        now=datetime.now(timezone.utc)
+        now=read_database_utc_clock(query)
         permit={"sourceSha":"a"*40,"project":j.PROJECT,"nonce":"e"*32,
                 "expiresAt":(now+timedelta(minutes=5)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
         def one_session():
@@ -78,7 +79,7 @@ def test():
             result=j.run_signed_one_stage(query,one_session,
                 reserve_nonce=mock_reserve,acquire_single_flight=nullcontext,
                 envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
-                approved_public_pin="b"*64,approved_source_sha="a"*40,now=now)
+                approved_public_pin="b"*64,approved_source_sha="a"*40)
         assert_true(result["status"]=="SOURCE_ONLY_RELOCKED","NOT_RELOCKED")
         # A replay from a separate SQL connection must fail before reopening.
         replay_calls=[]
@@ -87,7 +88,7 @@ def test():
                 j.run_signed_one_stage(query,lambda:replay_calls.append(True),
                     reserve_nonce=mock_reserve,acquire_single_flight=nullcontext,envelope_path="SYNTHETIC",
                     public_key_path="SYNTHETIC",approved_public_pin="b"*64,
-                    approved_source_sha="a"*40,now=now)
+                    approved_source_sha="a"*40)
             except j.JitStageDenied as exc:
                 assert_true("NONCE_ALREADY_RESERVED" in str(exc),"REPLAY_WRONG_ERROR")
             else:raise RuntimeError("REPLAY_NOT_REJECTED")
