@@ -7,14 +7,18 @@ from datetime import datetime,timedelta,timezone
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import cst_onejob_stage_jit_open_controller as j
+from cst_onejob_gatea_lease_reader import CLOCK_SQL
 
 class FakeAdmin:
     def __init__(self):
         self.enabled=0
         self.sessions=0
         self.commands=[]
+        self.db_now=datetime(2026,11,22,2,0,tzinfo=timezone.utc)
     def query(self,statement):
         self.commands.append(statement)
+        if statement==CLOCK_SQL:
+            return [[self.db_now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]+"Z"]]
         if statement==j.ROLE_QUERY:return [[self.enabled,0,0,0,1]]
         if statement==j.ACTIVE_QUERY:return [[self.sessions]]
         if statement==j.relock_once.__globals__["NOLOGIN_QUERY"]:
@@ -43,11 +47,12 @@ class JitContract(unittest.TestCase):
 
     def invoke(self, action=lambda:None, manifest=None, reservation=None):
         reserve=self.reserve_nonce if reservation is None else reservation
+        self.db.db_now=self.now
         with patch.object(j,"read_signed_manifest",return_value=manifest or self.manifest) as verified:
             out=j.run_signed_one_stage(
                 self.db.query,action,reserve_nonce=reserve,acquire_single_flight=self.stage_lock,envelope_path="SYNTHETIC",
                 public_key_path="SYNTHETIC",approved_public_pin="b"*64,
-                approved_source_sha="a"*40,now=self.now)
+                approved_source_sha="a"*40)
         self.assertEqual(verified.call_count,1)
         return out
     def test_one_bounded_open_then_existing_relock(self):
@@ -122,7 +127,7 @@ class JitContract(unittest.TestCase):
                     self.db.query,lambda:None,reserve_nonce=self.reserve_nonce,
                     acquire_single_flight=None,envelope_path="SYNTHETIC",
                     public_key_path="SYNTHETIC",approved_public_pin="b"*64,
-                    approved_source_sha="a"*40,now=self.now)
+                    approved_source_sha="a"*40)
         self.assertEqual(self.db.commands,[])
         self.assertEqual(self.nonces,set())
 
@@ -158,4 +163,35 @@ class JitContract(unittest.TestCase):
                     approved_public_pin="b"*64,approved_source_sha="a"*40,
                     now=self.now,relock=fail_relock)
 
+    def test_database_clock_is_used_before_signed_permit(self):
+        self.invoke()
+        self.assertEqual(self.db.commands[0],CLOCK_SQL)
+    def test_permit_expires_after_single_flight_lock_no_nonce_or_login(self):
+        from contextlib import contextmanager
+        @contextmanager
+        def expires_during_lock():
+            self.db.db_now=self.now+timedelta(minutes=6)
+            yield
+        with patch.object(j,"read_signed_manifest",return_value=self.manifest):
+            with self.assertRaisesRegex(j.JitStageDenied,"EXPIRED_OR_UNBOUNDED"):
+                j.run_signed_one_stage(
+                    self.db.query,lambda:None,reserve_nonce=self.reserve_nonce,
+                    acquire_single_flight=expires_during_lock,
+                    envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
+                    approved_public_pin="b"*64,approved_source_sha="a"*40)
+        self.assertEqual(self.nonces,set())
+        self.assertNotIn("LOGIN VALID UNTIL",str(self.db.commands))
+    def test_permit_expires_during_nonce_reservation_no_login(self):
+        def reserve_then_expire(project,nonce,source,deadline):
+            result=self.reserve_nonce(project,nonce,source,deadline)
+            self.db.db_now=deadline+timedelta(milliseconds=1)
+            return result
+        with self.assertRaisesRegex(j.JitStageDenied,"EXPIRED_OR_UNBOUNDED"):
+            self.invoke(reservation=reserve_then_expire)
+        self.assertEqual(self.db.enabled,0)
+        self.assertNotIn("LOGIN VALID UNTIL",str(self.db.commands))
+        self.assertEqual(len(self.nonces),1)
+    def test_host_clock_override_is_not_available(self):
+        import inspect
+        self.assertNotIn("now",inspect.signature(j.run_signed_one_stage).parameters)
 if __name__=="__main__": unittest.main(verbosity=2)
