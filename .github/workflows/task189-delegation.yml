@@ -1,0 +1,42 @@
+name: Task 189 DEV delegation
+on:
+  pull_request:
+    paths:
+      - 'artifacts/api-server/src/**/*task189*'
+      - 'artifacts/api-server/src/app.ts'
+      - 'artifacts/api-server/src/middleware/agentServiceAuth.ts'
+      - 'scripts/migrations/20261124_task189_release_delegation.sql'
+      - 'scripts/task189-release-mandate.test.mjs'
+      - '.github/workflows/task189-delegation.yml'
+permissions:
+  contents: read
+jobs:
+  issuance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fixture.xssrfshdrtdfupgqwfdw
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: task189_fixture
+        ports:
+          - 5432:5432
+        options: --health-cmd="pg_isready -d task189_fixture -U fixture.xssrfshdrtdfupgqwfdw" --health-interval=5s --health-timeout=3s --health-retries=10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --experimental-strip-types --test scripts/task189-release-mandate.test.mjs
+      - run: echo '127.0.0.1 task189-fixture.pooler.supabase.com' | sudo tee -a /etc/hosts > /dev/null
+      - name: Test HTTP registration, concurrent issuance, revocation and single redemption on PostgreSQL 17
+        env:
+          TASK189_DISPOSABLE_POSTGRES: '1'
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/__tests__/task189-release.test.ts
