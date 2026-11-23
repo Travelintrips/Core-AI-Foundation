@@ -20,7 +20,7 @@
 
 Owner menerbitkan mandat untuk satu izin teknis di CST-DEV. OpenClaw menerbitkan izin berdasarkan mandat tersebut melalui akun layanan `openclaw-vps-dev-consumer`. Mandat hanya berlaku untuk tenant `default`, Task Hub #189, job `816767f4-4264-4931-9a82-3d9496d3da3c`, dan permintaan `66ae915fde2dc1aab68b55272a7107cb3e4b`. [Tiket operasional #208](https://github.com/Travelintrips/AI-Task-Hub/issues/208)
 
-Rute berada di `/api/ai/agent-runtime/dev/task189-release`. Aktivasi memerlukan dua migrasi skema `20261124_task189_release_delegation.sql` dan `20261124_task189_owner_mandate.sql`, serta konfigurasi DEV terlindung `CST_DEV_TASK189_OWNER_USER_ID` yang berisi ID akun Core milik Owner yang sudah diverifikasi. Rute tetap nonaktif sampai pengelola mengatur `CST_DEV_TASK189_DELEGATION_ENABLED=true`. Sistem mencocokkan sesi, ID, jabatan, dan status aktif Owner. Sistem menyimpan identitas penerbit dan waktu penerbitan dalam riwayat yang terlindung.
+Rute berada di `/api/ai/agent-runtime/dev/task189-release`. Aktivasi memerlukan dua migrasi skema `20261124_task189_release_delegation.sql` dan `20261124_task189_owner_mandate.sql`, serta konfigurasi DEV terlindung `CST_DEV_TASK189_OWNER_USER_ID` yang berisi ID akun Core milik Owner yang sudah diverifikasi. Rute tetap nonaktif sampai pengelola mengatur `CST_DEV_TASK189_DELEGATION_ENABLED=true`. Sistem mencocokkan sesi, ID akun penerbit yang ditetapkan, status aktif, dan peran internal Owner atau Admin. Penetapan ini hanya berlaku pada rute #189. Sistem menyimpan identitas penerbit dan waktu penerbitan dalam riwayat yang terlindung.
 
 | Operasi | Pelaku dan hasil |
 | --- | --- |

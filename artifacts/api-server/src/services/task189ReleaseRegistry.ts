@@ -30,7 +30,7 @@ export async function task189Release(action: ReleaseAction, ownerId: number) {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(189, 20261124)`);
     const activeOwner = (await tx.execute(sql`
       SELECT id FROM ai_platform.internal_users
-      WHERE id=${ownerId} AND role='owner' AND account_type='internal'
+      WHERE id=${ownerId} AND role IN ('owner', 'admin') AND account_type='internal'
         AND status='active' AND NOT must_change_password
     `)).rows[0];
     if (!activeOwner || (action.kind !== "issue" && action.admin.userId !== ownerId))

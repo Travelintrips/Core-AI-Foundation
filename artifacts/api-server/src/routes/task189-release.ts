@@ -12,7 +12,7 @@ const root = "/ai/agent-runtime/dev/task189-release";
 const id = z.string().uuid().transform(value => value.toLowerCase());
 const grantIdBody = z.object({ grantId: id }).strict();
 const redeemBody = grantIdBody.extend({ permitId: id }).strict();
-const admin = [requireAuth, requireInternalRole("owner"), requirePasswordChanged];
+const admin = [requireAuth, requireInternalRole("owner", "admin"), requirePasswordChanged];
 const mutation: RequestHandler = (req,res,next) => {
   if (req.headers.origin !== origin || !req.is("application/json")) {
     res.status(403).json({ error: "SAME_ORIGIN_JSON_REQUIRED" }); return;

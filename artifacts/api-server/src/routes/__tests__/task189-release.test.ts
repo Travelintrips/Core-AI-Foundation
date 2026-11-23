@@ -11,7 +11,7 @@ import { task189Target } from "../../services/task189ReleaseMandate.js";
 vi.mock("../../services/internalAuthService.js", () => ({
   SESSION_COOKIE_NAME: "qa_session",
   verifySessionToken: (s: string) => s === "fixture-admin" ? { sub: 7 } : s === "other-admin" ? { sub: 8 } : s === "other-owner" ? { sub: 9 } : null,
-  getInternalUserById: async (id: number) => ({ id, accountType: "internal", status: "active", role: id === 7 || id === 9 ? "owner" : "admin", mustChangePassword:false }),
+  getInternalUserById: async (id: number) => ({ id, accountType: "internal", status: "active", role: id === 9 ? "owner" : "admin", mustChangePassword:false }),
 }));
 vi.mock("../../services/aiAuditService.js", () => ({ logAudit: async () => {} }));
 
@@ -46,7 +46,7 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
       CREATE SCHEMA ai_platform;
       CREATE TABLE ai_platform.internal_users (
         id int PRIMARY KEY, role text, account_type text, status text, must_change_password boolean);
-      INSERT INTO ai_platform.internal_users VALUES (7,'owner','internal','active',false),
+      INSERT INTO ai_platform.internal_users VALUES (7,'admin','internal','active',false),
         (8,'admin','internal','active',false), (9,'owner','internal','active',false);
       CREATE TABLE ai_platform.ai_agent_service_tokens (
         id uuid PRIMARY KEY, name text UNIQUE, token_hash text UNIQUE, scopes text[],is_active boolean DEFAULT true,
