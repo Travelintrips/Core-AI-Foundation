@@ -122,3 +122,28 @@ The generic `agent:work` queue may carry coordination/read-only jobs only. It mu
 - Existing Task #189 Owner review path is bound to Task #189 request/decision/release evidence. It must not be repurposed for GPT02.
 - No GPT02-specific assignment, signed manifest, one-use nonce record, or dedicated executor/activation receipt has been verified yet.
 - The live relock remains NO-GO until the new path is implemented, independently tested, and deployed to DEV under its own release gate.
+
+## 8. Critical compatibility finding: auditor NOLOGIN vs recurring supervisor
+
+The current installed supervisor opens PostgreSQL as `dev_gpt02_relock_catalog_auditor` on every timer activation. It verifies `session_user` equals that role and invokes the four cleanup RPCs. The requested final state for that same role is `NOLOGIN`, `CONNECTION LIMIT 0`, while retaining a non-NULL password. These requirements are incompatible with a still-enabled recurring supervisor using that identity: once `NOLOGIN` is applied, the supervisor cannot reconnect on the next 5-second cadence.
+
+The current timer is configured with `OnBootSec=30s` and `OnUnitInactiveSec=5s` and is live `active/enabled`. A recent sanitized journal sample captured 75 runs over 15 minutes. In those runs, writer Phase A/B and reader Phase A/B counts were all zero; the Task183 lane reported `roleLocked=true`, no canary/operational window, zero sessions remaining, no preparation attempted, and dispatch false. Current read-only watchdog counts were 0 open rows for both writer and reader tables. Thus the service is repeatedly connecting and evaluating cleanup lanes, but the sampled period contained no pending watchdog rows to process.
+
+The exact installed writer/reader function bodies were inspected read-only. They are postgres-owned `SECURITY DEFINER VOLATILE` functions. Writer Phase A sets only expired, allowlisted evidence roles to `NOLOGIN`, connection limit 0, password NULL and restores `VALID UNTIL`; writer Phase B verifies those states, terminates sessions for those expired roles, and marks watchdog rows cleaned. Reader Phase A/B apply analogous checks to exact task-scoped `dev_gpt02_task_<task>_<suffix>` roles; reader Phase B also calls the existing grant-revocation helper and verifies the target no longer has access to named private evidence tables. No auditor role is altered by these four functions. The exact code is in the installed function definitions; no function was executed during this review.
+
+### Required architecture decision before live relock
+Choose and review one design:
+
+**Option A — one-shot finalizer:** run the approved cleanup exactly once under a dedicated, narrow execution window; verify postconditions; then stop/disable the recurring timer and ensure the service is idle; finally set the auditor to `NOLOGIN` / limit 0 while retaining its password. The final state must prove no background process requires that auditor to reconnect.
+
+**Option B — separate ongoing read-only monitor:** keep recurring monitoring only if a new dedicated `NOLOGIN`-ineligible monitor identity with least-privilege catalog reads is introduced, and separate that identity from all mutation/SECURITY DEFINER execution. The old auditor must no longer be the recurring service login. The old cleanup executor must have a distinct, exact, short-lived, one-shot Owner authorization and no unattended cadence.
+
+Do not implement both paths partially. The design must also state whether `OnUnitInactiveSec=5s` is intentionally desired; it conflicts with the requested final inactive/disabled timer state. A generic worker task assignment or `agent:work` capability does not resolve this DB/systemd identity conflict.
+
+### Current observed state (read-only)
+- Four target roles found; auditor invariant fails (`LOGIN`, connection limit 1, password present); three evidence roles are `NOLOGIN`, limit 0 but password present 3/3.
+- Current follow-up snapshot: role sessions 0, open watchdog rows 0 (writer + reader).
+- Credential source metadata PASS: regular file, not symlink, mode 0600, owner/group root:root; contents untouched.
+- Timer remains active/running/enabled; service is activating during recurring run.
+
+No role/password/timer/service changes are made by this design update. No signing, dispatch, or PROD capability is included.
