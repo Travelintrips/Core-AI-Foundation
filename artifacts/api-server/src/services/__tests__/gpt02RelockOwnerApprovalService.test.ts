@@ -66,24 +66,13 @@ describe("GPT02 relock Owner approval", () => {
     transaction.mockReset();
   });
 
-  it("creates only an exact DEV challenge after trusted Owner eligibility is confirmed", async () => {
-    const result = await createGpt02RelockOwnerChallenge({
+  it("does not issue a challenge before the dedicated GPT02 Owner key is pinned", async () => {
+    await expect(createGpt02RelockOwnerChallenge({
       actor,
       verifyOwner: async (candidate) => candidate.id === actor.id,
       nowMs: actor.authVerifiedAt,
-    });
-
-    expect(result.manifest.scope).toBe("GPT02_RELOCK_CST_DEV");
-    expect(result.manifest.projectId).toBe("xssrfshdrtdfupgqwfdw");
-    expect(result.manifest.workerPrincipal).toBe("openclaw-vps-main");
-    expect(result.manifest.roles).toHaveLength(4);
-    expect(result.manifest.timer.finalActiveState).toBe("inactive");
-    expect(result.manifest.timer.finalUnitFileState).toBe("disabled");
-    expect(result.manifest.expiresAt - result.manifest.issuedAt).toBe(120_000);
-    expect(result.signatureAlgorithm).toBe("Ed25519");
-    expect(result.manifestSha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(execute).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(result)).not.toContain("PASSWORD_HASH");
+    })).rejects.toThrow("GPT02_OWNER_APPROVAL_TRUST_ANCHOR_MISSING");
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("fails closed when Owner eligibility is not proven", async () => {

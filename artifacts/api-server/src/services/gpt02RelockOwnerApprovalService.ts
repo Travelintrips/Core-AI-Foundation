@@ -185,6 +185,9 @@ export async function createGpt02RelockOwnerChallenge(input: {
   if (typeof input.verifyOwner !== "function" || await input.verifyOwner(input.actor) !== true) {
     deny("GPT02_OWNER_IDENTITY_NOT_ELIGIBLE");
   }
+  // Refuse to create an approval challenge unless the dedicated Owner key is
+  // already pinned. This avoids presenting an approval UI that cannot verify.
+  await loadPinnedOwnerApprovalKey();
 
   const nonce = randomBytes(32).toString("base64url");
   const requestId = randomUUID();
