@@ -34,6 +34,76 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify AI Core command trigger
         run: node --test scripts/ai-core-command.test.mjs
+      - name: Verify DEV GPT02 resume RFC remains fail-closed
+        run: node --test scripts/dev/test-gpt02-resume-rfc.mjs
+      - name: Verify GPT02 integrated acceptance remains fail-closed
+        run: node --test scripts/dev/gpt02-integrated-acceptance.test.mjs
+      - name: Verify cross-system read-only DEV evidence cannot authorize GPT02
+        run: node --test scripts/dev/gpt02-cross-ledger-readonly-evidence.test.mjs
+      - name: Verify independent task namespaces and assignment evidence remain non-authorizing
+        run: node --test scripts/dev/gpt02-task-lineage-ownership.test.mjs
+      - name: Verify GPT02 binding writer preflight cannot self-attest or persist
+        run: node --test scripts/dev/gpt02-binding-writer-preflight.test.mjs
+      - name: Verify GPT02 binding operator trust boundary denies client-supplied identity
+        run: node --test scripts/dev/gpt02-binding-trusted-operator-boundary.test.mjs
+      - name: Verify integrated offline GPT02 operator-readback-attestation chain remains non-authorizing
+        run: node --test scripts/dev/gpt02-binding-integrated-evidence-gate.test.mjs
+      - name: Verify sanitized cross-database DEV binding read-only audit stays non-authorizing
+        run: |
+          node --test scripts/dev/gpt02-binding-live-readonly-audit.test.mjs
+          bash -n scripts/dev/run-gpt02-binding-live-readonly-audit.sh
+      - name: Verify direct GPT02 task-attempt-command reference is not native attestation
+        run: |
+          node --test scripts/dev/gpt02-direct-attempt-lineage-readonly.test.mjs
+          bash -n scripts/dev/run-gpt02-direct-attempt-lineage-readonly.sh
+      - name: Verify offline binding Ed25519 evidence remains non-authorizing
+        run: node --test scripts/dev/gpt02-binding-attestation-verifier.test.mjs
+      - name: Verify GPT02 live evidence requires independent authenticated readback
+        run: node --test scripts/dev/gpt02-live-evidence-gate.test.mjs
+      - name: Verify isolated PostgreSQL task-attempt binding claims are immutable and non-authorizing
+        run: bash scripts/dev/test-gpt02-task-attempt-binding-isolated-postgres.sh
+      - name: Verify atomic nonce reservation and binding replay denial in isolated PostgreSQL
+        run: bash scripts/dev/test-gpt02-binding-nonce-atomic-isolated-postgres.sh
+      - name: Verify consolidated native GPT02 cross-service acceptance policy
+        run: |
+          node --test scripts/dev/gpt02-unified-e2e-acceptance-readonly.test.cjs
+          node --check scripts/dev/gpt02-unified-e2e-acceptance-readonly.cjs
+      - name: Verify native GPT02 issuer readiness remains fail-closed
+        run: |
+          node --test scripts/dev/gpt02-native-issuer-runtime-readiness.test.cjs
+          node --check scripts/dev/gpt02-native-issuer-runtime-readiness.cjs
+      - name: Verify dedicated GPT02 writer startup preflight stays non-authorizing
+        run: |
+          node --test scripts/dev/gpt02-dedicated-writer-preflight.test.cjs
+          node --check scripts/dev/gpt02-dedicated-writer-preflight.cjs
+      - name: Verify deployed DEV inert evidence schema and NOLOGIN writer migrations
+        run: bash scripts/dev/test-gpt02-nologin-writer-schema-migrations-isolated.sh
+      - name: Verify actual isolated PostgreSQL login writer, reader and app boundaries
+        run: bash scripts/dev/test-gpt02-distinct-login-writer-isolated-postgres.sh
+      - name: Verify synthetic Ed25519 attestation and atomic binding nonce contract
+        run: node scripts/dev/test-gpt02-crypto-atomic-binding-isolated.mjs
+      - name: Verify scoped database writer, separate reader and runtime role denial
+        run: bash scripts/dev/test-gpt02-binding-scoped-writer-isolated-postgres.sh
+      - name: Verify isolated PostgreSQL GPT02 lease concurrency contract
+        run: bash scripts/dev/test-gpt02-resume-isolated-postgres.sh
+      - name: Verify isolated PostgreSQL GPT02 operator grant issuance contract
+        run: bash scripts/dev/test-gpt02-issuance-isolated-postgres.sh
+      - name: Verify isolated PostgreSQL GPT02 approval nonce replay contract
+        run: bash scripts/dev/test-gpt02-approval-nonce-isolated-postgres.sh
+      - name: Verify isolated PostgreSQL signed review-intent audit schema constraints
+        run: bash scripts/dev/test-gpt02-review-intent-schema-isolated-postgres.sh
+      - name: Verify DEV-only review readback scoped RLS policy in isolated PostgreSQL
+        run: bash scripts/dev/test-gpt02-review-readback-select-isolated-postgres.sh
+      - name: Verify proposed DEV GPT02 dedicated review writer remains isolated
+        run: bash scripts/dev/test-gpt02-review-writer-rfc-isolated-postgres.sh
+      - name: Verify synthetic GPT02 command-lock atomic writer prototype
+        run: bash scripts/dev/test-gpt02-review-atomic-lock-prototype-isolated-postgres.sh
+      - name: Verify synthetic GPT02 review evidence fencing rejects stale and revoked audit
+        run: bash scripts/dev/test-gpt02-review-evidence-fencing-isolated-postgres.sh
+      - name: Verify concurrent terminal-state review-audit gate
+        run: bash scripts/dev/test-gpt02-review-audit-command-race-postgres.sh
+      - name: Verify exact GPT02 proposed claim remains inert in isolated PostgreSQL
+        run: bash scripts/dev/test-gpt02-inert-claim-exact-proposal-postgres.sh
       - name: Verify fail-closed DEV-first production promotion
         run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
       - name: Verify GitHub event correlation contract
