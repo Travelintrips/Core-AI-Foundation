@@ -29,7 +29,8 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository &&
         github.head_ref == 'feat/cst-ai-team-scoped-readiness-20261118') ||
        (github.event_name == 'workflow_dispatch' &&
-        github.ref == 'refs/heads/feat/cst-ai-team-scoped-readiness-20261118'))
+        (github.ref == 'refs/heads/feat/cst-ai-team-scoped-readiness-20261118' ||
+         github.ref == 'refs/heads/fix/dev-onejob-generic-enqueue-deny-20261119')))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -54,13 +55,13 @@ jobs:
             --label "cst.qa.source_commit=$SOURCE_SHA" \
             --label "cst.qa.scope=DEV_ONEJOB_IMAGE_PROVENANCE_ONLY" \
             --label "cst.qa.prod_deploy=false" \
-            --tag cst-core-onejob-pr1763-image-qa:local \
+            --tag cst-core-onejob-dev-qa:local \
             .
       - name: Readback embedded SHA and image label without network
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE=cst-core-onejob-pr1763-image-qa:local
+          IMAGE=cst-core-onejob-dev-qa:local
           IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
           ACTUAL_MARKER="$(docker run --rm --network none --entrypoint cat "$IMAGE" /app/.cst-build-sha)"
           ACTUAL_LABEL="$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "cst.qa.source_commit"}}')"
@@ -74,3 +75,38 @@ jobs:
         shell: bash
         run: |
           echo "NO IMAGE PUSH / NO DEV OR PROD DEPLOY / NO DB CONNECTION / NO SIGNER CHANGE"
+
+  protected-dev-superadmin-review:
+    name: Super Admin protected DEV handoff (no credentials or deployment)
+    needs: exact-source-image
+    if: >-
+      github.repository == 'Travelintrips/Core-AI-Foundation' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/fix/dev-onejob-generic-enqueue-deny-20261119'
+    environment:
+      name: cst-onejob-dev
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - name: Record approved DEV change gate with NO credential or service access
+        shell: bash
+        env:
+          QA_SOURCE_REF: ${{ github.ref }}
+          QA_SOURCE_SHA: ${{ github.sha }}
+          REVIEWED_ENVIRONMENT: cst-onejob-dev
+        run: |
+          set -euo pipefail
+          test "$QA_SOURCE_REF" = "refs/heads/fix/dev-onejob-generic-enqueue-deny-20261119"
+          [[ "$QA_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$REVIEWED_ENVIRONMENT" = "cst-onejob-dev"
+          {
+            echo "## CST-DEV One-Job: protected reviewer handoff"
+            echo
+            echo "- Environment review: PASSED through GitHub protection rules"
+            echo "- Source SHA: $QA_SOURCE_SHA"
+            echo "- Mode: NO_SECRETS_NO_DB_NO_DEPLOY"
+            echo "- Scope: GitHub reviewer identity only, not operational GO"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "CST_DEV_SUPERADMIN_REVIEW_GATE_PASS_NO_PROVISIONING"

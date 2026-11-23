@@ -40,6 +40,11 @@ import {
 } from "../services/jobWorkerService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
+import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.js";
+import { requireAuth, requireInternalRole, requirePasswordChanged } from "../middleware/internalAuth.js";
+import { SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
+import { verifyFreshOneJobStageConsent } from "../lib/cstOneJobFreshStageConsent.js";
+import { stageCstDevOneJobForVerifiedOwner } from "../services/cstOneJobOwnerApprovalStageService.js";
 
 const router = Router();
 
@@ -317,6 +322,54 @@ router.get("/ai/jobs", async (req, res): Promise<void> => {
   });
 });
 
+// Dedicated one-use DEV Owner approval: stages a WAITING job only.
+// No generic API key, machine identity or body-provided actor can authorize it.
+// Deliberately disabled unless the exact deployment explicitly enables it.
+router.post("/ai/dev/onejob/owner-approve-and-stage",
+  requireAuth,
+  requireInternalRole("owner"),
+  requirePasswordChanged,
+  async (req,res):Promise<void>=>{
+    const host=req.hostname.toLowerCase();
+    const origin=req.get("origin");
+    const site=req.get("sec-fetch-site");
+    if(host!=="dev.cstlogistic.co.id" ||
+       origin!=="https://dev.cstlogistic.co.id" ||
+       (site && site!=="same-origin") ||
+       !req.is("application/json")){
+      res.status(403).json({error:"DEV_OWNER_ORIGIN_REQUIRED"});return;
+    }
+    // One Owner action, no second confirmation after staging. The existing
+    // signed session must have been issued recently; an old 12h cookie,
+    // generic admin key, password-reset token or forged actor never suffices.
+    const actor=req.internalUser;
+    const sessionToken=(req.cookies as Record<string,string>|undefined)?.[SESSION_COOKIE_NAME];
+    if(!actor || !verifyFreshOneJobStageConsent({
+      sessionToken,sessionSecret:process.env.SESSION_SECRET,
+      ownerUserId:actor.id,role:actor.role,status:actor.status,
+      accountType:actor.accountType,mustChangePassword:actor.mustChangePassword,
+      body:req.body,
+    })){
+      res.status(403).json({error:"FRESH_EXPLICIT_OWNER_STAGE_CONSENT_REQUIRED",
+        dispatchPermitted:false});return;
+    }
+    try{
+      const staged=await stageCstDevOneJobForVerifiedOwner({
+        ownerUserId:actor.id,env:process.env,
+      });
+      res.setHeader("Cache-Control","no-store");
+      res.status(201).json(staged);
+    }catch(error){
+      const code=error instanceof Error ? error.message.split(":")[0]:"ONEJOB_STAGE_FAILED";
+      // Never include DB error messages or credentials in an HTTP response.
+      res.status(code==="ONEJOB_STAGE_NOT_READY"?403:503).json({
+        error:code==="ONEJOB_STAGE_NOT_READY"?"ONEJOB_STAGE_NOT_READY":"ONEJOB_STAGE_UNAVAILABLE",
+        dispatchPermitted:false,
+      });
+    }
+  }
+);
+
 // ── Enqueue Job ───────────────────────────────────────────────────────────────
 
 router.post("/ai/jobs", async (req, res): Promise<void> => {
@@ -327,6 +380,14 @@ router.post("/ai/jobs", async (req, res): Promise<void> => {
   }
 
   const d = body.data;
+  // A requestId in the reserved one-job pilot namespace is NOT authorization.
+  // Never let generic enqueue create a pilot job (or a different job type
+  // impersonating it). A dedicated Owner/Super Admin approval flow must
+  // bind one immutable requestId, job and worker before any admission.
+  if (isReservedOneJobPilotRequest(d.payloadJson)) {
+    res.status(403).json({ error: "DEV_ONEJOB_OWNER_APPROVAL_REQUIRED" });
+    return;
+  }
   const job = await enqueue({
     jobType:           d.jobType,
     payloadJson:       d.payloadJson,

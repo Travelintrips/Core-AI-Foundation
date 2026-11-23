@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { registerWorker, renewLease, DEFAULT_LEASE_TTL_MS, MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { completeJob, retryJob, JobOwnershipLostError } from "./jobWorkerService.js";
+import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.js";
 
 export const REMOTE_OLLAMA_RUNTIME_KIND = "ollama_remote_pull";
 export const REMOTE_OLLAMA_JOB_TYPE = "ollama_model_invocation";
@@ -246,6 +247,9 @@ export async function enqueueRemoteOllamaInvocation(
   payload: RemoteOllamaInvocationPayload,
   options: { priority?: number } = {},
 ): Promise<AiJob> {
+  if (isReservedOneJobPilotRequest(payload)) {
+    throw new Error("DEV_ONEJOB_OWNER_APPROVAL_REQUIRED");
+  }
   const now = new Date();
   const priority = Math.max(
     0,
