@@ -106,6 +106,9 @@ class StopBridgeTest(unittest.TestCase):
     def test_stop_readback_denied(self):
         r,c,e=self.serve_pair(ack=b"NO")
         self.assertEqual(r,b"");self.assertEqual(c,[b.BROKER]);self.assertTrue(e)
+    def test_wire_command_is_precisely_pre_relock_stop_not_relock_receipt(self):
+        self.assertEqual(b.COMMAND,b"CST_GATEA_BEFORE_RELOCK_STOP_V1\n")
+        self.assertNotIn(b"COMPLETE",b.COMMAND)
     def test_fixed_target_no_arbitrary_arguments(self):
         self.assertEqual(b.BROKER,"cst-onejob-gatea-preapproval-broker.service")
         self.assertNotIn("service",b.COMMAND.decode().lower())
