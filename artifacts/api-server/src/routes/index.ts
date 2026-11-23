@@ -183,8 +183,27 @@ import incidentsRouter from "./incidents.js";
 import aicodingDashboardRouter from "./aicoding-dashboard.js";
 import localMediaRouter from "./local-media.js";
 import local3dRouter from "./local-3d.js";
+import { createGpt02RelockOwnerApprovalRouter } from "./gpt02-relock-owner-approval.js";
+import {
+  verifyCstHubGpt02OwnerSession,
+  verifyCstHubGpt02OwnerLink,
+} from "../services/cstHubGpt02OwnerIdentityVerifier.js";
 
 const router: IRouter = Router();
+
+// GPT02 relock Owner approval remains disabled unless the explicit DEV-only
+// feature gate is enabled. Its identity adapter verifies the CST Hub session
+// and the separate read-only Owner link; no Task #189 approval state is read.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.APP_ENV === "development" &&
+  process.env.GPT02_RELOCK_OWNER_APPROVAL_ENABLED === "true"
+) {
+  router.use("/gpt02-owner-approval", createGpt02RelockOwnerApprovalRouter({
+    verifyOwnerSession: ({ bearerToken }) => verifyCstHubGpt02OwnerSession({ bearerToken }),
+    verifyOwnerEligibility: verifyCstHubGpt02OwnerLink,
+  }));
+}
 
 router.use(healthRouter);
 router.use(storageRouter);

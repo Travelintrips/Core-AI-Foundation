@@ -4,7 +4,6 @@ import {
   createGpt02RelockOwnerChallenge,
   verifyAndRecordGpt02RelockOwnerApproval,
   type Gpt02OwnerActor,
-  type Gpt02OwnerVerifier,
 } from "../services/gpt02RelockOwnerApprovalService.js";
 
 const OWNER_HOST = "dev-ai-task.cstlogistic.co.id";
@@ -21,7 +20,7 @@ export type Gpt02RelockOwnerApprovalRouterOptions = Readonly<{
   // Must validate the Supabase-Google signed Owner session through the
   // trusted CST Hub identity chain; never map this to adminAuth or an API key.
   verifyOwnerSession: Gpt02RelockOwnerSessionVerifier;
-  verifyOwnerEligibility: Gpt02OwnerVerifier;
+  verifyOwnerEligibility: (actor: Gpt02OwnerActor, bearerToken: string) => Promise<boolean>;
 }>;
 
 function countRawHeader(request: Request, name: string): number {
@@ -94,7 +93,7 @@ export function createGpt02RelockOwnerApprovalRouter(
       const actor = await options.verifyOwnerSession({ bearerToken: token, request: req });
       const challenge = await createGpt02RelockOwnerChallenge({
         actor,
-        verifyOwner: options.verifyOwnerEligibility,
+        verifyOwner: (candidate) => options.verifyOwnerEligibility(candidate, token),
       });
       res.status(201).json({
         challengeId: challenge.challengeId,
@@ -112,7 +111,11 @@ export function createGpt02RelockOwnerApprovalRouter(
       });
     } catch (error) {
       const code = safeErrorCode(error, "GPT02_OWNER_APPROVAL_PREPARATION_FAILED");
-      const unauthorized = code.includes("SUPERADMIN_SESSION_REQUIRED") || code.includes("OWNER_IDENTITY_NOT_ELIGIBLE") || code.includes("OWNER_SESSION_REQUIRED");
+      const unauthorized = code.includes("SUPERADMIN_SESSION_REQUIRED") ||
+        code.includes("OWNER_IDENTITY_NOT_ELIGIBLE") ||
+        code.includes("OWNER_SESSION_REQUIRED") ||
+        code.includes("HUB_OWNER_SESSION") ||
+        code.includes("HUB_OWNER_GOOGLE_SESSION");
       reject(res, unauthorized ? 403 : 503, unauthorized ? "GPT02_VERIFIED_OWNER_REQUIRED" : code);
     }
   });
@@ -134,7 +137,7 @@ export function createGpt02RelockOwnerApprovalRouter(
       const actor = await options.verifyOwnerSession({ bearerToken: token, request: req });
       const result = await verifyAndRecordGpt02RelockOwnerApproval({
         actor,
-        verifyOwner: options.verifyOwnerEligibility,
+        verifyOwner: (candidate) => options.verifyOwnerEligibility(candidate, token),
         challengeId: req.body.challengeId,
         manifestSha256: req.body.manifestSha256,
         signedSessionSha256: createHash("sha256").update(token, "utf8").digest("hex"),

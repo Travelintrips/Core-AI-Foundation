@@ -21,14 +21,17 @@ const ownerActor = {
   authVerifiedAt: Date.now(),
 };
 
-function makeApp(verifyOwnerSession = vi.fn().mockResolvedValue(ownerActor)) {
+function makeApp(
+  verifyOwnerSession = vi.fn().mockResolvedValue(ownerActor),
+  verifyOwnerEligibility = vi.fn().mockResolvedValue(true),
+) {
   const app = express();
   app.use(express.json({ limit: "8kb" }));
   app.use("/api/gpt02-owner-approval", createGpt02RelockOwnerApprovalRouter({
     verifyOwnerSession,
-    verifyOwnerEligibility: vi.fn().mockResolvedValue(true),
+    verifyOwnerEligibility,
   }));
-  return { app, verifyOwnerSession };
+  return { app, verifyOwnerSession, verifyOwnerEligibility };
 }
 
 function validHeaders() {
@@ -69,7 +72,7 @@ describe("GPT02 Owner approval HTTP boundary", () => {
   });
 
   it("prepares a manifest only after the trusted Hub session and Owner eligibility callbacks pass", async () => {
-    const { app, verifyOwnerSession } = makeApp();
+    const { app, verifyOwnerSession, verifyOwnerEligibility } = makeApp();
     const challenge = {
       challengeId: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
       manifest: { scope: "GPT02_RELOCK_CST_DEV", environment: "DEV", projectId: "xssrfshdrtdfupgqwfdw" },
@@ -92,10 +95,13 @@ describe("GPT02 Owner approval HTTP boundary", () => {
     expect(response.body.executionPermitted).toBe(false);
     expect(verifyOwnerSession).toHaveBeenCalledTimes(1);
     expect(verifyOwnerSession.mock.calls[0][0].bearerToken).toBe("x".repeat(64));
+    const eligibility = serviceMocks.createGpt02RelockOwnerChallenge.mock.calls[0][0].verifyOwner;
+    expect(await eligibility(ownerActor)).toBe(true);
+    expect(verifyOwnerEligibility).toHaveBeenCalledWith(ownerActor, "x".repeat(64));
   });
 
   it("records approval only for explicit APPROVE and the exact manifest digest", async () => {
-    const { app } = makeApp();
+    const { app, verifyOwnerEligibility } = makeApp();
     serviceMocks.verifyAndRecordGpt02RelockOwnerApproval.mockResolvedValue({
       recorded: true,
       ownerSessionCryptographicallyVerified: true,
@@ -122,6 +128,9 @@ describe("GPT02 Owner approval HTTP boundary", () => {
       manifestSha256: "a".repeat(64),
       signedSessionSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
     }));
+    const verifyOwner = serviceMocks.verifyAndRecordGpt02RelockOwnerApproval.mock.calls[0][0].verifyOwner;
+    expect(await verifyOwner(ownerActor)).toBe(true);
+    expect(verifyOwnerEligibility).toHaveBeenCalledWith(ownerActor, "x".repeat(64));
   });
 
   it("rejects approve requests that include an extra or non-APPROVE field", async () => {
