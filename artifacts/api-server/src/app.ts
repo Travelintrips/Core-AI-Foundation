@@ -19,6 +19,7 @@ import codingGithubWebhookRouter from "./routes/coding-github-webhook.js";
 import codingWhatsappWebhookRouter from "./routes/coding-whatsapp-webhook.js";
 import aiCoreSignedCallbackReceiver from "./routes/ai-core-signed-callback-receiver.js";
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
+import task189ReleaseRouter from "./routes/task189-release.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
 import aiCoreMcpOauthRouter from "./routes/ai-core-mcp-oauth.js";
@@ -193,6 +194,7 @@ app.use("/api", temporalCodingWorkerRouter);
 // Session-authenticated admin requests are skipped by isAdminRequest above.
 app.use("/api", globalLimiter);
 app.use("/api", mcpLimiter);
+app.use("/api", task189ReleaseRouter);
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,

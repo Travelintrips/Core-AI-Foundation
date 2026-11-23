@@ -32,6 +32,20 @@ Sebelum penerbitan, sistem rilis harus mencocokkan identitas layanan, lingkungan
 
 Pengelola mencatat referensi delegasi dan referensi izin yang dapat diperiksa pada tiket #208. Verifikasi pada VPS harus membuktikan izin berlaku untuk #189. Nama peran dalam dokumen ini saja tidak mengaktifkan hak akses di VPS.
 
+### Registrasi dan penerbitan teknis di Core DEV
+
+Rute Core DEV berada di `/api/ai/agent-runtime/dev/task189-release`. Rute hanya tersedia pada host DEV saat pool database cocok dengan proyek CST-DEV dan pengelola rilis telah mengaktifkan `CST_DEV_TASK189_DELEGATION_ENABLED`. Migrasi manual `20261124_task189_release_delegation.sql` menyimpan riwayat dalam skema terpisah. Pengelola rilis memasang kunci publik Ed25519 otoritas independen pada konfigurasi terlindung `CST_DEV_TASK189_REGISTRAR_PUBLIC_DER_B64` (SPKI DER, base64). Kunci privat tetap pada otoritas tersebut.
+
+| Operasi | Pelaku dan hasil |
+| --- | --- |
+| `GET` | Admin internal membaca target, ID dan sidik kredensial aktif, serta catatan penerbitan. |
+| `POST /register` | Admin internal menyerahkan paket `{mandate, signature}` yang telah ditandatangani otoritas rilis. Mandat mencantumkan ID dan sidik kredensial, ID admin penukar, batas waktu UTC (epoch milidetik), dan seluruh target di atas. Format byte mengikuti urutan kolom dalam `verifyMandate`, dengan tanda tangan base64url tanpa padding. |
+| `POST /issue` | OpenClaw memakai kredensial layanannya sendiri dan mengirim `grantId`. Percobaan ulang atas mandat yang sama mengembalikan ID izin pertama. |
+| `POST /redeem` | Admin yang ditunjuk dalam mandat mengirim `grantId` dan `permitId`. Pencatatan pemakaian bersifat atomik dan hanya dapat berhasil sekali. |
+| `POST /revoke` | Admin internal mencabut `grantId`. Pencabutan permanen, termasuk untuk izin yang telah diterbitkan dan belum dipakai. |
+
+Masa berlaku maksimum izin tiga menit dan berakhir lebih awal bila mandat kedaluwarsa. Perubahan kredensial OpenClaw membatalkan kecocokan mandat. Menonaktifkan flag menghentikan seluruh rute dan mempertahankan riwayat. Pemasangan kode dan pencatatan izin pada Core belum membuka jendela VPS. Kontrol rilis independen pada VPS, relock, serta persetujuan Owner melalui Task Hub tetap diperlukan sebelum pengujian job dilanjutkan.
+
 ## Pelaporan
 
 Laporan ringkas berisi perubahan konkret, tautan commit/PR atau bukti operasi, CI, hasil deployment, dan blocker yang belum selesai. Jangan mengubah status menjadi COMPLETED tanpa bukti terminal yang sah.
