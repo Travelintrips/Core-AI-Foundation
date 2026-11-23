@@ -1,0 +1,45 @@
+[Unit]
+Description=GPT02 CST-DEV read-only Owner identity-link verifier
+After=network.target docker.service
+Wants=network.target
+ConditionPathExists=/opt/ai-coding-standalone-dev/tasks.db
+ConditionPathExists=/opt/ai-coding-standalone-dev/qa/task183-owner-identity-readiness.py
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/ai-coding-standalone-dev/qa
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/ai-coding-standalone-dev/qa/gpt02-owner-identity-readonly-api.py
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=5s
+KillSignal=SIGTERM
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+ReadOnlyPaths=/opt/ai-coding-standalone-dev/tasks.db /opt/ai-coding-standalone-dev/qa/task183-owner-identity-readiness.py
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

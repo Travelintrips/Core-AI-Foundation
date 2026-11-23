@@ -1,0 +1,6 @@
+--- a/sites-available/dev-ai-task.cstlogistic.co.id
++++ b/sites-available/dev-ai-task.cstlogistic.co.id
+@@
+-    if ($uri ~ "^/api/ai-tasks/183/gpt02-") { return 410; }
++    # Only the exact read-only Owner identity-link GET is exempted; all other GPT02 Task183 APIs remain blocked.
++    if ($uri ~ "^/api/ai-tasks/183/gpt02-(?!owner-identity-readiness$)") { return 410; }
