@@ -43,7 +43,8 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
     vi.stubEnv("CST_DEV_TASK189_REGISTRAR_PUBLIC_DER_B64",keys.publicKey.export({type:"spki",format:"der"}).toString("base64"));
     ({pool}=await import("@workspace/db"));
     expect(pool.options.connectionString).toBe(dsn);
-    await pool.query(`CREATE SCHEMA ai_platform;
+    await pool.query(`CREATE ROLE gpt02_core_prep_login NOLOGIN CONNECTION LIMIT 0;
+      CREATE SCHEMA ai_platform;
       CREATE TABLE ai_platform.ai_agent_service_tokens (
         id uuid PRIMARY KEY, name text UNIQUE, token_hash text UNIQUE, scopes text[],is_active boolean DEFAULT true,
         last_used_at timestamptz, expires_at timestamptz,metadata jsonb DEFAULT '{}',
@@ -68,6 +69,8 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
   it("requires the independent grant, authenticates both actors and issues and consumes the permit once", async () => {
     const status=await request(app).get(path).set("Host","dev.cstlogistic.co.id").set("Cookie","qa_session=fixture-admin").expect(200);
     expect(status.body.credentialId).toBe(id);
+    expect(status.body.state).toBe("MANDATE_NOT_REGISTERED");
+    const inspect = () => request(app).get(path).set("Host","dev.cstlogistic.co.id").set("Cookie","qa_session=fixture-admin");
     const now=Date.now();
     const packet=(overrides:Record<string,unknown>={})=>{
       const mandate={...task189Target,grantId:randomUUID(),credentialId:id,credentialBinding:status.body.credentialBinding,
@@ -93,6 +96,14 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
     await worker(revoked.mandate.grantId).expect(409);
     await admin("/register",good).expect(200);
     await admin("/register",good).expect(200);
+    expect((await inspect().expect(200)).body.state).toBe("MANDATE_ACTIVE");
+    await pool.query("ALTER ROLE gpt02_core_prep_login CONNECTION LIMIT 1");
+    expect((await inspect().expect(200)).body.state).toBe("PREPARER_RELOCK_UNVERIFIED");
+    await worker(grantId).expect(409);
+    await pool.query("ALTER ROLE gpt02_core_prep_login CONNECTION LIMIT 0");
+    await pool.query("UPDATE public.ai_execution_jobs SET started_at=now()");
+    await worker(grantId).expect(409);
+    await pool.query("UPDATE public.ai_execution_jobs SET started_at=NULL");
     await worker(grantId,other).expect(403);
     const rotated=randomUUID();
     await pool.query("UPDATE ai_platform.ai_agent_service_tokens SET token_hash=$1 WHERE id=$2",[digest(rotated),id]);
@@ -104,12 +115,14 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
     expect(new Set(results.map(r=>r.body.permitId)).size).toBe(1);
     expect(results.every(r=>r.body.usable===true)).toBe(true);
     const another=packet();
-    await admin("/register",another).expect(200);
-    await worker(another.mandate.grantId).expect(409);
+    await admin("/register",another).expect(409);
+    await worker(another.mandate.grantId).expect(404);
+    expect((await inspect().expect(200)).body.state).toBe("PERMIT_ISSUED");
     await admin("/redeem",{grantId,permitId:randomUUID()}).expect(409);
     await admin("/redeem",{grantId,permitId},"other-admin").expect(403);
     const consumption=await Promise.all([admin("/redeem",{grantId,permitId}),admin("/redeem",{grantId,permitId})]);
     expect(consumption.map(r=>r.status).sort()).toEqual([200,409]);
+    expect((await inspect().expect(200)).body.state).toBe("PERMIT_CONSUMED");
     const replay=await worker(grantId).expect(200);
     expect(replay.body).toMatchObject({permitId,usable:false});
     await expect(pool.query("UPDATE task189_release.permit SET consumed_at=NULL,consumed_by=NULL")).rejects.toThrow(/immutable/);
