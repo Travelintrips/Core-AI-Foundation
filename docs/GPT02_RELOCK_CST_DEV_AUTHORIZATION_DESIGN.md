@@ -165,12 +165,13 @@ Because the requested final state explicitly requires the timer `inactive/disabl
 
 1. Obtain the exact Owner-signed manifest for `GPT02_RELOCK_CST_DEV` with a fresh one-use nonce and action digest. Validate delegation, signer identity, scope, expiry, replay state and DEV target server-side.
 2. Capture read-only preflight evidence. Confirm no active supervisor run, no in-flight cleanup, no open watchdog rows requiring unapproved work, and zero sessions for all four target roles. If any precondition fails, stop before mutation.
-3. Invoke only the explicitly approved existing cleanup lane once, if its preflight indicates eligible expired watchdog rows. Do not rerun automatically or use the 5-second timer as an executor. Require bounded counts and independent verification of each target.
-4. Disable the timer using the fixed unit identity only after verifying the current service run is finished and no dependent task requires another scheduled cleanup. Stop/disable is recorded as a separate enumerated operation inside the same signed manifest; no free-form shell command is accepted.
+3. Confirm both writer and reader watchdog tables contain zero open rows. If either has a row, abort and require a separate reviewed manifest for those exact eligible rows; do not call the recurring cleanup RPC from this GPT02 relock flow.
+4. Stop and disable the timer using the fixed unit identity only after verifying the current service run is finished and no dependent task requires another scheduled cleanup. Stop/disable is recorded as an enumerated operation inside the same signed manifest; no free-form shell command is accepted.
 5. Verify the timer is `inactive` and `disabled`, the service is idle/inactive, and no MainPID remains.
-6. Change only `dev_gpt02_relock_catalog_auditor` to `NOLOGIN`, connection limit `0`, preserving its existing password verifier (do not read or display it). This must be the final role mutation after all actions requiring that login are complete.
-7. Independently verify all four role invariants, session count 0, writer+reader watchdog open-row count 0, timer inactive/disabled, service idle, and encrypted credential metadata. The credential file remains present as protected custody material; no decryption is performed.
-8. Consume and close the one-shot authorization, persist a redacted receipt, and mark complete only if every postcondition passes. Any mismatch is `NO_GO/OWNER_REVIEW_REQUIRED`; do not automatically retry, rollback, restart, or re-enable the timer.
+6. Set only the three evidence roles to `NOLOGIN`, connection limit `0`, password `NULL`.
+7. Change only `dev_gpt02_relock_catalog_auditor` to `NOLOGIN`, connection limit `0`, preserving its existing password verifier (do not read or display it). This must be the final role mutation after all actions requiring that login are complete.
+8. Independently verify all four role invariants, session count 0, writer+reader watchdog open-row count 0, timer inactive/disabled, service idle, and encrypted credential metadata. The credential file remains present as protected custody material; no decryption is performed.
+9. Consume and close the one-shot authorization, persist a redacted receipt, and mark complete only if every postcondition passes. Any mismatch is `NO_GO/OWNER_REVIEW_REQUIRED`; do not automatically retry, rollback, restart, or re-enable the timer.
 
 ### 9.3 Explicit prohibitions
 
@@ -185,3 +186,20 @@ Because the requested final state explicitly requires the timer `inactive/disabl
 ### 9.4 Completion definition
 
 The work is complete only when every target invariant is true simultaneously and independently verified after the service has been stopped and the auditor is NOLOGIN. A successful supervisor run or `roleLocked=true` for a separate Task183 lane is not completion evidence for the four target roles or timer final state.
+
+
+## 10. GPT02-specific Owner approval implementation (draft code added)
+
+The implementation draft adds these isolated components in Core-AI:
+- `artifacts/api-server/src/services/gpt02RelockOwnerApprovalService.ts`: builds an immutable manifest for the fixed DEV project/host/four role targets/timer, checks a fresh verified Super Admin Google identity via a required trusted eligibility callback, issues a 120-second nonce challenge, canonicalizes the complete manifest, verifies a detached Ed25519 signature using a dedicated trust anchor, and atomically consumes the challenge plus inserts an append-only decision receipt. The action set is limited to disabling the timer, setting the three evidence roles to password NULL, and setting the auditor NOLOGIN last; it does not call the generic recurring cleanup RPCs. The result deliberately returns `executionPermitted=false`, `signingPermitted=false`, `dispatchPermitted=false`, and `releaseDecision=NO_GO`; approval alone does not run the relock.
+- `artifacts/api-server/src/routes/gpt02-relock-owner-approval.ts`: an injectable Express router factory with strict same-origin/host/content-type/body checks. It requires a trusted CST Hub owner-session verifier and a separate eligibility verifier to be injected. It does not use generic `adminAuth`, API keys, worker tokens, or client-supplied actor claims.
+- `scripts/migrations/ai-gpt02-relock-owner-approvals.sql`: dedicated pending challenge and append-only decision tables, 120-second TTL, unique pending challenge, immutable manifest fields, one-time consumption, and no PUBLIC grants. Runtime DDL is deliberately not used.
+- `artifacts/api-server/src/services/__tests__/gpt02RelockOwnerApprovalService.test.ts`: positive/negative Ed25519, exact-scope/tamper, identity-denial and readiness tests.
+
+### Explicit activation blockers
+1. The VPS currently has no `/etc/gpt02-dev/public/gpt02-relock-owner-approval.pem`, and the trust manifest has no `gpt02RelockOwnerApproval` fingerprint. The existing `approval-public.pem` is Task #189-domain pinned and is explicitly not accepted as a fallback. Thus the verifier fails closed today.
+2. The actual CST Hub signed-Google-Owner session verifier is not yet wired into the Core API route factory. The router is intentionally not mounted. Do not substitute `adminAuth`, an admin API key, a worker service token, or a GitHub comment.
+3. The migration has not been applied. The managed DB operator must grant the exact minimum SQL privileges to the verified API service database principal only after identifying that principal; there is deliberately no blanket PUBLIC grant.
+4. No Owner signature has been generated or requested by this draft. The Owner's private key must remain in the trusted Owner signing environment; OpenClaw/API must never create or impersonate it.
+
+Until these blockers are resolved, Owner approval cannot be issued/verified, and no relock action is executable. This code draft is not deployed and changes no live database, systemd unit, credential, signing or dispatch state.
