@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import express from "express";
@@ -10,8 +10,8 @@ import { task189Target } from "../../services/task189ReleaseMandate.js";
 // This suite has its own disposable PostgreSQL service. It never uses a caller's DSN.
 vi.mock("../../services/internalAuthService.js", () => ({
   SESSION_COOKIE_NAME: "qa_session",
-  verifySessionToken: (s: string) => s === "fixture-admin" ? { sub: 7 } : s === "other-admin" ? { sub: 8 } : null,
-  getInternalUserById: async (id: number) => ({ id, accountType: "internal", status: "active", role: "admin", mustChangePassword:false }),
+  verifySessionToken: (s: string) => s === "fixture-admin" ? { sub: 7 } : s === "other-admin" ? { sub: 8 } : s === "other-owner" ? { sub: 9 } : null,
+  getInternalUserById: async (id: number) => ({ id, accountType: "internal", status: "active", role: id === 7 || id === 9 ? "owner" : "admin", mustChangePassword:false }),
 }));
 vi.mock("../../services/aiAuditService.js", () => ({ logAudit: async () => {} }));
 
@@ -23,7 +23,6 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
   const app = express();
   const token = randomUUID();
   const other = randomUUID();
-  const keys = generateKeyPairSync("ed25519");
   const id = randomUUID();
   let pool: typeof import("@workspace/db").pool;
   const admin = (op:string, body:unknown, session="fixture-admin") => request(app).post(path+op).set("Host", "dev.cstlogistic.co.id")
@@ -40,11 +39,15 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
     vi.stubEnv("SUPABASE_URL_DEV",`https://${task189Target.project}.supabase.co`);
     vi.stubEnv("SUPABASE_DEV_DATABASE_URL",dsn);
     vi.stubEnv("CST_DEV_TASK189_DELEGATION_ENABLED","true");
-    vi.stubEnv("CST_DEV_TASK189_REGISTRAR_PUBLIC_DER_B64",keys.publicKey.export({type:"spki",format:"der"}).toString("base64"));
+    vi.stubEnv("CST_DEV_TASK189_OWNER_USER_ID","7");
     ({pool}=await import("@workspace/db"));
     expect(pool.options.connectionString).toBe(dsn);
     await pool.query(`CREATE ROLE gpt02_core_prep_login NOLOGIN CONNECTION LIMIT 0;
       CREATE SCHEMA ai_platform;
+      CREATE TABLE ai_platform.internal_users (
+        id int PRIMARY KEY, role text, account_type text, status text, must_change_password boolean);
+      INSERT INTO ai_platform.internal_users VALUES (7,'owner','internal','active',false),
+        (8,'admin','internal','active',false), (9,'owner','internal','active',false);
       CREATE TABLE ai_platform.ai_agent_service_tokens (
         id uuid PRIMARY KEY, name text UNIQUE, token_hash text UNIQUE, scopes text[],is_active boolean DEFAULT true,
         last_used_at timestamptz, expires_at timestamptz,metadata jsonb DEFAULT '{}',
@@ -59,6 +62,9 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
       await client.query("SET ai_core.dev_migration_authorized='true'");
       await client.query("SET ai_core.dev_project_ref='xssrfshdrtdfupgqwfdw'");
       await client.query(migration);
+      await client.query(readFileSync(
+        new URL("../../../../../scripts/migrations/20261124_task189_owner_mandate.sql", import.meta.url), "utf8"));
+
     } finally { client.release(); }
     const {default:router}=await import("../task189-release.js");
     app.use(express.json(),cookieParser());
@@ -66,36 +72,33 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
   });
   afterAll(async () => { if (pool) await pool.end(); vi.unstubAllEnvs(); });
 
-  it("requires the independent grant, authenticates both actors and issues and consumes the permit once", async () => {
+  it("requires the designated Owner grant, authenticates both actors and issues and consumes the permit once", async () => {
     const status=await request(app).get(path).set("Host","dev.cstlogistic.co.id").set("Cookie","qa_session=fixture-admin").expect(200);
     expect(status.body.credentialId).toBe(id);
     expect(status.body.state).toBe("MANDATE_NOT_REGISTERED");
     const inspect = () => request(app).get(path).set("Host","dev.cstlogistic.co.id").set("Cookie","qa_session=fixture-admin");
-    const now=Date.now();
-    const packet=(overrides:Record<string,unknown>={})=>{
-      const mandate={...task189Target,grantId:randomUUID(),credentialId:id,credentialBinding:status.body.credentialBinding,
-        redeemerUserId:7, notBefore:now-1000,expiresAt:now+150000,...overrides};
-      return {mandate,signature:sign(null,Buffer.from(JSON.stringify(mandate)),keys.privateKey).toString("base64url")};
-    };
-    const good=packet();
-    const grantId=good.mandate.grantId;
+    const grantId = randomUUID();
+    const register = { grantId };
     await worker(grantId).expect(404);
     await request(app).post(path+"/register").set("Host","dev.cstlogistic.co.id").set("Origin",origin)
-      .set("Authorization","Bearer "+token).send(good).expect(401);
+      .set("Authorization","Bearer "+token).send(register).expect(401);
     await request(app).post(path+"/register").set("Host","dev.cstlogistic.co.id").set("Origin","https://wrong.invalid")
-      .set("Cookie","qa_session=fixture-admin").send(good).expect(403);
+      .set("Cookie","qa_session=fixture-admin").send(register).expect(403);
     await request(app).get(path).set("Host","unrelated.invalid").set("Cookie","qa_session=fixture-admin").expect(404);
-    await admin("/register",packet({job:randomUUID()})).expect(400);
-    await admin("/register",packet({expiresAt:now-1})).expect(409);
-    await admin("/register",packet({credentialBinding:"0".repeat(64)})).expect(403);
-    await admin("/register",{...good,signature:"A".repeat(86)}).expect(403);
-    const revoked=packet();
+    await admin("/register",register,"other-admin").expect(403);
+    await admin("/register",register,"other-owner").expect(403);
+    await admin("/register",{...register, job:randomUUID()}).expect(400);
+    await admin("/register",{...register, signature:"A".repeat(86)}).expect(400);
+    const revoked = { grantId: randomUUID() };
     await admin("/register",revoked).expect(200);
-    await admin("/revoke",{grantId:revoked.mandate.grantId}).expect(200);
+    await admin("/revoke",revoked).expect(200);
     await admin("/register",revoked).expect(409);
-    await worker(revoked.mandate.grantId).expect(409);
-    await admin("/register",good).expect(200);
-    await admin("/register",good).expect(200);
+    await worker(revoked.grantId).expect(409);
+    await admin("/register",register).expect(200);
+    await admin("/register",register).expect(200);
+    await pool.query("UPDATE ai_platform.internal_users SET status='suspended' WHERE id=7");
+    await worker(grantId).expect(403);
+    await pool.query("UPDATE ai_platform.internal_users SET status='active' WHERE id=7");
     expect((await inspect().expect(200)).body.state).toBe("MANDATE_ACTIVE");
     await pool.query("ALTER ROLE gpt02_core_prep_login CONNECTION LIMIT 1");
     expect((await inspect().expect(200)).body.state).toBe("PREPARER_RELOCK_UNVERIFIED");
@@ -114,9 +117,9 @@ describe.skipIf(process.env.TASK189_DISPOSABLE_POSTGRES !== "1")("Task 189 relea
     const permitId=results[0].body.permitId;
     expect(new Set(results.map(r=>r.body.permitId)).size).toBe(1);
     expect(results.every(r=>r.body.usable===true)).toBe(true);
-    const another=packet();
+    const another={grantId:randomUUID()};
     await admin("/register",another).expect(409);
-    await worker(another.mandate.grantId).expect(404);
+    await worker(another.grantId).expect(404);
     expect((await inspect().expect(200)).body.state).toBe("PERMIT_ISSUED");
     await admin("/redeem",{grantId,permitId:randomUUID()}).expect(409);
     await admin("/redeem",{grantId,permitId},"other-admin").expect(403);

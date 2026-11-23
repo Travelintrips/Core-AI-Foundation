@@ -18,33 +18,19 @@
 
 ## Delegasi penerbit rilis CST-DEV untuk Task #189
 
-Owner menunjuk akun layanan `openclaw-vps-dev-consumer` sebagai calon penerbit satu izin rilis untuk mengaktifkan layanan penanda tangan persiapan kedua GPT02. Permintaan akses tercatat di [tiket operasional #208](https://github.com/Travelintrips/AI-Task-Hub/issues/208). Pengelola rilis CST-DEV mengaktifkan delegasi melalui mekanisme perubahan akses yang memverifikasi identitas penerima dan merekam perubahan. Sampai ada bukti aktivasi, statusnya tetap diajukan.
+Owner menerbitkan mandat untuk satu izin teknis di CST-DEV. OpenClaw menerbitkan izin berdasarkan mandat tersebut melalui akun layanan `openclaw-vps-dev-consumer`. Mandat hanya berlaku untuk tenant `default`, Task Hub #189, job `816767f4-4264-4931-9a82-3d9496d3da3c`, dan permintaan `66ae915fde2dc1aab68b55272a7107cb3e4b`. [Tiket operasional #208](https://github.com/Travelintrips/AI-Task-Hub/issues/208)
 
-| Batas delegasi | Nilai |
-| --- | --- |
-| Lingkungan dan tenant | CST-DEV, perusahaan `default` |
-| Penerima | Identitas layanan DEV terautentikasi `openclaw-vps-dev-consumer` |
-| Objek | Task Hub #189, job `816767f4-4264-4931-9a82-3d9496d3da3c`, permintaan pemulihan `66ae915fde2dc1aab68b55272a7107cb3e4b` |
-| Tindakan | Menerbitkan satu izin untuk layanan penanda tangan persiapan kedua, dengan masa berlaku eksplisit dan satu kali pemakaian |
-| Keputusan Owner | Owner menandatangani persetujuan persiapan melalui aplikasi dengan sesi pribadinya |
-
-Sebelum penerbitan, sistem rilis harus mencocokkan identitas layanan, lingkungan, job, permintaan, dan status delegasi. Delegasi berakhir setelah satu penerbitan, kedaluwarsa, atau pencabutan. Permintaan ulang untuk objek yang sama harus mengembalikan referensi penerbitan semula tanpa membuka kesempatan kedua. Persetujuan Owner, pengiriman job, dan konfirmasi hasil tetap memakai pemeriksaan masing-masing.
-
-Pengelola mencatat referensi delegasi dan referensi izin yang dapat diperiksa pada tiket #208. Verifikasi pada VPS harus membuktikan izin berlaku untuk #189. Nama peran dalam dokumen ini saja tidak mengaktifkan hak akses di VPS.
-
-### Registrasi dan penerbitan teknis di Core DEV
-
-Rute Core DEV berada di `/api/ai/agent-runtime/dev/task189-release`. Rute hanya tersedia pada host DEV saat pool database cocok dengan proyek CST-DEV dan pengelola rilis telah mengaktifkan `CST_DEV_TASK189_DELEGATION_ENABLED`. Migrasi manual `20261124_task189_release_delegation.sql` menyimpan riwayat dalam skema terpisah. Pengelola rilis memasang kunci publik Ed25519 otoritas independen pada konfigurasi terlindung `CST_DEV_TASK189_REGISTRAR_PUBLIC_DER_B64` (SPKI DER, base64). Kunci privat tetap pada otoritas tersebut.
+Rute berada di `/api/ai/agent-runtime/dev/task189-release`. Aktivasi memerlukan dua migrasi skema `20261124_task189_release_delegation.sql` dan `20261124_task189_owner_mandate.sql`, serta konfigurasi DEV terlindung `CST_DEV_TASK189_OWNER_USER_ID` yang berisi ID akun Core milik Owner yang sudah diverifikasi. Rute tetap nonaktif sampai pengelola mengatur `CST_DEV_TASK189_DELEGATION_ENABLED=true`. Sistem mencocokkan sesi, ID, jabatan, dan status aktif Owner. Sistem menyimpan identitas penerbit dan waktu penerbitan dalam riwayat yang terlindung.
 
 | Operasi | Pelaku dan hasil |
 | --- | --- |
-| `GET` | Admin internal membaca target, ID dan sidik kredensial aktif, serta catatan penerbitan. |
-| `POST /register` | Admin internal menyerahkan paket `{mandate, signature}` yang telah ditandatangani otoritas rilis. Mandat mencantumkan ID dan sidik kredensial, ID admin penukar, batas waktu UTC (epoch milidetik), dan seluruh target di atas. Format byte mengikuti urutan kolom dalam `verifyMandate`, dengan tanda tangan base64url tanpa padding. |
-| `POST /issue` | OpenClaw memakai kredensial layanannya sendiri dan mengirim `grantId`. Percobaan ulang atas mandat yang sama mengembalikan ID izin pertama. |
-| `POST /redeem` | Admin yang ditunjuk dalam mandat mengirim `grantId` dan `permitId`. Pencatatan pemakaian bersifat atomik dan hanya dapat berhasil sekali. |
-| `POST /revoke` | Admin internal mencabut `grantId`. Pencabutan permanen, termasuk untuk izin yang telah diterbitkan dan belum dipakai. |
+| `GET` | Owner membaca kesiapan dan riwayat mandat. |
+| `POST /register` | Owner mengirim `{grantId}` berupa UUID baru melalui sesi dan origin Core DEV. Server mengikat sesi Owner, target, dan kredensial OpenClaw. Gunakan UUID yang sama ketika mengulangi permintaan yang hasilnya belum diketahui. |
+| `POST /issue` | OpenClaw mengirim `{grantId}` dengan kredensial layanannya. |
+| `POST /redeem` | Owner yang sama mengirim `{grantId, permitId}`. |
+| `POST /revoke` | Owner mencabut `{grantId}`. |
 
-Masa berlaku maksimum izin tiga menit dan berakhir lebih awal bila mandat kedaluwarsa. Perubahan kredensial OpenClaw membatalkan kecocokan mandat. Menonaktifkan flag menghentikan seluruh rute dan mempertahankan riwayat. Pemasangan kode dan pencatatan izin pada Core belum membuka jendela VPS. Kontrol rilis independen pada VPS, relock, serta persetujuan Owner melalui Task Hub tetap diperlukan sebelum pengujian job dilanjutkan.
+Mandat berlaku 15 menit dan izin berlaku maksimal tiga menit. Pencabutan, perubahan kredensial dan penonaktifan akun Owner mencegah pemakaian berikutnya. Riwayat mandat lama dipertahankan dan izin yang sudah tercatat menghabiskan jatah satu kali. Kontrol penandatangan VPS dan keputusan eksekusi Task Hub tetap diverifikasi melalui layanan masing-masing.
 
 ## Pelaporan
 
