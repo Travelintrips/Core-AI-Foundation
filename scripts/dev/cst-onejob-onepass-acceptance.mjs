@@ -32,6 +32,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"stage_http_network_none_unix",argv:[node,"--test","scripts/dev/cst-onejob-stage-http-no-network.test.mjs"]},
   {id:"preapproval_broker_separation",argv:[node,"--test","scripts/dev/cst-onejob-preapproval-broker-separation.test.mjs"]},
   {id:"gate_a_preapproval_stage_broker_security",argv:["python3","-B","scripts/dev/test_cst_onejob_preapproval_stage_broker.py"]},
+  {id:"gate_a_held_open_frontend_eof_socket_regression",argv:["python3","-B","scripts/dev/test_cst_onejob_preapproval_stage_broker_real_eof.py"]},
   {id:"gate_a_nonroot_sigterm_socket_cleanup",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_broker_signal_qa.py"]},
   {id:"gate_a_runtime_directory_crash_recovery_contract",argv:[node,"--test","scripts/dev/cst-onejob-stage-broker-rundir-contract.test.mjs"]},
   {id:"gate_a_source_only_systemd_unit_preflight",argv:[node,"--test","scripts/dev/cst-onejob-gatea-broker-unit-candidate.test.mjs"]},
