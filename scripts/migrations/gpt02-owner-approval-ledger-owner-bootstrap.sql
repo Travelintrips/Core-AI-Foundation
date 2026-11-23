@@ -26,7 +26,8 @@ $bootstrap$;
 
 -- Creating a dedicated schema requires CREATE on the database. Keep this
 -- permission temporary and remove it in the finalization migration.
-GRANT CREATE ON DATABASE postgres TO gpt02_relock_owner_approval_owner;
+GRANT CREATE ON DATABASE postgres TO gpt02_relock_owner_approval_owner
+  GRANTED BY postgres;
 
 GRANT gpt02_relock_owner_approval_owner TO aicore_dev_runtime
-  WITH INHERIT FALSE, SET TRUE, ADMIN TRUE;
+  WITH INHERIT FALSE, SET TRUE, ADMIN TRUE GRANTED BY postgres;
