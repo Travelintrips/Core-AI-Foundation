@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Gate A relock-only Unix stop bridge. SOURCE CANDIDATE; NOT INSTALLED.
 
-The independent DynamicUser watchdog calls notify_stage_stop only AFTER its
-fixed-function DB relock and readback. systemd accepts an AF_UNIX socket and
+The independent DynamicUser watchdog calls notify_stage_stop BEFORE its
+fixed-function DB relock. A failed STOP must never prevent the SQL relock
+attempt. systemd accepts an AF_UNIX socket and
 runs the server as a narrowly sandboxed privileged one-shot. The receiver
 compares SO_PEERCRED PID with the current watchdog MainPID and stops ONLY the
 single fixed Gate A preapproval broker unit. Never starts broker, opens LOGIN,
@@ -18,7 +19,7 @@ SOCKET_PATH = "/run/cst-onejob-gatea-stage-stop.sock"
 WATCHDOG = "cst-onejob-gatea-watchdog.service"
 BROKER = "cst-onejob-gatea-preapproval-broker.service"
 BROKER_SOCKET = "/run/cst-onejob-stage-db/pg-pooler.sock"
-COMMAND = b"CST_GATEA_RELOCK_COMPLETE_V1\n"
+COMMAND = b"CST_GATEA_BEFORE_RELOCK_STOP_V1\n"
 ACK = (b"STAGE_BROKER_STOPPED_V1\n", b"STAGE_BROKER_ABSENT_V1\n")
 DENIED = "GATEA_STOP_BRIDGE_DENIED"
 
