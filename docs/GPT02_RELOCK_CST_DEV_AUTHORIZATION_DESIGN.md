@@ -147,3 +147,41 @@ Do not implement both paths partially. The design must also state whether `OnUni
 - Timer remains active/running/enabled; service is activating during recurring run.
 
 No role/password/timer/service changes are made by this design update. No signing, dispatch, or PROD capability is included.
+
+## 9. Preferred implementation for the requested target: one-shot finalizer (Option A)
+
+Because the requested final state explicitly requires the timer `inactive/disabled` and auditor `NOLOGIN` while retaining its password, **Option A is the preferred implementation**. Option B is deferred unless the Owner separately requests continued unattended monitoring after relock.
+
+### 9.1 Preconditions
+
+- Dedicated GPT02 Owner review/signature path is implemented, independently reviewed, and passes all negative tests.
+- A one-use Owner-signed manifest explicitly authorizes the exact one-shot sequence below; a broad delegation or GitHub comment is not sufficient.
+- Target is verified as Supabase CST-DEV project `xssrfshdrtdfupgqwfdw`, database `postgres`; VPS is `srv1792369`.
+- The four target roles are exactly present, no extra target is inferred, and credential metadata is verified as already specified.
+- Both writer and reader watchdogs are queried; open/expired row counts and the service's current in-flight state are captured. If unexpected rows exist, they must be handled only by the approved scoped cleanup contract, never by broad/manual SQL.
+- The supervisor's current 5-second cadence and the reason it was enabled are reviewed by the system owner. No run may overlap the one-shot finalizer.
+
+### 9.2 Approved one-shot order
+
+1. Obtain the exact Owner-signed manifest for `GPT02_RELOCK_CST_DEV` with a fresh one-use nonce and action digest. Validate delegation, signer identity, scope, expiry, replay state and DEV target server-side.
+2. Capture read-only preflight evidence. Confirm no active supervisor run, no in-flight cleanup, no open watchdog rows requiring unapproved work, and zero sessions for all four target roles. If any precondition fails, stop before mutation.
+3. Invoke only the explicitly approved existing cleanup lane once, if its preflight indicates eligible expired watchdog rows. Do not rerun automatically or use the 5-second timer as an executor. Require bounded counts and independent verification of each target.
+4. Disable the timer using the fixed unit identity only after verifying the current service run is finished and no dependent task requires another scheduled cleanup. Stop/disable is recorded as a separate enumerated operation inside the same signed manifest; no free-form shell command is accepted.
+5. Verify the timer is `inactive` and `disabled`, the service is idle/inactive, and no MainPID remains.
+6. Change only `dev_gpt02_relock_catalog_auditor` to `NOLOGIN`, connection limit `0`, preserving its existing password verifier (do not read or display it). This must be the final role mutation after all actions requiring that login are complete.
+7. Independently verify all four role invariants, session count 0, writer+reader watchdog open-row count 0, timer inactive/disabled, service idle, and encrypted credential metadata. The credential file remains present as protected custody material; no decryption is performed.
+8. Consume and close the one-shot authorization, persist a redacted receipt, and mark complete only if every postcondition passes. Any mismatch is `NO_GO/OWNER_REVIEW_REQUIRED`; do not automatically retry, rollback, restart, or re-enable the timer.
+
+### 9.3 Explicit prohibitions
+
+- Do not apply `NOLOGIN` to the auditor before the one-shot cleanup and timer shutdown are complete; the current supervisor needs that login to connect.
+- Do not leave the 5-second timer enabled after locking its service identity.
+- Do not change the evidence-role passwords except through their exact target state and a separately approved manifest.
+- Do not kill sessions as a shortcut; preflight must show zero sessions or stop for review.
+- Do not run the existing four SECURITY DEFINER functions manually outside the approved one-shot orchestrator.
+- Do not re-use Task #189 approval identifiers, nonce, signature, or release marker.
+- Do not make any PROD, signing, dispatch, signer-custody, or unrelated GPT02 Task183 changes.
+
+### 9.4 Completion definition
+
+The work is complete only when every target invariant is true simultaneously and independently verified after the service has been stopped and the auditor is NOLOGIN. A successful supervisor run or `roleLocked=true` for a separate Task183 lane is not completion evidence for the four target roles or timer final state.
