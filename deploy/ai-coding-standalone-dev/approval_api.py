@@ -61,6 +61,20 @@ def issue159_operator_identity(identity,connection):
          'enabled':True,'authMethod':'supabase_admin_session'}
 def issue159_identity_verifier(token,connection):
  return issue159_operator_identity(admin_identity(token,connection),connection)
+def issue159_chain_readiness_gate(record):
+ # DEV only: fail closed before a one-shot approval can be consumed.
+ if os.environ.get('GPT02_ISSUE159_AUTO_CHAIN_PREAPPROVAL_READY','false').strip().lower()!='true':
+  return False
+ if type(record.get('task_id')) is not int or record['task_id']<=139:
+  return False
+ if not Path('/run/gpt02-issuer-reader/reader.sock').is_socket():
+  return False
+ for path in ('/run/gpt02-issue159-sign-once-approval/approval-signature.json',
+              '/run/gpt02-issue159-sign-once-hub/hub-signature.json',
+              '/run/gpt02-issue159-sign-once-core/core-signature.json'):
+  if Path(path).exists():
+   return False
+ return True
 def load_issue159_pending_claims(actor_id):
  try:
   st=os.lstat(ISSUE159_PENDING_CLAIMS)
@@ -211,7 +225,8 @@ class Handler(BaseHTTPRequestHandler):
     with conn() as c:
      status,body=handle_issue159_approval_intent(
       self.headers.get('Authorization',''),raw,c,issue159_identity_verifier,
-      enabled=ISSUE159_APPROVAL_INTENT_ENABLED)
+      enabled=ISSUE159_APPROVAL_INTENT_ENABLED,
+      readiness_gate=issue159_chain_readiness_gate)
     if status==201 and isinstance(data,dict) and set(data)=={'claims'}:
      persist_issue159_approved_packet(data['claims'],body)
     return self.send(status,body)
