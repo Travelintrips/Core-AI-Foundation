@@ -134,7 +134,7 @@ describe("GPT02 relock Owner approval", () => {
     });
 
     expect(result.recorded).toBe(true);
-    expect(result.ownerIdentityCryptographicallyVerified).toBe(true);
+    expect(result.ownerSessionCryptographicallyVerified).toBe(true);
     expect(result.explicitOwnerDecision).toBe("APPROVE");
     expect(result.executionPermitted).toBe(false);
     expect(result.signingPermitted).toBe(false);

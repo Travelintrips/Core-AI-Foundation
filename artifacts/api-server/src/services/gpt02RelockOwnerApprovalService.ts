@@ -242,7 +242,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
   nowMs?: number;
 }): Promise<{
   recorded: true;
-  ownerIdentityCryptographicallyVerified: true;
+  ownerSessionCryptographicallyVerified: true;
   explicitOwnerDecision: "APPROVE";
   executionPermitted: false;
   signingPermitted: false;
@@ -322,7 +322,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
 
   return {
     recorded: true,
-    ownerIdentityCryptographicallyVerified: true,
+    ownerSessionCryptographicallyVerified: true,
     explicitOwnerDecision: "APPROVE",
     executionPermitted: false,
     signingPermitted: false,
