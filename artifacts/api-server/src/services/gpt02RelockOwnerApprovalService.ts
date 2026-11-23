@@ -202,14 +202,14 @@ export async function createGpt02RelockOwnerChallenge(input: {
   const nonceHash = sha256(nonce);
 
   await db.execute(sql`
-    UPDATE ai_platform.gpt02_relock_owner_approval_challenges
+    UPDATE gpt02_owner_approval.gpt02_relock_owner_approval_challenges
     SET status = 'EXPIRED'
     WHERE scope = ${GPT02_RELOCK_SCOPE}
       AND status = 'PENDING'
       AND expires_at <= NOW()
   `);
   await db.execute(sql`
-    INSERT INTO ai_platform.gpt02_relock_owner_approval_challenges (
+    INSERT INTO gpt02_owner_approval.gpt02_relock_owner_approval_challenges (
       id, scope, owner_subject, owner_auth_supabase_id, owner_email,
       worker_principal, environment, project_id, request_id,
       manifest_json, manifest_sha256, nonce_hash, issued_at, expires_at, status
@@ -263,7 +263,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
   const result = await db.execute(sql`
     SELECT id, owner_subject, owner_auth_supabase_id, owner_email, manifest_json,
            manifest_sha256, nonce_hash, expires_at, status
-    FROM ai_platform.gpt02_relock_owner_approval_challenges
+    FROM gpt02_owner_approval.gpt02_relock_owner_approval_challenges
     WHERE id = ${input.challengeId}::uuid
     LIMIT 1
   `);
@@ -292,7 +292,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
 
   await db.transaction(async (tx) => {
     const consumed = await tx.execute(sql`
-      UPDATE ai_platform.gpt02_relock_owner_approval_challenges
+      UPDATE gpt02_owner_approval.gpt02_relock_owner_approval_challenges
       SET status = 'CONSUMED', consumed_at = NOW()
       WHERE id = ${input.challengeId}::uuid
         AND status = 'PENDING'
@@ -307,7 +307,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
       deny("GPT02_OWNER_APPROVAL_NONCE_REPLAY_OR_RACE");
     }
     await tx.execute(sql`
-      INSERT INTO ai_platform.gpt02_relock_owner_approval_decisions (
+      INSERT INTO gpt02_owner_approval.gpt02_relock_owner_approval_decisions (
         challenge_id, scope, owner_subject, owner_auth_supabase_id, owner_email,
         worker_principal, manifest_sha256, signed_session_sha256, approval_method,
         decision, decided_at

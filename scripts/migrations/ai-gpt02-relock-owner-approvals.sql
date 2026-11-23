@@ -1,8 +1,25 @@
--- GPT02 CST-DEV: dedicated Owner-signed, one-use relock approval ledger.
--- This migration is NOT applied by the application at runtime. Deploy only
--- through the separately reviewed DEV migration gate after security review.
+-- GPT02 CST-DEV Owner approval ledger.
+-- Apply using the Supabase DEV postgres migration session after the bootstrap
+-- step has temporarily granted that session SET ROLE through the runtime
+-- grantor. The NOLOGIN role owns this private schema. Runtime gets only the
+-- RLS-scoped DML below; both temporary role memberships are removed before
+-- the migration finishes / immediately after it completes.
 
-CREATE TABLE IF NOT EXISTS ai_platform.gpt02_relock_owner_approval_challenges (
+SET ROLE gpt02_relock_owner_approval_owner;
+
+DO $schema_guard$
+BEGIN
+  IF current_user <> 'gpt02_relock_owner_approval_owner' THEN
+    RAISE EXCEPTION 'GPT02_LEDGER_MIGRATION_REQUIRES_DEDICATED_NOLOGIN_OWNER';
+  END IF;
+END
+$schema_guard$;
+
+CREATE SCHEMA IF NOT EXISTS gpt02_owner_approval;
+REVOKE ALL ON SCHEMA gpt02_owner_approval FROM PUBLIC, anon, authenticated, service_role, aicore_dev_runtime;
+GRANT USAGE ON SCHEMA gpt02_owner_approval TO aicore_dev_runtime;
+
+CREATE TABLE IF NOT EXISTS gpt02_owner_approval.gpt02_relock_owner_approval_challenges (
   id UUID PRIMARY KEY,
   scope TEXT NOT NULL CHECK (scope = 'GPT02_RELOCK_CST_DEV'),
   owner_subject TEXT NOT NULL,
@@ -34,13 +51,13 @@ CREATE TABLE IF NOT EXISTS ai_platform.gpt02_relock_owner_approval_challenges (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS gpt02_relock_one_pending_owner_challenge_uidx
-  ON ai_platform.gpt02_relock_owner_approval_challenges(scope)
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges(scope)
   WHERE status = 'PENDING';
 CREATE INDEX IF NOT EXISTS gpt02_relock_owner_challenges_expiry_idx
-  ON ai_platform.gpt02_relock_owner_approval_challenges(status, expires_at);
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges(status, expires_at);
 
-CREATE TABLE IF NOT EXISTS ai_platform.gpt02_relock_owner_approval_decisions (
-  challenge_id UUID PRIMARY KEY REFERENCES ai_platform.gpt02_relock_owner_approval_challenges(id),
+CREATE TABLE IF NOT EXISTS gpt02_owner_approval.gpt02_relock_owner_approval_decisions (
+  challenge_id UUID PRIMARY KEY REFERENCES gpt02_owner_approval.gpt02_relock_owner_approval_challenges(id),
   scope TEXT NOT NULL CHECK (scope = 'GPT02_RELOCK_CST_DEV'),
   owner_subject TEXT NOT NULL,
   owner_auth_supabase_id UUID NOT NULL,
@@ -53,8 +70,8 @@ CREATE TABLE IF NOT EXISTS ai_platform.gpt02_relock_owner_approval_decisions (
   decided_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE OR REPLACE FUNCTION ai_platform.gpt02_relock_approval_challenge_guard()
-RETURNS TRIGGER LANGUAGE plpgsql AS $guard$
+CREATE OR REPLACE FUNCTION gpt02_owner_approval.gpt02_relock_approval_challenge_guard()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog, gpt02_owner_approval AS $guard$
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'GPT02_RELOCK_CHALLENGE_DELETE_DENIED';
@@ -89,20 +106,21 @@ BEGIN
 END
 $guard$;
 
-DROP TRIGGER IF EXISTS gpt02_relock_owner_challenge_immutable ON ai_platform.gpt02_relock_owner_approval_challenges;
+DROP TRIGGER IF EXISTS gpt02_relock_owner_challenge_immutable
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges;
 CREATE TRIGGER gpt02_relock_owner_challenge_immutable
-  BEFORE UPDATE OR DELETE ON ai_platform.gpt02_relock_owner_approval_challenges
-  FOR EACH ROW EXECUTE FUNCTION ai_platform.gpt02_relock_approval_challenge_guard();
+  BEFORE UPDATE OR DELETE ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges
+  FOR EACH ROW EXECUTE FUNCTION gpt02_owner_approval.gpt02_relock_approval_challenge_guard();
 
-CREATE OR REPLACE FUNCTION ai_platform.gpt02_relock_approval_decision_guard()
-RETURNS TRIGGER LANGUAGE plpgsql AS $guard$
-DECLARE challenge ai_platform.gpt02_relock_owner_approval_challenges%ROWTYPE;
+CREATE OR REPLACE FUNCTION gpt02_owner_approval.gpt02_relock_approval_decision_guard()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog, gpt02_owner_approval AS $guard$
+DECLARE challenge gpt02_owner_approval.gpt02_relock_owner_approval_challenges%ROWTYPE;
 BEGIN
   IF TG_OP <> 'INSERT' THEN
     RAISE EXCEPTION 'GPT02_RELOCK_APPROVAL_DECISION_APPEND_ONLY';
   END IF;
   SELECT * INTO challenge
-    FROM ai_platform.gpt02_relock_owner_approval_challenges
+    FROM gpt02_owner_approval.gpt02_relock_owner_approval_challenges
    WHERE id = NEW.challenge_id
    FOR KEY SHARE;
   IF NOT FOUND OR challenge.status <> 'CONSUMED'
@@ -123,15 +141,55 @@ BEGIN
 END
 $guard$;
 
-DROP TRIGGER IF EXISTS gpt02_relock_owner_decision_guard ON ai_platform.gpt02_relock_owner_approval_decisions;
+DROP TRIGGER IF EXISTS gpt02_relock_owner_decision_guard
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions;
 CREATE TRIGGER gpt02_relock_owner_decision_guard
-  BEFORE INSERT OR UPDATE OR DELETE ON ai_platform.gpt02_relock_owner_approval_decisions
-  FOR EACH ROW EXECUTE FUNCTION ai_platform.gpt02_relock_approval_decision_guard();
+  BEFORE INSERT OR UPDATE OR DELETE ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions
+  FOR EACH ROW EXECUTE FUNCTION gpt02_owner_approval.gpt02_relock_approval_decision_guard();
 
-REVOKE ALL ON ai_platform.gpt02_relock_owner_approval_challenges FROM PUBLIC;
-REVOKE ALL ON ai_platform.gpt02_relock_owner_approval_decisions FROM PUBLIC;
+-- The ledger schema is not exposed through the Data API. RLS adds a second
+-- boundary for the application runtime, even if another grant is introduced.
+ALTER TABLE gpt02_owner_approval.gpt02_relock_owner_approval_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gpt02_owner_approval.gpt02_relock_owner_approval_challenges FORCE ROW LEVEL SECURITY;
+ALTER TABLE gpt02_owner_approval.gpt02_relock_owner_approval_decisions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gpt02_owner_approval.gpt02_relock_owner_approval_decisions FORCE ROW LEVEL SECURITY;
 
--- Trigger functions are invoked only by their attached triggers. Do not leave
--- the default PUBLIC EXECUTE privilege on either implementation function.
-REVOKE ALL ON FUNCTION ai_platform.gpt02_relock_approval_challenge_guard() FROM PUBLIC;
-REVOKE ALL ON FUNCTION ai_platform.gpt02_relock_approval_decision_guard() FROM PUBLIC;
+DROP POLICY IF EXISTS gpt02_owner_challenge_select_runtime ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges;
+CREATE POLICY gpt02_owner_challenge_select_runtime
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges
+  FOR SELECT TO aicore_dev_runtime
+  USING (scope = 'GPT02_RELOCK_CST_DEV' AND environment = 'DEV' AND project_id = 'xssrfshdrtdfupgqwfdw' AND worker_principal = 'openclaw-vps-main');
+DROP POLICY IF EXISTS gpt02_owner_challenge_insert_runtime ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges;
+CREATE POLICY gpt02_owner_challenge_insert_runtime
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges
+  FOR INSERT TO aicore_dev_runtime
+  WITH CHECK (scope = 'GPT02_RELOCK_CST_DEV' AND environment = 'DEV' AND project_id = 'xssrfshdrtdfupgqwfdw' AND worker_principal = 'openclaw-vps-main' AND status = 'PENDING');
+DROP POLICY IF EXISTS gpt02_owner_challenge_update_runtime ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges;
+CREATE POLICY gpt02_owner_challenge_update_runtime
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges
+  FOR UPDATE TO aicore_dev_runtime
+  USING (scope = 'GPT02_RELOCK_CST_DEV' AND status = 'PENDING')
+  WITH CHECK (scope = 'GPT02_RELOCK_CST_DEV' AND status IN ('CONSUMED','EXPIRED'));
+
+DROP POLICY IF EXISTS gpt02_owner_decision_select_runtime ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions;
+CREATE POLICY gpt02_owner_decision_select_runtime
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions
+  FOR SELECT TO aicore_dev_runtime
+  USING (scope = 'GPT02_RELOCK_CST_DEV' AND worker_principal = 'openclaw-vps-main');
+DROP POLICY IF EXISTS gpt02_owner_decision_insert_runtime ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions;
+CREATE POLICY gpt02_owner_decision_insert_runtime
+  ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions
+  FOR INSERT TO aicore_dev_runtime
+  WITH CHECK (scope = 'GPT02_RELOCK_CST_DEV' AND worker_principal = 'openclaw-vps-main' AND decision = 'APPROVED' AND approval_method = 'FRESH_CST_HUB_SIGNED_GOOGLE_OWNER_SESSION');
+
+REVOKE ALL ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION gpt02_owner_approval.gpt02_relock_approval_challenge_guard() FROM PUBLIC, anon, authenticated, service_role, aicore_dev_runtime;
+REVOKE ALL ON FUNCTION gpt02_owner_approval.gpt02_relock_approval_decision_guard() FROM PUBLIC, anon, authenticated, service_role, aicore_dev_runtime;
+GRANT SELECT, INSERT, UPDATE ON gpt02_owner_approval.gpt02_relock_owner_approval_challenges TO aicore_dev_runtime;
+GRANT SELECT, INSERT ON gpt02_owner_approval.gpt02_relock_owner_approval_decisions TO aicore_dev_runtime;
+
+RESET ROLE;
+-- The runtime grantor must first revoke its temporary SET ROLE membership to
+-- the postgres migration session. The separate finalization migration then
+-- removes this bootstrap membership from aicore_dev_runtime.
