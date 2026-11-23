@@ -33,6 +33,9 @@ test("UI never auto-approves, never asks for a new login, and is hidden outside 
  assert.match(ui,/APPROVE_ONE_NEW_CST_DEV_MODEL_JOB/);
  assert.match(ui,/operationsRootFingerprint:readiness.data\?\.operationsRootCandidateSha256/);
  assert.match(ui,/onejob-ops-candidate-fingerprint/);
+ assert.match(ui,/READONLY_PREVIEW_ONLY/);
+ assert.match(ui,/data-testid="onejob-preview-only"/);
+ assert.match(ui,/Ini halaman persetujuan yang benar, tetapi masih baca-saja/);
  assert.match(ui,/setSubmitted\(true\)/);
  assert.doesNotMatch(ui,/request-magic-link|type="password"|setInterval|autoRetry/i);
  assert.match(layout,/nav-dev-onejob/);
