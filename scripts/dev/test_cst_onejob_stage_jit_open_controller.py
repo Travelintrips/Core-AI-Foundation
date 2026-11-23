@@ -39,6 +39,7 @@ class JitContract(unittest.TestCase):
         self.manifest={"sourceSha":"a"*40,"project":j.PROJECT,"nonce":"e"*32,
                        "expiresAt":(self.now+timedelta(minutes=5)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
         self.db=FakeAdmin()
+        self.db.db_
     def reserve_nonce(self,project,nonce,source,deadline):
         assert project==j.PROJECT and source=="a"*40
         if nonce in self.nonces:return False
@@ -47,7 +48,7 @@ class JitContract(unittest.TestCase):
 
     def invoke(self, action=lambda:None, manifest=None, reservation=None):
         reserve=self.reserve_nonce if reservation is None else reservation
-        self.db.db_now=self.now
+        self.db.db_
         with patch.object(j,"read_signed_manifest",return_value=manifest or self.manifest) as verified:
             out=j.run_signed_one_stage(
                 self.db.query,action,reserve_nonce=reserve,acquire_single_flight=self.stage_lock,envelope_path="SYNTHETIC",
@@ -71,10 +72,11 @@ class JitContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"DISPOSABLE_QA_ERROR"):
             self.invoke(fail)
         self.assertEqual((self.db.enabled,self.db.sessions),(0,0))
-    def test_wrong_source_denied_before_sql(self):
+    def test_wrong_source_denied_before_opening_sql(self):
         with self.assertRaisesRegex(j.JitStageDenied,"MISMATCH"):
             self.invoke(manifest={**self.manifest,"sourceSha":"f"*40})
-        self.assertEqual(self.db.commands,[])
+        self.assertEqual(self.db.commands,[CLOCK_SQL])
+        self.assertNotIn("ALTER ROLE",str(self.db.commands))
     def test_session_already_open_denied(self):
         self.db.sessions=1
         with self.assertRaisesRegex(j.JitStageDenied,"CONTAINED"):
@@ -89,7 +91,8 @@ class JitContract(unittest.TestCase):
     def test_expired_lease_denied(self):
         with self.assertRaisesRegex(j.JitStageDenied,"EXPIRED"):
             self.invoke(manifest={**self.manifest,"expiresAt":self.now.isoformat(timespec="milliseconds").replace("+00:00","Z")})
-        self.assertEqual(self.db.commands,[])
+        self.assertEqual(self.db.commands,[CLOCK_SQL])
+        self.assertNotIn("ALTER ROLE",str(self.db.commands))
     def test_source_missing_rejected_without_permit_read(self):
         with patch.object(j,"read_signed_manifest") as verify:
             with self.assertRaisesRegex(j.JitStageDenied,"SOURCE_PIN_REQUIRED"):
@@ -161,7 +164,7 @@ class JitContract(unittest.TestCase):
                 j.run_signed_one_stage(self.db.query,lambda:None,
                     reserve_nonce=self.reserve_nonce,acquire_single_flight=self.stage_lock,envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                     approved_public_pin="b"*64,approved_source_sha="a"*40,
-                    now=self.now,relock=fail_relock)
+                    ,relock=fail_relock)
 
     def test_database_clock_is_used_before_signed_permit(self):
         self.invoke()
@@ -170,7 +173,7 @@ class JitContract(unittest.TestCase):
         from contextlib import contextmanager
         @contextmanager
         def expires_during_lock():
-            self.db.db_now=self.now+timedelta(minutes=6)
+            self.db.db_+timedelta(minutes=6)
             yield
         with patch.object(j,"read_signed_manifest",return_value=self.manifest):
             with self.assertRaisesRegex(j.JitStageDenied,"EXPIRED_OR_UNBOUNDED"):
