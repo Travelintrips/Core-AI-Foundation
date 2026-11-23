@@ -86,7 +86,7 @@ class Flight(unittest.TestCase):
                         acquire_single_flight=self.acquire,
                         envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                         approved_public_pin="b"*64,
-                        approved_source_sha="a"*40,now=now)
+                        approved_source_sha="a"*40)
             self.assertEqual(operations,[])
         finally:
             release.set()
