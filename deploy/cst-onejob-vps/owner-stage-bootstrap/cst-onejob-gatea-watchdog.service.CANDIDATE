@@ -25,6 +25,8 @@ Type=simple
 # Verified with transient systemd synthetic credential, not a real DB key.
 DynamicUser=yes
 User=cst-onejob-gatea-watchdog
+# Provision this fixed local group only after independent DEV release review.
+SupplementaryGroups=cst-onejob-gatea-stop
 UMask=0077
 WorkingDirectory=/opt/cst-onejob-dev/bootstrap
 RuntimeDirectory=cst-onejob-gatea-watchdog
