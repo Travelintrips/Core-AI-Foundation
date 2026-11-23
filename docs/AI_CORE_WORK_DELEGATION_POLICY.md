@@ -16,6 +16,22 @@
 5. Uji CI dan verifikasi hasil deployment sebelum melaporkan selesai. Perintah berhasil diterima bukan bukti bahwa pekerjaan selesai.
 6. Saat suatu CWS dibatalkan karena coding dipindahkan ke GitHub, pastikan autonomous disabled dan hindari retry atau membuat CWS duplikat.
 
+## Delegasi penerbit rilis CST-DEV untuk Task #189
+
+Owner menunjuk akun layanan `openclaw-vps-dev-consumer` sebagai calon penerbit satu izin rilis untuk mengaktifkan layanan penanda tangan persiapan kedua GPT02. Permintaan akses tercatat di [tiket operasional #208](https://github.com/Travelintrips/AI-Task-Hub/issues/208). Pengelola rilis CST-DEV mengaktifkan delegasi melalui mekanisme perubahan akses yang memverifikasi identitas penerima dan merekam perubahan. Sampai ada bukti aktivasi, statusnya tetap diajukan.
+
+| Batas delegasi | Nilai |
+| --- | --- |
+| Lingkungan dan tenant | CST-DEV, perusahaan `default` |
+| Penerima | Identitas layanan DEV terautentikasi `openclaw-vps-dev-consumer` |
+| Objek | Task Hub #189, job `816767f4-4264-4931-9a82-3d9496d3da3c`, permintaan pemulihan `66ae915fde2dc1aab68b55272a7107cb3e4b` |
+| Tindakan | Menerbitkan satu izin untuk layanan penanda tangan persiapan kedua, dengan masa berlaku eksplisit dan satu kali pemakaian |
+| Keputusan Owner | Owner menandatangani persetujuan persiapan melalui aplikasi dengan sesi pribadinya |
+
+Sebelum penerbitan, sistem rilis harus mencocokkan identitas layanan, lingkungan, job, permintaan, dan status delegasi. Delegasi berakhir setelah satu penerbitan, kedaluwarsa, atau pencabutan. Permintaan ulang untuk objek yang sama harus mengembalikan referensi penerbitan semula tanpa membuka kesempatan kedua. Persetujuan Owner, pengiriman job, dan konfirmasi hasil tetap memakai pemeriksaan masing-masing.
+
+Pengelola mencatat referensi delegasi dan referensi izin yang dapat diperiksa pada tiket #208. Verifikasi pada VPS harus membuktikan izin berlaku untuk #189. Nama peran dalam dokumen ini saja tidak mengaktifkan hak akses di VPS.
+
 ## Pelaporan
 
 Laporan ringkas berisi perubahan konkret, tautan commit/PR atau bukti operasi, CI, hasil deployment, dan blocker yang belum selesai. Jangan mengubah status menjadi COMPLETED tanpa bukti terminal yang sah.
