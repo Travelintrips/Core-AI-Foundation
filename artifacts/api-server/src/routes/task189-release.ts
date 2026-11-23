@@ -9,7 +9,7 @@ import { task189Release, type ReleaseAction } from "../services/task189ReleaseRe
 const router = Router();
 const origin = "https://dev.cstlogistic.co.id";
 const root = "/ai/agent-runtime/dev/task189-release";
-const id = z.uuid().transform(value => value.toLowerCase());
+const id = z.string().uuid().transform(value => value.toLowerCase());
 const grantIdBody = z.object({ grantId: id }).strict();
 const redeemBody = grantIdBody.extend({ permitId: id }).strict();
 const admin = [requireAuth, requireInternalRole("owner"), requirePasswordChanged];
