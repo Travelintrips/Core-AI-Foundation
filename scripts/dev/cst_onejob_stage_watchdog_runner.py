@@ -67,7 +67,34 @@ def relock_exact(query):
     return {"status":"PASS","roleLogin":False,
             "residualRoleSessions":0,"operationalPermission":False}
 
-def run_watchdog_check(query, source_sha):
+def close_transport_before_relock(query, close_stage_transport):
+    """Fail closed: request exact Stage-A transport closure BEFORE DB relock.
+
+    A failed closure must NEVER prevent the database relock attempt.
+    A closure can be considered confirmed only with an exact local stop
+    readback; do not allow caller-provided stage role names or SQL.
+    The injection point requires a separately approved stop-only bridge.
+    """
+    stop_ok = False
+    try:
+        receipt = close_stage_transport()
+        stop_ok = (
+            isinstance(receipt, dict) and
+            receipt.get("service") == "cst-onejob-gatea-preapproval-broker.service" and
+            receipt.get("active") is False and
+            receipt.get("socketPresent") is False and
+            set(receipt) == {"service", "active", "socketPresent"}
+        )
+    except Exception:
+        stop_ok = False
+    # Even if the stop bridge failed, still lock the stage role first.
+    database_result = relock_exact(query)
+    if not stop_ok:
+        raise WatchdogRunnerDenied("FRONTEND_TRANSPORT_STOP_NOT_VERIFIED")
+    return database_result
+
+
+def run_watchdog_check(query, source_sha, *, close_stage_transport=None):
     """One independent tick; database UTC controls all time comparisons.
 
     The existing check_once performs atomic relock readback on unsafe state.
@@ -85,7 +112,8 @@ def run_watchdog_check(query, source_sha):
         scoped_query,
         lambda: read_project_lease(scoped_query),
         now=now, approved_source_sha=source_sha,
-        relock=relock_exact,
+        relock=(relock_exact if close_stage_transport is None else
+                lambda q: close_transport_before_relock(q, close_stage_transport)),
     )
 
 def _read_regular(path, maximum, *, owner=None):
@@ -188,7 +216,7 @@ def query_with_connection(conn, statement):
         cursor.execute(statement)
         return list(cursor.fetchall()) if cursor.description else []
 
-def run_loop(source_sha, dsn, ca_path, *, connect=_connect, stop=None):
+def run_loop(source_sha, dsn, ca_path, *, connect=_connect, stop=None, close_stage_transport=None):
     """Continue across successful observations; DB errors cause systemd retry."""
     stop=stop if stop is not None else threading.Event()
     validate_source_sha(source_sha)
@@ -196,14 +224,16 @@ def run_loop(source_sha, dsn, ca_path, *, connect=_connect, stop=None):
         while not stop.is_set():
             with connect(dsn, ca_path) as conn:
                 run_watchdog_check(lambda statement: query_with_connection(conn,statement),
-                                   source_sha)
+                                   source_sha, close_stage_transport=close_stage_transport)
             stop.wait(INTERVAL_SECONDS)
     finally:
         # A deliberate systemd stop is NOT allowed to strand an open stage
         # LOGIN. Attempt a fresh, fixed-query administrative relock even if
         # a previous observation or connection failed. Never hide failures.
         with connect(dsn, ca_path) as conn:
-            relock_exact(lambda statement: query_with_connection(conn,statement))
+            relock_callback=(relock_exact if close_stage_transport is None else
+                            lambda q: close_transport_before_relock(q,close_stage_transport))
+            relock_callback(lambda statement: query_with_connection(conn,statement))
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description="CST-DEV relock-only watchdog")
