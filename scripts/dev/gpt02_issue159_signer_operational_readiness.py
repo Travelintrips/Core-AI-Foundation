@@ -178,7 +178,7 @@ def hub_core_reader_runtime_operational():
                 or stat.S_IMODE(endpoint.st_mode) != 0o660):
             return False
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client.settimeout(8)
+        client.settimeout(12)
         try:
             client.connect(socket_path)
             client.sendall(
