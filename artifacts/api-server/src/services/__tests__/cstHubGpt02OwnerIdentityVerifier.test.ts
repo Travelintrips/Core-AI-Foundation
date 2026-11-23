@@ -147,6 +147,12 @@ describe("CST Hub GPT02 Owner identity adapter", () => {
       .rejects.toThrow("GPT02_HUB_OWNER_VERIFIER_RESPONSE_TOO_LARGE");
   });
 
+  it("does not misclassify a retired Owner-link verifier as an ineligible Owner", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 410));
+    await expect(verifyCstHubGpt02OwnerLink(owner, signedHubToken()))
+      .rejects.toThrow("GPT02_HUB_OWNER_LINK_VERIFIER_RETIRED");
+  });
+
   it("fails closed on verifier unavailability or rejected Hub sessions", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({}, 503));
     await expect(verifyCstHubGpt02OwnerSession({ bearerToken: signedHubToken() }))

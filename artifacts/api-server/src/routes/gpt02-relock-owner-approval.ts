@@ -153,7 +153,8 @@ export function createGpt02RelockOwnerApprovalRouter(
       const code = safeErrorCode(error, "GPT02_OWNER_APPROVAL_FAILED");
       const status = code.includes("NOT_FOUND") ? 404 :
         code.includes("EXPIRED") || code.includes("REPLAY") || code.includes("MISMATCH") || code.includes("NOT_PENDING") ? 409 :
-        code.includes("TRUST") || code.includes("KEY") || code.includes("CUSTODY") || code.includes("FINGERPRINT") ? 503 :
+        code.includes("VERIFIER_UNAVAILABLE") || code.includes("VERIFIER_RETIRED") ||
+          code.includes("TRUST") || code.includes("KEY") || code.includes("CUSTODY") || code.includes("FINGERPRINT") ? 503 :
         code.includes("OWNER") ? 403 : 503;
       reject(res, status, code);
     }

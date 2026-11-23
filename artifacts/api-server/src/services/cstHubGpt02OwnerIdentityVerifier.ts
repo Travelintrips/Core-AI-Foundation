@@ -89,6 +89,9 @@ async function getHubJson(path: string, bearerToken: string): Promise<Record<str
     if (response!.status === 401 || response!.status === 403) {
       deny("GPT02_HUB_OWNER_SESSION_OR_IDENTITY_REJECTED");
     }
+    if (response!.status === 410) {
+      deny("GPT02_HUB_OWNER_LINK_VERIFIER_RETIRED");
+    }
     deny("GPT02_HUB_OWNER_VERIFIER_UNAVAILABLE");
   }
   const contentType = response!.headers.get("content-type") ?? "";
@@ -171,7 +174,10 @@ export async function verifyCstHubGpt02OwnerLink(
       identity.issuerAuthorized === false &&
       identity.dispatchPermitted === false &&
       identity.readOnly === true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof Error && error.message === "GPT02_HUB_OWNER_SESSION_OR_IDENTITY_REJECTED") {
+      return false;
+    }
+    throw error;
   }
 }
