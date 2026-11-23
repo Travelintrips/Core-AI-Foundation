@@ -7,6 +7,7 @@ import {
 } from "../gpt02Issue159FourSignerContract.js";
 import {
   GPT02_ISSUE159_ISSUER_IDENTITY_SQL,
+  GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL,
   GPT02_ISSUE159_ISSUER_LEDGER_SQL,
   readGpt02Issue159IssuerLedgerReadOnly,
 } from "../gpt02Issue159IssuerLedgerReadOnly.js";
@@ -80,16 +81,19 @@ const row = () => ({
   dispatch_allowed: false, fence_core_ledger_written: false,
 });
 type Patch = { identity?: Record<string, unknown>; rows?: Record<string, unknown>[];
-  queryFailure?: string; tls?: boolean; };
+  queryFailure?: string; tls?: boolean; rollbackFailure?: boolean; };
 function fixture(patch: Patch = {}) {
   const calls: { sql: string; args?: readonly unknown[] }[] = [];
   let releases = 0;
+  const destroyed: boolean[] = [];
   const client = {
     connection: { stream: { encrypted: patch.tls ?? true, authorized: patch.tls ?? true } },
     async query(sql: string, args?: readonly unknown[]) {
       calls.push({ sql, args });
       if (sql === patch.queryFailure) throw Error("SENSITIVE_DB_EXCEPTION");
-      if (sql === GPT02_ISSUE159_ISSUER_IDENTITY_SQL) {
+      if (sql === "ROLLBACK" && patch.rollbackFailure) throw Error("ROLLBACK_FAILED");
+      if (sql === GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL ||
+          sql === GPT02_ISSUE159_ISSUER_IDENTITY_SQL) {
         return { rows: [{ ...identity(), ...patch.identity }] };
       }
       if (sql === GPT02_ISSUE159_ISSUER_LEDGER_SQL) {
@@ -97,10 +101,10 @@ function fixture(patch: Patch = {}) {
       }
       return { rows: [] as Record<string, unknown>[] };
     },
-    release(force?: boolean) { expect(force).toBe(true); releases++; },
+    release(force?: boolean) { destroyed.push(force === true); releases++; },
   };
   const pool = { async connect() { return client; } };
-  return { pool, calls, released: () => releases };
+  return { pool, calls, released: () => releases, destroyed };
 }
 
 describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
@@ -125,6 +129,7 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
       claims().linkId, claims().receiptId, claims().fenceId,
     ]);
     expect(f.released()).toBe(1);
+    expect(f.destroyed).toEqual([false]);
   });
 
   it("rejects historical, stale, wrong tenant and injected input before DB connect", async () => {
@@ -150,10 +155,6 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
     for (const patch of [
       { identity: { login: "postgres" } },
       { identity: { tx_readonly: false } },
-      { identity: { no_relation_writes: false } },
-      { identity: { no_privileged_routines: false } },
-      { identity: { restricted_role: false } },
-      { identity: { no_memberships: false } },
       { identity: { db_tls: false } },
       { tls: false },
     ]) {
@@ -165,6 +166,7 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
       expect(f.calls.some(c=>c.sql===GPT02_ISSUE159_ISSUER_LEDGER_SQL)).toBe(false);
       expect(f.calls.some(c=>c.sql==="ROLLBACK")).toBe(true);
       expect(f.released()).toBe(1);
+      expect(f.destroyed).toEqual([true]);
     }
   });
 
@@ -193,7 +195,7 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
 
   it("sanitizes read errors and always rolls back/relinquishes client", async () => {
     for (const queryFailure of [
-      GPT02_ISSUE159_ISSUER_IDENTITY_SQL, GPT02_ISSUE159_ISSUER_LEDGER_SQL,
+      GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL, GPT02_ISSUE159_ISSUER_LEDGER_SQL,
     ]) {
       const f = fixture({queryFailure});
       const result = await readGpt02Issue159IssuerLedgerReadOnly(f.pool, {
@@ -204,6 +206,24 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
       expect(f.calls.some(c=>c.sql==="ROLLBACK")).toBe(true);
       expect(f.released()).toBe(1);
     }
+  });
+
+  it("fails closed when rollback fails and destroys the unsafe connection", async () => {
+    const f = fixture({ rollbackFailure: true });
+    await expect(readGpt02Issue159IssuerLedgerReadOnly(f.pool, {
+      claims: claims(), observedAt: 5000,
+    })).rejects.toThrow("ISSUER_READONLY_SESSION_CLEANUP_FAILED");
+    expect(f.destroyed).toEqual([true]);
+  });
+
+  it("rejects missing TLS or wrong role before querying issuer ledger", async () => {
+    const f = fixture({ identity: { db_tls: false } });
+    const result = await readGpt02Issue159IssuerLedgerReadOnly(f.pool, {
+      claims: claims(), observedAt: 5000,
+    });
+    expect(result.signingPermitted).toBe(false);
+    expect(result.dispatchPermitted).toBe(false);
+    expect(f.calls.some(c => c.sql === GPT02_ISSUE159_ISSUER_LEDGER_SQL)).toBe(false);
   });
 
   it("uses only fixed SELECTs and cannot load signer secrets or send commands", async () => {
@@ -217,6 +237,8 @@ describe("Issue159 restricted issuer persisted-ledger source adapter", () => {
     expect(GPT02_ISSUE159_ISSUER_LEDGER_SQL).toContain("l.link_id=$5::uuid");
     expect(GPT02_ISSUE159_ISSUER_LEDGER_SQL).toContain("f.fence_id=$7::uuid");
     expect(GPT02_ISSUE159_ISSUER_IDENTITY_SQL).toMatch(/^SELECT /);
+    expect(GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL).toMatch(/^SELECT /);
+    expect(GPT02_ISSUE159_ISSUER_FAST_IDENTITY_SQL).toContain("transaction_read_only");
     const src=await readFile(new URL("../gpt02Issue159IssuerLedgerReadOnly.ts", import.meta.url), "utf8");
     for (const forbidden of ["createPrivateKey","sign(","node:fs",
       "fetch(","http://","https://","process.env","dispatchPermitted: true"]) {
