@@ -39,7 +39,7 @@ class JitContract(unittest.TestCase):
         self.manifest={"sourceSha":"a"*40,"project":j.PROJECT,"nonce":"e"*32,
                        "expiresAt":(self.now+timedelta(minutes=5)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
         self.db=FakeAdmin()
-        self.db.db_
+        self.db.db_now=self.now
     def reserve_nonce(self,project,nonce,source,deadline):
         assert project==j.PROJECT and source=="a"*40
         if nonce in self.nonces:return False
@@ -48,7 +48,7 @@ class JitContract(unittest.TestCase):
 
     def invoke(self, action=lambda:None, manifest=None, reservation=None):
         reserve=self.reserve_nonce if reservation is None else reservation
-        self.db.db_
+        self.db.db_now=self.now
         with patch.object(j,"read_signed_manifest",return_value=manifest or self.manifest) as verified:
             out=j.run_signed_one_stage(
                 self.db.query,action,reserve_nonce=reserve,acquire_single_flight=self.stage_lock,envelope_path="SYNTHETIC",
@@ -173,7 +173,7 @@ class JitContract(unittest.TestCase):
         from contextlib import contextmanager
         @contextmanager
         def expires_during_lock():
-            self.db.db_+timedelta(minutes=6)
+            self.db.db_now=self.now+timedelta(minutes=6)
             yield
         with patch.object(j,"read_signed_manifest",return_value=self.manifest):
             with self.assertRaisesRegex(j.JitStageDenied,"EXPIRED_OR_UNBOUNDED"):
