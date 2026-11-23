@@ -1,5 +1,6 @@
 import hashlib,hmac,json,os,sqlite3,stat,time,uuid
 from datetime import datetime,timezone
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 from pathlib import Path
@@ -283,6 +284,41 @@ def conn():
  c.execute('CREATE TABLE IF NOT EXISTS admin_identities (user_id TEXT PRIMARY KEY,role TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 0)')
  c.commit()
  return c
+
+TASK189_BASE = '/api/ai-tasks/189/gpt02-owner-'
+TASK189_QUERY = '?companyId=default'
+TASK189_FINAL = TASK189_BASE + 'approval' + TASK189_QUERY
+TASK189_READINESS = TASK189_BASE + 'approval-readiness' + TASK189_QUERY
+TASK189_HANDLER_SHA256 = '55a52ef72071406a767f8d60687fa393450d0ea85ce2c0280b885c1060c49fb0'
+
+
+@lru_cache(maxsize=1)
+def task189_handler():
+    path = Path('/opt/ai-coding-standalone-dev/qa/task189-owner-review-service.py')
+    info = path.lstat()
+    if (not stat.S_ISREG(info.st_mode) or (info.st_uid, info.st_gid) != (0, 0)
+            or stat.S_IMODE(info.st_mode) != 0o400):
+        raise RuntimeError('Untrusted Task 189 handler')
+    source = path.read_bytes()
+    if hashlib.sha256(source).hexdigest() != TASK189_HANDLER_SHA256:
+        raise RuntimeError('Task 189 handler release mismatch')
+    namespace = {'__name__': 'task189_core_endpoint', '__file__': str(path)}
+    exec(compile(source, str(path), 'exec'), namespace)
+    return namespace['serve_core_request']
+
+
+def handle_task189(request):
+    if request.headers.get('Host') != 'dev-ai-task.cstlogistic.co.id':
+        return request.send(404, {})
+    if len(request.headers.get_all('Authorization', [])) != 1 or not request.headers['Authorization'].startswith('Bearer '):
+        return request.send(401, {'error': 'OWNER_SESSION_REQUIRED'})
+    try:
+        handler = task189_handler()
+    except Exception:
+        return request.send(503, {'error': 'OWNER_VERIFICATION_UNAVAILABLE'})
+    return handler(request)
+
+
 class Handler(BaseHTTPRequestHandler):
  def send(self,status,obj):
   b=json.dumps(obj).encode()
@@ -304,6 +340,8 @@ class Handler(BaseHTTPRequestHandler):
   return None
  def authorized(self): return self.principal() is not None
  def do_GET(self):
+  if self.path == TASK189_READINESS:
+   return handle_task189(self)
   if urlparse(self.path).path in ('/','/login'):
    body=Path('/opt/ai-coding-standalone-dev/admin_login.html').read_bytes()
    self.send_response(200)
@@ -344,6 +382,8 @@ class Handler(BaseHTTPRequestHandler):
    rows=c.execute("SELECT id,kind,status,checkpoint,updated_at,payload FROM jobs WHERE status='WAITING_APPROVAL' ORDER BY updated_at DESC LIMIT 100").fetchall()
   return self.send(200,{'approvals':[{'job_id':r[0],'kind':r[1],'status':r[2],'test_result':r[3],'updated_at':r[4],'artifact_hash':hashlib.sha256(r[5].encode()).hexdigest()} for r in rows]})
  def do_POST(self):
+  if self.path == TASK189_FINAL:
+   return handle_task189(self)
   p=urlparse(self.path).path
   if p=='/api/gpt02/issue159/approval-intent/refresh':
    # This is NOT a task/approval creation API. It only rotates an expired
