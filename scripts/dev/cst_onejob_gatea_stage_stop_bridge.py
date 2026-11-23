@@ -54,7 +54,8 @@ def _watchdog_cgroup(pid):
             lines = handle.read(4096).splitlines()
     except OSError:
         raise StopBridgeDenied("WATCHDOG_CGROUP_UNAVAILABLE") from None
-    return any(line.endswith("/" + WATCHDOG) for line in lines)
+    # Exact unified cgroup rather than a foreign nested path with same suffix.
+    return lines == ["0::/system.slice/" + WATCHDOG]
 
 def _peercred(connection):
     packed = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED,
@@ -90,11 +91,18 @@ def stop_exact_stage_broker():
     if state not in ("not-found", "loaded"):
         raise StopBridgeDenied("BROKER_UNIT_UNTRUSTED")
     if state == "loaded":
+        # Deny a replaced or unsafe unit before privileged STOP.
+        if (_unit_property(BROKER, "FragmentPath") !=
+                "/etc/systemd/system/" + BROKER
+            or _unit_property(BROKER, "KillMode") != "control-group"
+            or _unit_property(BROKER, "Restart") != "no"):
+            raise StopBridgeDenied("BROKER_UNIT_PROVENANCE_DENIED")
         if _unit_property(BROKER, "ActiveState") == "active":
             r = _execute("/usr/bin/systemctl", "stop", BROKER)
             if r.returncode:
                 raise StopBridgeDenied("BROKER_STOP_FAILED")
-        if _unit_property(BROKER, "ActiveState") != "inactive":
+        if (_unit_property(BROKER, "ActiveState") != "inactive"
+            or _unit_property(BROKER, "MainPID") != "0"):
             raise StopBridgeDenied("BROKER_STOP_READBACK_FAILED")
     # A stale Unix socket or a foreign replacement must NEVER be reported
     # as a clean transport stop.

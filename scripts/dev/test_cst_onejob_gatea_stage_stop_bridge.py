@@ -145,7 +145,12 @@ class StopBridgeTest(unittest.TestCase):
     def test_stop_active_exact_unit_readback(self):
         def state(unit,prop):
             self.assertEqual(unit,b.BROKER)
-            return {"LoadState":"loaded","ActiveState":"active"}[prop] if count[0]==0 else {"LoadState":"loaded","ActiveState":"inactive"}[prop]
+            props={"LoadState":"loaded",
+                   "FragmentPath":"/etc/systemd/system/"+b.BROKER,
+                   "KillMode":"control-group","Restart":"no",
+                   "ActiveState":"active" if count[0]==0 else "inactive",
+                   "MainPID":"40002" if count[0]==0 else "0"}
+            return props[prop]
         count=[0]
         def command(*args):
             self.assertEqual(args,("/usr/bin/systemctl","stop",b.BROKER))
@@ -156,7 +161,12 @@ class StopBridgeTest(unittest.TestCase):
             self.assertEqual(b.stop_exact_stage_broker(),b.ACK[0])
         self.assertEqual(count[0],1)
     def test_loaded_but_unstoppable_broker_is_denied(self):
-        with patch.object(b,"_unit_property",side_effect=lambda unit,prop: "loaded" if prop=="LoadState" else "active"):
+        def props(unit,prop):
+            return {"LoadState":"loaded",
+                    "FragmentPath":"/etc/systemd/system/"+b.BROKER,
+                    "KillMode":"control-group","Restart":"no",
+                    "ActiveState":"active","MainPID":"40002"}[prop]
+        with patch.object(b,"_unit_property",side_effect=props):
             class Fail:returncode=1
             with patch.object(b,"_execute",return_value=Fail()):
                 with self.assertRaisesRegex(b.StopBridgeDenied,"BROKER_STOP_FAILED"):
@@ -187,5 +197,42 @@ class StopBridgeTest(unittest.TestCase):
             finally:t.join(timeout=3)
             self.assertEqual(result,[b.ACK[0]])
             self.assertFalse(t.is_alive())
+    def test_unit_provenance_denies_foreign_fragment_before_stop(self):
+        def props(unit,prop):
+            return {"LoadState":"loaded","FragmentPath":"/tmp/foreign.service"}[prop]
+        with patch.object(b,"_unit_property",side_effect=props),patch.object(b,"_execute") as cmd:
+            with self.assertRaisesRegex(b.StopBridgeDenied,"BROKER_UNIT_PROVENANCE_DENIED"):
+                b.stop_exact_stage_broker()
+            cmd.assert_not_called()
+    def test_non_cgroup_kill_mode_denied(self):
+        def props(unit,prop):
+            return {"LoadState":"loaded","FragmentPath":"/etc/systemd/system/"+b.BROKER,
+                    "KillMode":"process"}[prop]
+        with patch.object(b,"_unit_property",side_effect=props),patch.object(b,"_execute") as cmd:
+            with self.assertRaisesRegex(b.StopBridgeDenied,"BROKER_UNIT_PROVENANCE_DENIED"):
+                b.stop_exact_stage_broker()
+            cmd.assert_not_called()
+    def test_restart_auto_denied(self):
+        def props(unit,prop):
+            return {"LoadState":"loaded","FragmentPath":"/etc/systemd/system/"+b.BROKER,
+                    "KillMode":"control-group","Restart":"always"}[prop]
+        with patch.object(b,"_unit_property",side_effect=props),patch.object(b,"_execute") as cmd:
+            with self.assertRaisesRegex(b.StopBridgeDenied,"BROKER_UNIT_PROVENANCE_DENIED"):
+                b.stop_exact_stage_broker()
+            cmd.assert_not_called()
+    def test_inactive_with_residual_mainpid_denied(self):
+        def props(unit,prop):
+            return {"LoadState":"loaded","FragmentPath":"/etc/systemd/system/"+b.BROKER,
+                    "KillMode":"control-group","Restart":"no","ActiveState":"inactive",
+                    "MainPID":"12345"}[prop]
+        with patch.object(b,"_unit_property",side_effect=props):
+            with self.assertRaisesRegex(b.StopBridgeDenied,"BROKER_STOP_READBACK_FAILED"):
+                b.stop_exact_stage_broker()
+    def test_exact_systemd_cgroup_not_nested_suffix(self):
+        from unittest.mock import mock_open
+        with patch("builtins.open",mock_open(read_data="0::/system.slice/foreign.slice/"+b.WATCHDOG+"\n")):
+            self.assertFalse(b._watchdog_cgroup(12345))
+        with patch("builtins.open",mock_open(read_data="0::/system.slice/"+b.WATCHDOG+"\n")):
+            self.assertTrue(b._watchdog_cgroup(12345))
 if __name__=="__main__":
     unittest.main(verbosity=2)
