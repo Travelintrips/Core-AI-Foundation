@@ -11,6 +11,7 @@ vi.mock("@workspace/db", () => ({
 }));
 
 import {
+  assertExactGpt02RelockManifestScope,
   createGpt02RelockOwnerChallenge,
   digestGpt02RelockManifest,
   getGpt02RelockOwnerApprovalReadiness,
@@ -104,6 +105,13 @@ describe("GPT02 relock Owner approval", () => {
     const readiness = await getGpt02RelockOwnerApprovalReadiness();
     expect(readiness.task189KeyFallbackPermitted).toBe(false);
     expect(readiness.runtimeRouteIntegrated).toBe(false);
+  });
+
+  it("accepts only the fixed target scope and exact action list", () => {
+    const manifest = manifestFixture();
+    expect(() => assertExactGpt02RelockManifestScope(manifest, actor, manifest.issuedAt)).not.toThrow();
+    expect(() => assertExactGpt02RelockManifestScope({ ...manifest, projectId: "prod" } as Gpt02RelockManifest, actor, manifest.issuedAt)).toThrow("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
+    expect(() => assertExactGpt02RelockManifestScope({ ...manifest, operations: ["DISABLE_ISSUE159_TIMER"] as unknown as Gpt02RelockManifest["operations"] }, actor, manifest.issuedAt)).toThrow("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
   });
 
   it("hashes the full canonical manifest including nonce and expiry", () => {

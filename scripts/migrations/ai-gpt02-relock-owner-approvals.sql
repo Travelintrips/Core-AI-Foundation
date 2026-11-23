@@ -86,17 +86,36 @@ CREATE TRIGGER gpt02_relock_owner_challenge_immutable
   BEFORE UPDATE OR DELETE ON ai_platform.gpt02_relock_owner_approval_challenges
   FOR EACH ROW EXECUTE FUNCTION ai_platform.gpt02_relock_approval_challenge_guard();
 
-CREATE OR REPLACE FUNCTION ai_platform.gpt02_relock_approval_decision_immutable()
+CREATE OR REPLACE FUNCTION ai_platform.gpt02_relock_approval_decision_guard()
 RETURNS TRIGGER LANGUAGE plpgsql AS $guard$
+DECLARE challenge ai_platform.gpt02_relock_owner_approval_challenges%ROWTYPE;
 BEGIN
-  RAISE EXCEPTION 'GPT02_RELOCK_APPROVAL_DECISION_APPEND_ONLY';
+  IF TG_OP <> 'INSERT' THEN
+    RAISE EXCEPTION 'GPT02_RELOCK_APPROVAL_DECISION_APPEND_ONLY';
+  END IF;
+  SELECT * INTO challenge
+    FROM ai_platform.gpt02_relock_owner_approval_challenges
+   WHERE id = NEW.challenge_id
+   FOR KEY SHARE;
+  IF NOT FOUND OR challenge.status <> 'CONSUMED'
+     OR challenge.scope <> NEW.scope
+     OR challenge.owner_subject <> NEW.owner_subject
+     OR challenge.worker_principal <> NEW.worker_principal
+     OR challenge.manifest_sha256 <> NEW.manifest_sha256
+     OR challenge.environment <> 'DEV'
+     OR challenge.project_id <> 'xssrfshdrtdfupgqwfdw'
+     OR challenge.expires_at <= NEW.decided_at
+  THEN
+    RAISE EXCEPTION 'GPT02_RELOCK_APPROVAL_DECISION_CHALLENGE_MISMATCH';
+  END IF;
+  RETURN NEW;
 END
 $guard$;
 
-DROP TRIGGER IF EXISTS gpt02_relock_owner_decision_immutable ON ai_platform.gpt02_relock_owner_approval_decisions;
-CREATE TRIGGER gpt02_relock_owner_decision_immutable
-  BEFORE UPDATE OR DELETE ON ai_platform.gpt02_relock_owner_approval_decisions
-  FOR EACH ROW EXECUTE FUNCTION ai_platform.gpt02_relock_approval_decision_immutable();
+DROP TRIGGER IF EXISTS gpt02_relock_owner_decision_guard ON ai_platform.gpt02_relock_owner_approval_decisions;
+CREATE TRIGGER gpt02_relock_owner_decision_guard
+  BEFORE INSERT OR UPDATE OR DELETE ON ai_platform.gpt02_relock_owner_approval_decisions
+  FOR EACH ROW EXECUTE FUNCTION ai_platform.gpt02_relock_approval_decision_guard();
 
 REVOKE ALL ON ai_platform.gpt02_relock_owner_approval_challenges FROM PUBLIC;
 REVOKE ALL ON ai_platform.gpt02_relock_owner_approval_decisions FROM PUBLIC;

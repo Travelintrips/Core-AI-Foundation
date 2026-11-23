@@ -50,12 +50,15 @@ function ownerBearerToken(req: Request): string | null {
 }
 
 function validSameOriginJson(req: Request): boolean {
+  for (const header of ["host", "origin", "content-type", "content-length"]) {
+    if (countRawHeader(req, header) !== 1) return false;
+  }
+  if (countRawHeader(req, "transfer-encoding") !== 0) return false;
+  const length = Number(req.get("content-length"));
   return req.get("host") === OWNER_HOST &&
     req.get("origin") === OWNER_ORIGIN &&
     req.is("application/json") === "application/json" &&
-    !req.get("transfer-encoding") &&
-    Number.isSafeInteger(Number(req.get("content-length"))) &&
-    Number(req.get("content-length")) > 0 && Number(req.get("content-length")) <= 8192;
+    Number.isSafeInteger(length) && length > 0 && length <= 8192;
 }
 
 export function createGpt02RelockOwnerApprovalRouter(

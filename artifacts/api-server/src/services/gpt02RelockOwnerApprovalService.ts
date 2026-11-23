@@ -6,7 +6,8 @@ import {
   verify as verifySignature,
   type KeyObject,
 } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, open } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 
@@ -93,7 +94,7 @@ function assertActorShape(actor: Gpt02OwnerActor, nowMs: number): void {
   }
 }
 
-function assertExactManifestScope(manifest: Gpt02RelockManifest, actor: Gpt02OwnerActor, nowMs: number): void {
+export function assertExactGpt02RelockManifestScope(manifest: Gpt02RelockManifest, actor: Gpt02OwnerActor, nowMs: number): void {
   const expectedRoles = [
     { name: "dev_gpt02_relock_catalog_auditor", canLogin: false, connectionLimit: 0, passwordState: "PRESERVE_PRESENT" },
     { name: "dev_gpt02_attestor_evidence", canLogin: false, connectionLimit: 0, passwordState: "NULL" },
@@ -207,13 +208,13 @@ export async function createGpt02RelockOwnerChallenge(input: {
       { name: "dev_gpt02_issuer_evidence", canLogin: false, connectionLimit: 0, passwordState: "NULL" },
       { name: "gpt02_issuer_evidence_reader", canLogin: false, connectionLimit: 0, passwordState: "NULL" },
     ] as const,
-    timer: { unit: "gpt02-issue159-relock-catalog-auditor.timer", finalActiveState: "inactive", finalUnitFileState: "disabled" },
-    service: { unit: "gpt02-issue159-relock-catalog-auditor.service", finalActiveState: "inactive", finalMainPid: 0 },
+    timer: { unit: "gpt02-issue159-relock-catalog-auditor.timer", finalActiveState: "inactive", finalUnitFileState: "disabled" } as const,
+    service: { unit: "gpt02-issue159-relock-catalog-auditor.service", finalActiveState: "inactive", finalMainPid: 0 } as const,
     credential: {
       source: "/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn",
       regularFile: true, symlink: false, mode: "0600", owner: "root", group: "root",
       contentRead: false, decrypted: false,
-    },
+    } as const,
     operations: [
       "DISABLE_ISSUE159_TIMER",
       "SET_EVIDENCE_ROLES_NOLOGIN_LIMIT0_PASSWORD_NULL",
@@ -269,46 +270,61 @@ export async function createGpt02RelockOwnerChallenge(input: {
 }
 
 async function loadPinnedOwnerApprovalKey(expectedOwner?: Gpt02OwnerActor): Promise<{ key: KeyObject; fingerprint: string }> {
-  let keyInfo;
-  let trustInfo;
+  const rootDir = "/etc/gpt02-dev";
+  const publicDir = "/etc/gpt02-dev/public";
+  for (const directory of [rootDir, publicDir]) {
+    let info;
+    try { info = await lstat(directory); } catch { deny("GPT02_OWNER_APPROVAL_TRUST_ANCHOR_MISSING"); }
+    if (!info!.isDirectory() || info!.isSymbolicLink() || info!.uid !== 0 || info!.gid !== 0 || (info!.mode & 0o022) !== 0) {
+      deny("GPT02_OWNER_APPROVAL_TRUST_DIRECTORY_CUSTODY_INVALID");
+    }
+  }
+
+  let keyHandle;
   try {
-    [keyInfo, trustInfo] = await Promise.all([lstat(OWNER_APPROVAL_KEY_PATH), lstat(TRUST_MANIFEST_PATH)]);
+    keyHandle = await open(OWNER_APPROVAL_KEY_PATH, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   } catch {
     deny("GPT02_OWNER_APPROVAL_TRUST_ANCHOR_MISSING");
   }
-  if (
-    !keyInfo!.isFile() || keyInfo!.isSymbolicLink() || keyInfo!.uid !== 0 || keyInfo!.gid !== 0 ||
-    (keyInfo!.mode & 0o777) !== 0o440 ||
-    !trustInfo!.isFile() || trustInfo!.isSymbolicLink() || trustInfo!.uid !== 0 || trustInfo!.gid !== 0 ||
-    (trustInfo!.mode & 0o777) !== 0o644
-  ) {
-    deny("GPT02_OWNER_APPROVAL_TRUST_CUSTODY_INVALID");
+  try {
+    const trustHandle = await open(TRUST_MANIFEST_PATH, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW).catch(() => {
+      deny("GPT02_OWNER_APPROVAL_TRUST_MANIFEST_MISSING");
+    });
+    try {
+      const [keyInfo, trustInfo] = await Promise.all([keyHandle!.stat(), trustHandle.stat()]);
+      if (
+        !keyInfo.isFile() || keyInfo.uid !== 0 || keyInfo.gid !== 0 || (keyInfo.mode & 0o777) !== 0o440 ||
+        !trustInfo.isFile() || trustInfo.uid !== 0 || trustInfo.gid !== 0 || (trustInfo.mode & 0o777) !== 0o644
+      ) {
+        deny("GPT02_OWNER_APPROVAL_TRUST_CUSTODY_INVALID");
+      }
+      const [pem, trustBytes] = await Promise.all([keyHandle!.readFile(), trustHandle.readFile()]);
+      if (pem.length === 0 || pem.length > 4096 || trustBytes.length > 16_384) {
+        deny("GPT02_OWNER_APPROVAL_TRUST_FILE_SIZE_INVALID");
+      }
+      let trust: unknown;
+      try { trust = JSON.parse(trustBytes.toString("utf8")); } catch { deny("GPT02_OWNER_APPROVAL_TRUST_MANIFEST_INVALID"); }
+      if (!isPlainObject(trust) || typeof trust[KEY_FINGERPRINT_FIELD] !== "string" || !HEX_SHA256_PATTERN.test(trust[KEY_FINGERPRINT_FIELD]) ||
+          typeof trust[KEY_OWNER_SUBJECT_FIELD] !== "string" || !/^owner:google_[A-Za-z0-9_-]{6,120}$/.test(trust[KEY_OWNER_SUBJECT_FIELD]) ||
+          typeof trust[KEY_OWNER_SUPABASE_ID_FIELD] !== "string" || !UUID_PATTERN.test(trust[KEY_OWNER_SUPABASE_ID_FIELD])) {
+        deny("GPT02_OWNER_APPROVAL_FINGERPRINT_NOT_PROVISIONED");
+      }
+      if (expectedOwner && (trust[KEY_OWNER_SUBJECT_FIELD] !== `owner:${expectedOwner.id}` ||
+          trust[KEY_OWNER_SUPABASE_ID_FIELD] !== expectedOwner.authSupabaseId.toLowerCase())) {
+        deny("GPT02_OWNER_APPROVAL_KEY_OWNER_BINDING_MISMATCH");
+      }
+      let key: KeyObject;
+      try { key = createPublicKey(pem); } catch { deny("GPT02_OWNER_APPROVAL_PUBLIC_KEY_INVALID"); }
+      if (key!.asymmetricKeyType !== "ed25519") deny("GPT02_OWNER_APPROVAL_KEY_NOT_ED25519");
+      const fingerprint = sha256(key!.export({ type: "spki", format: "der" }) as Buffer);
+      if (fingerprint !== trust[KEY_FINGERPRINT_FIELD]) deny("GPT02_OWNER_APPROVAL_FINGERPRINT_MISMATCH");
+      return { key: key!, fingerprint };
+    } finally {
+      await trustHandle.close();
+    }
+  } finally {
+    await keyHandle!.close();
   }
-
-  const [pem, trustBytes] = await Promise.all([
-    readFile(OWNER_APPROVAL_KEY_PATH),
-    readFile(TRUST_MANIFEST_PATH),
-  ]);
-  if (pem.length === 0 || pem.length > 4096 || trustBytes.length > 16_384) {
-    deny("GPT02_OWNER_APPROVAL_TRUST_FILE_SIZE_INVALID");
-  }
-  let trust: unknown;
-  try { trust = JSON.parse(trustBytes.toString("utf8")); } catch { deny("GPT02_OWNER_APPROVAL_TRUST_MANIFEST_INVALID"); }
-  if (!isPlainObject(trust) || typeof trust[KEY_FINGERPRINT_FIELD] !== "string" || !HEX_SHA256_PATTERN.test(trust[KEY_FINGERPRINT_FIELD]) ||
-      typeof trust[KEY_OWNER_SUBJECT_FIELD] !== "string" || !/^owner:google_[A-Za-z0-9_-]{6,120}$/.test(trust[KEY_OWNER_SUBJECT_FIELD]) ||
-      typeof trust[KEY_OWNER_SUPABASE_ID_FIELD] !== "string" || !UUID_PATTERN.test(trust[KEY_OWNER_SUPABASE_ID_FIELD])) {
-    deny("GPT02_OWNER_APPROVAL_FINGERPRINT_NOT_PROVISIONED");
-  }
-  if (expectedOwner && (trust[KEY_OWNER_SUBJECT_FIELD] !== `owner:${expectedOwner.id}` ||
-      trust[KEY_OWNER_SUPABASE_ID_FIELD] !== expectedOwner.authSupabaseId.toLowerCase())) {
-    deny("GPT02_OWNER_APPROVAL_KEY_OWNER_BINDING_MISMATCH");
-  }
-  let key: KeyObject;
-  try { key = createPublicKey(pem); } catch { deny("GPT02_OWNER_APPROVAL_PUBLIC_KEY_INVALID"); }
-  if (key!.asymmetricKeyType !== "ed25519") deny("GPT02_OWNER_APPROVAL_KEY_NOT_ED25519");
-  const fingerprint = sha256(key!.export({ type: "spki", format: "der" }) as Buffer);
-  if (fingerprint !== trust[KEY_FINGERPRINT_FIELD]) deny("GPT02_OWNER_APPROVAL_FINGERPRINT_MISMATCH");
-  return { key: key!, fingerprint };
 }
 
 export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
@@ -354,7 +370,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
 
   const manifest = row.manifest_json as Gpt02RelockManifest;
   if (!isPlainObject(manifest)) deny("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
-  assertExactManifestScope(manifest, input.actor, nowMs);
+  assertExactGpt02RelockManifestScope(manifest, input.actor, nowMs);
   const canonicalPayload = canonicalizeGpt02RelockManifest(manifest);
   const digest = sha256(canonicalPayload);
   if (digest !== row.manifest_sha256 || !HEX_SHA256_PATTERN.test(digest)) {
