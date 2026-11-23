@@ -58,22 +58,22 @@ def run_signed_one_stage(
         raise JitStageDenied("JIT_TRUSTED_DATABASE_QUERY_REQUIRED")
     if not callable(acquire_single_flight):
         raise JitStageDenied("JIT_INDEPENDENT_SINGLE_FLIGHT_LOCK_REQUIRED")
-    # PostgreSQL UTC is authoritative for permit validation; never trust
-    # an injected caller/host clock to open the stage role.
-    current=read_database_utc_clock(query)
-    # Existing strict Gate-A validation enforces Ed25519 signature, pinned
-    # public root, project/role/Company 1, nonce, one-use technical scope.
-    permit=read_signed_manifest(envelope_path,public_key_path,
-                                approved_public_pin,now=current)
-    if permit["sourceSha"]!=approved_source_sha or permit["project"]!=PROJECT:
-        raise JitStageDenied("JIT_PINNED_SOURCE_OR_PROJECT_MISMATCH")
-    lease_end=exact_timestamp(permit["expiresAt"])
-    if not current < lease_end or not 0 < (lease_end-current).total_seconds() <= 600:
-        raise JitStageDenied("JIT_LEASE_EXPIRED_OR_UNBOUNDED")
-    # The lock MUST cover baseline, nonce consumption, LOGIN and forced relock
-    # as one exclusive region. Different valid nonces are not sufficient to
-    # prevent two concurrent launchers opening the same role.
+    # Acquire the exclusive lock BEFORE any database access. A losing
+    # concurrent launcher must not read the DB clock or reserve a nonce.
+    # The lock covers signature validation, baseline, nonce, LOGIN, action,
+    # forced relock and final readback as one exclusive region.
     with acquire_single_flight():
+        # PostgreSQL UTC is authoritative; never trust caller/host clock.
+        current=read_database_utc_clock(query)
+        # Existing strict Gate-A validation enforces Ed25519 signature, pinned
+        # public root, project/role/Company 1, nonce, one-use technical scope.
+        permit=read_signed_manifest(envelope_path,public_key_path,
+                                    approved_public_pin,now=current)
+        if permit["sourceSha"]!=approved_source_sha or permit["project"]!=PROJECT:
+            raise JitStageDenied("JIT_PINNED_SOURCE_OR_PROJECT_MISMATCH")
+        lease_end=exact_timestamp(permit["expiresAt"])
+        if not current < lease_end or not 0 < (lease_end-current).total_seconds() <= 600:
+            raise JitStageDenied("JIT_LEASE_EXPIRED_OR_UNBOUNDED")
         return _run_locked_one_stage(query,stage_once,reserve_nonce,
                                       permit,approved_source_sha,lease_end,relock)
 
