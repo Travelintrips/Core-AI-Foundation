@@ -43,10 +43,12 @@ CREATE TABLE IF NOT EXISTS ai_platform.gpt02_relock_owner_approval_decisions (
   challenge_id UUID PRIMARY KEY REFERENCES ai_platform.gpt02_relock_owner_approval_challenges(id),
   scope TEXT NOT NULL CHECK (scope = 'GPT02_RELOCK_CST_DEV'),
   owner_subject TEXT NOT NULL,
+  owner_auth_supabase_id UUID NOT NULL,
+  owner_email TEXT NOT NULL,
   worker_principal TEXT NOT NULL CHECK (worker_principal = 'openclaw-vps-main'),
   manifest_sha256 CHAR(64) NOT NULL CHECK (manifest_sha256 ~ '^[0-9a-f]{64}$'),
-  signature_sha256 CHAR(64) NOT NULL CHECK (signature_sha256 ~ '^[0-9a-f]{64}$'),
-  approval_key_fingerprint CHAR(64) NOT NULL CHECK (approval_key_fingerprint ~ '^[0-9a-f]{64}$'),
+  signed_session_sha256 CHAR(64) NOT NULL CHECK (signed_session_sha256 ~ '^[0-9a-f]{64}$'),
+  approval_method TEXT NOT NULL CHECK (approval_method = 'FRESH_CST_HUB_SIGNED_GOOGLE_OWNER_SESSION'),
   decision TEXT NOT NULL CHECK (decision = 'APPROVED'),
   decided_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -77,6 +79,12 @@ BEGIN
   IF NEW.status = 'EXPIRED' AND NEW.consumed_at IS NOT NULL THEN
     RAISE EXCEPTION 'GPT02_RELOCK_EXPIRED_CHALLENGE_CANNOT_BE_CONSUMED';
   END IF;
+  IF NEW.status = 'EXPIRED' AND OLD.expires_at > clock_timestamp() THEN
+    RAISE EXCEPTION 'GPT02_RELOCK_ACTIVE_CHALLENGE_CANNOT_BE_EXPIRED';
+  END IF;
+  IF NEW.status = 'CONSUMED' AND OLD.expires_at <= clock_timestamp() THEN
+    RAISE EXCEPTION 'GPT02_RELOCK_EXPIRED_CHALLENGE_CANNOT_BE_CONSUMED';
+  END IF;
   RETURN NEW;
 END
 $guard$;
@@ -100,11 +108,14 @@ BEGIN
   IF NOT FOUND OR challenge.status <> 'CONSUMED'
      OR challenge.scope <> NEW.scope
      OR challenge.owner_subject <> NEW.owner_subject
+     OR challenge.owner_auth_supabase_id <> NEW.owner_auth_supabase_id
+     OR lower(challenge.owner_email) <> lower(NEW.owner_email)
      OR challenge.worker_principal <> NEW.worker_principal
      OR challenge.manifest_sha256 <> NEW.manifest_sha256
      OR challenge.environment <> 'DEV'
      OR challenge.project_id <> 'xssrfshdrtdfupgqwfdw'
      OR challenge.expires_at <= NEW.decided_at
+     OR NEW.approval_method <> 'FRESH_CST_HUB_SIGNED_GOOGLE_OWNER_SESSION'
   THEN
     RAISE EXCEPTION 'GPT02_RELOCK_APPROVAL_DECISION_CHALLENGE_MISMATCH';
   END IF;

@@ -6,7 +6,7 @@ Target only: Supabase CST-DEV project `xssrfshdrtdfupgqwfdw` and VPS `srv1792369
 
 ## 1. Purpose and non-goals
 
-This design lets the Owner appoint the canonical OpenClaw VPS worker as the PIC for a narrowly scoped GPT02 security relock. It must preserve a separation between (a) the Owner's delegation of coordination and (b) the Owner's cryptographic authorization of exact security mutations.
+This design lets the Owner appoint the canonical OpenClaw VPS worker as the PIC for a narrowly scoped GPT02 security relock. It preserves a separation between (a) the Owner's delegation of coordination and (b) an explicit, short-lived approval decision authenticated by a fresh CST Hub-signed Google Super Admin session and bound to the exact immutable action manifest. This is a session-authenticated Owner decision, not a detached signature over the manifest.
 
 It does **not** grant OpenClaw a general administrator identity, arbitrary shell, general database access, access to secrets, signing-key custody, dispatch authority, GitHub merge/deploy authority, or any PROD capability. It does not reuse Task #189 approval records, request IDs, nonces, digests, or release markers.
 
@@ -31,25 +31,26 @@ Delegation allows OpenClaw to coordinate and perform the explicitly listed read-
 
 ### 2.3 One-use Owner mutation authorization
 
-Before any mutation, the Owner must approve one canonical, immutable action manifest via the trusted CST Owner session/signing flow. The signed payload must include:
-- request ID, delegation ID, canonical worker ID, signer/Owner subject;
+Before any mutation, the Owner must review the exact immutable manifest in the trusted CST Owner interface and submit an explicit `APPROVE` decision while holding a fresh, cryptographically verified CST Hub-signed Google Super Admin session. The session verifier must validate the Hub signature/issuer/audience/expiry and the actor claims; a separate read-only eligibility check must prove the exact active Owner operator link. The action is then bound server-side to:
+- request ID, delegation ID, canonical worker ID, Owner subject and Supabase Auth user ID;
 - environment `DEV`, exact project ID, exact VPS identity;
 - exact four role names and target states;
 - exact systemd timer and service unit names;
 - exact permitted operation identifiers (not caller-supplied shell strings or free-form SQL);
 - required preconditions and postconditions from section 3;
-- issue/expiry timestamps, unique nonce, and a monotonic/replay-protection identifier;
-- manifest digest and signature algorithm/key ID.
+- issue/expiry timestamps, unique 256-bit nonce, manifest digest, challenge ID, and hash of the verified signed session.
 
-Verify the signature server-side against the trusted Owner identity/key chain. The verifier must fail closed on missing/unknown key, non-Owner, wrong subject, invalid signature, altered manifest, expired request, revoked delegation, unhealthy/non-canonical worker, wrong environment/project/host, reused nonce, or any action/resource mismatch. The raw signature, private key, password hashes/verifiers, tokens, or credential contents must never be logged or returned.
+The challenge expires after 120 seconds. The Owner approval endpoint re-verifies the signed Hub session and active Owner eligibility, requires the exact manifest digest displayed to the Owner, and consumes the nonce atomically before recording the decision. Duplicate, concurrent, expired, cross-Owner, cross-project, or digest-mismatched approvals fail closed. Only the signed-session hash is retained; the bearer token is never stored or logged. The decision ledger is append-only and the database trigger verifies that the decision matches a previously consumed challenge.
 
-A GitHub comment, chat message, WhatsApp reply, boolean metadata flag, generic `SECURITY_CHANGE` token, Task #189 approval, or an OpenClaw statement is not a substitute for this exact signed authorization.
+This proof is **not a detached Ed25519 signature made by an Owner private key**. It is an explicit Owner decision authenticated by the existing trusted CST Hub-signed session and bound to the exact action digest/nonce. It must never be described as a detached signature. If the Owner identity/session chain cannot be independently verified, the approval is rejected.
+
+A GitHub comment, chat message, WhatsApp reply, boolean metadata flag, generic `SECURITY_CHANGE` token, Task #189 approval record, or an OpenClaw statement is not a substitute for this fresh, challenge-bound Owner decision.
 
 ## 3. Exact relock manifest and gates
 
 ### 3.1 Database role targets
 
-Read-only preflight must establish all four roles exist. The signed manifest may authorize only these targets:
+Read-only preflight must establish all four roles exist. The Owner-approved manifest may authorize only these targets:
 
 | Role | `rolcanlogin` | `rolconnlimit` | Password-presence state |
 |---|---:|---:|---|
@@ -78,7 +79,7 @@ Credential verification is metadata-only: prove the configured `LoadCredentialEn
 
 ### 3.4 Atomicity, idempotency, and one-use execution
 
-The executor must atomically consume the signed authorization nonce before the first mutation and bind it to one immutable manifest digest. Duplicate, concurrent, or replayed calls must be rejected. Each operation must be an enumerated constant mapped to fixed SQL/systemd helper code; no raw SQL, shell command, unit name, role name, project ID, or path may come from worker-controlled free-form input.
+The approval service must atomically consume the one-use challenge nonce when the Owner submits the challenge-bound decision; a separate executor must verify the recorded decision and bind it to the same immutable manifest digest before any mutation. Duplicate, concurrent, or replayed calls must be rejected. Each operation must be an enumerated constant mapped to fixed SQL/systemd helper code; no raw SQL, shell command, unit name, role name, project ID, or path may come from worker-controlled free-form input.
 
 Record an append-only audit trail with request/delegation IDs, actor, worker ID, manifest digest, action IDs, timestamps, before/after booleans/counts, and terminal result. Do not place secrets in the audit payload.
 
@@ -86,8 +87,8 @@ Record an append-only audit trail with request/delegation IDs, actor, worker ID,
 
 1. Owner registers the bounded delegation; system confirms exact canonical OpenClaw principal and stores expiry/revocation state.
 2. OpenClaw uses its own principal to conduct read-only preflight and prepare a redacted evidence packet.
-3. The Owner reviews and signs that exact packet/manifest using the existing trusted CST Owner identity/signing chain, under a **new GPT02-specific request ID, nonce and digest**.
-4. A server-side GPT02-specific verifier checks signature, owner subject, delegation, scope, nonce, preconditions and expiry.
+3. The Owner reviews the exact manifest in the trusted CST Owner interface and submits `APPROVE` using a fresh Hub-signed Google Super Admin session, under a **new GPT02-specific request ID, nonce and digest**.
+4. A server-side GPT02-specific verifier checks Hub session signature/claims, exact Owner operator eligibility, owner subject, delegation, scope, manifest digest, nonce, preconditions and expiry.
 5. A dedicated least-privilege executor exposes only the enumerated role and timer operations. It must not provide an interactive shell or generic SQL execution.
 6. OpenClaw observes execution and runs the independent postflight. It cannot rewrite the approval or postflight result.
 7. The system marks completion only after exact postflight evidence; otherwise it remains failed/blocked for Owner review.
@@ -96,14 +97,14 @@ The generic `agent:work` queue may carry coordination/read-only jobs only. It mu
 
 ## 5. Required fail-closed test matrix
 
-- Valid Owner signature, exact manifest, active delegation, correct DEV project/host, unused nonce, passing preflight: authorization accepted.
-- Missing signature, invalid signature, wrong Owner, untrusted key, or verification service unavailable: reject.
+- Valid fresh Hub-signed Owner session, exact Owner link, exact manifest, active delegation, correct DEV project/host, unused nonce, passing preflight: decision record accepted.
+- Missing/invalid/expired Hub session, wrong Owner, wrong issuer/audience, failed Owner link, or verification service unavailable: reject.
 - Wrong project ID, PROD environment, wrong host, wrong role, extra role, wrong timer/service unit, or free-form command input: reject.
 - Delegation expired/revoked, worker lease expired/unhealthy, wrong canonical client ID: reject.
 - Expired/replayed/duplicate nonce or concurrent consume: reject exactly once.
 - Non-zero role sessions, open watchdog row, service activating/running, or missing credential metadata: refuse mutation and preserve evidence.
 - Task #189 request ID, approval, signature, marker or evidence packet supplied to GPT02 flow: reject.
-- Owner signature valid for a different action digest or stale before/after snapshot: reject.
+- Owner decision submitted with a different action digest or stale before/after snapshot: reject.
 - Postflight mismatch, partial database changes, timer still active/enabled, service not idle, or credential metadata mismatch: report failure; no automatic cleanup/rollback.
 
 ## 6. Release gates
@@ -120,7 +121,7 @@ The generic `agent:work` queue may carry coordination/read-only jobs only. It mu
 - Canonical OpenClaw VPS principal found: `openclaw-vps-main`; read-only registry snapshot showed active/healthy lease and bounded task coordination.
 - Generic work-claim path uses `agent:work` and assignment/lease checks; its approval metadata flag is not a cryptographic authorization check.
 - Existing Task #189 Owner review path is bound to Task #189 request/decision/release evidence. It must not be repurposed for GPT02.
-- No GPT02-specific assignment, signed manifest, one-use nonce record, or dedicated executor/activation receipt has been verified yet.
+- No GPT02-specific assignment, Owner decision record, one-use nonce record, or dedicated executor/activation receipt has been verified yet.
 - The live relock remains NO-GO until the new path is implemented, independently tested, and deployed to DEV under its own release gate.
 
 ## 8. Critical compatibility finding: auditor NOLOGIN vs recurring supervisor
@@ -154,8 +155,8 @@ Because the requested final state explicitly requires the timer `inactive/disabl
 
 ### 9.1 Preconditions
 
-- Dedicated GPT02 Owner review/signature path is implemented, independently reviewed, and passes all negative tests.
-- A one-use Owner-signed manifest explicitly authorizes the exact one-shot sequence below; a broad delegation or GitHub comment is not sufficient.
+- Dedicated GPT02 Owner session-approval path is implemented, independently reviewed, and passes all negative tests.
+- A one-use Owner-approved manifest and challenge-bound decision record explicitly authorize the exact one-shot sequence below; a broad delegation or GitHub comment is not sufficient.
 - Target is verified as Supabase CST-DEV project `xssrfshdrtdfupgqwfdw`, database `postgres`; VPS is `srv1792369`.
 - The four target roles are exactly present, no extra target is inferred, and credential metadata is verified as already specified.
 - Both writer and reader watchdogs are queried; open/expired row counts and the service's current in-flight state are captured. If unexpected rows exist, they must be handled only by the approved scoped cleanup contract, never by broad/manual SQL.
@@ -163,10 +164,10 @@ Because the requested final state explicitly requires the timer `inactive/disabl
 
 ### 9.2 Approved one-shot order
 
-1. Obtain the exact Owner-signed manifest for `GPT02_RELOCK_CST_DEV` with a fresh one-use nonce and action digest. Validate delegation, signer identity, scope, expiry, replay state and DEV target server-side.
+1. Present the exact `GPT02_RELOCK_CST_DEV` manifest to the Owner. Obtain an explicit `APPROVE` from a fresh Hub-signed Google Super Admin session with a fresh one-use challenge nonce and action digest. Validate delegation, Owner identity/link, scope, expiry, replay state and DEV target server-side.
 2. Capture read-only preflight evidence. Confirm no active supervisor run, no in-flight cleanup, no open watchdog rows requiring unapproved work, and zero sessions for all four target roles. If any precondition fails, stop before mutation.
 3. Confirm both writer and reader watchdog tables contain zero open rows. If either has a row, abort and require a separate reviewed manifest for those exact eligible rows; do not call the recurring cleanup RPC from this GPT02 relock flow.
-4. Stop and disable the timer using the fixed unit identity only after verifying the current service run is finished and no dependent task requires another scheduled cleanup. Stop/disable is recorded as an enumerated operation inside the same signed manifest; no free-form shell command is accepted.
+4. Stop and disable the timer using the fixed unit identity only after verifying the current service run is finished and no dependent task requires another scheduled cleanup. Stop/disable is recorded as an enumerated operation inside the same Owner-approved manifest; no free-form shell command is accepted.
 5. Verify the timer is `inactive` and `disabled`, the service is idle/inactive, and no MainPID remains.
 6. Set only the three evidence roles to `NOLOGIN`, connection limit `0`, password `NULL`.
 7. Change only `dev_gpt02_relock_catalog_auditor` to `NOLOGIN`, connection limit `0`, preserving its existing password verifier (do not read or display it). This must be the final role mutation after all actions requiring that login are complete.
@@ -180,7 +181,7 @@ Because the requested final state explicitly requires the timer `inactive/disabl
 - Do not change the evidence-role passwords except through their exact target state and a separately approved manifest.
 - Do not kill sessions as a shortcut; preflight must show zero sessions or stop for review.
 - Do not run the existing four SECURITY DEFINER functions manually outside the approved one-shot orchestrator.
-- Do not re-use Task #189 approval identifiers, nonce, signature, or release marker.
+- Do not re-use Task #189 approval identifiers, nonce, decision records, or release marker.
 - Do not make any PROD, signing, dispatch, signer-custody, or unrelated GPT02 Task183 changes.
 
 ### 9.4 Completion definition
@@ -191,15 +192,15 @@ The work is complete only when every target invariant is true simultaneously and
 ## 10. GPT02-specific Owner approval implementation (draft code added)
 
 The implementation draft adds these isolated components in Core-AI:
-- `artifacts/api-server/src/services/gpt02RelockOwnerApprovalService.ts`: builds an immutable manifest for the fixed DEV project/host/four role targets/timer, checks a fresh verified Super Admin Google identity via a required trusted eligibility callback, issues a 120-second nonce challenge, canonicalizes the complete manifest, verifies a detached Ed25519 signature using a dedicated trust anchor, and atomically consumes the challenge plus inserts an append-only decision receipt. The action set is limited to disabling the timer, setting the three evidence roles to password NULL, and setting the auditor NOLOGIN last; it does not call the generic recurring cleanup RPCs. The result deliberately returns `executionPermitted=false`, `signingPermitted=false`, `dispatchPermitted=false`, and `releaseDecision=NO_GO`; approval alone does not run the relock.
-- `artifacts/api-server/src/routes/gpt02-relock-owner-approval.ts`: an injectable Express router factory with strict same-origin/host/content-type/body checks. It requires a trusted CST Hub owner-session verifier and a separate eligibility verifier to be injected. It does not use generic `adminAuth`, API keys, worker tokens, or client-supplied actor claims.
-- `scripts/migrations/ai-gpt02-relock-owner-approvals.sql`: dedicated pending challenge and append-only decision tables, 120-second TTL, unique pending challenge, immutable manifest fields, one-time consumption, and no PUBLIC grants. Runtime DDL is deliberately not used.
-- `artifacts/api-server/src/services/__tests__/gpt02RelockOwnerApprovalService.test.ts`: positive/negative Ed25519, exact-scope/tamper, identity-denial and readiness tests.
+- `artifacts/api-server/src/services/gpt02RelockOwnerApprovalService.ts`: builds an immutable manifest for the fixed DEV project/host/four role targets/timer; checks a fresh Google Super Admin actor plus a required trusted Owner-eligibility callback; issues a 120-second nonce challenge; canonicalizes the complete manifest; verifies the exact manifest, owner subject, Supabase Auth user ID, expiry and nonce; atomically consumes the challenge and records an append-only approval decision with only the SHA-256 hash of the verified Hub session. The decision returns `executionPermitted=false`, `signingPermitted=false`, `dispatchPermitted=false`, and `releaseDecision=NO_GO`; approval alone does not run the relock.
+- `artifacts/api-server/src/routes/gpt02-relock-owner-approval.ts`: an injectable Express router factory with strict same-origin/host/content-type/body checks. It requires a trusted CST Hub signed-session verifier and a separate eligibility verifier to be injected. It does not use generic `adminAuth`, API keys, worker tokens, or client-supplied actor claims.
+- `scripts/migrations/ai-gpt02-relock-owner-approvals.sql`: dedicated challenge/decision tables, 120-second TTL, unique pending challenge, immutable manifest fields, one-time consumption, decision/challenge consistency trigger, append-only decision records, and no PUBLIC grants. Runtime DDL is deliberately not used.
+- `artifacts/api-server/src/services/__tests__/gpt02RelockOwnerApprovalService.test.ts`: challenge issuance after Owner eligibility, denied Owner, exact-scope/digest mismatch, one-use nonce consumption/replay rejection, and digest binding.
 
 ### Explicit activation blockers
-1. The VPS currently has no `/etc/gpt02-dev/public/gpt02-relock-owner-approval.pem`, and the trust manifest has no `gpt02RelockOwnerApproval` fingerprint. The existing `approval-public.pem` is Task #189-domain pinned and is explicitly not accepted as a fallback. Thus the verifier fails closed today.
-2. The actual CST Hub signed-Google-Owner session verifier is not yet wired into the Core API route factory. The router is intentionally not mounted. Do not substitute `adminAuth`, an admin API key, a worker service token, or a GitHub comment.
-3. The migration has not been applied. The managed DB operator must grant the exact minimum SQL privileges to the verified API service database principal only after identifying that principal; there is deliberately no blanket PUBLIC grant.
-4. No Owner signature has been generated or requested by this draft. The Owner's private key must remain in the trusted Owner signing environment; OpenClaw/API must never create or impersonate it.
+1. The trusted CST Hub signed-Google-Owner session verifier is not yet wired into the Core API route factory. The router is intentionally not mounted. The adapter must verify the Hub token signature, issuer/audience, expiry and exact actor claims, then independently confirm the current Owner operator link using the trusted read-only identity source. The existing Task #189 approval/decision/marker tables are not reused; only a common identity/session verification primitive may be shared.
+2. The route is a factory only; no Owner-facing UI is mounted yet to display the complete manifest and submit the explicit `APPROVE` decision. The UI must show project, host, worker, all four role targets, timer/service end states, preconditions, postconditions, and expiry before enabling approval.
+3. The SQL migration is not applied. The managed DB operator must identify the exact runtime DB principal and grant only the minimum challenge SELECT/INSERT/UPDATE and decision INSERT privileges; there are deliberately no PUBLIC grants.
+4. The decision ledger records a hash of the verified Hub session, not the bearer token or a detached Owner signature. No token is stored or logged. Approval is only a decision record; execution remains disabled until a separately reviewed one-shot executor verifies the recorded decision and the same manifest digest.
 
-Until these blockers are resolved, Owner approval cannot be issued/verified, and no relock action is executable. This code draft is not deployed and changes no live database, systemd unit, credential, signing or dispatch state.
+Until the trusted session adapter, Owner UI, least-privilege migration grants and separate executor are implemented, reviewed and deployed to DEV, Owner approval cannot be used to execute a relock. This code draft is not deployed and changes no live database, systemd unit, credential, signing or dispatch state.

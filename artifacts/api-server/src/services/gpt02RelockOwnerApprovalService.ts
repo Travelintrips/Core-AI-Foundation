@@ -1,13 +1,4 @@
-import {
-  createHash,
-  createPublicKey,
-  randomBytes,
-  randomUUID,
-  verify as verifySignature,
-  type KeyObject,
-} from "node:crypto";
-import { lstat, open } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 
@@ -17,14 +8,8 @@ export const GPT02_RELOCK_WORKER_ID = "openclaw-vps-main" as const;
 export const GPT02_RELOCK_HOST_ID = "srv1792369" as const;
 export const GPT02_RELOCK_TTL_MS = 120_000;
 
-const OWNER_APPROVAL_KEY_PATH = "/etc/gpt02-dev/public/gpt02-relock-owner-approval.pem";
-const TRUST_MANIFEST_PATH = "/etc/gpt02-dev/trust-fingerprints.json";
-const KEY_FINGERPRINT_FIELD = "gpt02RelockOwnerApproval";
-const KEY_OWNER_SUBJECT_FIELD = "gpt02RelockOwnerSubject";
-const KEY_OWNER_SUPABASE_ID_FIELD = "gpt02RelockOwnerAuthSupabaseId";
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const HEX_SHA256_PATTERN = /^[a-f0-9]{64}$/;
-const BASE64URL_SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{86}$/;
 
 export type Gpt02OwnerActor = Readonly<{
   id: string;
@@ -77,24 +62,49 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (isPlainObject(value)) {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
+    if (typeof value === "number" && !Number.isFinite(value)) deny("GPT02_MANIFEST_NUMBER_INVALID");
+    return JSON.stringify(value) ?? "null";
+  }
+  deny("GPT02_MANIFEST_VALUE_INVALID");
+}
+
+function sha256(value: string | Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export function canonicalizeGpt02RelockManifest(manifest: Gpt02RelockManifest): Buffer {
+  return Buffer.from(`CST_GPT02_RELOCK_OWNER_APPROVAL_V1\n${canonicalJson(manifest)}`, "utf8");
+}
+
+export function digestGpt02RelockManifest(manifest: Gpt02RelockManifest): string {
+  return sha256(canonicalizeGpt02RelockManifest(manifest));
+}
+
 function assertActorShape(actor: Gpt02OwnerActor, nowMs: number): void {
   if (
-    !isPlainObject(actor) ||
-    actor.role !== "super_admin" ||
+    !isPlainObject(actor) || actor.role !== "super_admin" ||
     !(actor.companyId === undefined || actor.companyId === null || actor.companyId === "default") ||
     actor.authSource !== "supabase_google_identity" ||
     typeof actor.id !== "string" || !/^google_[A-Za-z0-9_-]{6,120}$/.test(actor.id) ||
     typeof actor.email !== "string" || !/^[^@\s]+@[^@\s]+$/.test(actor.email) ||
     typeof actor.authSupabaseId !== "string" || !UUID_PATTERN.test(actor.authSupabaseId) ||
     !Number.isSafeInteger(actor.authVerifiedAt) ||
-    actor.authVerifiedAt > nowMs + 30_000 ||
-    actor.authVerifiedAt < nowMs - 5 * 60_000
-  ) {
-    deny("GPT02_OWNER_GOOGLE_SUPERADMIN_SESSION_REQUIRED");
-  }
+    actor.authVerifiedAt > nowMs + 30_000 || actor.authVerifiedAt < nowMs - 5 * 60_000
+  ) deny("GPT02_OWNER_GOOGLE_SUPERADMIN_SESSION_REQUIRED");
 }
 
-export function assertExactGpt02RelockManifestScope(manifest: Gpt02RelockManifest, actor: Gpt02OwnerActor, nowMs: number): void {
+export function assertExactGpt02RelockManifestScope(
+  manifest: Gpt02RelockManifest,
+  actor: Gpt02OwnerActor,
+  nowMs: number,
+): void {
   const expectedRoles = [
     { name: "dev_gpt02_relock_catalog_auditor", canLogin: false, connectionLimit: 0, passwordState: "PRESERVE_PRESENT" },
     { name: "dev_gpt02_attestor_evidence", canLogin: false, connectionLimit: 0, passwordState: "NULL" },
@@ -126,49 +136,7 @@ export function assertExactGpt02RelockManifestScope(manifest: Gpt02RelockManifes
     !Number.isSafeInteger(manifest.issuedAt) || !Number.isSafeInteger(manifest.expiresAt) ||
     manifest.issuedAt > nowMs + 30_000 || manifest.issuedAt < nowMs - GPT02_RELOCK_TTL_MS - 30_000 ||
     manifest.expiresAt <= nowMs || manifest.expiresAt - manifest.issuedAt !== GPT02_RELOCK_TTL_MS
-  ) {
-    deny("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
-  }
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (isPlainObject(value)) {
-    const keys = Object.keys(value).sort();
-    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
-  }
-  if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
-    if (typeof value === "number" && !Number.isFinite(value)) deny("GPT02_MANIFEST_NUMBER_INVALID");
-    return JSON.stringify(value) ?? "null";
-  }
-  deny("GPT02_MANIFEST_VALUE_INVALID");
-}
-
-function sha256(value: string | Buffer): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-export function canonicalizeGpt02RelockManifest(manifest: Gpt02RelockManifest): Buffer {
-  return Buffer.from(`CST_GPT02_RELOCK_OWNER_APPROVAL_V1\n${canonicalJson(manifest)}`, "utf8");
-}
-
-export function digestGpt02RelockManifest(manifest: Gpt02RelockManifest): string {
-  return sha256(canonicalizeGpt02RelockManifest(manifest));
-}
-
-export function verifyGpt02RelockOwnerSignatureWithKey(input: {
-  manifest: Gpt02RelockManifest;
-  signature: string;
-  publicKey: KeyObject;
-}): boolean {
-  if (input.publicKey.asymmetricKeyType !== "ed25519" || !BASE64URL_SIGNATURE_PATTERN.test(input.signature)) return false;
-  try {
-    const signature = Buffer.from(input.signature, "base64url");
-    return signature.length === 64 && signature.toString("base64url") === input.signature &&
-      verifySignature(null, canonicalizeGpt02RelockManifest(input.manifest), input.publicKey, signature);
-  } catch {
-    return false;
-  }
+  ) deny("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
 }
 
 export async function createGpt02RelockOwnerChallenge(input: {
@@ -180,7 +148,7 @@ export async function createGpt02RelockOwnerChallenge(input: {
   manifest: Gpt02RelockManifest;
   canonicalPayload: string;
   manifestSha256: string;
-  signatureAlgorithm: "Ed25519";
+  approvalMethod: "FRESH_CST_HUB_SIGNED_GOOGLE_OWNER_SESSION";
   expiresAt: string;
 }> {
   const nowMs = input.nowMs ?? Date.now();
@@ -188,9 +156,6 @@ export async function createGpt02RelockOwnerChallenge(input: {
   if (typeof input.verifyOwner !== "function" || await input.verifyOwner(input.actor) !== true) {
     deny("GPT02_OWNER_IDENTITY_NOT_ELIGIBLE");
   }
-  // Refuse to create an approval challenge unless the dedicated Owner key is
-  // already pinned. This avoids presenting an approval UI that cannot verify.
-  await loadPinnedOwnerApprovalKey(input.actor);
 
   const nonce = randomBytes(32).toString("base64url");
   const requestId = randomUUID();
@@ -220,8 +185,8 @@ export async function createGpt02RelockOwnerChallenge(input: {
       "SET_EVIDENCE_ROLES_NOLOGIN_LIMIT0_PASSWORD_NULL",
       "SET_AUDITOR_NOLOGIN_LIMIT0_PRESERVE_PASSWORD",
     ] as const,
-    preconditions: { rolesFound: 4, activeSessions: 0, openWatchdogRows: 0, serviceIdle: true, noConcurrentSupervisorRun: true },
-    postconditions: { allRoleInvariantsPass: true, activeSessions: 0, openWatchdogRows: 0, timerInactiveDisabled: true, serviceIdle: true, credentialMetadataPass: true },
+    preconditions: { rolesFound: 4, activeSessions: 0, openWatchdogRows: 0, serviceIdle: true, noConcurrentSupervisorRun: true } as const,
+    postconditions: { allRoleInvariantsPass: true, activeSessions: 0, openWatchdogRows: 0, timerInactiveDisabled: true, serviceIdle: true, credentialMetadataPass: true } as const,
     ownerSubject: `owner:${input.actor.id}`,
     ownerAuthSupabaseId: input.actor.authSupabaseId.toLowerCase(),
     ownerEmail: input.actor.email.toLowerCase(),
@@ -236,7 +201,6 @@ export async function createGpt02RelockOwnerChallenge(input: {
   const challengeId = randomUUID();
   const nonceHash = sha256(nonce);
 
-  // The challenge store is migration-managed. The runtime never creates schema.
   await db.execute(sql`
     UPDATE ai_platform.gpt02_relock_owner_approval_challenges
     SET status = 'EXPIRED'
@@ -264,78 +228,22 @@ export async function createGpt02RelockOwnerChallenge(input: {
     manifest,
     canonicalPayload: canonicalPayload.toString("base64url"),
     manifestSha256,
-    signatureAlgorithm: "Ed25519",
+    approvalMethod: "FRESH_CST_HUB_SIGNED_GOOGLE_OWNER_SESSION",
     expiresAt: new Date(manifest.expiresAt).toISOString(),
   };
-}
-
-async function loadPinnedOwnerApprovalKey(expectedOwner?: Gpt02OwnerActor): Promise<{ key: KeyObject; fingerprint: string }> {
-  const rootDir = "/etc/gpt02-dev";
-  const publicDir = "/etc/gpt02-dev/public";
-  for (const directory of [rootDir, publicDir]) {
-    let info;
-    try { info = await lstat(directory); } catch { deny("GPT02_OWNER_APPROVAL_TRUST_ANCHOR_MISSING"); }
-    if (!info!.isDirectory() || info!.isSymbolicLink() || info!.uid !== 0 || info!.gid !== 0 || (info!.mode & 0o022) !== 0) {
-      deny("GPT02_OWNER_APPROVAL_TRUST_DIRECTORY_CUSTODY_INVALID");
-    }
-  }
-
-  let keyHandle;
-  try {
-    keyHandle = await open(OWNER_APPROVAL_KEY_PATH, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-  } catch {
-    deny("GPT02_OWNER_APPROVAL_TRUST_ANCHOR_MISSING");
-  }
-  try {
-    const trustHandle = await open(TRUST_MANIFEST_PATH, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW).catch(() => {
-      deny("GPT02_OWNER_APPROVAL_TRUST_MANIFEST_MISSING");
-    });
-    try {
-      const [keyInfo, trustInfo] = await Promise.all([keyHandle!.stat(), trustHandle.stat()]);
-      if (
-        !keyInfo.isFile() || keyInfo.uid !== 0 || keyInfo.gid !== 0 || (keyInfo.mode & 0o777) !== 0o440 ||
-        !trustInfo.isFile() || trustInfo.uid !== 0 || trustInfo.gid !== 0 || (trustInfo.mode & 0o777) !== 0o644
-      ) {
-        deny("GPT02_OWNER_APPROVAL_TRUST_CUSTODY_INVALID");
-      }
-      const [pem, trustBytes] = await Promise.all([keyHandle!.readFile(), trustHandle.readFile()]);
-      if (pem.length === 0 || pem.length > 4096 || trustBytes.length > 16_384) {
-        deny("GPT02_OWNER_APPROVAL_TRUST_FILE_SIZE_INVALID");
-      }
-      let trust: unknown;
-      try { trust = JSON.parse(trustBytes.toString("utf8")); } catch { deny("GPT02_OWNER_APPROVAL_TRUST_MANIFEST_INVALID"); }
-      if (!isPlainObject(trust) || typeof trust[KEY_FINGERPRINT_FIELD] !== "string" || !HEX_SHA256_PATTERN.test(trust[KEY_FINGERPRINT_FIELD]) ||
-          typeof trust[KEY_OWNER_SUBJECT_FIELD] !== "string" || !/^owner:google_[A-Za-z0-9_-]{6,120}$/.test(trust[KEY_OWNER_SUBJECT_FIELD]) ||
-          typeof trust[KEY_OWNER_SUPABASE_ID_FIELD] !== "string" || !UUID_PATTERN.test(trust[KEY_OWNER_SUPABASE_ID_FIELD])) {
-        deny("GPT02_OWNER_APPROVAL_FINGERPRINT_NOT_PROVISIONED");
-      }
-      if (expectedOwner && (trust[KEY_OWNER_SUBJECT_FIELD] !== `owner:${expectedOwner.id}` ||
-          trust[KEY_OWNER_SUPABASE_ID_FIELD] !== expectedOwner.authSupabaseId.toLowerCase())) {
-        deny("GPT02_OWNER_APPROVAL_KEY_OWNER_BINDING_MISMATCH");
-      }
-      let key: KeyObject;
-      try { key = createPublicKey(pem); } catch { deny("GPT02_OWNER_APPROVAL_PUBLIC_KEY_INVALID"); }
-      if (key!.asymmetricKeyType !== "ed25519") deny("GPT02_OWNER_APPROVAL_KEY_NOT_ED25519");
-      const fingerprint = sha256(key!.export({ type: "spki", format: "der" }) as Buffer);
-      if (fingerprint !== trust[KEY_FINGERPRINT_FIELD]) deny("GPT02_OWNER_APPROVAL_FINGERPRINT_MISMATCH");
-      return { key: key!, fingerprint };
-    } finally {
-      await trustHandle.close();
-    }
-  } finally {
-    await keyHandle!.close();
-  }
 }
 
 export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
   actor: Gpt02OwnerActor;
   verifyOwner: Gpt02OwnerVerifier;
   challengeId: string;
-  signature: string;
+  manifestSha256: string;
+  signedSessionSha256: string;
   nowMs?: number;
 }): Promise<{
   recorded: true;
-  ownerApprovalVerified: true;
+  ownerIdentityCryptographicallyVerified: true;
+  explicitOwnerDecision: "APPROVE";
   executionPermitted: false;
   signingPermitted: false;
   dispatchPermitted: false;
@@ -347,7 +255,8 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
   if (typeof input.verifyOwner !== "function" || await input.verifyOwner(input.actor) !== true) {
     deny("GPT02_OWNER_IDENTITY_NOT_ELIGIBLE");
   }
-  if (!UUID_PATTERN.test(input.challengeId) || !BASE64URL_SIGNATURE_PATTERN.test(input.signature)) {
+  if (!UUID_PATTERN.test(input.challengeId) || !HEX_SHA256_PATTERN.test(input.manifestSha256) ||
+      !HEX_SHA256_PATTERN.test(input.signedSessionSha256)) {
     deny("GPT02_OWNER_APPROVAL_SUBMISSION_INVALID");
   }
 
@@ -373,19 +282,13 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
   assertExactGpt02RelockManifestScope(manifest, input.actor, nowMs);
   const canonicalPayload = canonicalizeGpt02RelockManifest(manifest);
   const digest = sha256(canonicalPayload);
-  if (digest !== row.manifest_sha256 || !HEX_SHA256_PATTERN.test(digest)) {
+  if (digest !== row.manifest_sha256 || digest !== input.manifestSha256 || !HEX_SHA256_PATTERN.test(digest)) {
     deny("GPT02_OWNER_APPROVAL_MANIFEST_DIGEST_MISMATCH");
   }
   const nonceHash = sha256(manifest.nonce);
   if (nonceHash !== row.nonce_hash || manifest.expiresAt <= nowMs || manifest.issuedAt > nowMs + 30_000) {
     deny("GPT02_OWNER_APPROVAL_NONCE_OR_TIME_INVALID");
   }
-
-  const { key, fingerprint } = await loadPinnedOwnerApprovalKey(input.actor);
-  if (!verifyGpt02RelockOwnerSignatureWithKey({ manifest, signature: input.signature, publicKey: key })) {
-    deny("GPT02_OWNER_APPROVAL_SIGNATURE_INVALID");
-  }
-  const signatureSha256 = sha256(Buffer.from(input.signature, "base64url"));
 
   await db.transaction(async (tx) => {
     const consumed = await tx.execute(sql`
@@ -395,6 +298,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
         AND status = 'PENDING'
         AND expires_at > NOW()
         AND owner_subject = ${`owner:${input.actor.id}`}
+        AND owner_auth_supabase_id = ${input.actor.authSupabaseId}::uuid
         AND manifest_sha256 = ${digest}
         AND nonce_hash = ${nonceHash}
       RETURNING id
@@ -404,39 +308,26 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
     }
     await tx.execute(sql`
       INSERT INTO ai_platform.gpt02_relock_owner_approval_decisions (
-        challenge_id, scope, owner_subject, worker_principal,
-        manifest_sha256, signature_sha256, approval_key_fingerprint,
+        challenge_id, scope, owner_subject, owner_auth_supabase_id, owner_email,
+        worker_principal, manifest_sha256, signed_session_sha256, approval_method,
         decision, decided_at
       ) VALUES (
         ${input.challengeId}::uuid, ${GPT02_RELOCK_SCOPE}, ${`owner:${input.actor.id}`},
-        ${GPT02_RELOCK_WORKER_ID}, ${digest}, ${signatureSha256}, ${fingerprint},
-        'APPROVED', NOW()
+        ${input.actor.authSupabaseId}::uuid, ${input.actor.email.toLowerCase()},
+        ${GPT02_RELOCK_WORKER_ID}, ${digest}, ${input.signedSessionSha256},
+        'FRESH_CST_HUB_SIGNED_GOOGLE_OWNER_SESSION', 'APPROVED', NOW()
       )
     `);
   });
 
   return {
     recorded: true,
-    ownerApprovalVerified: true,
+    ownerIdentityCryptographicallyVerified: true,
+    explicitOwnerDecision: "APPROVE",
     executionPermitted: false,
     signingPermitted: false,
     dispatchPermitted: false,
     releaseDecision: "NO_GO",
     manifestSha256: digest,
   };
-}
-
-// Explicitly expose only public, non-secret availability metadata. No fallback
-// to the Task #189 approval key or generic SECURITY_CHANGE token is permitted.
-export async function getGpt02RelockOwnerApprovalReadiness(): Promise<{
-  dedicatedTrustAnchorPresent: boolean;
-  task189KeyFallbackPermitted: false;
-  runtimeRouteIntegrated: false;
-}> {
-  try {
-    await loadPinnedOwnerApprovalKey();
-    return { dedicatedTrustAnchorPresent: true, task189KeyFallbackPermitted: false, runtimeRouteIntegrated: false };
-  } catch {
-    return { dedicatedTrustAnchorPresent: false, task189KeyFallbackPermitted: false, runtimeRouteIntegrated: false };
-  }
 }

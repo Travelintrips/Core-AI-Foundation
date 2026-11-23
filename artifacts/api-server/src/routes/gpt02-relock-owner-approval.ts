@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import {
   createGpt02RelockOwnerChallenge,
@@ -102,7 +103,7 @@ export function createGpt02RelockOwnerApprovalRouter(
         manifest: challenge.manifest,
         canonicalPayload: challenge.canonicalPayload,
         manifestSha256: challenge.manifestSha256,
-        signatureAlgorithm: challenge.signatureAlgorithm,
+        approvalMethod: challenge.approvalMethod,
         expiresAt: challenge.expiresAt,
         ownerApprovalGranted: false,
         executionPermitted: false,
@@ -111,7 +112,7 @@ export function createGpt02RelockOwnerApprovalRouter(
       });
     } catch (error) {
       const code = safeErrorCode(error, "GPT02_OWNER_APPROVAL_PREPARATION_FAILED");
-      const unauthorized = code.includes("OWNER_SESSION") || code.includes("OWNER_IDENTITY");
+      const unauthorized = code.includes("SUPERADMIN_SESSION_REQUIRED") || code.includes("OWNER_IDENTITY_NOT_ELIGIBLE") || code.includes("OWNER_SESSION_REQUIRED");
       reject(res, unauthorized ? 403 : 503, unauthorized ? "GPT02_VERIFIED_OWNER_REQUIRED" : code);
     }
   });
@@ -123,8 +124,9 @@ export function createGpt02RelockOwnerApprovalRouter(
       return;
     }
     if (!req.body || typeof req.body !== "object" || Array.isArray(req.body) ||
-        Object.keys(req.body).sort().join(",") !== "challengeId,signature" ||
-        typeof req.body.challengeId !== "string" || typeof req.body.signature !== "string") {
+        Object.keys(req.body).sort().join(",") !== "challengeId,decision,manifestSha256" ||
+        typeof req.body.challengeId !== "string" || req.body.decision !== "APPROVE" ||
+        typeof req.body.manifestSha256 !== "string") {
       reject(res, 400, "GPT02_OWNER_APPROVAL_SUBMISSION_INVALID");
       return;
     }
@@ -134,7 +136,8 @@ export function createGpt02RelockOwnerApprovalRouter(
         actor,
         verifyOwner: options.verifyOwnerEligibility,
         challengeId: req.body.challengeId,
-        signature: req.body.signature,
+        manifestSha256: req.body.manifestSha256,
+        signedSessionSha256: createHash("sha256").update(token, "utf8").digest("hex"),
       });
       res.status(200).json({
         ...result,

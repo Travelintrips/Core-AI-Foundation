@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign } from "node:crypto";
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { execute, transaction } = vi.hoisted(() => ({
@@ -6,20 +6,18 @@ const { execute, transaction } = vi.hoisted(() => ({
   transaction: vi.fn(),
 }));
 
-vi.mock("@workspace/db", () => ({
-  db: { execute, transaction },
-}));
+vi.mock("@workspace/db", () => ({ db: { execute, transaction } }));
 
 import {
   assertExactGpt02RelockManifestScope,
   createGpt02RelockOwnerChallenge,
   digestGpt02RelockManifest,
-  getGpt02RelockOwnerApprovalReadiness,
-  verifyGpt02RelockOwnerSignatureWithKey,
+  verifyAndRecordGpt02RelockOwnerApproval,
   type Gpt02OwnerActor,
   type Gpt02RelockManifest,
 } from "../gpt02RelockOwnerApprovalService.js";
 
+const nowMs = 1_700_000_000_000;
 const actor: Gpt02OwnerActor = {
   id: "google_owner123456",
   role: "super_admin",
@@ -27,7 +25,7 @@ const actor: Gpt02OwnerActor = {
   email: "owner@example.test",
   authSource: "supabase_google_identity",
   authSupabaseId: "11111111-2222-4333-8444-555555555555",
-  authVerifiedAt: 1_700_000_000_000,
+  authVerifiedAt: nowMs,
 };
 
 function manifestFixture(): Gpt02RelockManifest {
@@ -56,9 +54,17 @@ function manifestFixture(): Gpt02RelockManifest {
     ownerEmail: "owner@example.test",
     requestId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     nonce: "n".repeat(43),
-    issuedAt: 1_700_000_000_000,
-    expiresAt: 1_700_000_120_000,
+    issuedAt: nowMs,
+    expiresAt: nowMs + 120_000,
   };
+}
+
+function txFor(challengeId: string, updateRows: unknown[] = [{ id: challengeId }]) {
+  const txExecute = vi.fn()
+    .mockResolvedValueOnce({ rows: updateRows })
+    .mockResolvedValueOnce({ rows: [] });
+  transaction.mockImplementation(async (callback: (tx: { execute: typeof txExecute }) => unknown) => callback({ execute: txExecute }));
+  return txExecute;
 }
 
 describe("GPT02 relock Owner approval", () => {
@@ -67,71 +73,127 @@ describe("GPT02 relock Owner approval", () => {
     transaction.mockReset();
   });
 
-  it("does not issue a challenge before the dedicated GPT02 Owner key is pinned", async () => {
-    await expect(createGpt02RelockOwnerChallenge({
+  it("creates only a short-lived exact DEV challenge after trusted Owner eligibility is confirmed", async () => {
+    const result = await createGpt02RelockOwnerChallenge({
       actor,
       verifyOwner: async (candidate) => candidate.id === actor.id,
-      nowMs: actor.authVerifiedAt,
-    })).rejects.toThrow("GPT02_OWNER_APPROVAL_TRUST_ANCHOR_MISSING");
-    expect(execute).not.toHaveBeenCalled();
+      nowMs,
+    });
+    expect(result.manifest.scope).toBe("GPT02_RELOCK_CST_DEV");
+    expect(result.manifest.projectId).toBe("xssrfshdrtdfupgqwfdw");
+    expect(result.manifest.workerPrincipal).toBe("openclaw-vps-main");
+    expect(result.manifest.roles).toHaveLength(4);
+    expect(result.manifest.timer.finalActiveState).toBe("inactive");
+    expect(result.manifest.timer.finalUnitFileState).toBe("disabled");
+    expect(result.manifest.expiresAt - result.manifest.issuedAt).toBe(120_000);
+    expect(result.approvalMethod).toBe("FRESH_CST_HUB_SIGNED_GOOGLE_OWNER_SESSION");
+    expect(result.manifestSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it("fails closed when Owner eligibility is not proven", async () => {
-    await expect(createGpt02RelockOwnerChallengeWithDeniedOwner()).rejects.toThrow(
-      "GPT02_OWNER_IDENTITY_NOT_ELIGIBLE",
-    );
+    await expect(createGpt02RelockOwnerChallenge({ actor, verifyOwner: async () => false, nowMs }))
+      .rejects.toThrow("GPT02_OWNER_IDENTITY_NOT_ELIGIBLE");
     expect(execute).not.toHaveBeenCalled();
-  });
-
-  it("verifies an Ed25519 signature over the exact canonical manifest", () => {
-    const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-    const manifest = manifestFixture();
-    const payload = Buffer.from(
-      `CST_GPT02_RELOCK_OWNER_APPROVAL_V1\n${stableCanonicalForTest(manifest)}`,
-      "utf8",
-    );
-    const signature = sign(null, payload, privateKey).toString("base64url");
-
-    expect(verifyGpt02RelockOwnerSignatureWithKey({ manifest, signature, publicKey })).toBe(true);
-    expect(verifyGpt02RelockOwnerSignatureWithKey({
-      manifest: { ...manifest, projectId: "prod-project-not-allowed" } as Gpt02RelockManifest,
-      signature,
-      publicKey,
-    })).toBe(false);
-    expect(verifyGpt02RelockOwnerSignatureWithKey({ manifest, signature: "not-a-signature", publicKey })).toBe(false);
-  });
-
-  it("does not report readiness without the dedicated GPT02 trust anchor", async () => {
-    const readiness = await getGpt02RelockOwnerApprovalReadiness();
-    expect(readiness.task189KeyFallbackPermitted).toBe(false);
-    expect(readiness.runtimeRouteIntegrated).toBe(false);
   });
 
   it("accepts only the fixed target scope and exact action list", () => {
     const manifest = manifestFixture();
-    expect(() => assertExactGpt02RelockManifestScope(manifest, actor, manifest.issuedAt)).not.toThrow();
-    expect(() => assertExactGpt02RelockManifestScope({ ...manifest, projectId: "prod" } as Gpt02RelockManifest, actor, manifest.issuedAt)).toThrow("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
-    expect(() => assertExactGpt02RelockManifestScope({ ...manifest, operations: ["DISABLE_ISSUE159_TIMER"] as unknown as Gpt02RelockManifest["operations"] }, actor, manifest.issuedAt)).toThrow("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
+    expect(() => assertExactGpt02RelockManifestScope(manifest, actor, nowMs)).not.toThrow();
+    expect(() => assertExactGpt02RelockManifestScope({ ...manifest, projectId: "prod" } as Gpt02RelockManifest, actor, nowMs))
+      .toThrow("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
+    expect(() => assertExactGpt02RelockManifestScope({ ...manifest, operations: ["DISABLE_ISSUE159_TIMER"] as unknown as Gpt02RelockManifest["operations"] }, actor, nowMs))
+      .toThrow("GPT02_OWNER_APPROVAL_MANIFEST_SCOPE_INVALID");
+  });
+
+  it("records an explicit Owner decision bound to the exact digest and signed session hash", async () => {
+    const manifest = manifestFixture();
+    const challengeId = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
+    const digest = digestGpt02RelockManifest(manifest);
+    const sessionHash = createHash("sha256").update("signed-owner-session-fixture").digest("hex");
+    execute.mockResolvedValueOnce({ rows: [{
+      id: challengeId,
+      owner_subject: manifest.ownerSubject,
+      owner_auth_supabase_id: manifest.ownerAuthSupabaseId,
+      owner_email: manifest.ownerEmail,
+      manifest_json: manifest,
+      manifest_sha256: digest,
+      nonce_hash: createHash("sha256").update(manifest.nonce).digest("hex"),
+      expires_at: new Date(manifest.expiresAt).toISOString(),
+      status: "PENDING",
+    }] });
+    const txExecute = txFor(challengeId);
+
+    const result = await verifyAndRecordGpt02RelockOwnerApproval({
+      actor,
+      verifyOwner: async (candidate) => candidate.authSupabaseId === actor.authSupabaseId,
+      challengeId,
+      manifestSha256: digest,
+      signedSessionSha256: sessionHash,
+      nowMs,
+    });
+
+    expect(result.recorded).toBe(true);
+    expect(result.ownerIdentityCryptographicallyVerified).toBe(true);
+    expect(result.explicitOwnerDecision).toBe("APPROVE");
+    expect(result.executionPermitted).toBe(false);
+    expect(result.signingPermitted).toBe(false);
+    expect(result.dispatchPermitted).toBe(false);
+    expect(result.releaseDecision).toBe("NO_GO");
+    expect(txExecute).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a challenge if the authenticated Owner submits a different manifest digest", async () => {
+    const manifest = manifestFixture();
+    const challengeId = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
+    execute.mockResolvedValueOnce({ rows: [{
+      id: challengeId,
+      owner_subject: manifest.ownerSubject,
+      owner_auth_supabase_id: manifest.ownerAuthSupabaseId,
+      owner_email: manifest.ownerEmail,
+      manifest_json: manifest,
+      manifest_sha256: digestGpt02RelockManifest(manifest),
+      nonce_hash: createHash("sha256").update(manifest.nonce).digest("hex"),
+      expires_at: new Date(manifest.expiresAt).toISOString(),
+      status: "PENDING",
+    }] });
+    await expect(verifyAndRecordGpt02RelockOwnerApproval({
+      actor,
+      verifyOwner: async () => true,
+      challengeId,
+      manifestSha256: "a".repeat(64),
+      signedSessionSha256: "b".repeat(64),
+      nowMs,
+    })).rejects.toThrow("GPT02_OWNER_APPROVAL_MANIFEST_DIGEST_MISMATCH");
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a replay or concurrent consume when the pending challenge was already consumed", async () => {
+    const manifest = manifestFixture();
+    const challengeId = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
+    const digest = digestGpt02RelockManifest(manifest);
+    execute.mockResolvedValueOnce({ rows: [{
+      id: challengeId,
+      owner_subject: manifest.ownerSubject,
+      owner_auth_supabase_id: manifest.ownerAuthSupabaseId,
+      owner_email: manifest.ownerEmail,
+      manifest_json: manifest,
+      manifest_sha256: digest,
+      nonce_hash: createHash("sha256").update(manifest.nonce).digest("hex"),
+      expires_at: new Date(manifest.expiresAt).toISOString(),
+      status: "PENDING",
+    }] });
+    const txExecute = txFor(challengeId, []);
+    await expect(verifyAndRecordGpt02RelockOwnerApproval({
+      actor, verifyOwner: async () => true, challengeId, manifestSha256: digest,
+      signedSessionSha256: "b".repeat(64), nowMs,
+    })).rejects.toThrow("GPT02_OWNER_APPROVAL_NONCE_REPLAY_OR_RACE");
+    expect(txExecute).toHaveBeenCalledTimes(1);
   });
 
   it("hashes the full canonical manifest including nonce and expiry", () => {
     const manifest = manifestFixture();
     expect(digestGpt02RelockManifest(manifest)).toMatch(/^[a-f0-9]{64}$/);
-    expect(digestGpt02RelockManifest({ ...manifest, nonce: "z".repeat(43) })).not.toBe(
-      digestGpt02RelockManifest(manifest),
-    );
+    expect(digestGpt02RelockManifest({ ...manifest, nonce: "z".repeat(43) })).not.toBe(digestGpt02RelockManifest(manifest));
   });
 });
-
-async function createGpt02RelockOwnerChallengeWithDeniedOwner() {
-  return createGpt02RelockOwnerChallenge({ actor, verifyOwner: async () => false, nowMs: actor.authVerifiedAt });
-}
-
-function stableCanonicalForTest(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableCanonicalForTest).join(",")}]`;
-  if (value && typeof value === "object") {
-    const object = value as Record<string, unknown>;
-    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableCanonicalForTest(object[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
-}
