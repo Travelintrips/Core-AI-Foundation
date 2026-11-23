@@ -5,7 +5,10 @@
 # database lease must exist independently before any service activation.
 [Unit]
 Description=CST-DEV one-Owner WAITING-only Gate A DB broker (NO-GO candidate)
-After=network.target
+After=network.target cst-onejob-gatea-watchdog.service
+BindsTo=cst-onejob-gatea-watchdog.service
+# A watchdog failure/restart stops the unique stage broker; no auto-restart.
+# It must never outlive the independently authorized relock guardian.
 AssertPathExists=/etc/cst-onejob-dev/gatea-authority/approved-gatea-public.pem
 AssertPathExists=/etc/cst-onejob-dev/gatea-authority/signed-gatea-manifest.json
 AssertPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env

@@ -1,0 +1,16 @@
+# SOURCE CANDIDATE ONLY. Never enable before signed Gate A technical release.
+# Socket accepts connections from any local UID but only the CURRENT,
+# non-root, systemd-confirmed watchdog MainPID is accepted by the service.
+[Unit]
+Description=CST-DEV Gate A watchdog relock -> exact stage broker stop socket (CANDIDATE)
+
+[Socket]
+ListenStream=/run/cst-onejob-gatea-stage-stop.sock
+SocketMode=0666
+Accept=yes
+MaxConnections=8
+Backlog=8
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,31 @@
+# SOURCE CANDIDATE ONLY. Never install without systemd peercred integration QA.
+# Root has no arbitrary commands; executable targets only one fixed broker unit.
+[Unit]
+Description=CST-DEV Gate A relock stop relay instance (CANDIDATE)
+BindsTo=cst-onejob-gatea-watchdog.service
+After=cst-onejob-gatea-watchdog.service
+
+[Service]
+Type=exec
+User=root
+Group=root
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_gatea_stage_stop_bridge.py serve-fd0
+TimeoutStartSec=10s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=96M
+TasksMax=20

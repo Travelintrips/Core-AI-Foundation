@@ -7,7 +7,8 @@
 [Unit]
 Description=CST-DEV independent Gate A lease relock watchdog (NO-GO candidate)
 Wants=network-online.target
-After=network-online.target
+Requires=cst-onejob-gatea-stage-stop-bridge.socket
+After=network-online.target cst-onejob-gatea-stage-stop-bridge.socket
 StartLimitIntervalSec=0
 # Retry indefinitely after temporary database failure; each retry fails closed.
 AssertPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
@@ -51,7 +52,7 @@ ExecStartPre=/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-ca
 # The runner exists as source only. It rejects unpinned TLS, unknown DB roles,
 # URLs outside CST-DEV, and SQL outside the fixed relock query allowlist.
 # No real relock-only credential or grant has been approved/provisioned.
-ExecStart=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py --credential-file ${CREDENTIALS_DIRECTORY}/watchdog-db --ca-file ${CREDENTIALS_DIRECTORY}/watchdog-ca --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA}
+ExecStart=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py --credential-file ${CREDENTIALS_DIRECTORY}/watchdog-db --ca-file ${CREDENTIALS_DIRECTORY}/watchdog-ca --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA} --stage-stop-bridge-socket /run/cst-onejob-gatea-stage-stop.sock
 Restart=always
 RestartSec=5s
 TimeoutStartSec=20s

@@ -28,6 +28,9 @@ from cst_onejob_gatea_lease_reader import (
 from cst_onejob_stage_relock_controller import ROLE_QUERY, ACTIVE_QUERY
 from cst_onejob_stage_watchdog_candidate import check_once
 from cst_onejob_preapproval_stage_broker import PROJECT
+from cst_onejob_gatea_stage_stop_bridge import (
+    SOCKET_PATH as STAGE_STOP_SOCKET, notify_stage_stop,
+)
 
 HOST = "aws-1-ap-southeast-2.pooler.supabase.com"
 ROLE = "cst_gatea_watchdog_relock"
@@ -103,17 +106,42 @@ def run_watchdog_check(query, source_sha, *, close_stage_transport=None):
     validate_source_sha(source_sha)
     if not callable(query):
         raise WatchdogRunnerDenied("RUNNER_SQL_READER_REQUIRED")
+    seen={"role":None,"sessions":None,"lease":None}
     def scoped_query(statement):
         if statement not in ALLOWED_SQL:
             raise WatchdogRunnerDenied("RUNNER_SQL_OUTSIDE_RELOCK_ALLOWLIST")
-        return query(statement)
+        rows=query(statement)
+        if statement==ROLE_QUERY:
+            seen["role"]=rows
+        elif statement==ACTIVE_QUERY:
+            seen["sessions"]=rows
+        elif statement==LEASE_SQL:
+            seen["lease"]=rows
+        return rows
+    def safely_relock(q):
+        if close_stage_transport is None:
+            return relock_exact(q)
+        # Avoid stopping a newly prepared signed broker on every 5-second
+        # idle polling tick, while role is already NOLOGIN, no sessions and
+        # no lease. All other/drifted/unknown states require transport STOP
+        # first. Existing DB role/session/lease reads are reused unchanged.
+        try:
+            role=seen["role"][0]
+            remaining=seen["sessions"][0][0]
+            already_closed=(len(role)==5 and int(role[0])==0 and
+                            tuple(int(v) for v in role[1:])==(0,0,0,1) and
+                            int(remaining)==0 and seen["lease"]==[])
+        except (TypeError,KeyError,IndexError,ValueError):
+            already_closed=False
+        if already_closed:
+            return relock_exact(q)
+        return close_transport_before_relock(q,close_stage_transport)
     now = read_database_utc_clock(scoped_query)
     return check_once(
         scoped_query,
         lambda: read_project_lease(scoped_query),
         now=now, approved_source_sha=source_sha,
-        relock=(relock_exact if close_stage_transport is None else
-                lambda q: close_transport_before_relock(q, close_stage_transport)),
+        relock=safely_relock,
     )
 
 def _read_regular(path, maximum, *, owner=None):
@@ -240,6 +268,7 @@ def main(argv=None):
     parser.add_argument("--credential-file",required=True)
     parser.add_argument("--ca-file",required=True)
     parser.add_argument("--expected-source-sha",required=True)
+    parser.add_argument("--stage-stop-bridge-socket",default=None)
     args=parser.parse_args(argv)
     try:
         pin=validate_source_sha(args.expected_source_sha)
@@ -257,7 +286,13 @@ def main(argv=None):
         stop=threading.Event()
         signal.signal(signal.SIGTERM,lambda *_:stop.set())
         signal.signal(signal.SIGINT,lambda *_:stop.set())
-        run_loop(pin,dsn,args.ca_file,stop=stop)
+        stage_stop=None
+        if args.stage_stop_bridge_socket is not None:
+            if args.stage_stop_bridge_socket != STAGE_STOP_SOCKET:
+                raise WatchdogRunnerDenied("STOP_BRIDGE_SOCKET_NOT_PINNED")
+            stage_stop=notify_stage_stop
+        run_loop(pin,dsn,args.ca_file,stop=stop,
+                 close_stage_transport=stage_stop)
         return 0
     except Exception:
         # Do not expose URLs, usernames, auth, query results or SQL errors.
