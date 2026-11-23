@@ -130,3 +130,8 @@ CREATE TRIGGER gpt02_relock_owner_decision_guard
 
 REVOKE ALL ON ai_platform.gpt02_relock_owner_approval_challenges FROM PUBLIC;
 REVOKE ALL ON ai_platform.gpt02_relock_owner_approval_decisions FROM PUBLIC;
+
+-- Trigger functions are invoked only by their attached triggers. Do not leave
+-- the default PUBLIC EXECUTE privilege on either implementation function.
+REVOKE ALL ON FUNCTION ai_platform.gpt02_relock_approval_challenge_guard() FROM PUBLIC;
+REVOKE ALL ON FUNCTION ai_platform.gpt02_relock_approval_decision_guard() FROM PUBLIC;
