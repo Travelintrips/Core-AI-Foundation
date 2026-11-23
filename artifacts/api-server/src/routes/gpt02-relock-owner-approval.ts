@@ -65,7 +65,6 @@ export function createGpt02RelockOwnerApprovalRouter(
     throw new Error("GPT02_TRUSTED_OWNER_SESSION_ADAPTER_REQUIRED");
   }
   const router = Router();
-  router.disable("x-powered-by");
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
     res.set("Pragma", "no-cache");

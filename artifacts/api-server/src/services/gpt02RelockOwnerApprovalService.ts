@@ -19,6 +19,8 @@ export const GPT02_RELOCK_TTL_MS = 120_000;
 const OWNER_APPROVAL_KEY_PATH = "/etc/gpt02-dev/public/gpt02-relock-owner-approval.pem";
 const TRUST_MANIFEST_PATH = "/etc/gpt02-dev/trust-fingerprints.json";
 const KEY_FINGERPRINT_FIELD = "gpt02RelockOwnerApproval";
+const KEY_OWNER_SUBJECT_FIELD = "gpt02RelockOwnerSubject";
+const KEY_OWNER_SUPABASE_ID_FIELD = "gpt02RelockOwnerAuthSupabaseId";
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const HEX_SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const BASE64URL_SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{86}$/;
@@ -187,7 +189,7 @@ export async function createGpt02RelockOwnerChallenge(input: {
   }
   // Refuse to create an approval challenge unless the dedicated Owner key is
   // already pinned. This avoids presenting an approval UI that cannot verify.
-  await loadPinnedOwnerApprovalKey();
+  await loadPinnedOwnerApprovalKey(input.actor);
 
   const nonce = randomBytes(32).toString("base64url");
   const requestId = randomUUID();
@@ -204,7 +206,7 @@ export async function createGpt02RelockOwnerChallenge(input: {
       { name: "dev_gpt02_attestor_evidence", canLogin: false, connectionLimit: 0, passwordState: "NULL" },
       { name: "dev_gpt02_issuer_evidence", canLogin: false, connectionLimit: 0, passwordState: "NULL" },
       { name: "gpt02_issuer_evidence_reader", canLogin: false, connectionLimit: 0, passwordState: "NULL" },
-    ],
+    ] as const,
     timer: { unit: "gpt02-issue159-relock-catalog-auditor.timer", finalActiveState: "inactive", finalUnitFileState: "disabled" },
     service: { unit: "gpt02-issue159-relock-catalog-auditor.service", finalActiveState: "inactive", finalMainPid: 0 },
     credential: {
@@ -216,7 +218,7 @@ export async function createGpt02RelockOwnerChallenge(input: {
       "DISABLE_ISSUE159_TIMER",
       "SET_EVIDENCE_ROLES_NOLOGIN_LIMIT0_PASSWORD_NULL",
       "SET_AUDITOR_NOLOGIN_LIMIT0_PRESERVE_PASSWORD",
-    ],
+    ] as const,
     preconditions: { rolesFound: 4, activeSessions: 0, openWatchdogRows: 0, serviceIdle: true, noConcurrentSupervisorRun: true },
     postconditions: { allRoleInvariantsPass: true, activeSessions: 0, openWatchdogRows: 0, timerInactiveDisabled: true, serviceIdle: true, credentialMetadataPass: true },
     ownerSubject: `owner:${input.actor.id}`,
@@ -266,7 +268,7 @@ export async function createGpt02RelockOwnerChallenge(input: {
   };
 }
 
-async function loadPinnedOwnerApprovalKey(): Promise<{ key: KeyObject; fingerprint: string }> {
+async function loadPinnedOwnerApprovalKey(expectedOwner?: Gpt02OwnerActor): Promise<{ key: KeyObject; fingerprint: string }> {
   let keyInfo;
   let trustInfo;
   try {
@@ -292,8 +294,14 @@ async function loadPinnedOwnerApprovalKey(): Promise<{ key: KeyObject; fingerpri
   }
   let trust: unknown;
   try { trust = JSON.parse(trustBytes.toString("utf8")); } catch { deny("GPT02_OWNER_APPROVAL_TRUST_MANIFEST_INVALID"); }
-  if (!isPlainObject(trust) || typeof trust[KEY_FINGERPRINT_FIELD] !== "string" || !HEX_SHA256_PATTERN.test(trust[KEY_FINGERPRINT_FIELD])) {
+  if (!isPlainObject(trust) || typeof trust[KEY_FINGERPRINT_FIELD] !== "string" || !HEX_SHA256_PATTERN.test(trust[KEY_FINGERPRINT_FIELD]) ||
+      typeof trust[KEY_OWNER_SUBJECT_FIELD] !== "string" || !/^owner:google_[A-Za-z0-9_-]{6,120}$/.test(trust[KEY_OWNER_SUBJECT_FIELD]) ||
+      typeof trust[KEY_OWNER_SUPABASE_ID_FIELD] !== "string" || !UUID_PATTERN.test(trust[KEY_OWNER_SUPABASE_ID_FIELD])) {
     deny("GPT02_OWNER_APPROVAL_FINGERPRINT_NOT_PROVISIONED");
+  }
+  if (expectedOwner && (trust[KEY_OWNER_SUBJECT_FIELD] !== `owner:${expectedOwner.id}` ||
+      trust[KEY_OWNER_SUPABASE_ID_FIELD] !== expectedOwner.authSupabaseId.toLowerCase())) {
+    deny("GPT02_OWNER_APPROVAL_KEY_OWNER_BINDING_MISMATCH");
   }
   let key: KeyObject;
   try { key = createPublicKey(pem); } catch { deny("GPT02_OWNER_APPROVAL_PUBLIC_KEY_INVALID"); }
@@ -357,7 +365,7 @@ export async function verifyAndRecordGpt02RelockOwnerApproval(input: {
     deny("GPT02_OWNER_APPROVAL_NONCE_OR_TIME_INVALID");
   }
 
-  const { key, fingerprint } = await loadPinnedOwnerApprovalKey();
+  const { key, fingerprint } = await loadPinnedOwnerApprovalKey(input.actor);
   if (!verifyGpt02RelockOwnerSignatureWithKey({ manifest, signature: input.signature, publicKey: key })) {
     deny("GPT02_OWNER_APPROVAL_SIGNATURE_INVALID");
   }
