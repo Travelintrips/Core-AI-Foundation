@@ -32,7 +32,13 @@ implement and verify all of the following:
    UNKNOWN/blocked until independently reconciled, never auto-retry it.
 4. Verify the local image's actual digest, root ownership of QA sources,
    contents of **every** script against an approved manifest, and the exact
-   SQL SHA. The verified permit itself does not prove image integrity.
+   SQL SHA. The source-only `issue238_qa_integrity.py` preflight now pins all
+   four file hashes and the local image ID and checks owner/mode/symlinks.
+   It verifies an externally supplied Docker inspection record; it does not
+   authenticate Docker itself or prevent a file/image replacement between
+   inspection and launch. The custodian must independently approve these
+   exact script hashes and bind immutable source snapshots at execution.
+   The verified permit alone does not prove image integrity.
 5. Execute only the reviewed isolated fixtures, with Docker network `none`,
    no exposed ports, synthetic data, no live Supabase credentials, bounded
    resources, and fail-closed audit / command-result correlation. Do not
