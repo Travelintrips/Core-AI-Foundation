@@ -9,11 +9,13 @@ on:
       - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
       - 'scripts/vps/gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/gpt02_relock_pg_reader_adapter_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
       - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
       - 'scripts/vps/test_gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_pg_reader_adapter_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
   push:
     branches: [develop]
@@ -23,11 +25,13 @@ on:
       - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
       - 'scripts/vps/gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/gpt02_relock_pg_reader_adapter_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
       - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
       - 'scripts/vps/test_gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_pg_reader_adapter_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
 
 permissions:
@@ -88,5 +92,11 @@ jobs:
           assert 'import os' not in chain
           assert 'read_only_ledger' in chain
           assert 'load_pinned_executor_root' in chain
+          pg=(root/'gpt02_relock_pg_reader_adapter_candidate.py').read_text()
+          assert 'if __name__' not in pg
+          assert 'psycopg' not in pg
+          assert 'import os' not in pg
+          assert 'transaction_read_only' in pg
+          assert 'sql != _OWNER_READ_SQL' in pg
           print('GPT02_CANDIDATE_NO_LIVE_ADAPTER=PASS')
           PY
