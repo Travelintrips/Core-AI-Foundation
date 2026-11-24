@@ -64,6 +64,17 @@ jobs:
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_release_integration.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_worker_attestor_key_loading.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_reader_custodian_start.py -v
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 18.19.1
+      - name: Provide the production executable path in this disposable runner
+        run: |
+          # The VPS has /usr/bin/node; hosted runners use a tool-cache path.
+          # Keep the real unit unchanged and verify its fixed executable path.
+          if [[ ! -e /usr/bin/node && ! -L /usr/bin/node ]]; then
+            sudo ln -s -- "$(command -v node)" /usr/bin/node
+          fi
+          test -x /usr/bin/node
       - name: Verify dormant systemd units
         run: |
           systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service
