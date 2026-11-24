@@ -16,6 +16,11 @@ import {fileURLToPath} from "node:url";
 const ROOT=fileURLToPath(new URL("../../",import.meta.url));
 export const PROJECT="xssrfshdrtdfupgqwfdw";
 const node=process.execPath;
+// CI may provide a temporary signed-broker QA venv. The VPS can lose /tmp
+// across cleanup/reboot; use system Python for the same isolated source tests
+// when that venv is absent. This does not bypass or skip either test.
+const signedBrokerQaPython=existsSync("/tmp/cst-onejob-broker-ci-venv/bin/python")
+  ? "/tmp/cst-onejob-broker-ci-venv/bin/python" : "python3";
 
 export const OFFLINE_TESTS=Object.freeze([
   {id:"cst_team_onejob_readiness_gate",argv:[node,"--test","scripts/dev/cst-team-onejob-readiness-gate.test.mjs"]},
@@ -24,6 +29,35 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"owner_approval",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-owner-approval-review.test.mjs"]},
   {id:"owner_stage",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-contract.test.mjs"]},
   {id:"owner_stage_bootstrap_circular_gate_split",argv:[node,"--test","scripts/dev/cst-onejob-owner-stage-bootstrap-split.test.mjs"]},
+  {id:"stage_http_network_none_unix",argv:[node,"--test","scripts/dev/cst-onejob-stage-http-no-network.test.mjs"]},
+  {id:"preapproval_broker_separation",argv:[node,"--test","scripts/dev/cst-onejob-preapproval-broker-separation.test.mjs"]},
+  {id:"gate_a_preapproval_stage_broker_security",argv:["python3","-B","scripts/dev/test_cst_onejob_preapproval_stage_broker.py"]},
+  {id:"gate_a_held_open_frontend_eof_socket_regression",argv:["python3","-B","scripts/dev/test_cst_onejob_preapproval_stage_broker_real_eof.py"]},
+  {id:"gate_a_authenticated_relock_stop_bridge",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_stage_stop_bridge.py"]},
+  {id:"gate_a_stop_socket_group_and_watchdog_permission",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_stage_stop_socket_contract.py"]},
+  {id:"gate_a_close_first_relock_bridge_integration",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_stage_stop_integration.py"]},
+  {id:"gate_a_nonroot_sigterm_socket_cleanup",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_broker_signal_qa.py"]},
+  {id:"gate_a_runtime_directory_crash_recovery_contract",argv:[node,"--test","scripts/dev/cst-onejob-stage-broker-rundir-contract.test.mjs"]},
+  {id:"gate_a_source_only_systemd_unit_preflight",argv:[node,"--test","scripts/dev/cst-onejob-gatea-broker-unit-candidate.test.mjs"]},
+  {id:"gate_a_watchdog_boot_candidate_contract",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_watchdog_boot_unit.py"]},
+  {id:"gate_a_nonroot_signed_manifest_acl_disposable",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_nonroot_manifest_disposable.py"]},
+  {id:"nonroot_stage_credential_handoff",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_credential_handoff.py"]},
+  {id:"stage_jit_durable_nonce_signer_primitive_reuse",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_nonce_adapter.py"]},
+  {id:"stage_jit_exclusive_multi_process_single_flight",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_single_flight.py"]},
+  {id:"stage_jit_signed_open_source_contract",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_jit_open_controller.py"]},
+  {id:"stage_jit_signed_open_disposable_pg16",argv:["python3","-B","scripts/dev/cst-onejob-stage-jit-open.disposable.py"]},
+  {id:"stage_jit_relock_residual_sessions_pg16",argv:["python3","-B","scripts/dev/cst-onejob-stage-jit-relock.disposable.py"]},
+  {id:"stage_relock_idempotent_controller_pg16",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_relock_controller.py"]},
+  {id:"stage_relock_role_drift_failclosed_no_docker",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_relock_failclosed.py"]},
+  {id:"gate_a_lease_reader_contract",argv:["python3","-B","scripts/dev/test_cst_onejob_gatea_lease_reader.py"]},
+  {id:"gate_a_lease_schema_disposable_pg16",argv:["python3","-B","scripts/dev/cst-onejob-gatea-lease-store.disposable.py"]},
+  {id:"gate_a_lease_acl_role_isolation_disposable_pg16",argv:["python3","-B","scripts/dev/cst-onejob-gatea-lease-acl.disposable.py"]},
+  {id:"gate_a_atomic_role_acl_rollback_disposable_pg16",argv:["python3","-B","scripts/dev/cst-onejob-gatea-lease-provision.disposable.py"]},
+
+  {id:"stage_jit_heartbeat_watchdog_source",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_watchdog_candidate.py"]},
+  {id:"gate_a_independent_watchdog_runner",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_watchdog_runner.py"]},
+  {id:"gate_a_watchdog_close_transport_before_relock",argv:["python3","-B","scripts/dev/test_cst_onejob_stage_watchdog_transport_close.py"]},
+  {id:"stage_jit_watchdog_stale_pg16",argv:["python3","-B","scripts/dev/cst-onejob-stage-watchdog.disposable.py"]},
   {id:"owner_stage_scoped_jwt_readonly_auth",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-stage-owner-session-auth.test.mjs"]},
   {id:"fresh_owner_consent",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-fresh-owner-stage-consent.test.mjs"]},
   {id:"signed_preapproval_ready",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-preapproval-ready.test.mjs"]},
@@ -47,7 +81,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"signed_subscriber_receipt",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs"]},
   {id:"subscriber_one_event_consumer",argv:[node,"--test","scripts/dev/cst-team-onejob-subscriber-consumer-qa.test.mjs"]},
   {id:"subscriber_rls_isolated_pg",argv:["python3","scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py"]},
-  {id:"operational_broker_signed_manifest",argv:["/tmp/cst-onejob-broker-ci-venv/bin/python","scripts/dev/test_cst_team_onejob_operational_broker.py"]},
+  {id:"operational_broker_signed_manifest",argv:[signedBrokerQaPython,"-B","scripts/dev/test_cst_team_onejob_operational_broker.py"]},
   {id:"admission_review",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-waiting-admission-review.test.mjs"]},
   {id:"cst_onejob_onepass_acceptance",argv:[node,"--test","scripts/dev/cst-onejob-onepass-acceptance.test.mjs"]},
   {id:"broker_fail_closed",argv:[node,"--test","scripts/dev/cst-onejob-broker-proposal-failclosed.test.mjs"]},
@@ -72,7 +106,7 @@ export const OFFLINE_TESTS=Object.freeze([
   {id:"review_only_capability_live_schema_mirror",argv:[node,"--test","scripts/dev/cst-onejob-capability-review-live-schema.disposable.test.mjs"]},
   {id:"trusted_qa_broker_same_transaction",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-trusted-admission-bridge.test.mjs"]},
   {id:"signed_operations_release_broker",argv:[node,"--test","scripts/dev/cst-onejob-operations-broker-release.test.mjs"]},
-  {id:"vps_stage_jit_v2_source_only",argv:["/tmp/cst-onejob-broker-ci-venv/bin/python","scripts/dev/cst-onejob-vps-stage-v2-source-qa.py"]},
+  {id:"vps_stage_jit_v2_source_only",argv:[signedBrokerQaPython,"-B","scripts/dev/cst-onejob-vps-stage-v2-source-qa.py"]},
   {id:"independent_qa_pull_subscriber_writers",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-integrated-evidence-issuance.test.mjs"]},
   {id:"independent_subscriber_operational_entrypoint",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-subscriber-one-shot.test.mjs"]},
   {id:"independent_qa_and_core_reconciliation_ops",argv:[node,"--experimental-strip-types","--test","scripts/dev/cst-onejob-independent-issuer-ops.test.mjs"]},
@@ -85,6 +119,19 @@ export const OFFLINE_TESTS=Object.freeze([
 export const VPS_ISOLATED_QA_GATES=Object.freeze([
  "scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py",
  "scripts/dev/cst-team-onejob-operational-broker-no-network-qa.sh",
+ "scripts/dev/cst-onejob-stage-http-uds-qa.sh",
+ "scripts/dev/cst-onejob-stage-broker-rundir-restart-qa.sh",
+ "scripts/dev/cst-onejob-gatea-real-kernel-policy.disposable.sh",
+ "scripts/dev/cst-onejob-gatea-pooler-tls-egress.disposable.sh",
+ "scripts/dev/cst-onejob-gatea-egress-cgroup-vps-qa.sh",
+ "scripts/dev/cst-onejob-gatea-layered-systemd-netns.disposable.sh",
+ "scripts/dev/cst-onejob-gatea-runner-systemd-pg17.disposable.sh",
+ "scripts/dev/cst-onejob-gatea-no-future-heartbeat-pg17.disposable.py",
+ "scripts/dev/cst-onejob-gatea-watchdog-dynamic-credential.disposable.sh",
+ "scripts/dev/cst-onejob-pilot-live-heartbeat-age-recovery.disposable.py",
+ "scripts/dev/cst-onejob-owner-approval-seven-day.disposable.py",
+ "scripts/dev/cst-onejob-gatea-lease-rollback-pg17.disposable.py",
+ "scripts/dev/cst-onejob-gatea-relock-only-pg17.disposable.py",
 ]);
 export const LIVE_GATES=Object.freeze([
   "DEDICATED_STAGING_LOGIN_AND_APPROVED_SECRET_CUSTODY",
@@ -109,7 +156,7 @@ export function verifyManifest(exists=existsSync) {
   for(const mandatory of ["generic_queue_pilot_status_guard","generic_queue_pilot_sql_disposable_pg","owner_stage_bootstrap_circular_gate_split","owner_stage_scoped_jwt_readonly_auth","owner_session_rls_single_column_pg","owner_stage","fresh_owner_consent","signed_preapproval_ready","owner_panel_one_click","owner_stage_readonly_recovery","one_canonical_owner_path","super_admin_single_human_authority","super_admin_root_candidate_oneclick_ledger",
     "host_gateway_denial","nft_egress_acl","broker_pinned_ca",
     "signed_subscriber_receipt","subscriber_rls_isolated_pg",
-    "operational_broker_signed_manifest","stage_pooler_tls","qa_signature",
+    "operational_broker_signed_manifest","stage_pooler_tls","gate_a_lease_reader_contract","gate_a_lease_schema_disposable_pg16","gate_a_lease_acl_role_isolation_disposable_pg16","gate_a_atomic_role_acl_rollback_disposable_pg16","stage_jit_durable_nonce_signer_primitive_reuse","stage_jit_exclusive_multi_process_single_flight","stage_jit_signed_open_source_contract","stage_jit_signed_open_disposable_pg16","qa_signature",
      "signed_locked_binding","broker_fail_closed","signed_operations_release_broker",
     "vps_stage_jit_v2_source_only",
     "independent_qa_pull_subscriber_writers",

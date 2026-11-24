@@ -1,0 +1,4 @@
+# CST-DEV SOURCE CANDIDATE ONLY. DO NOT install until independently authorized.
+# Install as /etc/sysusers.d/cst-onejob-gatea-stop-group.conf before starting
+# the socket; the fixed group grants permission to issue STOP, never LOGIN.
+g cst-onejob-gatea-stop - -

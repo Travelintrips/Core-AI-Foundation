@@ -68,6 +68,16 @@ test("independently pinned valid signature is lineage ONLY, never a verified Own
  assert.equal(result.independentFinalAckVerified,false);
 });
 
+test("pinned signed one-use approval still matches after several days without permitting execution",()=>{
+ const start=new Date(now.getTime()-5*24*60*60_000).toISOString();
+ const end=new Date(now.getTime()+2*24*60*60_000).toISOString();
+ const longer={...good,approval:{...approval,approvedAt:start,expiresAt:end},
+   receipt:envelope({...payload,approvedAt:start,expiresAt:end})};
+ const r=verdict(longer);
+ assert.equal(r.signedApprovalLineageConsistent,true);
+ assert.equal(r.ownerAuthenticatedSessionVerified,false);
+ assert.equal(r.pilotAdmissionReady,false);
+});
 test("Owner ID in database alone is NOT proof of actual Owner consent",()=>{
  const unlabeled={approval,job,owner};
  reject(unlabeled,"SIGNED_APPROVAL_DB_JOB_LINEAGE_MISMATCH");
@@ -112,7 +122,7 @@ test("receipt must cryptographically bind owner, request, worker, source and job
 test("approval TTL, future clock, replay, missing/extended expiry fail closed",()=>{
  reject(good,"APPROVAL_EXPIRED_OR_REPLAYED",trusted,new Date("2026-11-20T04:00:00.000Z"));
  reject(good,"APPROVAL_EXPIRED_OR_REPLAYED",trusted,new Date("2026-11-20T03:00:00.000Z"));
- reject(tamper(x=>x.approval.expiresAt="2026-11-20T04:30:00.000Z"),"APPROVAL_EXPIRED_OR_REPLAYED");
+ reject(tamper(x=>x.approval.expiresAt="2026-11-28T03:28:01.000Z"),"APPROVAL_EXPIRED_OR_REPLAYED");
  reject(tamper(x=>x.approval.approvedAt="2026-11-20T03:50:00.000Z"),"APPROVAL_EXPIRED_OR_REPLAYED");
  reject(tamper(x=>x.receipt.payload.nonce="BAD"),"INDEPENDENT_OWNER_SIGNATURE_NOT_VERIFIED");
 });

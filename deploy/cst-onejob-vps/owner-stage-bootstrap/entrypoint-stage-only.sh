@@ -29,4 +29,7 @@ SESSION_SECRET="$(cat "$CREDENTIALS_DIRECTORY/session-secret")"
 [ "${#SESSION_SECRET}" -ge 32 ] ||
  { echo ONEJOB_STAGE_SESSION_SECRET_INVALID;exit 77; }
 export SESSION_SECRET
-exec node scripts/hostinger-start.cjs
+[ -f /run/cst-stage-http-supervisor.cjs ] &&
+[ -d /run/cst-onejob-stage-http ] ||
+ { echo ONEJOB_STAGE_HTTP_UNIX_SUPERVISOR_MISSING; exit 77; }
+exec node /run/cst-stage-http-supervisor.cjs

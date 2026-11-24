@@ -80,7 +80,7 @@ export function projectIndependentOneJobOwnerApproval(input,trusted,now=new Date
   const t=now instanceof Date?now.getTime():NaN;
   const start=Date.parse(db?.approvedAt),end=Date.parse(db?.expiresAt);
   require(Number.isFinite(t) && Number.isFinite(start) &&
-    Number.isFinite(end) && end>start && end-start<=30*60_000 &&
+    Number.isFinite(end) && end>start && end-start<=7*24*60*60_000 &&
     start<=t+30_000 && t<end,
     "APPROVAL_EXPIRED_OR_REPLAYED");
   require(hasExact(payload,keys) &&

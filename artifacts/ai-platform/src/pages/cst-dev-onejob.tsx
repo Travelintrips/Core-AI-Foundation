@@ -86,6 +86,9 @@ export default function CstDevOneJobPage(){
    </p>
   </div>;
  }
+ // A static read-only preview is the correct approval location, but never
+ // evidence that the live staging POST can be used. Keep one-click disabled.
+ const previewOnly=readiness.data?.blockers?.includes("READONLY_PREVIEW_ONLY")===true;
  const ready=readiness.data?.readyForOneOwnerClick===true&&
    readiness.data?.project==="xssrfshdrtdfupgqwfdw"&&
    readiness.data?.companyId==="1"&&!readiness.isFetching&&
@@ -169,6 +172,18 @@ export default function CstDevOneJobPage(){
      )}
      {readiness.isLoading&&<p className="text-sm">Memeriksa kesiapan…</p>}
      {readiness.isError&&<p className="text-sm text-destructive">Pemeriksaan belum dapat dibaca.</p>}
+     {previewOnly&&(
+      <div className="rounded-md border p-3 text-sm" role="status"
+       data-testid="onejob-preview-only">
+       <p className="font-semibold">Ini halaman persetujuan yang benar, tetapi masih baca-saja.</p>
+       <p className="mt-2 text-muted-foreground">
+        Tombol Setujui satu job DEV belum bisa digunakan karena layanan staging,
+        kredensial watchdog, dan pengujian relock belum diaktifkan secara resmi.
+        Tidak ada persetujuan atau job yang dibuat dari pratinjau ini.
+        Setelah pemeriksaan teknis PASS, cukup satu persetujuan Super Admin.
+       </p>
+      </div>
+     )}
      {Array.isArray(readiness.data?.blockers)&&readiness.data!.blockers.length>0&&(
       <div className="text-xs text-muted-foreground">
        <p>Persyaratan teknis yang belum terpenuhi:</p>

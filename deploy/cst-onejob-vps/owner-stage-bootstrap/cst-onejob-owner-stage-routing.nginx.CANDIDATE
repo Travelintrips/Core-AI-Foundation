@@ -7,7 +7,7 @@
 location = /api/ai/dev/onejob/owner-stage-readiness {
     limit_except GET { deny all; }
     auth_request /api/internal/auth/me;
-    proxy_pass http://127.0.0.1:18583/api/ai/dev/onejob/owner-stage-readiness;
+    proxy_pass http://unix:/run/cst-onejob-stage-http/api.sock:/api/ai/dev/onejob/owner-stage-readiness;
     proxy_set_header Host dev.cstlogistic.co.id;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Forwarded-For $remote_addr;
@@ -18,7 +18,7 @@ location = /api/ai/dev/onejob/owner-stage-readiness {
 location = /api/ai/dev/onejob/owner-stage-status {
     limit_except GET { deny all; }
     auth_request /api/internal/auth/me;
-    proxy_pass http://127.0.0.1:18583/api/ai/dev/onejob/owner-stage-status;
+    proxy_pass http://unix:/run/cst-onejob-stage-http/api.sock:/api/ai/dev/onejob/owner-stage-status;
     proxy_set_header Host dev.cstlogistic.co.id;
     proxy_set_header X-Forwarded-Proto https;
     proxy_connect_timeout 2s;
@@ -29,7 +29,7 @@ location = /api/ai/dev/onejob/owner-approve-and-stage {
     limit_except POST { deny all; }
     auth_request /api/internal/auth/me;
     client_max_body_size 1k;
-    proxy_pass http://127.0.0.1:18583/api/ai/dev/onejob/owner-approve-and-stage;
+    proxy_pass http://unix:/run/cst-onejob-stage-http/api.sock:/api/ai/dev/onejob/owner-approve-and-stage;
     proxy_set_header Host dev.cstlogistic.co.id;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Forwarded-For $remote_addr;

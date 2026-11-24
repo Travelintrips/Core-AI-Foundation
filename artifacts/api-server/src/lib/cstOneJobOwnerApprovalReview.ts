@@ -71,7 +71,7 @@ export function reviewCstDevOneJobOwnerApproval(input: PilotApprovalReviewInput)
       "REQUEST_OR_WORKER_IDENTITY_INVALID");
     requireCondition(approval.sourceSha===input.expectedSourceSha,"APPROVAL_SOURCE_MISMATCH");
     requireCondition(Number.isFinite(now) && Number.isFinite(start) && Number.isFinite(end) &&
-      start<=now && now<end && end-start>0 && end-start<=30*60*1000,
+      start<=now && now<end && end-start>0 && end-start<=7*24*60*60*1000,
       "APPROVAL_EXPIRED_OR_UNBOUNDED");
     requireCondition(approval.consumedAt===null,"APPROVAL_ALREADY_CONSUMED");
     requireCondition(Number.isSafeInteger(approval.jobId) && Number(approval.jobId)>0 &&

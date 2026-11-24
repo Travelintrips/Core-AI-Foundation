@@ -30,6 +30,14 @@ test("complete hypothetical evidence never grants a transition",()=>{
  assert.equal(r.dispatchPermitted,false);
  assert.equal(r.finalAckVerified,false);
 });
+test("bound WAITING approval may remain pending for five days without a second human click",()=>{
+ const extended={...approval,expiresAt:"2026-11-26T15:00:00.000Z"};
+ const result=reviewOneJobWaitingAdmission({...ready,approval:extended,
+    nowIso:"2026-11-24T15:00:00.000Z"});
+ assert.equal(result.status,"REVIEW_CONDITIONS_MATCH");
+ assert.equal(result.queueTransitionAuthorized,false);
+ assert.equal(result.finalAckVerified,false);
+});
 test("approval must remain one-use, current and bound to a waiting job",()=>{
  deny({approval:{...approval,consumedAt:"2026-11-19T15:04:00.000Z"}},"OWNER_APPROVAL_ALREADY_USED");
  deny({approval:{...approval,sourceSha:"c".repeat(40)}},"APPROVAL_SOURCE_SHA_MISMATCH");

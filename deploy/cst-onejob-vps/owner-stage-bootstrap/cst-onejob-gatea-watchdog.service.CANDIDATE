@@ -1,0 +1,81 @@
+# CST-DEV Gate A watchdog systemd SOURCE CANDIDATE ONLY.
+# DO NOT install, enable or start. This unit requires narrowly authorized
+# relock-only credentials, verified source and reviewed network ACL.
+# Closing LOGIN must NOT require an unexpired manifest for opening LOGIN.
+# A source-only runner now exists; no operational unit, credential or network ACL is installed.
+# Restart after a process crash is NOT proof of a full VPS power-off relock.
+[Unit]
+Description=CST-DEV independent Gate A lease relock watchdog (NO-GO candidate)
+Wants=network-online.target
+Requires=cst-onejob-gatea-stage-stop-bridge.socket
+After=network-online.target cst-onejob-gatea-stage-stop-bridge.socket
+StartLimitIntervalSec=0
+# Retry indefinitely after temporary database failure; each retry fails closed.
+AssertPathExists=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
+AssertPathExists=/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential
+AssertPathExists=/etc/cst-onejob-dev/gatea-watchdog/supabase-root-2021.pem
+AssertPathExists=/run/netns/cst-onejob-gatea-watchdog-reviewed
+AssertPathExists=/opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py
+
+[Service]
+Type=simple
+# systemd DynamicUser provides a distinct non-login service identity and
+# automatically owns the temporary LoadCredential copies. Avoid running a
+# root wrapper or copying an administrative secret into a shared UID path.
+# Verified with transient systemd synthetic credential, not a real DB key.
+DynamicUser=yes
+User=cst-onejob-gatea-watchdog
+# Provision this fixed local group only after independent DEV release review.
+SupplementaryGroups=cst-onejob-gatea-stop
+UMask=0077
+WorkingDirectory=/opt/cst-onejob-dev/bootstrap
+RuntimeDirectory=cst-onejob-gatea-watchdog
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=no
+NetworkNamespacePath=/run/netns/cst-onejob-gatea-watchdog-reviewed
+# Fail closed even if the network namespace is accidentally over-permissive.
+# Reviewed numeric pooler addresses must be supplied separately as a bounded
+# IPAddressAllow drop-in. No default outbound network permission is granted.
+# Public cloud load-balancer IPs can rotate: stale allowlists deny connectivity.
+IPAddressDeny=any
+IPAccounting=yes
+Environment=PYTHONDONTWRITEBYTECODE=1
+# The public env must pin CST_GATEA_POOLER_IPV4 equal to the current
+# approved nft TCP/6543 and cgroup IPAddressAllow target. libpq hostaddr
+# skips DNS in this isolated netns; DSN host still verifies Supabase TLS.
+EnvironmentFile=/etc/cst-onejob-dev/gatea-authority/gatea-approved-public.env
+LoadCredential=watchdog-db:/etc/cst-onejob-dev/gatea-watchdog/watchdog-admin-credential
+LoadCredential=watchdog-ca:/etc/cst-onejob-dev/gatea-watchdog/supabase-root-2021.pem
+# Gate A opening still verifies a fresh signed permit separately. This
+# closing-only watchdog must survive that permit's expiry and keep relocking.
+# Missing systemd credentials fail before a database query is attempted.
+ExecStartPre=/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-db
+ExecStartPre=/usr/bin/test -r ${CREDENTIALS_DIRECTORY}/watchdog-ca
+# The runner exists as source only. It rejects unpinned TLS, unknown DB roles,
+# URLs outside CST-DEV, and SQL outside the fixed relock query allowlist.
+# No real relock-only credential or grant has been approved/provisioned.
+ExecStart=/usr/bin/python3 -B /opt/cst-onejob-dev/bootstrap/cst_onejob_stage_watchdog_runner.py --credential-file ${CREDENTIALS_DIRECTORY}/watchdog-db --ca-file ${CREDENTIALS_DIRECTORY}/watchdog-ca --expected-source-sha ${CST_GATEA_PINNED_SOURCE_SHA} --stage-stop-bridge-socket /run/cst-onejob-gatea-stage-stop.sock
+Restart=always
+RestartSec=5s
+TimeoutStartSec=20s
+TimeoutStopSec=8s
+KillMode=control-group
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+MemoryMax=192M
+TasksMax=16
+
+# Future install contract only. Never enabled until an independent approved
+# relock runner, credential scope, network ACL and host-reboot test are PASS.
+[Install]
+WantedBy=multi-user.target

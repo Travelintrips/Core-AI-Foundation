@@ -22,14 +22,17 @@ const input=(change={})=>({
   operationsRootFingerprint:rootFingerprint},...change,
 });
 
-test("one explicit fresh Owner click accepts a signed numeric internal session",()=>{
- assert.equal(verifyFreshOneJobStageConsent(input()),true);
+test("one explicit Owner click works with an existing valid app session beyond 20 minutes",()=>{
+ for(const sessionToken of [token(),token(19,now-21*60),token(19,now-4*60*60),
+   token(19,now-11*60*60)]){
+  assert.equal(verifyFreshOneJobStageConsent(input({sessionToken})),true);
+ }
 });
-test("old 12h login, future JWT, expired JWT and forged subject denied",()=>{
+test("future JWT, expired session, excessive lifetime, forgery and wrong subject denied",()=>{
+ const excessiveLifetime=jwt.sign({sub:19,iat:now-45,exp:now+24*60*60},secret,{algorithm:"HS256"});
  for(const sessionToken of [
-  token(19,now-21*60),token(19,now+60),token(20),
-  token(19,now-13*60*60),token(19,now-45,{purpose:"magic_login"}),
-  token().slice(0,-3)+"bad",
+  token(19,now+60),token(20),token(19,now-13*60*60),excessiveLifetime,
+  token(19,now-45,{purpose:"magic_login"}),token().slice(0,-3)+"bad",
  ]){
   assert.equal(verifyFreshOneJobStageConsent(input({sessionToken})),false);
  }

@@ -11,6 +11,7 @@ import {
 import { registerWorker, renewLease, DEFAULT_LEASE_TTL_MS, MAX_ACTIVE_JOBS_PER_WORKER } from "./workerClusterService.js";
 import { completeJob, retryJob, JobOwnershipLostError } from "./jobWorkerService.js";
 import { isReservedOneJobPilotRequest } from "../lib/cstOneJobPilotEnqueueGuard.js";
+import { excludeHealthyCstDevPilotFromAgeOnlyRecovery } from "../lib/cstOneJobLiveWorkerRecoveryPredicate.js";
 
 export const REMOTE_OLLAMA_RUNTIME_KIND = "ollama_remote_pull";
 export const REMOTE_OLLAMA_JOB_TYPE = "ollama_model_invocation";
@@ -170,6 +171,7 @@ export async function recoverStaleRemoteOllamaCapacity(
         AND payload_json->>'modelId' = ${modelId}
         AND started_at IS NOT NULL
         AND started_at < NOW() - (${boundedStaleMs} * INTERVAL '1 millisecond')
+        ${excludeHealthyCstDevPilotFromAgeOnlyRecovery(process.env)}
       FOR UPDATE SKIP LOCKED
     `);
 
