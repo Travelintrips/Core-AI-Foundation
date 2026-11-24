@@ -43,8 +43,12 @@ def run_approved_qa(*, identity: AuthenticatedWork, envelope: dict,
     """
     if authenticated_executor is not True:
         raise PermitDenied("trusted_executor_required")
+    # No real execution path may be selected from an untrusted Boolean.
+    # A future audited adapter must supply the isolated runner explicitly.
     if command_runner is None:
-        command_runner = subprocess.run
+        raise PermitDenied("trusted_command_runner_required")
+    if not callable(command_runner):
+        raise PermitDenied("invalid_command_runner")
     prepared = prepare_qa(
         identity=identity, envelope=envelope,
         custodian_public_key=public_key,
@@ -61,7 +65,9 @@ def run_approved_qa(*, identity: AuthenticatedWork, envelope: dict,
         raise PermitDenied("source_changed_after_reservation")
     env = {k: v for k, v in os.environ.items() if k in ENV_ALLOW}
     env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    env["ISSUE238_DBA_DISPOSABLE_QA_APPROVED"] = "YES"
+    # Never mint QA custodian approval in this module. This draft intentionally
+    # cannot satisfy the fixture approval gate on its own.
+    env.pop("ISSUE238_DBA_DISPOSABLE_QA_APPROVED", None)
     env["ISSUE238_APPROVED_SQL_SHA256"] = APPROVED_SQL_SHA256
     try:
         result = command_runner(

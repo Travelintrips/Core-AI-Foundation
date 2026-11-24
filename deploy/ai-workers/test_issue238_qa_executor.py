@@ -36,11 +36,23 @@ class ExecutorTests(unittest.TestCase):
                 run_approved_qa(**(self.kw | {"authenticated_executor": False}))
             check.assert_not_called()
 
+    def test_no_default_real_executor_even_if_boolean_true(self):
+        with patch("issue238_qa_executor.prepare_qa") as preflight:
+            with self.assertRaisesRegex(PermitDenied, "trusted_command_runner_required"):
+                run_approved_qa(**self.kw)
+            preflight.assert_not_called()
+
+    def test_noncallable_executor_rejected(self):
+        with patch("issue238_qa_executor.prepare_qa") as preflight:
+            with self.assertRaisesRegex(PermitDenied, "invalid_command_runner"):
+                run_approved_qa(**(self.kw | {"command_runner": True}))
+            preflight.assert_not_called()
+
     def test_reject_source_drift_before_subprocess(self):
         with patch("issue238_qa_executor.prepare_qa", return_value=self.prepared), \
              patch("issue238_qa_executor.subprocess.run") as run:
             with self.assertRaisesRegex(PermitDenied, "source_changed_after_reservation"):
-                run_approved_qa(**self.kw)
+                run_approved_qa(**(self.kw | {"command_runner":run}))
             run.assert_not_called()
 
     def test_success_receipt_fixed_argv_without_shell(self):
@@ -59,6 +71,7 @@ class ExecutorTests(unittest.TestCase):
             self.assertEqual(kwargs["env"]["ISSUE238_APPROVED_SQL_SHA256"],
                              "0c7815ee6e9ffc9950ee1d7e5680e6debf8e11cd840074dd2991ec49fe6d79c4")
             self.assertNotIn("SUPABASE_DATABASE_URL",kwargs["env"])
+            self.assertNotIn("ISSUE238_DBA_DISPOSABLE_QA_APPROVED", kwargs["env"])
             finish.assert_called_once()
 
     def test_timeout_is_unknown_without_retry(self):
