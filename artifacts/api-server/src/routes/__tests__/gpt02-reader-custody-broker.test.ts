@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../middleware/agentServiceAuth.js", () => ({
-  requireAgentServiceScope: () => (req: any, res: any, next: any) => {
+  requireAgentServiceScope: (_scope: string, binding: (hash: string) => string) => (req: any, res: any, next: any) => {
     if (req.get("Authorization") !== "Bearer test-valid-agent-presence") {
       res.status(401).json({ error: "NO_SCOPED_AGENT_TOKEN" }); return;
     }
@@ -10,9 +10,14 @@ vi.mock("../../middleware/agentServiceAuth.js", () => ({
       id: req.get("x-test-service-id") || "service-id-1",
       name: req.get("x-test-service-name") || "openclaw-vps-dev-consumer",
       scopes: ["agent:presence"],
+      credentialBinding: binding("a".repeat(64)),
     };
     next();
   },
+}));
+vi.mock("@workspace/db", () => ({
+  assertDevelopmentDatabaseIsolation: vi.fn(),
+  pool: { options: { connectionString: "unused-isolated-test" } },
 }));
 const policy = vi.hoisted(() => ({ evaluated: vi.fn() }));
 vi.mock("../../services/gpt02OpenClawReaderCustodyPolicy.js", () => ({
