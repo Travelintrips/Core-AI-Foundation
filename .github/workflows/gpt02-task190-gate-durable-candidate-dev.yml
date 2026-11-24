@@ -1,0 +1,38 @@
+name: GPT02 Task190 durable gate source-only candidate (DEV)
+on:
+  pull_request:
+    paths:
+      - 'ops/dev/gpt02/durable-candidate/**'
+      - '.github/workflows/gpt02-task190-gate-durable-candidate-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'ops/dev/gpt02/durable-candidate/**'
+      - '.github/workflows/gpt02-task190-gate-durable-candidate-dev.yml'
+permissions:
+  contents: read
+jobs:
+  offline-durable-fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline persistence and negative tests
+        run: |
+          node --test ops/dev/gpt02/durable-candidate/gate-durable-core.test.mjs
+          python3 ops/dev/gpt02/durable-candidate/path-guards.test.py
+      - name: Source-only cannot provision runtime
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('ops/dev/gpt02/durable-candidate')
+          for source in root.glob('*'):
+            if source.suffix in ('.mjs','.py') and not source.name.endswith('.test.mjs') and not source.name.endswith('.test.py'):
+              s=source.read_text()
+              for phrase in ('server.listen(', 'ALTER ROLE ', 'GRANT ', 'dispatchCommand(', 'signer.sock', 'postgresql://'):
+                assert phrase not in s,(source,phrase)
+          print('SOURCE_ONLY_NO_RUNTIME_ACTIVATION=PASS')
+          PY
