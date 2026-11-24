@@ -33,7 +33,7 @@ function rig(paired = true, accountAlias = "GPT02", conversationId = "c816f67b-d
   const resolveTarget = vi.fn().mockResolvedValue({
     workerId: "openclaw-dell-chatgpt-wake-dev",
     ownerChannel: "ai-engine-oauth:" + "a".repeat(64),
-    targetConversationId: "c816f67b-d56b-4c27-8391-44c082c7e6a1",
+    targetConversationId: conversationId,
     wakeBinding: paired ? { accountAlias, bindingFingerprint: "b".repeat(64) } : undefined,
   });
   const enqueue = vi.fn().mockResolvedValue({ created: true, commandId: "1234", clientId: "openclaw-dell-chatgpt-wake-dev" });
