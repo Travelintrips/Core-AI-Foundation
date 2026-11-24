@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { getExternalAgentRegistrySnapshot } from "../services/externalAgentRegistryService.js";
+import { gpt02CustodyCredentialBinding } from "../services/gpt02ReaderCustodyAttestation.js";
+import { createGpt02ReaderCustodyRuntime, type CustodyVerification, type CustodyReceiptVerification, type CustodyAttestationRequest } from "../services/gpt02ReaderCustodyRuntime.js";
 import {
   evaluateGpt02ReaderCustodyCoordination,
   GPT02_READER_CUSTODY_SCOPE,
@@ -19,28 +21,56 @@ const allowedRequest = z.object({
   ]),
 }).strict();
 
-type VerifiedService = { id: string; name: string; scopes: string[] };
+type VerifiedService = { id: string; name: string; scopes: string[]; credentialBinding?: string };
 export interface CustodyBrokerDeps {
+  /** The mounted adapter verifies the actual pool before authentication can query it. */
+  verifyRuntimeIsolation?: () => void;
+  /** Non-authorizing binding packet for the real issuer; not an attestation. */
+  prepareAttestationRequest?: (serviceId: string, principal: string, binding?: string) => Promise<CustodyAttestationRequest>;
   /** Independent security attestor, not agent supplied. Unconfigured = DENY. */
-  verifyWorkerAttestation: (serviceId: string, principal: string) => Promise<boolean>;
+  verifyWorkerAttestation: (serviceId: string, principal: string, binding?: string) => Promise<boolean | CustodyVerification>;
   /** Trusted DBA custody handoff state; never return secrets. */
-  readDbaCustodyReceipt: () => Promise<{ verified: boolean; receiptId: string | null }>;
+  readDbaCustodyReceipt: (serviceId: string, principal: string, binding?: string) => Promise<CustodyReceiptVerification>;
   /** Source registry has no privilege to update roles or secrets. */
   readPresence: () => Promise<{ active: boolean; healthy: boolean }>;
 }
 export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
   const router = Router();
-  const authenticate = requireAgentServiceScope("agent:presence");
+  const authenticate = requireAgentServiceScope("agent:presence", gpt02CustodyCredentialBinding);
+
+  router.use((_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    try { deps.verifyRuntimeIsolation?.(); }
+    catch { res.status(503).json({ error: "CUSTODY_DEV_RUNTIME_UNAVAILABLE" }); return; }
+    next();
+  });
+
+  router.get("/attestation-request", authenticate, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const service = res.locals["aiAgentService"] as VerifiedService | undefined;
+    if (!service || service.name !== TOKEN_NAME || !service.id || !service.credentialBinding) {
+      res.status(403).json({ error: "CUSTODY_WORKER_TOKEN_NOT_BOUND" }); return;
+    }
+    try {
+      if (!deps.prepareAttestationRequest) throw new Error("UNCONFIGURED");
+      const packet = await deps.prepareAttestationRequest(service.id, PRINCIPAL, service.credentialBinding);
+      res.status(200).json(packet);
+    } catch {
+      res.status(503).json({ error: "CUSTODY_ATTESTATION_REQUEST_UNAVAILABLE" });
+    }
+  });
 
   async function authorize(res: import("express").Response, action: string) {
     const service = res.locals["aiAgentService"] as VerifiedService | undefined;
-    if (!service || service.name !== TOKEN_NAME || !service.id) {
+    if (!service || service.name !== TOKEN_NAME || !service.id || !service.credentialBinding) {
       return { allowed: false, reason: "CUSTODY_WORKER_TOKEN_NOT_BOUND" };
     }
-    const [attested, presence] = await Promise.all([
-      deps.verifyWorkerAttestation(service.id, PRINCIPAL),
-      deps.readPresence(),
-    ]);
+    const attested = await deps.verifyWorkerAttestation(service.id, PRINCIPAL, service.credentialBinding);
+    if (!(typeof attested === "boolean" ? attested : attested.verified)) {
+      return { allowed: false, reason: typeof attested === "boolean"
+        ? "CUSTODY_WORKER_ATTESTATION_REQUIRED" : attested.reason ?? "CUSTODY_WORKER_ATTESTATION_REQUIRED" };
+    }
+    const presence = await deps.readPresence();
     const decision = evaluateGpt02ReaderCustodyCoordination({
       authenticatedPrincipal: PRINCIPAL,
       source: "openclaw",
@@ -50,11 +80,14 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
       action,
       leaseActive: presence.active,
       verifiedHealthy: presence.healthy,
-      workerAttestationVerified: attested,
+      workerAttestationVerified: typeof attested === "boolean" ? attested : attested.verified,
     });
     return {
       allowed: decision.allowed,
-      reason: decision.allowed ? "SCOPED_COORDINATION_AUTHORIZED" : "CUSTODY_WORKER_ATTESTATION_REQUIRED",
+      reason: decision.allowed ? "SCOPED_COORDINATION_AUTHORIZED"
+        : !presence.active || !presence.healthy ? "CUSTODY_WORKER_PRESENCE_REQUIRED"
+        : "CUSTODY_WORKER_ATTESTATION_REQUIRED",
+      service,
     };
   }
   router.get("/status", authenticate, async (_req, res) => {
@@ -65,7 +98,8 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
         res.status(403).json({ error: authorization.reason, state: "LOCKED", projectId: PROJECT });
         return;
       }
-      const receipt = await deps.readDbaCustodyReceipt();
+      const service = authorization.service!;
+      const receipt = await deps.readDbaCustodyReceipt(service.id, PRINCIPAL, service.credentialBinding);
       res.status(200).json({
         state: receipt.verified ? "CUSTODY_RECEIPT_VERIFIED" : "AWAITING_AUTHORIZED_DBA",
         projectId: PROJECT,
@@ -73,6 +107,10 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
         secretExposed: false,
         databaseMutationGranted: false,
         receiptId: receipt.verified ? receipt.receiptId : null,
+        ...(!receipt.verified && { reason: receipt.reason ?? "CUSTODY_DBA_RECEIPT_REQUIRED" }),
+        readerE2eVerified: false,
+        signingPermitted: false,
+        dispatchPermitted: false,
       });
     } catch {
       res.status(503).json({ error: "CUSTODY_BROKER_UNAVAILABLE" });
@@ -85,7 +123,8 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
     try {
       const authorization = await authorize(res, parsed.data.action);
       if (!authorization.allowed) { res.status(403).json({ error: authorization.reason }); return; }
-      const receipt = await deps.readDbaCustodyReceipt();
+      const service = authorization.service!;
+      const receipt = await deps.readDbaCustodyReceipt(service.id, PRINCIPAL, service.credentialBinding);
       // This broker only coordinates the handoff; it never touches DB roles or secrets.
       res.status(receipt.verified ? 200 : 409).json({
         state: receipt.verified ? "READY_FOR_READER_E2E_VERIFICATION" : "AWAITING_AUTHORIZED_DBA",
@@ -93,6 +132,10 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
         projectId: PROJECT,
         credentialIssuedByBroker: false,
         directPostgresPrivileges: false,
+        requestRecorded: false,
+        handoffDispatched: false,
+        readerE2eVerified: false,
+        ...(!receipt.verified && { reason: receipt.reason ?? "CUSTODY_DBA_RECEIPT_REQUIRED" }),
       });
     } catch {
       res.status(503).json({ error: "CUSTODY_BROKER_UNAVAILABLE" });
@@ -101,12 +144,11 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
   return router;
 }
 
-/** Production dependency configuration is intentionally deny-by-default until
- * independent DBA custody and authenticated worker attestation are installed. */
+/** Mounted runtime adapter remains deny-by-default until the authorized issuer
+ * trust and signed evidence are installed. It never issues credentials. */
 export function createLockedGpt02ReaderCustodyBroker() {
   return createGpt02ReaderCustodyBroker({
-    verifyWorkerAttestation: async () => false,
-    readDbaCustodyReceipt: async () => ({ verified: false, receiptId: null }),
+    ...createGpt02ReaderCustodyRuntime(),
     readPresence: async () => {
       const rows = await getExternalAgentRegistrySnapshot({ skipSchemaEnsure: true });
       const record = rows.find(row => row.clientId === PRINCIPAL);
