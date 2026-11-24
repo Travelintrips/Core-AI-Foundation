@@ -68,8 +68,6 @@ def get_reader_mounts(*, enabled: bool, environment: str, production: bool) -> t
         return ()
     if environment != "development" or production:
         raise ReaderMountDenied("READER_MOUNT_DEV_ONLY")
-    if not READER_DIR.exists() or READER_DIR.is_symlink():
-        raise ReaderMountDenied("READER_CREDENTIAL_DIRECTORY_MISSING")
     try:
         directory = READER_DIR.lstat()
     except OSError:
