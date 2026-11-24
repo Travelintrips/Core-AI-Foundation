@@ -23,16 +23,18 @@ const route = "/api/ai/agent-runtime/dev/projects/continue-partial";
 const auth = { Host: "dev.cstlogistic.co.id", Authorization: "Bearer scoped-test-token" };
 const input = {
   action: "CONTINUE_PARTIAL_JOB", environment: "CST_DEV", reportStatus: "PARTIAL",
-  project: "SPORT_CENTER", jobId: "SC-1829", checkpointRevision: 2,
+  project: "SPORT_CENTER", accountAlias: "GPT02",
+  targetConversationId: conversationId,
+  jobId: "SC-1829", checkpointRevision: 2,
   reportSummary: "VIS allocation still requires verification against latest DEV data.",
   nextStep: "Inspect current DEV allocation and produce evidence without touching PROD.",
 };
-function rig(paired = true) {
+function rig(paired = true, accountAlias = "GPT02", conversationId = "c816f67b-d56b-4c27-8391-44c082c7e6a1") {
   const resolveTarget = vi.fn().mockResolvedValue({
     workerId: "openclaw-dell-chatgpt-wake-dev",
     ownerChannel: "ai-engine-oauth:" + "a".repeat(64),
     targetConversationId: "c816f67b-d56b-4c27-8391-44c082c7e6a1",
-    wakeBinding: paired ? { accountAlias: "GPT02", bindingFingerprint: "b".repeat(64) } : undefined,
+    wakeBinding: paired ? { accountAlias, bindingFingerprint: "b".repeat(64) } : undefined,
   });
   const enqueue = vi.fn().mockResolvedValue({ created: true, commandId: "1234", clientId: "openclaw-dell-chatgpt-wake-dev" });
   const app = express(); app.use(express.json());
@@ -51,6 +53,9 @@ describe("CST project-specific continuation on verified DEV DELL session", () =>
   });
   it.each([
     ["unknown project", {project:"OTHER"}],
+    ["unsupported account", {accountAlias:"GPT01"}],
+    ["malformed session", {accountAlias:"GPT99999"}],
+    ["invalid chat id", {targetConversationId:"different-tab"}],
     ["PROD environment", {environment:"PROD"}],
     ["nonpartial", {reportStatus:"PASS"}],
     ["arbitrary command", {action:"EXECUTE"}],
@@ -59,6 +64,16 @@ describe("CST project-specific continuation on verified DEV DELL session", () =>
     const r = rig(); const res = await request(r.app).post(route).set(auth).send({...input,...changes});
     expect(res.status).toBe(400);
     expect(r.enqueue).not.toHaveBeenCalled();
+  });
+  it("rejects a different conversation even if the account is paired", async () => {
+    const r=rig(); const res=await request(r.app).post(route).set(auth).send({...input, targetConversationId:"d816f67b-d56b-4c27-8391-44c082c7e6a1"});
+    expect(res.status).toBe(409); expect(r.enqueue).not.toHaveBeenCalled();
+  });
+  it("routes to an explicitly selected GPT03 when already configured and verified", async () => {
+    const r=rig(true,"GPT03","d816f67b-d56b-4c27-8391-44c082c7e6a1");
+    const res=await request(r.app).post(route).set(auth).send({...input, accountAlias:"GPT03", targetConversationId:"d816f67b-d56b-4c27-8391-44c082c7e6a1"});
+    expect(res.status).toBe(202); expect(r.resolveTarget).toHaveBeenCalledWith("GPT03");
+    expect(r.enqueue.mock.calls[0][0].targetConversationId).toBe("d816f67b-d56b-4c27-8391-44c082c7e6a1");
   });
   it("requires verified DELL pairing", async () => {
     const r=rig(false); const res=await request(r.app).post(route).set(auth).send(input);
