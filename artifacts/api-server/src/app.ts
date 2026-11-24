@@ -21,6 +21,7 @@ import aiCoreSignedCallbackReceiver from "./routes/ai-core-signed-callback-recei
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import task189ReleaseRouter from "./routes/task189-release.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
+import { createDefaultCstProjectContinuePartialRouter } from "./routes/cst-project-continue-partial.js";
 import { createDefaultGpt02ContinuePartialRouter } from "./routes/gpt02-continue-partial-job.js";
 import { createLockedGpt02ReaderCustodyBroker } from "./routes/gpt02-reader-custody-broker.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
@@ -192,6 +193,10 @@ app.use("/api", optionalSessionAuth);
 // still fails closed in its own worker/service-token middleware.
 app.use("/api", remoteOllamaWorkerRouter);
 app.use("/api", agentRuntimeRouter);
+// Shared continuation API for CST projects; project-specific verified pairing required.
+if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
+  app.use("/api/ai/agent-runtime/dev/projects/continue-partial", createDefaultCstProjectContinuePartialRouter());
+}
 // DEV-only paired GPT02 continuation lane; existing DELL identity and browser proof remain mandatory.
 if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
   app.use("/api/ai/agent-runtime/dev/gpt02/continue-partial", createDefaultGpt02ContinuePartialRouter());
