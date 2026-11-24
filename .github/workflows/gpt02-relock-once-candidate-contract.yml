@@ -1,0 +1,44 @@
+name: GPT02 relock once candidate contract (DEV only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_relock_once_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_once_candidate.py'
+      - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_relock_once_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_once_candidate.py'
+      - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-only-qa:
+    name: Relock one-shot isolated contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python candidate tests (no database or credentials)
+        run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_relock_once_candidate.py -v
+      - name: Verify executor has no live entrypoint or credential/SQL access
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/vps/gpt02_relock_once_candidate.py').read_text()
+          assert 'if __name__' not in s
+          assert 'subprocess' not in s
+          assert 'psycopg' not in s
+          assert 'import os' not in s
+          assert 'systemctl' not in s
+          assert 'import socket' not in s
+          assert 'releaseDecision": "NO_GO"' in s
+          assert 'signingPermitted": False' in s
+          assert 'dispatchPermitted": False' in s
+          print('GPT02_CANDIDATE_NO_LIVE_ADAPTER=PASS')
+          PY
