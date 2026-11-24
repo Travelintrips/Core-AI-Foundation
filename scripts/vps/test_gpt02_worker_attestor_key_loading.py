@@ -317,6 +317,32 @@ class WorkerKeyReleaseTests(unittest.TestCase):
 
 
 class WorkerFlagEnvironmentTests(unittest.TestCase):
+    def test_actual_release_rejects_quoted_or_padded_public_trust_before_loading(self):
+        values = {
+            **worker_configuration(),
+            "SUPABASE_DATABASE_URL_DEV": "synthetic-database-reference",
+            "SUPABASE_SERVICE_ROLE_KEY_DEV": "synthetic-service-value",
+            "SESSION_SECRET": "synthetic-session-value",
+        }
+        # Configured DBA pins are optional at worker bootstrap, but if present
+        # they must have the same literal value seen by the API container.
+        values.update({key: value for key, value in public_configuration().items()
+                       if key.startswith("GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_")})
+        with tempfile.TemporaryDirectory() as directory:
+            environment = Path(directory) / "synthetic.env"
+            for key in [name for name in values if "_PUBLIC_KEY_SPKI_" in name]:
+                for raw in ('"' + values[key] + '"', " " + values[key]):
+                    candidate = {**values, key: raw}
+                    environment.write_text("\n".join(name + "=" + value for name, value in candidate.items()))
+                    with self.subTest(key=key, raw=raw), patch.object(release, "ENV", environment), \
+                            patch.object(release, "command") as command, \
+                            patch.object(Path, "lstat", side_effect=AssertionError("protected metadata IO")) as metadata:
+                        self.assertEqual(release.env_guard()[key], raw)
+                        with self.assertRaisesRegex(gate.ReaderMountDenied, "TRUST_CONFIGURATION_INVALID"):
+                            release.start("synthetic-canary", 18084, "synthetic-image", SHA)
+                        command.assert_not_called()
+                        metadata.assert_not_called()
+
     def test_actual_release_rejects_quoted_or_whitespace_worker_flag_before_loading(self):
         values = {
             **worker_configuration(),

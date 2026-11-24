@@ -88,9 +88,16 @@ def env_guard():
             k, v = line.split("=", 1)
             key = k.strip()
             # Docker --env-file passes quote/space characters literally. Keep
-            # this new activation flag exact so the loader and API cannot
-            # disagree about whether worker issuance was explicitly enabled.
-            keys[key] = v if key == "GPT02_DEV_CUSTODY_WORKER_ISSUER_ENABLED" else v.strip().strip('"').strip("'")
+            # activation and public trust exact so the loader and API cannot
+            # disagree about whether issuance is enabled with valid pins.
+            literal_custody_keys = {
+                "GPT02_DEV_CUSTODY_WORKER_ISSUER_ENABLED",
+                "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64",
+                "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256",
+                "GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64",
+                "GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256",
+            }
+            keys[key] = v if key in literal_custody_keys else v.strip().strip('"').strip("'")
     if keys.get("SUPABASE_URL_DEV", "").rstrip("/") != "https://" + EXPECTED_DEV_PROJECT + ".supabase.co":
         raise RuntimeError("Unexpected DEV database project reference")
     for k in ("SUPABASE_DATABASE_URL_DEV", "SUPABASE_SERVICE_ROLE_KEY_DEV", "SESSION_SECRET"):

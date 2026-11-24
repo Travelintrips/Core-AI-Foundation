@@ -4,8 +4,9 @@ Target: `Travelintrips/Core-AI-Foundation`, `develop`, DEV project
 `xssrfshdrtdfupgqwfdw`, canonical principal `openclaw-vps-main` and credential
 name `openclaw-vps-dev-consumer`. Owner remains the only business approver.
 
-This change supplies the missing worker-attestation issuance path and its
-encrypted key-loading callsite. It does not treat the existing read-only Hub
+This change supplies the missing worker-attestation issuance path, its
+encrypted key-loading callsite, and an independent host DBA custodian. It does
+not treat the existing read-only Hub
 Owner-link response, a coordinator appointment, a Task189 mandate, or Task190
 evidence as permission to enroll a signing key or provision a database role.
 Source/CI verification and live issuer activation are separate evidence stages.
@@ -90,9 +91,9 @@ The static, network-isolated unit has no installation target. Installing its
 source and reloading systemd does not start or enable it. The reviewed DEV
 release `start()` callsite validates the public configuration, starts this exact
 loader only when the feature is explicitly enabled, then verifies metadata and
-adds a read-only key-file bind for both canary and live containers. A quoted or
-whitespace-padded new flag is rejected before loading: Docker and the release
-wrapper must agree on the literal activation value.
+adds a read-only key-file bind for both canary and live containers. Quoted or
+whitespace-padded activation flags or public pins are rejected before loading:
+Docker and the release wrapper must agree on literal activation and trust.
 
 Worker issuance is independent of the Owner-reader feature, the reader
 credential, the TLS CA, and the not-yet-issued custody proof files. This avoids
@@ -106,6 +107,82 @@ requires container recreation/removal of that mount; deleting the host file
 alone does not revoke an already-mounted inode. Runtime issuer disablement and
 public trust changes also require applying the container configuration. No
 automatic enrollment, key rotation, systemd enablement or timer is added.
+
+## Independent host DBA custodian
+
+The supported operational entry is the no-argument
+`/usr/local/sbin/gpt02-reader-custodian-start.py` launcher. Its protected public
+configuration is `/etc/gpt02-dev/reader-custodian.env`; the supplied example has
+`GPT02_DEV_CUSTODY_DBA_PREPARATION_ENABLED=false`. It accepts only the fixed DEV
+environment, project and four public trust settings. It rejects duplicate keys,
+unknown settings, quoted values, unsafe ownership and oversized input. It never
+sources a shell environment or reads a private key or SQL password.
+
+After root identity, explicit preparation opt-in, distinct public pins, worker
+proof metadata and CA metadata pass, the launcher starts the fixed reader
+credential loader. It then rereads the protected public configuration and
+requires unchanged valid opt-in and pins before starting the custodian unit.
+The Owner-reader API feature may remain disabled throughout preparation. This
+removes the bootstrap cycle without weakening the existing reader release gate.
+
+| Component | Fixed contract |
+| --- | --- |
+| Standalone host artifact | `/usr/local/libexec/cst-dev/gpt02-reader-custodian-runtime.cjs` |
+| Static unit | `gpt02-reader-custodian.service` |
+| Separately provisioned encrypted DBA key | `/etc/credstore.encrypted/gpt02-reader-custody-dba-issuer.pkcs8` |
+| Unit-only private key input | `/run/credentials/gpt02-reader-custodian.service/private-key.pkcs8` |
+| Immutable public audit directory | `/var/lib/gpt02-reader-custodian-audit` |
+| Atomic public output | `/run/credentials/gpt02-reader-custody/issuer-receipt.json` |
+
+The DBA private key is never mounted into the API container. The standalone
+bundle uses the pure `@workspace/db/pg` export, avoiding initialization of the
+application's database pool. It builds as CJS for the existing host Node 18
+runtime and does not require application writer credentials.
+
+The unit has no boot installation target, reader dependency, shared-proof
+`RuntimeDirectory`, or `RemainAfterExit`. Each supported explicit invocation
+can perform a new bounded issuance; the shared custody directory and worker
+proof survive unit completion. Direct root `systemctl start` of this private
+unit is an unsupported privileged path: systemd decrypts its configured
+credential before Node can check the flag. The guarded launcher is therefore
+the supported activation boundary. A launcher timeout does not prove a systemd
+job stopped; reconcile unit state and published public evidence before retrying.
+
+The service first verifies the existing signed V2 worker document. It then uses
+the approved reader input to open one bounded TLS connection to the fixed DEV
+host as `gpt02_owner_ledger_reader_dev`. It checks exact session/effective role
+identity, verified SSL, current and default read-only settings, no administrative
+or RLS-bypass role privileges, schema usage without creation, no table-wide
+SELECT or write privileges, and enabled RLS on the two Owner ledger tables.
+Two zero-row SELECTs cover every column used by the actual reader, including
+its filters and joins. This checks usable column access without retrieving an
+Owner decision or modifying PostgreSQL state. Catalog functions are explicitly
+qualified. Historical inheritance, connection-limit and FORCE RLS observations
+are not new requirements to alter a shared role.
+
+Only after that probe passes does the service load its canonical Ed25519 key
+and check its correspondence to the independent pinned DBA public key. The
+receipt fixes the V2 target, worker generation claim, canonical worker-proof
+digest and reader path. Its lifetime is at most 15 minutes, contained within
+the worker proof's validity. The service rechecks trust, worker proof, reader
+bytes, CA bytes and time after asynchronous work and before publication.
+
+An immutable public audit file is synchronized before the receipt is atomically
+replaced through an opened root-only directory. The audit contains the public
+signed envelope and verified probe facts, with no reader password or key.
+The service preserves the shared directory inode so the existing broker sees
+receipt changes. Audit, probe or pre-commit revalidation failure prevents a new
+receipt publication. A failure after rename, including expiry or directory-sync
+failure, may leave a complete new public receipt while reporting failure; inspect
+and verify that receipt before retrying. Never infer live success from an audit
+file alone.
+
+The host verifies the signed generation claim but does not independently query
+the current service-token row. Its public status explicitly keeps
+`credentialGenerationChecked=false`; the broker's fresh authenticated token
+check remains required when the evidence is used. It also keeps
+`readerE2eVerified=false`, `authorizationGranted=false` and
+`dispatchPermitted=false`.
 
 ## Remaining live acceptance boundary
 
@@ -121,9 +198,9 @@ consumer, broaden OpenClaw's database rights, or grant root/postgres access.
 
 Worker issuance proves only the current credential's canonical worker binding.
 It does not by itself prove actual DBA custody, Owner-ledger E2E, final ACK,
-relock, or execution permission. The actual DBA custodian must independently
-check the approved reader input and its bounded TLS/read-only access before
-issuing a matching V2 receipt. A separate live Super Admin request must still
+relock, or execution permission. The host custodian must run successfully with
+its legitimately provisioned inputs before a matching V2 receipt is available.
+A separate live Super Admin request must still
 return the matching redacted decision receipt for the original challenge.
 
 ## Verification and recovery
