@@ -1,0 +1,43 @@
+# SOURCE CANDIDATE ONLY, NEVER INCLUDED IN A LIVE NGINX SITE.
+# This must replace the existing readonly preview's exact API locations
+# coherently in ONE reviewed DEV-only cutover AFTER the isolated backend,
+# pinned TLS, signed Owner session, bounded DB LOGIN and rollback prove PASS.
+# The original broad denial rule must remain until this safe cutover.
+# Current Nginx is intentionally still read-only (403 on all Owner POSTs).
+location = /api/ai/dev/onejob/owner-stage-readiness {
+    limit_except GET { deny all; }
+    auth_request /api/internal/auth/me;
+    proxy_pass http://127.0.0.1:18583/api/ai/dev/onejob/owner-stage-readiness;
+    proxy_set_header Host dev.cstlogistic.co.id;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_connect_timeout 2s;
+    proxy_read_timeout 12s;
+    add_header Cache-Control "no-store" always;
+}
+location = /api/ai/dev/onejob/owner-stage-status {
+    limit_except GET { deny all; }
+    auth_request /api/internal/auth/me;
+    proxy_pass http://127.0.0.1:18583/api/ai/dev/onejob/owner-stage-status;
+    proxy_set_header Host dev.cstlogistic.co.id;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 2s;
+    proxy_read_timeout 12s;
+    add_header Cache-Control "no-store" always;
+}
+location = /api/ai/dev/onejob/owner-approve-and-stage {
+    limit_except POST { deny all; }
+    auth_request /api/internal/auth/me;
+    client_max_body_size 1k;
+    proxy_pass http://127.0.0.1:18583/api/ai/dev/onejob/owner-approve-and-stage;
+    proxy_set_header Host dev.cstlogistic.co.id;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_connect_timeout 2s;
+    proxy_read_timeout 12s;
+    add_header Cache-Control "no-store" always;
+}
+# Missing/variant/trailing paths remain explicitly denied.
+location ^~ /api/ai/dev/onejob/owner-approve-and-stage/ {
+    return 403;
+}

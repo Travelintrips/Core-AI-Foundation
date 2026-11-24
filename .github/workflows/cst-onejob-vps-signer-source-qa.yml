@@ -1,0 +1,53 @@
+name: CST DEV VPS signer source-only readiness QA
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cst-onejob-vps-signer-source-qa.yml"
+      - "deploy/cst-onejob-vps/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vps-signers-source-only:
+    if: github.repository == 'Travelintrips/Core-AI-Foundation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public-key parser dependency
+        run: python3 -m pip install --disable-pip-version-check 'cryptography>=42,<50'
+      - name: Read-only signer source negative tests, no live key/DB
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -B -m unittest -v deploy/cst-onejob-vps/test_cst_onejob_vps_readonly_gate.py
+          python3 -B -m unittest -v deploy/cst-onejob-vps/test_cst_onejob_vps_nonce_durability.py
+          python3 -B -m unittest -v deploy/cst-onejob-vps/test_install_approved_release_batch.py
+          python3 -B -m unittest -v deploy/cst-onejob-vps/test_cst_onejob_stage_release_v2.py
+          python3 - <<'PY'
+          import json,subprocess,sys
+          script="deploy/cst-onejob-vps/cst_onejob_vps_readonly_gate.py"
+          p=subprocess.run([sys.executable,"-B",script,"--host-readonly"],
+                           capture_output=True,text=True,timeout=8)
+          report=json.loads(p.stdout)
+          assert p.returncode==2 and report["status"]=="DENIED_WRONG_HOST"
+          assert report["releaseDecision"]=="NO_GO"
+          assert report["privateCredentialContentsRead"] is False
+          assert report["signaturesIssued"]==0
+          print("WRONG_HOST_DEFAULT_DENY_PASS")
+          PY
+      - name: Never grant signer release from source QA
+        run: |
+          echo "SOURCE_QA_ONLY=PASS"
+          echo "PRIVATE_KEY_READ=FALSE"
+          echo "REAL_SIGNER_ACTIVATION=FALSE"
+          echo "ONEJOB_DISPATCH=FALSE"
+          echo "RELEASE_DECISION=NO_GO"

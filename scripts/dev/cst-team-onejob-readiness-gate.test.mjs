@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
 import test from "node:test";
 import { projectOneJobGate } from "./cst-team-onejob-readiness-gate.mjs";
 
@@ -7,11 +8,16 @@ const sha="a".repeat(40), imageId="sha256:"+"f".repeat(64);
 const ready={
   sourceSha:sha,imageSourceSha:sha,imageBuildMarkerSha:sha,imageId,
   candidateRunning:true,candidateHealthy:true,candidateImageId:imageId,
-  candidateNetworkIsolated:true,devHostResolved:true,retiredHostQuarantined:true,
+  candidateNetworkIsolated:true,candidateHostGatewayBlocked:true,
+  candidateIndependentNetworkAclVerified:true,candidateDedicatedDevDbTransportVerified:true,
+  candidateBrokerUnixFilesystemVerified:true,candidateBrokerKernelPeerCredentialsVerified:true,
+  candidateIndependentOwnerApprovalAttested:true,
+  candidateIndependentSubscriberArmed:true,
+  devHostResolved:true,retiredHostQuarantined:true,
   candidateDirectHealthy:true,nginxApiRetainsExistingCore:true,
   dbStatus:"DEV_DB_READ_ONLY_PASS",database:"postgres",
   dbRole:"cst_team_model_pilot_20261119_abcdef12",
-  roleCount:1,safeRoleCount:1,
+  roleCount:1,safeRoleCount:1,safeScaffoldCount:0,
   jobId:483,matchingRequestCount:1,uniqueIndexPresent:true,jobQueued:true,jobCompany:"1",jobModel:"qwen2.5:3b",
   workerName:"cst-dev-dell-onejob-20261119-abcdef12",workerAlreadyRegistered:false,
   enrollmentConfigured:true,oneJobGuardConfigured:true,
@@ -42,11 +48,116 @@ test("missing or old Core runtime and wrong build provenance always fail closed"
   check({imageBuildMarkerSha:"b".repeat(40)},"IMAGE_BUILD_SHA_MARKER_MISMATCH");
   check({imageBuildMarkerSha:null},"IMAGE_BUILD_SHA_MARKER_MISMATCH");
   check({candidateNetworkIsolated:false},"BLUE_GREEN_NETWORK_ISOLATION_NOT_PROVEN");
+  check({candidateHostGatewayBlocked:false},"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
+  check({candidateHostGatewayBlocked:null},"HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED");
+  check({candidateIndependentNetworkAclVerified:false},"CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
+  check({candidateIndependentNetworkAclVerified:null},"CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
+  check({candidateIndependentNetworkAclVerified:"true"},"CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED");
+  check({candidateDedicatedDevDbTransportVerified:false},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
+  check({candidateDedicatedDevDbTransportVerified:null},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
+  check({candidateDedicatedDevDbTransportVerified:"true"},"DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED");
+  check({candidateBrokerUnixFilesystemVerified:false},"BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
+  check({candidateBrokerUnixFilesystemVerified:null},"BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
+  check({candidateBrokerUnixFilesystemVerified:"true"},"BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED");
+  check({candidateBrokerKernelPeerCredentialsVerified:false},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
+  check({candidateBrokerKernelPeerCredentialsVerified:null},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
+  check({candidateBrokerKernelPeerCredentialsVerified:"true"},"BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED");
+  check({candidateIndependentOwnerApprovalAttested:false},"INDEPENDENT_OWNER_APPROVAL_NOT_ATTESTED");
+  check({candidateIndependentOwnerApprovalAttested:null},"INDEPENDENT_OWNER_APPROVAL_NOT_ATTESTED");
+  check({candidateIndependentOwnerApprovalAttested:"true"},"INDEPENDENT_OWNER_APPROVAL_NOT_ATTESTED");
+  check({candidateIndependentSubscriberArmed:false},"INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
+  check({candidateIndependentSubscriberArmed:null},"INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
+  check({candidateIndependentSubscriberArmed:"true"},"INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED");
   check({devHostResolved:false},"UNIFIED_DEV_HOST_DNS_MISSING");
   check({retiredHostQuarantined:false},"RETIRED_DEV_HOST_NOT_QUARANTINED");
   check({candidateDirectHealthy:false},"CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED");
   check({nginxApiRetainsExistingCore:false},"SHARED_DEV_API_ROUTE_CHANGED");
 });
+test("gateway denial and scoped SQL cannot imply independent ACL or DB route proof",()=>{
+  const evidence={...ready, candidateIndependentNetworkAclVerified:undefined,
+    candidateDedicatedDevDbTransportVerified:undefined};
+  const verdict=projectOneJobGate(evidence);
+  assert.equal(verdict.pilotAdmissionReady,false);
+  assert.ok(verdict.blockers.includes("CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED"));
+  assert.ok(verdict.blockers.includes("DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED"));
+  assert.equal(verdict.sideEffects,"NONE");
+  assert.equal(verdict.independentFinalAckVerified,false);
+});
+
+/** Exercise the exact Node code sent through docker exec, not a reimplementation. */
+test("loopback-only IPv6 reject routes do not appear as outbound connectivity",()=>{
+  const gate=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
+  const extracted=gate.match(/const routeJs=String\.raw\`([\s\S]*?)\`;/);
+  assert.ok(extracted && extracted[1],"in-container route probe script must be present");
+  const vmScript=new Script(extracted[1]);
+  const zeros="0".repeat(32);
+  const v4header="Iface\tDestination\tGateway\tFlags\n";
+  const noDefault4=v4header+"eth0\t0040A8C0\t00000000\t0001\n";
+  const hasDefault4=v4header+"eth0\t00000000\t01020304\t0003\n";
+  const v6lo=zeros+" 00 "+zeros+" 00 00000000000000000000000000000000 00000000 00200200 lo\n";
+  const v6eth=zeros+" 00 "+zeros+" 00 00000000000000000000000000000000 00000000 00000003 eth0\n";
+  function probe(v4,v6,externalIPv6=false){
+    const recorded=[];
+    const fs={readFileSync:(path)=>{
+      if(path==="/proc/net/route")return v4;
+      if(path==="/proc/net/ipv6_route"){
+        if(v6===null)throw Object.assign(new Error("not found"),{code:"ENOENT"});
+        return v6;
+      }
+      throw Error("UNEXPECTED_PATH");
+    }};
+    const os={networkInterfaces:()=>({
+      lo:[{family:"IPv6",address:"::1",internal:true}],
+      eth0:externalIPv6?[{family:"IPv6",address:"fe80::1",internal:false}]:
+        [{family:"IPv4",address:"192.0.2.25",internal:false}],
+    })};
+    vmScript.runInNewContext({
+      require:(name)=>{
+        if(name==="node:fs")return fs;
+        if(name==="node:os")return os;
+        throw Error("UNEXPECTED_MODULE");
+      },
+      console:{log:(message)=>recorded.push(message)},
+    },{timeout:1000});
+    return recorded[0];
+  }
+  assert.equal(probe(noDefault4,v6lo),"NO_DEFAULT_ROUTE");
+  assert.equal(probe(hasDefault4,v6lo),"ROUTE_PRESENT");
+  assert.equal(probe(noDefault4,v6eth),"ROUTE_PRESENT");
+  assert.equal(probe(noDefault4,v6lo,true),"ROUTE_PRESENT");
+  assert.equal(probe(noDefault4,null),"ROUTE_PRESENT");
+});
+
+test("read-only preflight must reuse the existing socket transport, never unguarded TCP",()=>{
+  const source=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
+  assert.match(source,/createCstDevOneJobSocketOptions\(raw,process\.env\)/);
+  assert.match(source,/socketOptions\.ssl\?\.rejectUnauthorized!==true/);
+  assert.match(source,/socketOptions\.ssl\.ca\.equals\(rootCa\)/);
+  assert.match(source,/typeof socketOptions\.stream!=="function"/);
+  assert.match(source,/new pg\.Client\(\{connectionString:raw,\.\.\.socketOptions/);
+  assert.match(source,/DEV_PILOT_SOCKET_TRANSPORT_NOT_VERIFIED/);
+  assert.match(source,/node","--experimental-strip-types","-e",dbReadOnlyJs/);
+  assert.match(source,/isRunning==="true" \? readDevCatalog\(CANDIDATE\)/);
+  assert.doesNotMatch(source,/readDevCatalog\(isRunning==="true" \? CANDIDATE : CORE\)/);
+  assert.match(source,/u\.hostname!==target/);
+  assert.match(source,/u\.port!=="6543"/);
+  assert.match(source,/SUPABASE_URL_DEV!/);
+  assert.match(source,/cst_team_model_pilot_\[0-9\]/);
+  assert.match(source,/raw\.includes\("nzdweipzckfszczzqtuw"\)/);
+});
+test("the exact Docker read-only catalog JavaScript remains parseable",()=>{
+  const source=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
+  const match=source.match(/const dbReadOnlyJs = String\.raw`([\s\S]*?)`;/);
+  assert.ok(match && match[1],"must extract exact in-container diagnostic");
+  const script=new Script(match[1]);
+  assert.ok(script);
+  assert.match(match[1],/BEGIN READ ONLY/);
+  assert.match(match[1],/ROLLBACK/);
+  assert.match(match[1],/DEV_TRUSTED_CA_NOT_VERIFIED/);
+  assert.match(match[1],/DEV_PILOT_SOCKET_TRANSPORT_NOT_VERIFIED/);
+  assert.doesNotMatch(match[1],/rejectUnauthorized:false/);
+});
+
 test("an ancestral QA image is reusable only if runtime code and pilot RLS are unchanged",()=>{
   const oldSha="b".repeat(40);
   assert.equal(projectOneJobGate({...ready,imageSourceSha:oldSha,sourceContentEquivalent:false}).pilotAdmissionReady,false);
@@ -61,7 +172,30 @@ test("shared login or missing short-lived role is denied",()=>{
   check({roleCount:0,safeRoleCount:0},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
   check({roleCount:2,safeRoleCount:2},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
   check({roleCount:1,safeRoleCount:0},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:0,safeScaffoldCount:2},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:1,safeScaffoldCount:1},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:4,safeRoleCount:1,safeScaffoldCount:2},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:1,safeScaffoldCount:null},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:3,safeRoleCount:1,safeScaffoldCount:"2"},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({roleCount:1,safeRoleCount:1,safeScaffoldCount:3},"ONE_JOB_ROLE_MISSING_OR_UNSAFE");
+  check({dbRole:"cst_team_model_pilot_stage_login"},"CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
+  check({dbRole:"cst_team_model_pilot_writer"},"CANDIDATE_DB_LOGIN_NOT_SCOPED_PILOT_ROLE");
 });
+test("two inert NOLOGIN staging roles can coexist with exactly one safe live pilot",()=>{
+  const withScaffold=projectOneJobGate({
+    ...ready,roleCount:3,safeRoleCount:1,safeScaffoldCount:2,
+  });
+  assert.equal(withScaffold.pilotAdmissionReady,true,withScaffold.blockers.join(","));
+  assert.equal(withScaffold.operationalE2EVerified,false);
+  assert.equal(withScaffold.subscriberReceiptVerified,false);
+  assert.equal(withScaffold.independentFinalAckVerified,false);
+  const noLogin=projectOneJobGate({
+    ...ready,roleCount:2,safeRoleCount:0,safeScaffoldCount:2,
+  });
+  assert.equal(noLogin.pilotAdmissionReady,false);
+  assert.ok(noLogin.blockers.includes("ONE_JOB_ROLE_MISSING_OR_UNSAFE"));
+});
+
 test("historic job, wrong company or unqueued model job cannot be admitted",()=>{
   check({jobId:482},"FRESH_COMPANY1_MODEL_JOB_NOT_PROVEN");
   check({matchingRequestCount:2},"PILOT_REQUEST_ID_NOT_UNIQUE");
@@ -83,21 +217,61 @@ test("reused worker and unconfigured enrollment/guards cannot be admitted",()=>{
 test("diagnostic implementation cannot start jobs, manage services or change database",()=>{
   const file=readFileSync(new URL("./cst-team-onejob-readiness-gate.mjs",import.meta.url),"utf8");
   assert.match(file,/BEGIN READ ONLY/);
+  assert.match(file,/DEV_TRUSTED_CA_NOT_VERIFIED/);
+  assert.ok(file.includes("prod-ca-2021.crt"));
+  assert.ok(file.includes("cert.fingerprint256"));
+  assert.ok(file.includes("cert.verify(cert.publicKey)"));
+  // The existing adapter owns the pinned CA and rejectUnauthorized=true.
+  assert.match(file,/socketOptions\.ssl\?\.rejectUnauthorized!==true/);
+  assert.match(file,/socketOptions\.ssl\.ca\.equals\(rootCa\)/);
+  assert.match(file,/connectionString:raw,\.\.\.socketOptions/);
+  assert.doesNotMatch(file,/rejectUnauthorized:false/);
   assert.match(file,/ROLLBACK/);
   assert.match(file,/RUNNING|Running/);
   assert.match(file,/x-cst-source-commit/);
   assert.match(file,/x-cst-commit-sha/);
   assert.match(file,/CANDIDATE_LOOPBACK_HEALTH_UNVERIFIED/);
   assert.match(file,/SHARED_DEV_API_ROUTE_CHANGED/);
-  assert.match(file,/candidateLoopbackPort/);
+  assert.doesNotMatch(file,/candidateLoopbackPort/);
+  assert.match(file,/noPublishedHostPorts/);
+  assert.match(file,/gateway_mode_ipv4/);
+  assert.match(file,/network\.EnableIPv6===false/);
+  assert.match(file,/hostGatewayUnassigned/);
+  assert.match(file,/candidateRoutesAbsent/);
+  assert.match(file,/candidateCoreCrossNetworkDenied/);
+  assert.match(file,/NO_DEFAULT_ROUTE/);
+  assert.match(file,/ENETUNREACH/);
   assert.match(file,/IMAGE_BUILD_SHA_MARKER_MISMATCH/);
   assert.match(file,/\.cst-build-sha/);
   assert.match(file,/cst-core-onejob-dev-net/);
+  assert.match(file,/probeCstDevHostGateway/);
+  assert.match(file,/HOST_GATEWAY_ACCESS_NOT_BLOCKED_OR_UNVERIFIED/);
+  assert.match(file,/CANDIDATE_EGRESS_ACL_NOT_INDEPENDENTLY_VERIFIED/);
+  assert.match(file,/DEDICATED_CST_DEV_DB_TRANSPORT_NOT_VERIFIED/);
+  assert.match(file,/BROKER_UNIX_FILESYSTEM_IDENTITY_NOT_VERIFIED/);
+  assert.match(file,/BROKER_KERNEL_PEER_CREDENTIALS_NOT_VERIFIED/);
+  assert.match(file,/candidateBrokerUnixFilesystemVerified:false/);
+  assert.match(file,/candidateBrokerKernelPeerCredentialsVerified:false/);
+  assert.match(file,/INDEPENDENT_OWNER_APPROVAL_NOT_ATTESTED/);
+  assert.match(file,/candidateIndependentOwnerApprovalAttested:false/);
+  assert.match(file,/INDEPENDENT_ONEJOB_SUBSCRIBER_NOT_ARMED/);
+  assert.match(file,/candidateIndependentSubscriberArmed:false/);
+  // Preflight must not accept a user-supplied flag as operational proof.
+  assert.match(file,/candidateIndependentNetworkAclVerified:false/);
+  assert.match(file,/candidateDedicatedDevDbTransportVerified:false/);
+  assert.doesNotMatch(file,/candidateIndependentNetworkAclVerified:\s*process\.env/);
+  assert.doesNotMatch(file,/candidateDedicatedDevDbTransportVerified:\s*process\.env/);
   assert.match(file,/members\.length===1/);
-  assert.match(file,/isInternal==="true"/);
+  assert.match(file,/network\.Internal===true/);
   assert.match(file,/matchingRequestCount===1/);
   assert.match(file,/uniqueIndexPresent===true/);
   assert.match(file,/ai_jobs_company1_pilot_request_unique/);
+  assert.match(file,/safe_scaffold_count/);
+  assert.match(file,/cst_team_model_pilot_stage_login/);
+  assert.match(file,/cst_team_model_pilot_writer/);
+  assert.match(file,/not p\.rolcanlogin/);
+  assert.match(file,/has_table_privilege/);
+  assert.match(file,/data\.safeScaffoldCount/);
   assert.match(file,/members\[0\]\?\.Name===CANDIDATE/);
   assert.match(file,/sites-enabled\/dev.cstlogistic.co.id/);
   assert.match(file,/RETIRED_VHOST/);

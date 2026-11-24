@@ -1,0 +1,49 @@
+# Source-only, NEVER installed or started automatically.
+# Owner WAITING stage requires no independently approved Operations root
+# because the single Owner job must first exist before job-specific signing.
+# No approved root, signer or job admission is enabled by this candidate.
+[Unit]
+Description=CST-DEV one-Super-Admin WAITING-only bootstrap candidate
+After=docker.service cst-onejob-owner-stage-egress-reconcile.service
+Requires=docker.service cst-onejob-owner-stage-egress-reconcile.service
+ConditionPathExists=/opt/cst-onejob-dev/qa/owner-stage-egress-scoped-20261124.sh
+ConditionPathExists=/etc/cst-onejob-dev/bootstrap-verified/owner-stage-runtime-ready.json
+ConditionPathExists=/etc/cst-onejob-dev/trust/prod-ca-2021.crt
+ConditionPathExists=/etc/credstore.encrypted/cst-onejob-owner-stage-database-url
+ConditionPathExists=/etc/credstore.encrypted/cst-onejob-owner-stage-session-secret
+
+[Service]
+Type=simple
+Restart=no
+User=root
+Group=root
+LoadCredentialEncrypted=database-url:/etc/credstore.encrypted/cst-onejob-owner-stage-database-url
+LoadCredentialEncrypted=session-secret:/etc/credstore.encrypted/cst-onejob-owner-stage-session-secret
+Environment=APP_ENV=development
+Environment=NODE_ENV=development
+Environment=SUPABASE_URL_DEV=https://xssrfshdrtdfupgqwfdw.supabase.co
+Environment=AI_DISPATCHER_ENABLED=false
+Environment=AI_SCHEDULER_ENABLED=false
+Environment=OLLAMA_WORKER_RUNTIME_ENABLED=false
+Environment=CST_DEV_ONEJOB_BROKER_ENABLED=false
+Environment=CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true
+# The root-owned public env file supplies CST_ONEJOB_STAGE_IMAGE_REF (exact 40-hex source).
+# It is checked against CST_TEAM_DEV_APPROVED_SOURCE_SHA by the read-only
+# provenance gate; absence of an independently verified image still denies boot.
+EnvironmentFile=/etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env
+# Re-verify the actual host bridge and scoped firewall chains immediately
+# before running the stage workload. The reconciler's success is not
+# sufficient: its chains might have changed after that earlier check.
+ExecStartPre=/opt/cst-onejob-dev/qa/owner-stage-egress-scoped-20261124.sh --verify
+ExecStart=/usr/bin/docker run --rm --name cst-onejob-owner-stage-bootstrap --network cst-onejob-owner-stage-egress --add-host aws-1-ap-southeast-2.pooler.supabase.com:52.62.122.103 --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 900m --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /run:rw,nosuid,nodev,size=24m --publish 127.0.0.1:18583:3000 --mount type=bind,src=%d,dst=/run/credentials/cst-onejob-owner-stage.service,readonly --mount type=bind,src=/etc/cst-onejob-dev/trust/prod-ca-2021.crt,dst=/run/cst-onejob-dev-db/ca/prod-ca-2021.crt,readonly --mount type=bind,src=/opt/cst-onejob-dev/bootstrap/entrypoint-stage-only.sh,dst=/run/cst-stage-entrypoint.sh,readonly --env APP_ENV=development --env NODE_ENV=development --env SUPABASE_URL_DEV=https://xssrfshdrtdfupgqwfdw.supabase.co --env CREDENTIALS_DIRECTORY=/run/credentials/cst-onejob-owner-stage.service --env AI_DISPATCHER_ENABLED=false --env AI_SCHEDULER_ENABLED=false --env OLLAMA_WORKER_RUNTIME_ENABLED=false --env CST_DEV_ONEJOB_BROKER_ENABLED=false --env CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true --env-file /etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env --entrypoint /bin/sh ${CST_ONEJOB_STAGE_IMAGE_REF} /run/cst-stage-entrypoint.sh
+ExecStop=/usr/bin/docker stop cst-onejob-owner-stage-bootstrap
+TimeoutStartSec=55
+TimeoutStopSec=18
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+PrivateDevices=yes
+
+# No Install section. This technical stage candidate cannot auto-enable.
+# Signer/dispatch remain OFF. One real Owner JWT permits only WAITING staging.

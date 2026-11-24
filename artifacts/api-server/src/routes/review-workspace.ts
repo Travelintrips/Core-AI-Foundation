@@ -26,13 +26,18 @@ import {
   computePermissions,
 } from "../services/reviewWorkspaceService.js";
 import { clientReviewLimiter } from "../middleware/rateLimiter.js";
+import { skipWorkspaceSchemaEnsureForOneJobPreview } from "../lib/cstOneJobReadonlyPreviewGate.js";
 
 const router = Router();
 
-// ── Ensure DB schema exists on module load ────────────────────────────────────
-ensureWorkspaceMetaTable().catch((err: unknown) => {
-  console.error("[review-workspace] Schema ensure failed:", err);
-});
+// Preserve the original schema initializer for every ordinary runtime.
+// A strictly scoped CST-DEV Owner UI preview must not issue startup DDL.
+// Invalid preview settings throw and prevent the API from starting.
+if (!skipWorkspaceSchemaEnsureForOneJobPreview()) {
+  ensureWorkspaceMetaTable().catch((err: unknown) => {
+    console.error("[review-workspace] Schema ensure failed:", err);
+  });
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

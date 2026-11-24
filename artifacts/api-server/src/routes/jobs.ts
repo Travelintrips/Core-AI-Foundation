@@ -27,7 +27,7 @@ import {
   PauseQueueBody,
   ResumeQueueBody,
 } from "@workspace/api-zod";
-import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
+import { db, aiJobsTable, aiWorkersTable, loadPinnedCstDevSupabaseRootCa } from "@workspace/db";
 import {
   enqueue,
   reprioritize,
@@ -40,6 +40,20 @@ import {
 } from "../services/jobWorkerService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
+import {
+ isReservedOneJobPilotRequest,CST_ONEJOB_RESERVED_REQUEST_PREFIX
+} from "../lib/cstOneJobPilotEnqueueGuard.js";
+import {requireCstOneJobStageOwner} from "../middleware/cstOneJobStageOwnerAuth.js";
+import { SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
+import { verifyFreshOneJobStageConsent } from "../lib/cstOneJobFreshStageConsent.js";
+import { stageCstDevOneJobForVerifiedOwner, evaluateCstOneJobStageEnvironment } from "../services/cstOneJobOwnerApprovalStageService.js";
+import {getCstOneJobStageRecoveryForVerifiedOwner} from "../services/cstOneJobStageRecoveryService.js";
+import {reviewCstOneJobStageDatabaseConfig} from "../lib/cstOneJobStageDbConfig.js";
+import {getCstOneJobStagingDatabase} from "../lib/cstOneJobStagingDatabase.js";
+import {readIndependentlySignedPreapproval} from "../lib/cstOneJobPreapprovalReadiness.js";
+import {CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256} from "../lib/cstOneJobOperationsRootCandidate.js";
+import {readFileSync} from "node:fs";
+import {resolve} from "node:path";
 
 const router = Router();
 
@@ -317,6 +331,148 @@ router.get("/ai/jobs", async (req, res): Promise<void> => {
   });
 });
 
+// One Super Admin human authority only. Existing Core internal role "owner"
+ // is the privileged Super Admin mapping; generic "admin"/"manager" are denied.
+ // Readiness response is read-only, no approval or job write.
+// A signed QA preapproval does not grant dispatch, and the real stage action
+// independently verifies all protected conditions again in its transaction.
+router.get("/ai/dev/onejob/owner-stage-readiness",
+  requireCstOneJobStageOwner,
+  async (_req,res):Promise<void>=>{
+    let sha="";
+    try{sha=readFileSync(resolve(process.cwd(),".cst-build-sha"),"utf8").trim()}catch{}
+    const envGate=evaluateCstOneJobStageEnvironment(process.env,sha);
+    const stageConfig=reviewCstOneJobStageDatabaseConfig(process.env);
+    const qa=readIndependentlySignedPreapproval({
+      sourceSha:sha,workerName:process.env.CST_TEAM_DEV_APPROVED_WORKER_NAME??"",
+    });
+    // Advisory: QA PRE (job+approval-specific) remains mandatory at
+    // admission, not as a circular prerequisite to create WAITING.
+    const blockers=[...envGate.blockers,...stageConfig.blockers];
+    // Check the exact source-pinned public Supabase CA BEFORE attempting
+    // any dedicated-login network connection. A missing Docker bind mount
+    // must not be misdiagnosed as a password or Supavisor authentication bug.
+    // Never trust a peer certificate as an alternative CA or retry with
+    // rejectUnauthorized=false. This is a read-only runtime file check.
+    if(blockers.length===0){
+      try{loadPinnedCstDevSupabaseRootCa();}
+      catch{blockers.push("STAGING_PINNED_CA_NOT_INSTALLED_OR_INVALID");}
+    }
+    if(blockers.length===0){
+      try{
+        const db=getCstOneJobStagingDatabase(process.env);
+        const valid=await db.transaction(async tx=>{
+          await tx.execute(sql`SET TRANSACTION READ ONLY`);
+          const r=await tx.execute(sql`
+            SELECT current_user AS role_name,current_database() AS database_name,
+              EXISTS(SELECT 1 FROM pg_roles
+                WHERE rolname=current_user AND rolcanlogin
+                  AND NOT rolbypassrls AND NOT rolsuper AND NOT rolinherit)
+                AS scoped_login,
+              EXISTS(SELECT 1 FROM pg_auth_members m
+                JOIN pg_roles wr ON wr.oid=m.roleid
+                JOIN pg_roles lo ON lo.oid=m.member
+                WHERE wr.rolname='cst_team_model_pilot_writer'
+                  AND lo.rolname='cst_team_model_pilot_stage_login'
+                  AND m.set_option AND NOT m.inherit_option AND NOT m.admin_option)
+                AS scoped_membership`);
+          const row=r.rows[0] as Record<string,unknown>|undefined;
+          return r.rows.length===1&&
+            row?.role_name==='cst_team_model_pilot_stage_login'&&
+            row?.database_name==='postgres'&&
+            row?.scoped_login===true&&row?.scoped_membership===true;
+        });
+        if(!valid)blockers.push("SCOPED_STAGING_LOGIN_NOT_VERIFIED");
+      }catch{blockers.push("SCOPED_STAGING_DB_UNREACHABLE");}
+    }
+    res.setHeader("Cache-Control","no-store");
+    res.status(200).json({
+      project:"xssrfshdrtdfupgqwfdw",companyId:"1",modelId:"qwen2.5:3b",
+      readyForOneOwnerClick:blockers.length===0,
+      blockers:[...new Set(blockers)],
+      operationsRootCandidateSha256:CST_ONEJOB_PUBLIC_OPERATIONS_CANDIDATE_SHA256,
+      operationsRootTrusted:false,
+      qaTechnicalPreflightAdvisory:qa.verified,
+      signedQaAdmissionStillRequired:true,
+      requiresNewPassword:false,secondOwnerApprovalRequired:false,
+      dispatchPermitted:false,operationalE2EVerified:false,
+    });
+  }
+);
+
+// Read-only Owner-only recovery of an ambiguous previous approval POST.
+// The scoped reader uses no more privilege than the already-existing
+// staging writer, and does not make a retry safe or grant dispatch.
+router.get("/ai/dev/onejob/owner-stage-status",
+ requireCstOneJobStageOwner,
+ async (req,res):Promise<void>=>{
+  res.setHeader("Cache-Control","no-store");
+  const actor=req.internalUser;
+  if(!actor||!Number.isSafeInteger(actor.id)||actor.id<=0){
+   res.status(403).json({error:"ACTIVE_SUPER_ADMIN_REQUIRED"});return;
+  }
+  try{
+   const reviewed=await getCstOneJobStageRecoveryForVerifiedOwner({
+     ownerUserId:actor.id,env:process.env
+   });
+   res.status(200).json(reviewed);
+  }catch{
+   // No raw Postgres errors, DSN, selected rows or JWT contents exposed.
+   res.status(503).json({
+    state:"UNAVAILABLE",automaticRetryAllowed:false,
+    dispatchPermitted:false,releaseDecision:"NO_GO"
+   });
+  }
+ }
+);
+
+// One-use Super Admin business decision using existing Core role "owner":
+ // stages exactly one WAITING job only; no second human approval.
+// No generic API key, machine identity or body-provided actor can authorize it.
+// Deliberately disabled unless the exact deployment explicitly enables it.
+router.post("/ai/dev/onejob/owner-approve-and-stage",
+  requireCstOneJobStageOwner,
+  async (req,res):Promise<void>=>{
+    const host=req.hostname.toLowerCase();
+    const origin=req.get("origin");
+    const site=req.get("sec-fetch-site");
+    if(host!=="dev.cstlogistic.co.id" ||
+       origin!=="https://dev.cstlogistic.co.id" ||
+       (site && site!=="same-origin") ||
+       !req.is("application/json")){
+      res.status(403).json({error:"DEV_OWNER_ORIGIN_REQUIRED"});return;
+    }
+    // One Owner action, no second confirmation after staging. The existing
+    // signed session must have been issued recently; an old 12h cookie,
+    // generic admin key, password-reset token or forged actor never suffices.
+    const actor=req.internalUser;
+    const sessionToken=(req.cookies as Record<string,string>|undefined)?.[SESSION_COOKIE_NAME];
+    if(!actor || !verifyFreshOneJobStageConsent({
+      sessionToken,sessionSecret:process.env.SESSION_SECRET,
+      ownerUserId:actor.id,role:actor.role,status:actor.status,
+      accountType:actor.accountType,mustChangePassword:actor.mustChangePassword,
+      body:req.body,
+    })){
+      res.status(403).json({error:"FRESH_EXPLICIT_OWNER_STAGE_CONSENT_REQUIRED",
+        dispatchPermitted:false});return;
+    }
+    try{
+      const staged=await stageCstDevOneJobForVerifiedOwner({
+        ownerUserId:actor.id,env:process.env,
+      });
+      res.setHeader("Cache-Control","no-store");
+      res.status(201).json(staged);
+    }catch(error){
+      const code=error instanceof Error ? error.message.split(":")[0]:"ONEJOB_STAGE_FAILED";
+      // Never include DB error messages or credentials in an HTTP response.
+      res.status(code==="ONEJOB_STAGE_NOT_READY"?403:503).json({
+        error:code==="ONEJOB_STAGE_NOT_READY"?"ONEJOB_STAGE_NOT_READY":"ONEJOB_STAGE_UNAVAILABLE",
+        dispatchPermitted:false,
+      });
+    }
+  }
+);
+
 // ── Enqueue Job ───────────────────────────────────────────────────────────────
 
 router.post("/ai/jobs", async (req, res): Promise<void> => {
@@ -327,6 +483,14 @@ router.post("/ai/jobs", async (req, res): Promise<void> => {
   }
 
   const d = body.data;
+  // A requestId in the reserved one-job pilot namespace is NOT authorization.
+  // Never let generic enqueue create a pilot job (or a different job type
+  // impersonating it). A dedicated Owner/Super Admin approval flow must
+  // bind one immutable requestId, job and worker before any admission.
+  if (isReservedOneJobPilotRequest(d.payloadJson)) {
+    res.status(403).json({ error: "DEV_ONEJOB_OWNER_APPROVAL_REQUIRED" });
+    return;
+  }
   const job = await enqueue({
     jobType:           d.jobType,
     payloadJson:       d.payloadJson,
@@ -447,6 +611,12 @@ router.patch("/ai/jobs/:id/retry", async (req, res): Promise<void> => {
     .where(eq(aiJobsTable.id, id));
 
   if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  // Retrying a reserved pilot requires NEW signed one-job admission;
+  // generic manual retry must never mint queue authority.
+  if (isReservedOneJobPilotRequest(job.payloadJson)) {
+    res.status(403).json({error:"DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED"});
+    return;
+  }
 
   const retriable = ["failed", "blocked", "cancelled"].includes(job.status);
   if (!retriable) {
@@ -462,8 +632,14 @@ router.patch("/ai/jobs/:id/retry", async (req, res): Promise<void> => {
       nextRetryAt:  null,
       updatedAt:    new Date(),
     })
-    .where(eq(aiJobsTable.id, id))
+    .where(and(eq(aiJobsTable.id, id),sql`
+      COALESCE(${aiJobsTable.payloadJson}->>'requestId','') NOT LIKE
+      ${CST_ONEJOB_RESERVED_REQUEST_PREFIX+'%'}`))
     .returning();
+  if (!updated) {
+    res.status(409).json({error:"DEV_ONEJOB_SIGNED_ADMISSION_REQUIRED"});
+    return;
+  }
 
   await logAudit("job-engine", "job_manual_retry", String(id), "ai_job", "success", {});
 

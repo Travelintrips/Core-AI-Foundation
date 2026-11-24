@@ -1,0 +1,39 @@
+name: CST DEV OneJob UI API paired CI artifact gate source QA
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cst-onejob-ci-pair-source-qa.yml"
+      - "scripts/dev/cst-onejob-ci-pair-readonly-gate.py"
+      - "scripts/dev/test_cst_onejob_ci_pair_readonly_gate.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paired-source-only:
+    if: github.repository == 'Travelintrips/Core-AI-Foundation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Exact one Owner UI + API CI bundle source QA
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -B -m unittest -v scripts/dev/test_cst_onejob_ci_pair_readonly_gate.py
+      - name: Default deny live release
+        run: |
+          echo "CST_DEV_CI_PAIR_SOURCE_QA=PASS"
+          echo "NO_GITHUB_PRIVATE_ARTIFACT_READ"
+          echo "NO_KEY_OR_DB_CREDENTIALS"
+          echo "NO_OWNER_APPROVAL"
+          echo "NO_DEV_OR_PROD_DEPLOY"
+          echo "NO_DISPATCH_OR_SIGNER_ENABLE"
+          echo "RELEASE_DECISION=NO_GO"

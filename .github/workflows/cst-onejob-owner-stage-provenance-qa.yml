@@ -1,0 +1,50 @@
+name: CST DEV Owner-Stage Provenance Readonly QA
+
+on:
+  pull_request:
+    branches:
+      - integration/cst-dev-onejob-one-batch-20261120
+    paths:
+      - .github/workflows/cst-onejob-owner-stage-provenance-qa.yml
+      - scripts/dev/cst-onejob-owner-stage-provenance-review.mjs
+      - scripts/dev/cst-onejob-owner-stage-provenance-review.test.mjs
+      - deploy/cst-onejob-vps/owner-stage-bootstrap/cst-onejob-owner-stage-bootstrap.service.CANDIDATE
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deny-unproven-stage-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate source-only gate syntax
+        run: node --check scripts/dev/cst-onejob-owner-stage-provenance-review.mjs
+      - name: Run five negative and invariant tests
+        run: node --test scripts/dev/cst-onejob-owner-stage-provenance-review.test.mjs
+      - name: Assert absent host public pin remains denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/dev/cst-onejob-owner-stage-provenance-review.mjs --read-only > /tmp/stage-provenance-denied.json
+          code=$?
+          set -e
+          test "$code" = 2
+          node -e 'const r=require(process.argv[1]); if(r.releaseDecision!=="NO_GO"||r.status!=="DENIED"||r.dispatchPermitted!==false||r.signerActivationPermitted!==false||r.finalAckIssued!==false)process.exit(1)' /tmp/stage-provenance-denied.json
+          echo CST_ONEJOB_STAGE_IMAGE_PROVENANCE_DEFAULT_DENY_PASS
+      - name: No authorization or side effects
+        run: |
+          echo NO_IMAGE_BUILD=true
+          echo NO_DATABASE_CONNECTION=true
+          echo NO_CREDENTIAL_READ=true
+          echo NO_SIGNER_DISPATCH=true
+          echo NO_DEV_OR_PROD_DEPLOY=true

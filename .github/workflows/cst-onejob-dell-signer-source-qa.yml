@@ -1,0 +1,155 @@
+name: CST DEV DELL Signer Source QA
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cst-onejob-dell-signer-source-qa.yml"
+      - "scripts/dev/cst-onejob-dell-signer-*"
+      - "scripts/dev/cst-onejob-dell-dpapi-custody.cs"
+      - "scripts/dev/cst-onejob-native-signer-*"
+      - "scripts/dev/cst-onejob-signed-artifact-readonly-review.ps1"
+      - "docs/dev/cst-onejob-dell-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-source-qa:
+    if: github.repository == 'Travelintrips/Core-AI-Foundation'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Independent signed-release evidence tests with in-memory keys
+        shell: pwsh
+        run: |
+          node --test scripts/dev/cst-onejob-dell-signer-release.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Real Windows kernel named-pipe source and negative tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\dev\cst-onejob-dell-signer-source-ci.ps1
+      - name: Compile guarded native Windows service and parse installer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64/v4.0.30319/csc.exe'
+          $serviceDll = Join-Path $env:WINDIR 'Microsoft.NET\Framework64/v4.0.30319/System.ServiceProcess.dll'
+          if (-not (Test-Path $compiler) -or -not (Test-Path $serviceDll)) { throw 'FRAMEWORK_SERVICE_COMPILER_NOT_PRESENT' }
+          $output = Join-Path $env:RUNNER_TEMP 'CstDevSignerService.exe'
+          & $compiler /nologo /target:exe /optimize+ "/r:$serviceDll" "/out:$output" .\scripts\dev\cst-onejob-native-signer-service.cs
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) { throw 'NATIVE_SIGNER_SERVICE_COMPILATION_FAILED' }
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path .\scripts\dev\cst-onejob-native-signer-installer.ps1),
+            [ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw 'NATIVE_SIGNER_INSTALLER_PARSE_FAILED' }
+          $text = Get-Content .\scripts\dev\cst-onejob-native-signer-installer.ps1 -Raw
+          if ($text -notmatch 'INSTALL_DENIED_MISSING_OFFICIAL_CUSTODY_OR_ADMIN_APPROVAL' -or
+              $text -notmatch "releaseDecision='NO_GO'" -or
+              $text -match '(?m)^\s*(?:Enable-LocalUser|Start-Service|New-LocalUser|Set-LocalUser)\b') {
+            throw 'SIGNER_INSTALLER_NOT_FAIL_CLOSED'
+          }
+          Write-Output 'CSTDEV_NATIVE_WINDOWS_SERVICE_SOURCE_BUILD_PASS'
+          Write-Output 'INSTALLER_SYNTAX_PASS_NO_INSTALL_NO_KEYS_NO_GO'
+      - name: Windows DPAPI CurrentUser synthetic self-test - no keys or installation
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          if (-not (Test-Path $compiler)) { throw 'WINDOWS_FRAMEWORK_COMPILER_NOT_PRESENT' }
+          $output = Join-Path $env:RUNNER_TEMP 'CstDevDpapiSyntheticQA.exe'
+          & $compiler /nologo /target:exe /optimize+ '/r:System.Security.dll' "/out:$output" .\scripts\dev\cst-onejob-dell-dpapi-custody.cs
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) {
+            throw 'DPAPI_SYNTHETIC_SOURCE_COMPILATION_FAILED'
+          }
+          $testOutput = & $output --synthetic-selftest
+          if ($LASTEXITCODE -ne 0) { throw 'DPAPI_CURRENT_USER_SYNTHETIC_TEST_FAILED' }
+          $result = $testOutput | ConvertFrom-Json
+          if ($result.status -ne 'PASS' -or $result.scope -ne 'WINDOWS_DPAPI_CURRENT_USER_SYNTHETIC_ONLY' -or
+              $result.roundTrip -ne $true -or $result.tamperingDenied -ne $true -or
+              $result.wrongScopeMetadataDenied -ne $true -or
+              $result.realSignerKeyCreated -ne $false -or
+              $result.vaultFileCreated -ne $false -or
+              $result.releaseDecision -ne 'NO_GO') {
+            throw 'DPAPI_SYNTHETIC_SOURCE_PROOF_INCOMPLETE'
+          }
+          $denyOutput = & $output --unseal-operational-key
+          if ($LASTEXITCODE -ne 2 -or $denyOutput -notmatch 'OPERATIONAL_COMMANDS_DISABLED') {
+            throw 'DPAPI_UNAUTHORIZED_RUNTIME_MODE_ACCEPTED'
+          }
+          Write-Output 'CST_DEV_DPAPI_SYNTHETIC_SOURCE_QA_PASS_NO_REAL_SIGNERS'
+          exit 0
+      - name: Verify signing certificate and approved post-signing hash source contract
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = '.\scripts\dev\cst-onejob-native-signer-installer.ps1'
+          $source = Get-Content $file -Raw
+          $required = @(
+            'unsignedReferenceBuildShaVerified',
+            'nativeServiceHashVerified=$false',
+            'PROTECTED_NATIVE_BINARY_AUTHENTICODE_NOT_VALID',
+            'INDEPENDENT_SIGNED_CHANGE_APPROVAL_NOT_VERIFIED',
+            'APPROVED_SIGNED_BINARY_HASH_MISMATCH',
+            'CST_DEV_SIGNER_SERVICE_CHANGE_SIGNATURE_VALID\|([A-F0-9]{64})',
+            'INSTALL_DENIED_MISSING_OFFICIAL_CUSTODY_OR_ADMIN_APPROVAL'
+          )
+          foreach ($term in $required) {
+            if (-not $source.Contains($term)) {
+              throw ('MISSING_FAIL_CLOSED_SIGNED_ARTIFACT_CONTROL: ' + $term)
+            }
+          }
+          if ($source.Contains('$ExpectedBinarySha') -or
+              $source -match '(?s)if\s*\(\s*\$hash\s+-cne\s+\$UnsignedReferenceSha') {
+            throw 'OLD_UNSIGNED_BINARY_HASH_WOULD_REJECT_APPROVED_SIGNATURE'
+          }
+          if ($source -match '(?m)^\s*(?:Enable-LocalUser|Start-Service|New-LocalUser)\b') {
+            throw 'SIGNER_SOURCE_ATTEMPTS_UNAUTHORIZED_ACTIVATION'
+          }
+          Write-Output 'SIGNED_ARTIFACT_HASH_TRUST_CONTRACT_SOURCE_PASS'
+          Write-Output 'NO_SIGNING_KEY_NO_CERT_ISSUANCE_NO_SERVICE_INSTALL'
+      - name: Signed-artifact package verifier source and default-deny QA
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = '.\scripts\dev\cst-onejob-signed-artifact-readonly-review.ps1'
+          $tokens = $null; $errors = $null
+          [Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $file), [ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw 'SIGNING_REVIEW_SCRIPT_PARSE_FAILED' }
+          $source = Get-Content $file -Raw
+          $required = @('REVIEW_MANIFEST_NOT_EQUAL_TO_PINNED_ZIP',
+            'INVALID_AUTHENTICODE_SIGNED_ARTIFACT',
+            'INDEPENDENT_APPROVED_CHANGE_AND_CUSTODY_STILL_REQUIRED',
+            'SIGNATURES_VERIFIED_RELEASE_NOT_AUTHORIZED')
+          foreach ($control in $required) {
+            if (-not $source.Contains($control)) {
+              throw ('REQUIRED_SOURCE_GATE_MISSING: ' + $control)
+            }
+          }
+          if ($source -match '(?m)^\s*(?:Enable-LocalUser|Start-Service|New-Service|New-LocalUser|Set-AuthenticodeSignature|Set-LocalUser)\b') {
+            throw 'SOURCE_SIGNING_VERIFIER_HAS_WRITER_OPERATIONS'
+          }
+          $result = & $file -ReviewFolder (Join-Path $env:RUNNER_TEMP 'NONEXISTENT_CSTDEV_SIGNING_REVIEW')
+          $proof = $result | ConvertFrom-Json
+          if ($proof.status -ne 'DENIED' -or
+              $proof.releaseDecision -ne 'NO_GO' -or
+              $proof.smartAppControlChanged -ne $false) {
+            throw 'NO_PACKAGE_MUST_DENY_WITHOUT_AUTHORITY'
+          }
+          Write-Output 'CSTDEV_SIGNED_ARTIFACT_READONLY_SOURCE_GATE_PASS'
+      - name: Default-deny QA scope
+        shell: pwsh
+        run: |
+          Write-Output "CST_DEV_WINDOWS_SOURCE_QA_ONLY"
+          Write-Output "NO USER PROVISIONING, NO CREDENTIALS, NO SIGNATURES"
+          Write-Output "NO DEV/PROD DEPLOY, NO OWNER JOB, NO FINAL ACK"
+          Write-Output "RELEASE_DECISION=NO_GO"

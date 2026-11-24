@@ -34,6 +34,7 @@ import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } 
 import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.js";
 import { logger } from "../lib/logger.js";
 import { isDevSafeRuntimeEnabled, isDevSmokeJob } from "./devRuntimeSafety.js";
+import {CST_ONEJOB_RESERVED_REQUEST_PREFIX} from "../lib/cstOneJobPilotEnqueueGuard.js";
 import { WorkerNotImplementedError } from "./jobCompletionGuard.js";
 import { createSystemContext } from "../security/requestContext.js";
 import { DEFAULT_TENANT_ID } from "../security/tenantResolution.js";
@@ -1159,6 +1160,9 @@ export async function cancelJob(jobId: number, workerId?: number): Promise<AiJob
       and(
         eq(aiJobsTable.id, jobId),
         inArray(aiJobsTable.status, ["queued", "waiting", "retrying", "running"]),
+        // Generic cancel is not the signed one-job revocation protocol.
+        sql`COALESCE(${aiJobsTable.payloadJson}->>'requestId','') NOT LIKE
+          ${CST_ONEJOB_RESERVED_REQUEST_PREFIX+'%'}`,
       ),
     )
     .returning();
