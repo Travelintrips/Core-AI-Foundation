@@ -24,7 +24,7 @@ const auth = { Host: "dev.cstlogistic.co.id", Authorization: "Bearer scoped-test
 const input = {
   action: "CONTINUE_PARTIAL_JOB", environment: "CST_DEV", reportStatus: "PARTIAL",
   project: "SPORT_CENTER", accountAlias: "GPT02",
-  targetConversationId: conversationId,
+  targetConversationId: "c816f67b-d56b-4c27-8391-44c082c7e6a1",
   jobId: "SC-1829", checkpointRevision: 2,
   reportSummary: "VIS allocation still requires verification against latest DEV data.",
   nextStep: "Inspect current DEV allocation and produce evidence without touching PROD.",
