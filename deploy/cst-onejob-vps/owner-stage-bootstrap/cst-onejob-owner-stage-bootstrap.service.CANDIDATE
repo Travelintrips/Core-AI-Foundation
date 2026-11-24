@@ -6,7 +6,7 @@
 Description=CST-DEV one-Super-Admin WAITING-only bootstrap candidate
 After=docker.service cst-onejob-owner-stage-egress-reconcile.service
 Requires=docker.service cst-onejob-owner-stage-egress-reconcile.service
-ConditionPathIsExecutable=/opt/cst-onejob-dev/qa/owner-stage-egress-scoped-20261124.sh
+ConditionPathExists=/opt/cst-onejob-dev/qa/owner-stage-egress-scoped-20261124.sh
 ConditionPathExists=/etc/cst-onejob-dev/bootstrap-verified/owner-stage-runtime-ready.json
 ConditionPathExists=/etc/cst-onejob-dev/trust/prod-ca-2021.crt
 ConditionPathExists=/etc/credstore.encrypted/cst-onejob-owner-stage-database-url
