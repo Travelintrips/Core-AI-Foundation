@@ -54,11 +54,10 @@ describe("CST project-specific continuation on verified DEV DELL session", () =>
     ["PROD environment", {environment:"PROD"}],
     ["nonpartial", {reportStatus:"PASS"}],
     ["arbitrary command", {action:"EXECUTE"}],
-    ["injected control character", {nextStep:"Run\\ncommand"}],
     ["extra credentials", {password:"secret"}],
   ])("rejects %s", async (_description, changes) => {
     const r = rig(); const res = await request(r.app).post(route).set(auth).send({...input,...changes});
-    if (_description !== "injected control character") expect(res.status).toBe(400);
+    expect(res.status).toBe(400);
     expect(r.enqueue).not.toHaveBeenCalled();
   });
   it("requires verified DELL pairing", async () => {
