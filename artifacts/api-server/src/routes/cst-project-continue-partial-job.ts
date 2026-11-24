@@ -13,12 +13,15 @@ export const CST_DEV_PROJECTS = [
 ] as const;
 const DEV_HOST = "dev.cstlogistic.co.id";
 const SERVICE = "openclaw-vps-dev-consumer";
-const ACCOUNT_ALIAS = "GPT02";
+const SESSION_ALIAS = /^GPT(?:0[2-9]|[1-9][0-9]{1,3})$/;
+const CONVERSATION_ID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const noControl = (value: string) => !/[\u0000-\u001f\u007f]/.test(value);
 const schema = z.object({
   action: z.literal("CONTINUE_PARTIAL_JOB"),
   environment: z.literal("CST_DEV"),
   project: z.enum(CST_DEV_PROJECTS),
+  accountAlias: z.string().regex(SESSION_ALIAS),
+  targetConversationId: z.string().regex(CONVERSATION_ID),
   reportStatus: z.literal("PARTIAL"),
   jobId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{2,79}$/),
   checkpointRevision: z.number().int().min(1).max(1000000),
@@ -30,7 +33,7 @@ type VerifiedService = { id?: string; name?: string; scopes?: string[] };
 type Target = Awaited<ReturnType<typeof resolveVerifiedDevWakeTarget>>;
 type DispatchResult = Awaited<ReturnType<typeof queueDevBrowserWake>>;
 export type CrossProjectContinueDeps = {
-  resolveTarget: () => Promise<Target>;
+  resolveTarget: (accountAlias: string) => Promise<Target>;
   enqueue: (input: Parameters<typeof queueDevBrowserWake>[0]) => Promise<DispatchResult>;
 };
 
@@ -50,22 +53,25 @@ export function createCrossProjectContinuePartialRouter(deps: CrossProjectContin
     if (!parsed.success) {
       res.status(400).json({ error: "INVALID_PROJECT_PARTIAL_CONTINUATION" }); return;
     }
-    const { project, jobId, checkpointRevision, reportSummary, nextStep } = parsed.data;
+    const { project, accountAlias, targetConversationId, jobId, checkpointRevision, reportSummary, nextStep } = parsed.data;
     try {
-      // All projects share the already-paired GPT02 DEV chat transport only.
-      // Verify the exact worker and fingerprint on every dispatch.
-      const target = await deps.resolveTarget();
+      // Caller must explicitly select an already registered, verified account AND exact chat.
+      // No automatic session enrollment and no fallback to GPT02 or another tab.
+      const target = await deps.resolveTarget(accountAlias);
       if (!target.wakeBinding || target.workerId !== DEV_WAKE_DELL_WORKER ||
-          target.wakeBinding.accountAlias !== ACCOUNT_ALIAS) {
+          target.wakeBinding.accountAlias !== accountAlias ||
+          target.targetConversationId !== targetConversationId.toLowerCase()) {
         res.status(409).json({ error: "VERIFIED_DELL_SESSION_REQUIRED", queued: false }); return;
       }
       const eventId = createHash("sha256").update([
         "CST-DEV/project-partial-continuation/v1",
-        project, jobId, String(checkpointRevision),
+        project, accountAlias, targetConversationId.toLowerCase(), jobId, String(checkpointRevision),
       ].join("|")).digest("hex");
       const instruction = [
         "CST PROJECT COORDINATION — CONTINUE_PARTIAL_JOB (CST-DEV only)",
         "Project: " + project,
+        "Verified ChatGPT session: " + accountAlias,
+        "Conversation: " + targetConversationId.toLowerCase(),
         "Owner authorized bounded DEV coordination with OpenClaw.",
         "Only continue this project's authorized DEV job. Do not confuse other project state.",
         "This instruction does not grant tools, credentials, administrative privilege, or approval bypass.",
@@ -90,7 +96,7 @@ export function createCrossProjectContinuePartialRouter(deps: CrossProjectContin
       });
       res.status(queued.created ? 202 : 200).json({
         accepted: true, queued: true, alreadyQueued: !queued.created,
-        commandId: queued.commandId, project, jobId, checkpointRevision,
+        commandId: queued.commandId, project, accountAlias, targetConversationId: target.targetConversationId, jobId, checkpointRevision,
         browserConfirmed: false, assistantContinued: false,
       });
     } catch (error) {
@@ -106,7 +112,7 @@ export function createCrossProjectContinuePartialRouter(deps: CrossProjectContin
 
 export function createDefaultCrossProjectContinuePartialRouter() {
   return createCrossProjectContinuePartialRouter({
-    resolveTarget: () => resolveVerifiedDevWakeTarget(ACCOUNT_ALIAS, DEV_HOST, undefined, DEV_WAKE_DELL_WORKER),
+    resolveTarget: (accountAlias) => resolveVerifiedDevWakeTarget(accountAlias, DEV_HOST, undefined, DEV_WAKE_DELL_WORKER),
     enqueue: queueDevBrowserWake,
   });
 }
