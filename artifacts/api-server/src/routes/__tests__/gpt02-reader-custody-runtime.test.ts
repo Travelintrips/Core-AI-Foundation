@@ -52,7 +52,7 @@ import {
   createGpt02ReaderCustodyRuntime,
   CustodyFileError,
   GPT02_CUSTODY_FILES,
-} from "../../services/gpt02ReaderCustodyRuntime.js";
+} from "../../services/gpt02ReaderCustodyVerifiedAdapter.js";
 import {
   GPT02_DBA_CUSTODY_TARGET,
   GPT02_WORKER_ATTESTATION_TARGET,
@@ -104,10 +104,10 @@ function makeApp() {
   };
   const env: NodeJS.ProcessEnv = {
     APP_ENV: "development", NODE_ENV: "test",
-    GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64: workerKey.der,
-    GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256: workerKey.fingerprint,
-    GPT02_CUSTODY_DBA_PUBLIC_DER_B64: dbaKey.der,
-    GPT02_CUSTODY_DBA_PUBLIC_SHA256: dbaKey.fingerprint,
+    GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64: workerKey.der,
+    GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256: workerKey.fingerprint,
+    GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64: dbaKey.der,
+    GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256: dbaKey.fingerprint,
   };
   let clock = now;
   const readDocument = vi.fn(async (kind: "worker" | "dba") => documents[kind]);
@@ -185,8 +185,8 @@ describe("HTTP custody broker with real signed evidence, isolated transport", ()
   it("the mounted factory emits only an unsigned generation-bound request without an installed attestation", async () => {
     vi.stubEnv("APP_ENV", "development");
     vi.stubEnv("NODE_ENV", "test");
-    vi.stubEnv("GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64", undefined);
-    vi.stubEnv("GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256", undefined);
+    vi.stubEnv("GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64", undefined);
+    vi.stubEnv("GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256", undefined);
     const app = express();
     app.use(url, createLockedGpt02ReaderCustodyBroker());
     const response = await request(app).get(url + "/attestation-request").set(auth);
@@ -339,7 +339,7 @@ describe("HTTP custody broker with real signed evidence, isolated transport", ()
 
   it("explains absent trust configuration instead of a permanent stub denial", async () => {
     const s = makeApp();
-    delete s.env.GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64;
+    delete s.env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64;
     const response = await request(s.app).get(url + "/status").set(auth);
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({ state: "LOCKED", error: "CUSTODY_ATTESTOR_NOT_CONFIGURED" });

@@ -49,4 +49,5 @@ jobs:
           src/routes/__tests__/gpt02-reader-custody-runtime.test.ts
           src/services/__tests__/gpt02ReaderCustodyAttestation.test.ts
           src/services/__tests__/gpt02ReaderCustodyRuntime.test.ts
+          src/services/__tests__/gpt02ReaderCustodyVerifiedAdapter.test.ts
           src/services/__tests__/gpt02OpenClawReaderCustodyPolicy.test.ts

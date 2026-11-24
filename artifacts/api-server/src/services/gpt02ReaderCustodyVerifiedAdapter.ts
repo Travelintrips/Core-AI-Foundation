@@ -12,8 +12,8 @@ import {
 const PRINCIPAL = "openclaw-vps-main";
 const PROJECT = "xssrfshdrtdfupgqwfdw";
 export const GPT02_CUSTODY_FILES = Object.freeze({
-  worker: "/run/credentials/core-ai-dev/gpt02-custody-worker-attestation.json",
-  dba: "/run/credentials/core-ai-dev/gpt02-custody-dba-receipt.json",
+  worker: "/run/credentials/gpt02-reader-custody/worker-attestation.json",
+  dba: "/run/credentials/gpt02-reader-custody/issuer-receipt.json",
   reader: "/run/credentials/gpt02-owner-ledger-reader/reader.json",
 });
 const MAX_RECEIPT_BYTES = 8_192;
@@ -155,7 +155,7 @@ export function createGpt02ReaderCustodyRuntime(overrides: Partial<Gpt02CustodyR
       return { status: { verified: false, reason }, proof: null };
     }
     if (principal !== PRINCIPAL || !binding) return { status: { verified: false, reason: "CUSTODY_WORKER_TOKEN_NOT_BOUND" }, proof: null };
-    if (!env.GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64 || !env.GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256) {
+    if (!env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64 || !env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256) {
       return { status: { verified: false, reason: "CUSTODY_ATTESTOR_NOT_CONFIGURED" }, proof: null };
     }
     let document: unknown;
@@ -165,8 +165,8 @@ export function createGpt02ReaderCustodyRuntime(overrides: Partial<Gpt02CustodyR
         ? "CUSTODY_ATTESTATION_NOT_INSTALLED" : "CUSTODY_ATTESTATION_FILE_REJECTED" }, proof: null };
     }
     const proof = verifyGpt02CustodyWorkerAttestation({
-      document, trustedIssuerPublicDerB64: env.GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64,
-      trustedIssuerSha256: env.GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256,
+      document, trustedIssuerPublicDerB64: env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64,
+      trustedIssuerSha256: env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256,
       authenticatedCredentialId: serviceId, authenticatedCredentialBinding: binding, now: deps.now(),
     });
     return { status: { verified: !!proof, ...(proof ? {} : { reason: "CUSTODY_ATTESTATION_REJECTED" }) }, proof, env };
@@ -196,10 +196,10 @@ export function createGpt02ReaderCustodyRuntime(overrides: Partial<Gpt02CustodyR
       const current = await worker(serviceId, principal, binding);
       if (!current.proof || !current.env) return { ...current.status, receiptId: null };
       const env = current.env;
-      if (!env.GPT02_CUSTODY_DBA_PUBLIC_DER_B64 || !env.GPT02_CUSTODY_DBA_PUBLIC_SHA256) {
+      if (!env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64 || !env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256) {
         return { verified: false, receiptId: null, reason: "CUSTODY_DBA_ATTESTOR_NOT_CONFIGURED" };
       }
-      if (env.GPT02_CUSTODY_DBA_PUBLIC_SHA256 === env.GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256) {
+      if (env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256 === env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256) {
         return { verified: false, receiptId: null, reason: "CUSTODY_ISSUER_DOMAINS_NOT_SEPARATE" };
       }
       let document: unknown;
@@ -209,8 +209,8 @@ export function createGpt02ReaderCustodyRuntime(overrides: Partial<Gpt02CustodyR
           ? "CUSTODY_DBA_RECEIPT_NOT_INSTALLED" : "CUSTODY_DBA_RECEIPT_FILE_REJECTED" };
       }
       const receipt = verifyGpt02DbaCustodyReceipt({
-        document, trustedIssuerPublicDerB64: env.GPT02_CUSTODY_DBA_PUBLIC_DER_B64,
-        trustedIssuerSha256: env.GPT02_CUSTODY_DBA_PUBLIC_SHA256, verifiedWorker: current.proof, now: deps.now(),
+        document, trustedIssuerPublicDerB64: env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64,
+        trustedIssuerSha256: env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256, verifiedWorker: current.proof, now: deps.now(),
       });
       if (!receipt.verified) return { ...receipt, reason: "CUSTODY_DBA_RECEIPT_REJECTED" };
       try { await deps.inspectReaderMount(); }
@@ -221,10 +221,15 @@ export function createGpt02ReaderCustodyRuntime(overrides: Partial<Gpt02CustodyR
       // Filesystem IO may cross the validity boundary. Make the final decision
       // against the current clock after the last asynchronous prerequisite.
       const finalReceipt = verifyGpt02DbaCustodyReceipt({
-        document, trustedIssuerPublicDerB64: env.GPT02_CUSTODY_DBA_PUBLIC_DER_B64,
-        trustedIssuerSha256: env.GPT02_CUSTODY_DBA_PUBLIC_SHA256, verifiedWorker: current.proof, now: deps.now(),
+        document, trustedIssuerPublicDerB64: env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64,
+        trustedIssuerSha256: env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256, verifiedWorker: current.proof, now: deps.now(),
       });
       return finalReceipt.verified ? finalReceipt : { ...finalReceipt, reason: "CUSTODY_DBA_RECEIPT_REJECTED" };
     },
   };
+}
+
+/** Canonical factory retained from PR #1813; one adapter and no V1 fallback. */
+export function createConfiguredGpt02ReaderCustodyAdapter() {
+  return createGpt02ReaderCustodyRuntime();
 }

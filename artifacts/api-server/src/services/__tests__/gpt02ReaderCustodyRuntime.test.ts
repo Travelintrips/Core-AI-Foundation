@@ -19,7 +19,7 @@ import {
   GPT02_CUSTODY_FILES,
   inspectProtectedGpt02ReaderMount,
   readProtectedGpt02CustodyDocument,
-} from "../gpt02ReaderCustodyRuntime.js";
+} from "../gpt02ReaderCustodyVerifiedAdapter.js";
 import {
   GPT02_DBA_CUSTODY_TARGET,
   GPT02_WORKER_ATTESTATION_TARGET,
@@ -69,10 +69,10 @@ function fixture() {
   const env: NodeJS.ProcessEnv = {
     APP_ENV: "development",
     NODE_ENV: "test",
-    GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64: workerKey.publicDer,
-    GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256: workerKey.fingerprint,
-    GPT02_CUSTODY_DBA_PUBLIC_DER_B64: dbaKey.publicDer,
-    GPT02_CUSTODY_DBA_PUBLIC_SHA256: dbaKey.fingerprint,
+    GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64: workerKey.publicDer,
+    GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256: workerKey.fingerprint,
+    GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64: dbaKey.publicDer,
+    GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256: dbaKey.fingerprint,
   };
   const documents: Record<"worker" | "dba", unknown> = { worker, dba };
   const readDocument = vi.fn(async (kind: "worker" | "dba") => documents[kind]);
@@ -148,8 +148,8 @@ describe("GPT02 custody runtime uses real signatures with isolated dependencies"
   });
 
   it.each([
-    ["key", "GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64"],
-    ["fingerprint", "GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256"],
+    ["key", "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64"],
+    ["fingerprint", "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256"],
   ])("rejects missing attestor %s with a concrete readiness reason", async (_name, field) => {
     const s = fixture();
     delete s.env[field];
@@ -209,7 +209,7 @@ describe("GPT02 custody runtime uses real signatures with isolated dependencies"
 
   it("denies absent DBA trust even after real worker verification", async () => {
     const s = fixture();
-    delete s.env.GPT02_CUSTODY_DBA_PUBLIC_SHA256;
+    delete s.env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256;
     expect(await s.runtime.readDbaCustodyReceipt(serviceId, principal, tokenBinding)).toEqual({
       verified: false, receiptId: null, reason: "CUSTODY_DBA_ATTESTOR_NOT_CONFIGURED",
     });
@@ -218,8 +218,8 @@ describe("GPT02 custody runtime uses real signatures with isolated dependencies"
 
   it("does not treat the same issuer key as two independent custody domains", async () => {
     const s = fixture();
-    s.env.GPT02_CUSTODY_DBA_PUBLIC_SHA256 = s.env.GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256;
-    s.env.GPT02_CUSTODY_DBA_PUBLIC_DER_B64 = s.env.GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64;
+    s.env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256 = s.env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256;
+    s.env.GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64 = s.env.GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64;
     expect(await s.runtime.readDbaCustodyReceipt(serviceId, principal, tokenBinding)).toEqual({
       verified: false, receiptId: null, reason: "CUSTODY_ISSUER_DOMAINS_NOT_SEPARATE",
     });
@@ -295,7 +295,7 @@ describe("fixed custody file IO validates the actual descriptor", () => {
     expect(io.open).toHaveBeenCalledWith(
       GPT02_CUSTODY_FILES.worker, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
-    expect(io.lstat.mock.calls.map(call => call[0])).toEqual(["/run/credentials/core-ai-dev", "/run/credentials", "/run", "/"]);
+    expect(io.lstat.mock.calls.map(call => call[0])).toEqual(["/run/credentials/gpt02-reader-custody", "/run/credentials", "/run", "/"]);
     expect(file.read.mock.calls.every(call => call[2] <= 8193)).toBe(true);
     expect(file.close).toHaveBeenCalledOnce();
   });

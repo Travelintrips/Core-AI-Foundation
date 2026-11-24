@@ -37,7 +37,7 @@ function packet(receipt: Record<string, unknown>, privateKey = workerKeys.privat
 
 // Deliberately independent of exported target constants: these are the wire contract.
 const workerReceipt = {
-  audience: "CST-DEV/GPT02/READER-CUSTODY/WORKER-ATTESTATION/v1",
+  audience: "CST-DEV/GPT02/READER-CUSTODY/WORKER-ATTESTATION/v2",
   project: "xssrfshdrtdfupgqwfdw",
   scope: "GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV",
   principal: "openclaw-vps-main",
@@ -59,7 +59,7 @@ const workerInput: Gpt02WorkerAttestationInput = {
 const workerDigest = createHash("sha256").update(JSON.stringify(workerReceipt), "utf8").digest("hex");
 
 const dbaReceipt = {
-  audience: "CST-DEV/GPT02/READER-CUSTODY/DBA-RECEIPT/v1",
+  audience: "CST-DEV/GPT02/READER-CUSTODY/DBA-RECEIPT/v2",
   project: "xssrfshdrtdfupgqwfdw",
   scope: "GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV",
   principal: "openclaw-vps-main",

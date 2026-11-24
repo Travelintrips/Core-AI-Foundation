@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { getExternalAgentRegistrySnapshot } from "../services/externalAgentRegistryService.js";
 import { gpt02CustodyCredentialBinding } from "../services/gpt02ReaderCustodyAttestation.js";
-import { createGpt02ReaderCustodyRuntime, type CustodyVerification, type CustodyReceiptVerification, type CustodyAttestationRequest } from "../services/gpt02ReaderCustodyRuntime.js";
+import { createConfiguredGpt02ReaderCustodyAdapter, type CustodyVerification, type CustodyReceiptVerification, type CustodyAttestationRequest } from "../services/gpt02ReaderCustodyVerifiedAdapter.js";
 import {
   evaluateGpt02ReaderCustodyCoordination,
   GPT02_READER_CUSTODY_SCOPE,
@@ -148,7 +148,7 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
  * trust and signed evidence are installed. It never issues credentials. */
 export function createLockedGpt02ReaderCustodyBroker() {
   return createGpt02ReaderCustodyBroker({
-    ...createGpt02ReaderCustodyRuntime(),
+    ...createConfiguredGpt02ReaderCustodyAdapter(),
     readPresence: async () => {
       const rows = await getExternalAgentRegistrySnapshot({ skipSchemaEnsure: true });
       const record = rows.find(row => row.clientId === PRINCIPAL);

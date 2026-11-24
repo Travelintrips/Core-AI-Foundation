@@ -5,7 +5,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export const GPT02_WORKER_ATTESTATION_TARGET = Object.freeze({
-  audience: "CST-DEV/GPT02/READER-CUSTODY/WORKER-ATTESTATION/v1",
+  audience: "CST-DEV/GPT02/READER-CUSTODY/WORKER-ATTESTATION/v2",
   project: "xssrfshdrtdfupgqwfdw",
   scope: "GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV",
   principal: "openclaw-vps-main",
@@ -13,7 +13,7 @@ export const GPT02_WORKER_ATTESTATION_TARGET = Object.freeze({
 } as const);
 
 export const GPT02_DBA_CUSTODY_TARGET = Object.freeze({
-  audience: "CST-DEV/GPT02/READER-CUSTODY/DBA-RECEIPT/v1",
+  audience: "CST-DEV/GPT02/READER-CUSTODY/DBA-RECEIPT/v2",
   project: "xssrfshdrtdfupgqwfdw",
   scope: "GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV",
   principal: "openclaw-vps-main",

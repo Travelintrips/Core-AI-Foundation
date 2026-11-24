@@ -1,10 +1,14 @@
-# GPT02-1782: connect the reader custody verifier
+# GPT02-1782: bind reader custody proofs to the current credential and protected mount
 
 Scope: CST-DEV `xssrfshdrtdfupgqwfdw`, canonical worker `openclaw-vps-main`, service token name `openclaw-vps-dev-consumer`. This change supplies a verification adapter; it does not supply an issuer, credential, database grant or execution permission.
 
 ## Evidenced problem
 
 The mounted `createLockedGpt02ReaderCustodyBroker()` in baseline `7853c975ca878e9a61a57faf114fa272773faff3` returns `false` for every worker attestation and every DBA custody receipt. Token metadata does not reach either decision. Thus manually populating `canonicalPrincipal`, `attestedBy` or `scope` would not repair the 403 and must not be used as proof of attestation.
+
+During this work, PR #1813 merged as `e96ab86e1b58dbff33afc2b20b3336f83f4bf8ce` and supplied a first signed-proof adapter. This patch is reconciled onto that change: it strengthens the existing `gpt02ReaderCustodyVerifiedAdapter.ts`, keeps its configured factory, public-key environment names and proof mount paths, and uses one runtime adapter. The first adapter did not bind token generation, did not bind the DBA receipt to the worker proof or actual reader mount, and read files without descriptor ownership/symlink/size protection. Those are the remaining source defects addressed here.
+
+The new envelopes use explicit **v2** audiences. Flat `GPT02_DEV_WORKER_ATTESTATION_V1` and `GPT02_DEV_OWNER_READER_ISSUER_RECEIPT_V1` proofs cannot establish current-token custody and are rejected; there is no automatic conversion, re-signing or permissive fallback. Existing public keys can be retained if their authorized provenance is verified, with the matching fingerprint settings and newly issued bound evidence. No live trust or evidence is rewritten by this source change.
 
 An unfinished candidate at `/opt/gpt02-custody-attestation-20261124` contained a dedicated Ed25519 contract. Its UUID expression rejected valid credential IDs, and its file reader followed symlinks and bounded the size only after reading. That working tree is preserved. The implementation here retains the purpose-specific credential binding and wire format, fixes UUID validation, and completes the separate custody receipt path.
 
@@ -28,15 +32,15 @@ The authorized deployment operator pins public keys and their SHA-256 fingerprin
 
 | Purpose | Public key setting | Fingerprint setting |
 | --- | --- | --- |
-| Worker credential attestor | `GPT02_CUSTODY_ATTESTOR_PUBLIC_DER_B64` | `GPT02_CUSTODY_ATTESTOR_PUBLIC_SHA256` |
-| Reader credential custodian | `GPT02_CUSTODY_DBA_PUBLIC_DER_B64` | `GPT02_CUSTODY_DBA_PUBLIC_SHA256` |
+| Worker credential attestor | `GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64` | `GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256` |
+| Reader credential custodian | `GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64` | `GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256` |
 
 The two technical issuer keys must be distinct. This is a separation of machine capabilities, not a requirement for a second human approval. The existing Owner remains the business decision maker. A key is trusted only after the authorized operator establishes its actual issuer provenance; generating a local test key and pinning it to make this broker pass is not activation.
 
 | Runtime file | Purpose |
 | --- | --- |
-| `/run/credentials/core-ai-dev/gpt02-custody-worker-attestation.json` | Signed public worker attestation envelope |
-| `/run/credentials/core-ai-dev/gpt02-custody-dba-receipt.json` | Signed public DBA custody receipt envelope |
+| `/run/credentials/gpt02-reader-custody/worker-attestation.json` | Signed public worker attestation envelope |
+| `/run/credentials/gpt02-reader-custody/issuer-receipt.json` | Signed public DBA custody receipt envelope |
 | `/run/credentials/gpt02-owner-ledger-reader/reader.json` | Existing reader credential mount; inspected **only through descriptor metadata** by this broker |
 
 All parents must be real root-owned directories, without group/other write permission. Files must be regular, root-owned, have one link, and have no group/other permission. Open uses `O_NOFOLLOW | O_NONBLOCK`; symlinks, FIFOs, directories, unsafe ownership or permissions are denied. Signed documents are at most 8,192 bytes and are read through a bounded descriptor with before/after consistency checks. The credential file must be present with a size from 1 to 4,096 bytes, but its contents are never read or hashed by this adapter.
@@ -49,7 +53,7 @@ Each document has exactly two fields, `receipt` and `signature`. `signature` is 
 
 Worker receipt fields, in canonical order:
 
-1. `audience`: `CST-DEV/GPT02/READER-CUSTODY/WORKER-ATTESTATION/v1`
+1. `audience`: `CST-DEV/GPT02/READER-CUSTODY/WORKER-ATTESTATION/v2`
 2. `project`: `xssrfshdrtdfupgqwfdw`
 3. `scope`: `GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV`
 4. `principal`: `openclaw-vps-main`
@@ -62,7 +66,7 @@ Worker receipt fields, in canonical order:
 
 DBA receipt fields, in canonical order:
 
-1. `audience`: `CST-DEV/GPT02/READER-CUSTODY/DBA-RECEIPT/v1`
+1. `audience`: `CST-DEV/GPT02/READER-CUSTODY/DBA-RECEIPT/v2`
 2. `project`: `xssrfshdrtdfupgqwfdw`
 3. `scope`: `GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV`
 4. `principal`: `openclaw-vps-main`
