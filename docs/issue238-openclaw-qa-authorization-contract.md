@@ -23,8 +23,13 @@ implement and verify all of the following:
    runner. A new permit must be signed by the actual authorized custodian;
    do not fabricate the signature or reuse another project's signer.
 3. Consume the `nonce` in a durable, atomic, exclusive store before execution
-   to prevent replay across workers or restarts. The module's in-memory set
-   is only a unit-test interface, not deployment-ready replay protection.
+   to prevent replay across workers or restarts. The permit module's in-memory
+   set is only a unit-test interface. The separate source-only SQLite ledger
+   (`issue238_qa_ledger.py`) now implements exclusive durable reservation,
+   one-time result finalization, and rejection of duplicate command IDs.
+   A future trusted runner must wire the ledger **after permit verification**,
+   use an owner-only persistent directory, and treat `RESERVED` after crash as
+   UNKNOWN/blocked until independently reconciled, never auto-retry it.
 4. Verify the local image's actual digest, root ownership of QA sources,
    contents of **every** script against an approved manifest, and the exact
    SQL SHA. The verified permit itself does not prove image integrity.
