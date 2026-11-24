@@ -13,6 +13,13 @@ test("WAITING-only bootstrap unit requires no future job release to start stagin
  assert.match(unit,/LoadCredentialEncrypted=database-url:/);
  assert.match(unit,/LoadCredentialEncrypted=session-secret:/);
  assert.match(unit,/--network cst-onejob-owner-stage-egress/);
+ assert.match(unit,/After=docker\.service cst-onejob-owner-stage-egress-reconcile\.service/);
+ assert.match(unit,/Requires=docker\.service cst-onejob-owner-stage-egress-reconcile\.service/);
+ assert.match(unit,/ConditionPathExists=\/opt\/cst-onejob-dev\/qa\/owner-stage-egress-scoped-20261124\.sh/);
+ assert.match(unit,/ExecStartPre=\/opt\/cst-onejob-dev\/qa\/owner-stage-egress-scoped-20261124\.sh --verify/);
+ assert.match(unit,/--add-host aws-1-ap-southeast-2\.pooler\.supabase\.com:52\.62\.122\.103/);
+ assert.doesNotMatch(unit,/--network host|--privileged|--add-host .*:(?:52\.65\.247\.42|0\.0\.0\.0)/);
+
  assert.doesNotMatch(unit,/--network (none|host)|--privileged/);
  assert.match(unit,/--publish 127\.0\.0\.1:18583:3000/);
  assert.match(unit,/--read-only/);
