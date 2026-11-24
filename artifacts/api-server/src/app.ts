@@ -24,6 +24,8 @@ import agentRuntimeRouter from "./routes/agent-runtime.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
 import aiCoreMcpOauthRouter from "./routes/ai-core-mcp-oauth.js";
 import { oauthNavigationCors } from "./middleware/oauthNavigationCors.js";
+import { createGpt02RelockOwnerApprovalRouter } from "./routes/gpt02-relock-owner-approval.js";
+import { verifyCstHubGpt02OwnerSession, verifyCstHubGpt02OwnerLink } from "./services/cstHubGpt02OwnerIdentityVerifier.js";
 
 const app: Express = express();
 
@@ -195,6 +197,19 @@ app.use("/api", temporalCodingWorkerRouter);
 app.use("/api", globalLimiter);
 app.use("/api", mcpLimiter);
 app.use("/api", task189ReleaseRouter);
+
+// DEV-only Owner approval uses its own signed Google session and Owner-link checks.
+// Mount BEFORE the generic admin API key guard; no other API bypass is granted.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.APP_ENV === "development" &&
+  process.env.GPT02_RELOCK_OWNER_APPROVAL_ENABLED === "true"
+) {
+  app.use("/api/gpt02-owner-approval", createGpt02RelockOwnerApprovalRouter({
+    verifyOwnerSession: ({ bearerToken }) => verifyCstHubGpt02OwnerSession({ bearerToken }),
+    verifyOwnerEligibility: verifyCstHubGpt02OwnerLink,
+  }));
+}
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,
