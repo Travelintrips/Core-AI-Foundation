@@ -50,5 +50,16 @@ implement and verify all of the following:
    unchanged until full exact-SHA QA and a separately approved hosted DBA
    installation gate have passed.
 
-Current unit evidence: nine synthetic permit-verification tests PASS.
+The source-only `issue238_qa_preflight.py` now composes the three existing
+modules: exact authenticated worker/job matching (identity must come from a
+separately authenticated adapter), pinned source/image verification, signed
+permit check, and atomic durable reservation. It returns
+`RESERVED_NOT_EXECUTED` and never launches Docker, opens a database connection,
+or issues a new authorization. The caller must still independently authenticate
+OpenClaw, authenticate the trusted Docker inspection and signing key, snapshot
+immutable sources, and provide a separately approved host runner. Do not
+expose this function as a public API or treat a caller-provided identity as
+proof of authentication.
+
+The module tests are synthetic and do not prove a real executor or PG17 relock.
 **No disposable PostgreSQL runtime test has been executed by this module.**
