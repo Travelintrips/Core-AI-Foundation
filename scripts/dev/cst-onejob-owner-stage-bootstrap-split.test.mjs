@@ -17,6 +17,9 @@ test("WAITING-only bootstrap unit requires no future job release to start stagin
  assert.match(unit,/Requires=docker\.service cst-onejob-owner-stage-egress-reconcile\.service/);
  assert.match(unit,/ConditionPathExists=\/opt\/cst-onejob-dev\/qa\/owner-stage-egress-scoped-20261124\.sh/);
  assert.match(unit,/ExecStartPre=\/opt\/cst-onejob-dev\/qa\/owner-stage-egress-scoped-20261124\.sh --verify/);
+ assert.match(unit,/ConditionPathExists=\/opt\/cst-onejob-dev\/bootstrap\/owner-stage-watchdog-source-preflight\.py/);
+ assert.match(unit,/ExecStartPre=\/usr\/bin\/python3 -B \/opt\/cst-onejob-dev\/bootstrap\/owner-stage-watchdog-source-preflight\.py --read-only/);
+
  assert.match(unit,/--add-host aws-1-ap-southeast-2\.pooler\.supabase\.com:52\.62\.122\.103/);
  assert.doesNotMatch(unit,/--network host|--privileged|--add-host .*:(?:52\.65\.247\.42|0\.0\.0\.0)/);
 
