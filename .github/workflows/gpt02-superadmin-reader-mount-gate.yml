@@ -1,0 +1,45 @@
+name: GPT02 Super Admin reader mount gate (DEV source only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
+      - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
+      - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-no-secret-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run fail-closed mount gate QA
+        run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_superadmin_reader_mount_gate.py -v
+      - name: Verify source cannot read plaintext secrets, change roles or restart containers
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/vps/gpt02_superadmin_reader_mount_gate.py').read_text()
+          assert 'get_reader_mounts' in s
+          assert 'reader.json' in s
+          assert 'readonly' in s
+          assert 'subprocess' not in s
+          assert 'password' not in s.lower()
+          assert 'read_text(' not in s
+          assert 'read_bytes(' not in s
+          assert 'systemctl' not in s
+          assert 'docker run' not in s
+          assert 'pg_' not in s
+          assert 'if __name__' not in s
+          print('GPT02_READ_ONLY_MOUNT_GATE_STATIC_PASS')
+          PY
