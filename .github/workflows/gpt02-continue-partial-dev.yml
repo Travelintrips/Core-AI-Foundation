@@ -1,0 +1,55 @@
+name: GPT02 OpenClaw continue-partial DEV
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/gpt02-continue-partial-job.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-continue-partial-job.test.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/gpt02-continue-partial-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/gpt02-continue-partial-job.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-continue-partial-job.test.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/gpt02-continue-partial-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-continuation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      APP_ENV: development
+      SUPABASE_URL_DEV: https://xssrfshdrtdfupgqwfdw.supabase.co
+      SUPABASE_DEV_DATABASE_URL: postgresql://test:test@db.xssrfshdrtdfupgqwfdw.supabase.co:1/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify 49 continuation and existing pairing boundary tests
+        run: pnpm -C artifacts/api-server exec vitest run src/routes/__tests__/gpt02-continue-partial-job.test.ts src/services/__tests__/devChatGptWakeService.test.ts
+      - name: Verify strict DEV and no secret/admin capability
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('artifacts/api-server/src/routes/gpt02-continue-partial-job.ts').read_text()
+          assert 'requireAgentServiceScope("agent:work")' in s
+          assert 'CONTINUE_PARTIAL_JOB' in s
+          assert 'resolveVerifiedDevWakeTarget' in s
+          assert 'expectedBindingFingerprint' in s
+          assert 'openclaw-dell-chatgpt-wake-dev' not in s or 'DEV_WAKE_DELL_WORKER' in s
+          assert 'assistantContinued: false' in s
+          assert 'browserConfirmed: false' in s
+          assert 'ALTER ROLE ' not in s and 'postgresql://' not in s
+          print('GPT02_CONTINUE_PARTIAL_FAIL_CLOSED_PASS')
+          PY
