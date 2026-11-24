@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAgentServiceScope } from "../middleware/agentServiceAuth.js";
 import { getExternalAgentRegistrySnapshot } from "../services/externalAgentRegistryService.js";
+import { createConfiguredGpt02ReaderCustodyAdapter } from "../services/gpt02ReaderCustodyVerifiedAdapter.js";
 import {
   evaluateGpt02ReaderCustodyCoordination,
   GPT02_READER_CUSTODY_SCOPE,
@@ -104,9 +105,10 @@ export function createGpt02ReaderCustodyBroker(deps: CustodyBrokerDeps) {
 /** Production dependency configuration is intentionally deny-by-default until
  * independent DBA custody and authenticated worker attestation are installed. */
 export function createLockedGpt02ReaderCustodyBroker() {
+  const proofs = createConfiguredGpt02ReaderCustodyAdapter();
   return createGpt02ReaderCustodyBroker({
-    verifyWorkerAttestation: async () => false,
-    readDbaCustodyReceipt: async () => ({ verified: false, receiptId: null }),
+    verifyWorkerAttestation: proofs.verifyWorkerAttestation,
+    readDbaCustodyReceipt: proofs.readDbaCustodyReceipt,
     readPresence: async () => {
       const rows = await getExternalAgentRegistrySnapshot({ skipSchemaEnsure: true });
       const record = rows.find(row => row.clientId === PRINCIPAL);
