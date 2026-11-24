@@ -90,6 +90,8 @@ class ApprovalIntentReaderTest(unittest.TestCase):
         self.assertEqual(out["releaseDecision"], "NO_GO")
         self.assertEqual(out["decision"]["actorId"], LOOKUP["superAdminId"])
         self.assertEqual(out["decision"]["claimsSha256"], LOOKUP["claimsSha256"])
+        self.assertEqual(out["decision"]["recordedAt"], 1000)
+        self.assertEqual(out["decision"]["expiresAt"], 2000)
 
     def test_single_authenticated_admin_session_is_trusted_without_aal2(self):
         path = self.db()
@@ -151,7 +153,7 @@ class ApprovalIntentReaderTest(unittest.TestCase):
     def test_expired_or_future_observation_fails_closed(self):
         path = self.db()
         self.seed(path, recorded=1000, expires=2000)
-        for observed in (999, 2001):
+        for observed in (999, 2000, 2001):
             out = reader.read_approval_intent(path, LOOKUP, observed, operational=False)
             self.assertEqual(out["reason"], "APPROVAL_INTENT_EXPIRED_OR_INVALID")
 

@@ -35,6 +35,7 @@ def record_issue159_approval_intent(
     claims,
     identity_verifier=None,
     now_ms=None,
+    readiness_gate=None,
 ):
     if not isinstance(access_token, str) or not (40 <= len(access_token) <= 8192):
         return _denied("ADMIN_SESSION_TOKEN_REQUIRED")
@@ -74,6 +75,17 @@ def record_issue159_approval_intent(
         return _denied("APPROVAL_CLAIMS_INVALID")
 
     record = built["record"]
+    # Preserve the already deployed CST-DEV readiness check. A new outbox
+    # MUST NOT remove an existing requirement that the single-command
+    # auto-chain be independently ready before committing Owner intent.
+    # This optional API matches the installed writer exactly; callers that
+    # supplied a gate must still get the same fail-closed behavior.
+    if readiness_gate is not None:
+        try:
+            if not callable(readiness_gate) or readiness_gate(record) is not True:
+                return _denied("AUTO_CHAIN_PREREQUISITES_NOT_READY")
+        except Exception:
+            return _denied("AUTO_CHAIN_PREREQUISITES_NOT_READY")
     try:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
@@ -91,6 +103,28 @@ def record_issue159_approval_intent(
                 record["expires_at_ms"],
             ),
         )
+        # Both writes belong to the SAME SQLite transaction: a human
+        # consent can never commit without its durable, immutable outbox
+        # record. PostgreSQL mirroring is deliberately NOT claimed here.
+        try:
+            connection.execute(
+                """INSERT INTO gpt02_issue159_owner_approval_outbox
+                (decision_id,task_id,company_id,command_id,attempt_id,
+                 claims_sha256,actor_id,auth_method,role_at_decision,
+                 recorded_at_ms,expires_at_ms)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record["id"], record["task_id"], record["company_id"],
+                    record["command_id"], record["attempt_id"],
+                    record["claims_sha256"], record["actor_id"],
+                    record["auth_method"], record["role_at_decision"],
+                    record["recorded_at_ms"], record["expires_at_ms"],
+                ),
+            )
+        except sqlite3.Error as exc:
+            # An outbox error is NOT a duplicate human decision. Classify it
+            # as a failed ATOMIC write and roll back the just-inserted intent.
+            raise sqlite3.OperationalError("OWNER_OUTBOX_ATOMIC_WRITE_FAILED") from exc
         connection.commit()
     except sqlite3.IntegrityError:
         try:

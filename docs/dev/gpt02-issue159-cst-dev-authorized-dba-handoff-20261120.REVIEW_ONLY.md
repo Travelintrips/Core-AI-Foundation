@@ -1,0 +1,173 @@
+# GPT02 Issue159 — CST-DEV one-task broker: DBA/custody handoff
+
+**Status:** REVIEW ONLY • **NO APPLY / NO DEPLOY / NO SIGNER / NO DISPATCH / NO PROD**  
+**Environment:** Supabase project `xssrfshdrtdfupgqwfdw` (CST-DEV).  
+**Evidence baseline:** Core AI PR #1754 at `b275d6b12cb31b16d2b4d177df1bc93d5ae8289d`; AI Task Hub PR #207 at `ef50a8b5ca6c813fae1b5b0ab7c3a03884294319`.  
+**Purpose:** Identify the first **authorized live-DEV technical change** without confusing source CI with operational authority. This page is an audit/release handoff, **not an install script**.
+
+## 1. Live read-only state, 20 November 2026
+
+Supabase read-only `BEGIN READ ONLY … ROLLBACK` confirmed:
+
+- Task #183: 1 expected assigned PIC, 1 `gpt02_pic_assigned` audit; **0** execution jobs, preparations, Owner approvals. Never assign another PIC or generate a fresh Task183 duplicate.
+- Historical Task #171 is immutable; do not replay its expired preparation.
+- Five currently protected GPT02 technical roles are `NOLOGIN`, connection limit 0; the issuer evidence reader has no active password verifier.
+- Existing `gpt02_relock_audit` schema and `dev_gpt02_relock_catalog_auditor` role **already exist**. The two installed PostgreSQL writer relock Phase A/B functions remain present.
+- All five issuer-reader SELECT policies on private lineage relations are **PERMISSIVE threshold-based** (multiple tasks in company `default`), not database-enforced one-task scope. **Never unlock/reuse that general reader as a shortcut.**
+- Missing: `reader_issuances`, `reader_consumptions`, `reader_approval_fences`; `scoped_reader_fully_locked`, `consume_reader_once`, `reader_consumption_persisted`, `canonical_reader_current_guard`; dedicated claim-consumer and admission-guard roles; all `dev_gpt02_task_%` roles; owner-held private reader grant-revoker helper.
+- `postgres` on this connected management route is CREATEROLE but not superuser. It has ADMIN OPTION for `gpt02_store_owner` **but no SET privilege**. The private table owner is an independent `NOLOGIN` identity. Do not self-grant `SET` to circumvent this boundary.
+
+On authorized VPS `srv1792369`, active AI Task DEV container remains healthy with HTTP 200. Legacy systemd AI Task, issuer reader and relock auditor timer are intentionally OFF. No service is to be started merely to obtain green status.
+
+## 2. Exactly what is already proven — and what is not
+
+**SOURCE/ISOLATED PASS:** Original PR1754 has a six-stage add-only **PG16 and PG17** installation-chain regression (GitHub Positive Permit #44614770684). It seeds an already-existing relock schema, locked auditor, writer Phase A/B and separately owned five FORCE-RLS tables. It proves no historical role/schema/function OID or writer ACL replacement, absence of PUBLIC EXECUTE on the four new privileged functions, three empty FORCE-RLS ledgers, dormant service roles, and refusal on migration replay.
+
+**NOT PROVEN / NO-GO:** Any of those objects installed on hosted CST-DEV; independent owner-held private grant revocation; a native one-use credential broker/secret custodian; authenticated four-signer runtime; genuine current command-bound Owner decision in the canonical PostgreSQL approval fence; independent crash-safe relock; single real DELL command and receiver-owned Final ACK.
+
+**Important:** the canonical PostgreSQL `reader_approval_fences` proposal is a **synthetic authority model**, *not* a validated live mirror of the existing persisted Issue159 Owner approval in SQLite. No signed/revoked cross-store authority bridge is installed. Creating the table alone must **not** cause a consumer to trust owner approval.
+
+## 3. Approved technical release needs an independent DBA/custodian
+
+This is an **infrastructure/security change approval**, not a second business approval for invoice/task execution. Task183 ultimately requires exactly one fresh command-specific Owner/Super Admin consent, through the **existing** Issue159 persisted-intent interface, **after** infrastructure is proven ready.
+
+Before requesting any live DDL, the designated custodian must authorize the **exact project, exact source SHA(s), permitted object list, off-hours/maintenance scope, maximum risk window, rollback owner, and verification evidence storage location**. The assistant cannot infer this consent from a generic `lanjut` message or from synthetic CI.
+
+Only after that approval and independent code review may the custodian consider these **six original, review-only source proposals**, in their tested order:
+
+1. `docs/dev/gpt02-issue159-minimal-catalog-auditor-existing-role.REVIEW_ONLY.sql` — **add-only** auditor boolean; do **not** run the older migration that recreates the auditor role/schema.
+2. `docs/dev/gpt02-issue159-one-read-consumption-attestation.PROPOSED.sql` — private issuance and one-read consumption ledgers.
+3. `docs/dev/gpt02-issue159-one-read-consumer-rpc.PROPOSED.sql` — dedicated dormant claim-consumer and RPC.
+4. `docs/dev/gpt02-issue159-reader-issuance-server-clock.PROPOSED.sql` — database-time 3.5–15-second issuance policy.
+5. `docs/dev/gpt02-issue159-canonical-approval-fence.PROPOSED.sql` — model of a revocable canonical approval fence, **not** permission to start using a synthetic authority.
+6. `docs/dev/gpt02-issue159-canonical-reader-guard.PROPOSED.sql` — held-row current approval guard and dormant role.
+
+**Do not apply six migrations merely because their isolated test passes.** Their owner/SECURITY DEFINER review and production-compatible signer/approval provenance remain independent gates. The owner-held private revocation helper from `docs/dev/gpt02-issue159-store-owner-relock-helper-maintenance.REVIEW_ONLY.sql` requires a **separately authenticated and precisely audited** maintenance identity; it cannot be applied by silently broadening the current `postgres` SET privilege.
+
+## 3A. Supabase-supported temporary SET route: **preserve the actual TWO grants**
+
+**New evidence, 20 Nov 2026:** Supabase's official role-membership guidance explains a bounded `SET ROLE` grant on a custom role can be made by a holder of ADMIN OPTION and then undone. Supabase does **not** give the ordinary `postgres` user superuser permission. Official reference: https://supabase.com/kb/troubleshooting/cant-revoke-a-role-membership-granted-by-supabase_admin-d08922 .
+
+**Important current CST-DEV difference from earlier synthetic fixtures:** READ ONLY `pg_auth_members` confirmed **TWO existing rows** for `gpt02_store_owner → postgres`:
+
+| Grantor | ADMIN | INHERIT | SET |
+| --- | --- | --- | --- |
+| `supabase_admin` | TRUE | FALSE | FALSE |
+| `postgres` | FALSE | FALSE | FALSE |
+
+The latter is **already present** in CST-DEV. A `REVOKE gpt02_store_owner FROM postgres GRANTED BY postgres` would delete that pre-existing second row. Consequently **do not copy the older one-grantor cleanup procedure or casually REVOKE** just because it passed a fixture with no original self-grant.
+
+A SOURCE-ONLY isolated regression `scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py` was added to Core AI PR1754. It verifies that a separate custom-role membership can be temporarily given SET=TRUE in one transaction, used for an exact owner-context protected function, and restored to SET=FALSE before COMMIT, preserving **both** original grantor records; faults roll back completely and restore the baseline; the old REVOKE would remove the existing self-grant. It has no hosted DB connection. CI PG16/PG17 must succeed independently before any use.
+
+**Release policy is unchanged:** official Supabase functionality is not independently authorized custody by itself. A deliberately appointed DBA/security custodian must review and approve the exact CST-DEV source, scope, scheduled window, SQL, role baselines, and postflight session termination. No assistant self-grant, live DB mutation, new password, or transaction carrying a temporarily usable SET on the shared management connection may be inferred from generic `lanjut`. A hosted trial is still **NO-GO** without that authorization.
+
+**Postflight for an authorized future change must independently verify** both original grantor rows including `admin_option`, `inherit_option`, `set_option`, `pg_has_role('postgres','gpt02_store_owner','SET')=false`, owner remains NOLOGIN, zero privileged maintenance sessions, exact helper OID/owner/SECURITY DEFINER/path/ACL, and no unrelated member. If any value drifts, stop the release and perform a reviewed rollback/relock.
+
+## 3B. Decision after LIVE read-only Phase A/B audit — reuse before adding auditor RPC
+
+A fresh authorised `BEGIN READ ONLY … ROLLBACK` on CST-DEV inspected the **installed function definitions**, rather than assuming source PR1754 matches live runtime. The real `gpt02_relock_audit.relock_expired_phase_a()` and `relock_expired_phase_b()` run as `postgres` but both demand `session_user='dev_gpt02_relock_catalog_auditor'`. Their EXECUTE grants belong only to that auditor (not PUBLIC). The actual allowlist is strictly `dev_gpt02_attestor_evidence`, `dev_gpt02_issuer_evidence`, `gpt02_issuer_evidence_reader`. An arbitrary `dev_gpt02_task_<id>_<digest>` role is **rejected** by both functions.
+
+Phase A sets `NOLOGIN`, connection limit 0 and `PASSWORD NULL`; Phase B checks phase A, terminates and verifies active sessions, and marks `writer_issuance_watchdog.cleaned_at`. Phase B **does not revoke the private five-table SELECT/column grants or schema USAGE**. That is a separately privileged owner-held task-scoped cleanup need, not a missing `COUNT(*)` test. There is 1 historical completed watchdog row, 0 pending or expired outstanding windows, and 0 current task-scoped reader roles.
+
+On the authorized VPS, the existing relock supervisor JS invokes exactly those two live functions; its systemd service is inactive, timer is **disabled/inactive**, and the auditor DB role remains `NOLOGIN`. A systemd encrypted credential filename being present cannot prove that the database login works. **Never simply enable the timer or put temporary task readers into the existing writer ledger**.
+
+**Avoid mandatory new-function framing:** the proposed `gpt02_relock_audit.scoped_reader_fully_locked(name)` boolean function is **not logically required for a manual, independently authorized DBA verification**. The existing code `deploy/ai-coding-standalone-dev/gpt02_issue159_native_relock_attestation.py::attest_native_relock` already performs direct native PostgreSQL catalog checks over a PINNED `postgres` TLS session. But it is only a read-only state observation, not a relock worker; using a privileged postgres credential in a long-lived broker has a larger security blast radius and its current SQL does not cover all indirect SECURITY DEFINER/view exposure conditions checked by the draft minimal auditor. Consequently, **do not silently replace the existing least-privilege post-read independent auditor requirement with this weaker shortcut**.
+
+The sensible minimal scope is: keep the operational Phase A/B writer functions **unchanged** for the three original writer identities; reuse their tested two-phase relock algorithm in a separately reviewed task-role lifecycle that also removes scoped private schema/table/column grants and handles crashed sessions. Choose either (a) the original restricted boolean auditor or (b) an **equivalently independent, tightly scoped catalog attestation** that demonstrably covers indirect access paths; do not install the boolean function solely to re-run synthetic QA. A native one-task role, one-use ledger, real persisted Owner approval provenance, and independent crash-safe cleanup remain required, regardless of which readback method is approved.
+
+**Decision as of this audit:** existing writer relock source/interface = **REUSE**, extra boolean auditor function = **OPTIONAL DESIGN CHOICE**, ability of existing Phase A/B to clean arbitrary scoped readers = **NO**, live task-scoped automated cleanup = **NOT IMPLEMENTED**. `GPT02_LIVE_E2E=NO_GO`; no hosted DDL/role updates, signer activation, task mutation or PROD touch.
+
+## 4. Operational broker and runtime acceptance — separate from installation
+
+A native supervisor, currently uninstalled, must provide all of the following **before any per-task role LOGIN**:
+
+- Verify genuine, fresh, immutable **Owner decision + exact task/command/attempt/nonce**, using original pinned public keys and the already-existing trusted SQLite/persisted reader; deny revoked, missing, replayed or cross-store-divergent authority.
+- Derive a fresh isolated `dev_gpt02_task_<task>_<digest>` role from signed scope, not from a browser parameter or shared issuer reader. Enforce exact task, company, command, attempt, approval digest, receipt, fence, worker, expiry by database RLS across all five original lineage tables.
+- Native TLS verification and pinned *public* CST-DEV root CA. Dedicated encrypted credentials with no plaintext in chat, CI logs, git commits, common environment variables or reuse of current issuer/Core/attestor credentials.
+- Commit exactly one ledger claim before opening the read session; independently attest it through the minimal auditor. The original canonical approval guard must hold a current row lock across the bounded read and recheck validity before releasing it.
+- Perform **one bounded canonical read**, no extra statement or role membership escalation. Original proposal's **15-second database issuance TTL is stricter than any operator maintenance window**; a proposed 10-minute maintenance window must never become a 10-minute reader credential.
+- Crash/replay/timeout/revocation paths must force **durable NOLOGIN, CONNECTION LIMIT 0, PASSWORD NULL, revoke private column/schema grants, terminate old sessions**, independently read back zero sessions and a clean issuer state. A self-reported JSON cleanup receipt is insufficient.
+- Only after these passes: four operational signer custody/transports, non-circular issuer startup ordering with original ledger checks intact, issuer lease, native DELL command/callback and receiver-owned Final ACK. None of these can be assumed from source/CI success.
+
+## 4A. Consolidated native supervisor adapter (source ready, NOT installed)
+
+The missing **Python interface adapter** for the original signed broker now exists as
+`deploy/ai-coding-standalone-dev/gpt02_issue159_native_one_shot_supervisor.py`.
+It implements all five already-reviewed supervisor hooks with exact signed
+task/command/attempt scope, immutable role derivation, and **injected native
+CST-DEV libpq connections**. It does not introduce a replacement verifier,
+service, timer, or dispatch workflow.
+
+- It calls the **original** `consume_once_via_pinned_connection` to commit one
+  immutable PostgreSQL claim, refusing any second attempt even after a failed
+  or uncertain commit acknowledgment.
+- It opens a separately authenticated low-privilege auditor connection for
+  original consumption proof; the original broker holds a separate native
+  canonical approval `FOR SHARE` guard while reading one row.
+- It opens only **one** task-scoped connection with pinned user, host and
+  `verify-full` public CA. Arbitrary caller-supplied role/DSN/root overrides
+  cannot be used by this adapter.
+- On every original broker completion/failure it calls existing **scoped**
+  reader Phase A (COMMIT NOLOGIN/password NULL) then Phase B (COMMIT revoke
+  all table/column grants and sessions), polling only within a strict bound.
+  This adapter's cleanup report is **not** a native receipt; the original broker
+  must independently verify the exact role through the existing boolean-only
+  PostgreSQL auditor or fail closed.
+- The relock connection is pinned to the **existing direct-host auditor
+  identity and encrypted-custody route**, distinct from pooler-bound
+  consumer, guard, independent audit and reader credentials.
+
+**Single one-shot entrypoint now exists in source (NOT installed):**
+`gpt02_issue159_one_shot_native_runtime.py` accepts only the sealed original
+four-signature lifecycle packet mounted by systemd, and invokes the **original
+broker ONCE** using `SystemdDeferredOneTaskSupervisor`. No credentials are
+opened until the broker itself authenticates the packet, Owner intent and
+trusted lineage. This avoids repeating the expensive verifier roundtrip inside
+the 15-second issuer lease.
+
+`gpt02_issue159_systemd_native_factories.py` strictly pins five native
+connection identities, the exact CST-DEV project, TLS verify-full and public
+CA, and reads credentials using no-follow, bounded file-descriptor access
+from `CREDENTIALS_DIRECTORY`. Symlink, world-readable, wrong role/host/port,
+foreign task and password-in-argv paths fail closed. The separate source-only
+systemd `gpt02-issue159-one-shot-native@.service` is **Type=oneshot**, has no
+Install/autostart section, uses root-prepared encrypted credentials and is
+limited by `MemoryMax=128M`/`TimeoutStartSec=70s`. It does not create a
+permanently running watchdog or replacement signer/worker.
+
+**Critical remaining LIVE DEPLOYMENT gap:** The source-only systemd unit and
+native Python dependency are **not installed or activated on VPS**. The
+separately authorized DBA and encrypted credential custodian must first stage
+signed, time-bounded per-task roles, canonical one-use issuance and
+independent consumer/guard/auditor connections, provision encrypted unit
+credentials, and prove the **existing** 5-second relock timer is operational.
+No password is to enter a browser, chat, git, HTTP route or ordinary env var.
+The original persisted SQLite Owner decision is still NOT atomically mirrored
+to PostgreSQL's canonical approval/revocation fence. Neither a source-only
+entrypoint nor a valid Ed25519 packet can substitute for that trust boundary.
+The one-shot unit must not be started until those conditions are met, and its
+success STILL CANNOT authorize signer, DELL dispatch or Task183 completion.
+
+Source tests invoke the original broker with the concrete adapter and
+exercise success, wrong DB identity, cross-task role swaps, replay,
+uncertain COMMIT, failed reader, missing independent relock proof, and
+transactionally separate Phase A/B. The unified one-pass QA includes these
+tests as part of the existing broker gate, **not a new release authority**.
+
+## 5. Required go/no-go evidence and rollback boundary
+
+**STOP / NO-GO** for wrong project or credential target, owner/admin privilege drift, unknown migration version, existing rows in the private one-read ledgers, unexpected PUBLIC/API EXECUTE, FORCE-RLS or column-grant drift, general-reader reuse, missing immutable signed authority, any residual privileged session, timeout/crash without independently verified terminal relock, signer/source identity mismatch, or any attempt to run historical Task171.
+
+For an approved change, capture independent pre- and post-state snapshots: exact project/ref, source commit and migration checksums, schema and role OIDs/ACLs, function owners and SECURITY DEFINER settings, RLS/policies, number of issuance/consumption/approval rows, privileged session count, native TLS identity, and a full rollback/recovery trial in isolated PostgreSQL before live installation.
+
+Rollback is **not** a blind `DROP SCHEMA CASCADE`, role recreation, owner-grant widening or automatic deletion of append-only evidence. If a live change fails, stop issuance immediately, lock every new temporary role, revoke new grants, end active sessions and verify zero sessions; then let the authorized DBA choose a reviewed object-level rollback that preserves preexisting Phase A/B and immutable records. If proof fails, retain **NO-GO**.
+
+## 6. Current decision and handoff
+
+- **Code/isolated PostgreSQL 16+17 installation-chain compatibility:** PASS.
+- **Real CST-DEV DBA-approved owner/credential custody and six-stage installation:** NOT DONE.
+- **Real one-use broker + current signed Owner provenance + terminal relock:** NOT DONE.
+- **Task183 one legitimate business consent, issuer/DELL/Final ACK:** NOT DONE.
+- **Release:** `GPT02_LIVE_E2E=NO_GO`; PRs remain Draft; **PROD untouched**.
+
+The next actionable handoff is to the independently authorized CST-DEV database/security custodian for review and a restricted release plan. **Do not repeat successful synthetic tests instead of closing this external operational dependency.**

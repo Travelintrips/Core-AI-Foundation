@@ -150,6 +150,15 @@ export function verifyReceipt(receipt, publicKey, expected) {
     Buffer.from(receipt.signature, "base64")), "ATTESTATION_SIGNATURE_INVALID");
   return true;
 }
+// Compare the server's persisted ACK with the independently observed reply.
+export function matchesPersistedFinalAck(ack, expected) {
+  if (ack?.state !== "COMPLETED" || ack.attestationVerified !== true ||
+      ack.transport !== "openclaw-gateway" ||
+      typeof ack.ackId !== "string" || !ack.ackId.trim()) return false;
+  return ["eventId", "commandId", "runId", "sessionKey", "assistantResponseHash", "signingKeyId"]
+    .every(field => typeof expected?.[field] === "string" &&
+      expected[field].trim().length > 0 && ack[field] === expected[field]);
+}
 function validateState(state) {
   ensure(state && VALID_STATES.has(state.status), "INVALID_BRIDGE_STATE");
   return state;
@@ -274,15 +283,21 @@ export async function reconcile({ work, binding, gateway, store, callback, priva
     await store.transition(key, "CALLBACK_UNKNOWN", "CALLBACK_ACCEPTED", {});
     existing = validateState(await store.read(key));
   }
-  if (existing.status === "CALLBACK_ACCEPTED") {
-    const ack = await callback.readFinalAck(key); // separate server-side ACK check
-    if (ack?.state !== "COMPLETED" || ack.eventId !== work.eventId ||
-      ack.commandId !== work.commandId ||
-      ack.attestationVerified !== true) {
+  if (existing.status === "CALLBACK_ACCEPTED" || existing.status === "FINAL_ACK") {
+    const ack = await callback.readFinalAck(key);
+    const matches = matchesPersistedFinalAck(ack, {
+      eventId: work.eventId, commandId: work.commandId,
+      runId: existing.runId, sessionKey: existing.sessionKey,
+      assistantResponseHash: existing.receipt?.assistantResponseHash,
+      signingKeyId: binding.signingKeyId,
+    });
+    if (!matches || (existing.ackId != null && existing.ackId !== ack.ackId)) {
       return { status: "CALLBACK_ACCEPTED", finalAckVerified: false };
     }
-    await store.transition(key, "CALLBACK_ACCEPTED", "FINAL_ACK", { ackId: ack.ackId });
+    if (existing.status === "CALLBACK_ACCEPTED") {
+      await store.transition(key, "CALLBACK_ACCEPTED", "FINAL_ACK", { ackId: ack.ackId });
+    }
     return { status: "FINAL_ACK", finalAckVerified: true };
   }
-  return { status: existing.status, finalAckVerified: existing.status === "FINAL_ACK" };
+  return { status: existing.status, finalAckVerified: false };
 }

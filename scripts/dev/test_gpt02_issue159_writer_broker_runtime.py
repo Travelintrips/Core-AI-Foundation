@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from gpt02_issue159_writer_broker_contract import (
-    APPROVAL_FIELDS, LINK_FIELDS, ISSUER_FIELDS,
+    APPROVAL_FIELDS, LINK_FIELDS, ISSUER_FIELDS, BrokerAdmissionError,
 )
 from gpt02_issue159_writer_broker_runtime import ROOT_FILES
 from gpt02_issue159_approval_reader_runtime import (
@@ -222,6 +222,22 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertFalse(out["dispatchPermitted"])
         self.assertEqual(out["releaseDecision"],"NO_GO")
 
+    def test_invalid_packet_gets_bounded_http_denial_not_closed_socket(self):
+        # Regression for live DEV 14 Nov: handler once raised NameError
+        # while formatting BrokerAdmissionError after a malformed packet.
+        self._start()
+        status, out = self._post({}, "/verify-persisted-lineage")
+        self.assertEqual(status, 400)
+        self.assertEqual(out["reason"], "PACKET_SHAPE_INVALID")
+        self.assertFalse(out["ok"])
+        self.assertFalse(out["dispatchPermitted"])
+        self.assertEqual(out["releaseDecision"], "NO_GO")
+        # Listener survives the rejected request and still handles a
+        # valid signature-only verification on the same socket.
+        status2, out2 = self._post(self.packet)
+        self.assertEqual(status2, 200)
+        self.assertFalse(out2["dispatchPermitted"])
+
     def test_socket_rejects_tampered_packet(self):
         self._start()
         packet=json.loads(json.dumps(self.packet))
@@ -277,6 +293,83 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertEqual(second,200,out2)
         self.assertFalse(out2["dispatchPermitted"])
 
+    def test_production_approval_socket_root_guard_survives_fixture_alias(self):
+        import stat
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import gpt02_issue159_writer_broker_runtime as broker
+
+        live_path = "/run/gpt02-approval-reader/approval.sock"
+        live_parent = "/run/gpt02-approval-reader"
+        def synthetic_non_root_lstat(path):
+            if path == live_path:
+                return SimpleNamespace(
+                    st_mode=stat.S_IFSOCK | 0o660, st_uid=1001,
+                )
+            if path == live_parent:
+                return SimpleNamespace(
+                    st_mode=stat.S_IFDIR | 0o750, st_uid=1001,
+                )
+            raise AssertionError("UNEXPECTED_ROOT_CUSTODY_PATH")
+
+        # Mutating a local test default must NOT disable mandatory ownership
+        # checks on the real, hard-pinned production socket path.
+        with patch.object(broker, "DEFAULT_APPROVAL_READER_SOCKET",
+                          "/tmp/synthetic-approval-only.sock"):
+            with patch.object(broker.os, "lstat",
+                              side_effect=synthetic_non_root_lstat):
+                with self.assertRaisesRegex(
+                    RuntimeError, "APPROVAL_SOCKET_ROOT_CUSTODY_REQUIRED",
+                ):
+                    broker._require_persisted_admin_decision(
+                        self.packet["approval"]["claims"],
+                        "a" * 64, live_path, self.now,
+                    )
+        print("PASS_LIVE_APPROVAL_SOCKET_REMAINS_ROOT_PINNED")
+
+    def test_trusted_sqlite_expiry_binds_readback_and_rejects_forged_ttl(self):
+        from gpt02_issue159_writer_broker_runtime import (
+            _require_persisted_admin_decision,
+        )
+        self._start_approval_reader()
+        claims = self.packet["approval"]["claims"]
+        digest = hashlib.sha256(json.dumps(
+            {key: claims[key] for key in APPROVAL_FIELDS},
+            separators=(",", ":"),
+        ).encode()).hexdigest()
+        observed = _require_persisted_admin_decision(
+            claims, digest, str(self.approval_socket_path), self.now,
+        )
+        self.assertEqual(observed, self.now + 120000)
+        # Simulate an unexpectedly overlong *reader response*, not a
+        # database write: the broker's own expiry/provenance check denies.
+        def forged_reader(path, lookup, now, operational):
+            proof = read_approval_intent(path, lookup, now,
+                                         operational=operational)
+            proof["decision"]["expiresAt"] = self.now + 600000
+            return proof
+        ApprovalHandler.approval_reader_fn = forged_reader
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "PERSISTED_ADMIN_APPROVAL_READBACK_MISMATCH",
+        ):
+            _require_persisted_admin_decision(
+                claims, digest, str(self.approval_socket_path), self.now,
+            )
+        # Missing expiry also fails closed even when other flags say PASS.
+        def omitted_reader(path, lookup, now, operational):
+            proof = read_approval_intent(path, lookup, now,
+                                         operational=operational)
+            proof["decision"].pop("expiresAt", None)
+            return proof
+        ApprovalHandler.approval_reader_fn = omitted_reader
+        with self.assertRaisesRegex(
+            BrokerAdmissionError, "PERSISTED_ADMIN_APPROVAL_READBACK_MISMATCH",
+        ):
+            _require_persisted_admin_decision(
+                claims, digest, str(self.approval_socket_path), self.now,
+            )
+        print("PASS_PINNED_SQLITE_APPROVAL_EXPIRY_AND_FORGED_TTL_DENIAL")
+
     def test_approved_route_rejects_wrong_stored_approval_digest(self):
         self._start_approval_reader(stored_digest="f"*64)
         self._start()
@@ -284,6 +377,57 @@ class WriterBrokerRuntimeTest(unittest.TestCase):
         self.assertEqual(status,403,out)
         self.assertFalse(out["ok"])
         self.assertFalse(out["dispatchPermitted"])
+
+
+    def test_signed_packet_cannot_reuse_expired_persisted_approval(self):
+        """An unchanged four-signature packet is not proof of fresh approval."""
+        self._start_approval_reader()
+        self._start()
+        first, accepted = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(first, 200, accepted)
+        self.assertFalse(accepted["authorizationGranted"])
+        with sqlite3.connect(self.root / "approval-intents.db") as db:
+            db.execute(
+                "UPDATE gpt02_issue159_approval_intents SET expires_at_ms=?",
+                (self.now - 1,),
+            )
+        second, denied = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(second, 403, denied)
+        self.assertFalse(denied["ok"])
+        self.assertEqual(
+            denied["reason"], "PERSISTED_ADMIN_APPROVAL_NOT_FOUND",
+        )
+        self.assertFalse(denied["dispatchPermitted"])
+        self.assertEqual(denied["releaseDecision"], "NO_GO")
+        print("PASS_SIGNED_PACKET_REUSE_AFTER_STORED_APPROVAL_EXPIRY_DENIED")
+
+    def test_approval_revocation_between_two_verifier_requests_denies(self):
+        """The reader must hit SQLite again, not cache a previous approval."""
+        self._start_approval_reader()
+        self._start()
+        first, accepted = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(first, 200, accepted)
+        with sqlite3.connect(self.root / "approval-intents.db") as db:
+            db.execute("UPDATE admin_identities SET enabled=0")
+        second, denied = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(second, 403, denied)
+        self.assertFalse(denied["ok"])
+        self.assertFalse(denied["authorizationGranted"])
+        self.assertEqual(denied["releaseDecision"], "NO_GO")
+        print("PASS_REVOKED_SUPER_ADMIN_AFTER_FIRST_READBACK_DENIED")
+
+    def test_deleted_persisted_approval_cannot_be_replayed(self):
+        self._start_approval_reader()
+        self._start()
+        first, accepted = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(first, 200, accepted)
+        with sqlite3.connect(self.root / "approval-intents.db") as db:
+            db.execute("DELETE FROM gpt02_issue159_approval_intents")
+        second, denied = self._post(self.packet, "/verify-approved-packet")
+        self.assertEqual(second, 403, denied)
+        self.assertFalse(denied["ok"])
+        self.assertEqual(denied["releaseDecision"], "NO_GO")
+        print("PASS_DELETED_PERSISTED_APPROVAL_REPLAY_DENIED")
 
     def test_approved_route_rejects_revoked_admin_mapping(self):
         self._start_approval_reader(mapping_enabled=0)

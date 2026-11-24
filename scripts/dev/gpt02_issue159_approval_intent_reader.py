@@ -58,7 +58,7 @@ def _secure_file(path, operational):
     return True
 
 def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
-                         operational: bool = True):
+                         operational: bool = True, *, require_owner_outbox: bool = False):
     if operational and db_path != LIVE_DB:
         return denied("OPERATIONAL_DB_PATH_NOT_PINNED")
     if not _lookup_valid(lookup) or not isinstance(observed_at_ms, int) or observed_at_ms <= 0:
@@ -73,8 +73,21 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA query_only=ON")
-        rows = con.execute(
-            """
+        # Reuse the EXISTING trusted read and Super Admin identity check.
+        # The new route adds an INNER JOIN to an immutable outbox row in the
+        # SAME SQLite snapshot; no second independent source can forge an ACK.
+        owner_join = """
+            JOIN gpt02_issue159_owner_approval_outbox o
+              ON o.decision_id=i.id AND o.task_id=i.task_id
+             AND o.company_id=i.company_id
+             AND o.command_id=i.command_id AND o.attempt_id=i.attempt_id
+             AND o.claims_sha256=i.claims_sha256 AND o.actor_id=i.actor_id
+             AND o.auth_method=i.auth_method
+             AND o.role_at_decision=i.role_at_decision
+             AND o.recorded_at_ms=i.recorded_at_ms
+             AND o.expires_at_ms=i.expires_at_ms
+        """ if require_owner_outbox else ""
+        query = """
             SELECT i.id AS intent_id,
                    i.task_id,i.command_id,i.attempt_id,i.company_id,
                    i.claims_sha256,i.actor_id,i.auth_method,
@@ -87,13 +100,16 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
             JOIN gpt02_issue159_admin_operator_links l
               ON l.hub_operator_id=i.actor_id
             JOIN admin_identities a ON a.user_id=l.auth_user_id
+            """ + owner_join + """
             WHERE i.company_id=?
               AND i.task_id=?
               AND i.command_id=?
               AND i.attempt_id=?
               AND i.claims_sha256=?
               AND i.actor_id=?
-            """,
+            """
+        rows = con.execute(
+            query,
             (
                 lookup["companyId"], lookup["taskId"], lookup["commandId"],
                 lookup["attemptId"], lookup["claimsSha256"],
@@ -121,11 +137,11 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
         if (
             not isinstance(recorded, int) or not isinstance(expires, int) or
             recorded <= 0 or expires <= recorded or expires - recorded > 300000 or
-            observed_at_ms < recorded or observed_at_ms > expires
+            observed_at_ms < recorded or observed_at_ms >= expires
         ):
             return denied("APPROVAL_INTENT_EXPIRED_OR_INVALID")
 
-        return {
+        result = {
             "environment": "DEV",
             "reason": "TRUSTED_APPROVAL_INTENT_READ_NO_SIGNING_AUTHORITY",
             "decision": {
@@ -136,6 +152,7 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
                 "roleAtDecision": r["role_at_decision"],
                 "decision": r["decision"],
                 "recordedAt": recorded,
+                "expiresAt": expires,
             },
             "persistedTrustedReadProven": True,
             "approvalBindingMatched": True,
@@ -146,6 +163,9 @@ def read_approval_intent(db_path: str, lookup: dict, observed_at_ms: int,
             "dispatchPermitted": False,
             "releaseDecision": "NO_GO",
         }
+        if require_owner_outbox:
+            result["sourceOutboxMatched"] = True
+        return result
     except sqlite3.Error:
         return denied("APPROVAL_INTENT_READ_FAILED")
     finally:

@@ -4,7 +4,7 @@
  * Caller MUST load binding and expected event from trusted server storage.
  * Never treat Gateway history or the GPT02 label as provider-account proof.
  */
-import { verifyReceipt, validateTrustedBinding, BridgeViolation } from "./dev-gpt02-gateway-bridge.mjs";
+import { verifyReceipt, validateTrustedBinding, matchesPersistedFinalAck, BridgeViolation } from "./dev-gpt02-gateway-bridge.mjs";
 
 function requireCondition(value, code) {
   if (!value) throw new BridgeViolation(code);
@@ -84,16 +84,6 @@ export function verifyPersistedFinalAck({ ack, evidence, expected }) {
     evidence.sessionKey === expected.sessionKey &&
     evidence.signingKeyId === expected.signingKeyId,
     "GATEWAY_CALLBACK_NOT_VERIFIED");
-  requireCondition(ack?.state === "COMPLETED" &&
-    ack?.attestationVerified === true &&
-    ack?.eventId === expected.eventId &&
-    ack?.commandId === expected.commandId &&
-    ack?.runId === expected.runId &&
-    ack?.sessionKey === expected.sessionKey &&
-    ack?.assistantResponseHash === expected.assistantResponseHash &&
-    ack?.signingKeyId === expected.signingKeyId &&
-    ack?.transport === "openclaw-gateway" &&
-    typeof ack.ackId === "string" && ack.ackId.length > 0,
-    "GATEWAY_FINAL_ACK_NOT_VERIFIED");
+  requireCondition(matchesPersistedFinalAck(ack, expected), "GATEWAY_FINAL_ACK_NOT_VERIFIED");
   return Object.freeze({ finalAckVerified: true, ackId: ack.ackId });
 }

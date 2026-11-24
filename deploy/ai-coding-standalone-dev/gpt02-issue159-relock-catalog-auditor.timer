@@ -1,0 +1,13 @@
+[Unit]
+Description=GPT02 DEV independent relock catalog watchdog cadence (disabled until reviewed)
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=gpt02-issue159-relock-catalog-auditor.service
+Persistent=false
+
+[Install]
+WantedBy=timers.target

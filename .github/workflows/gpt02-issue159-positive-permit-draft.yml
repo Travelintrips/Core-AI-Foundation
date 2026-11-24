@@ -1,0 +1,319 @@
+name: GPT02 DEV Positive Permit Proposal (Disposable Only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "docs/dev/gpt02-issue159-positive-dispatch-permit.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-exact-bridge-stage-role.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-release-claim-fence.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-held-claim-readback.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-issuer-reader-locked-recovery.md"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-issuer-reader.service"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-operational-signer@.service"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-operational-signer@issuer.service.d/10-require-issuer-reader.conf"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_operational_signer.py"
+      - "scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py"
+      - "scripts/dev/test_gpt02_issue159_preissuer_signer_bootstrap.py"
+      - "scripts/dev/test_gpt02_issue159_operational_signer.py"
+      - "scripts/dev/gpt02_issue159_relock_admin_custody.READONLY.py"
+      - "scripts/dev/test_gpt02_issue159_relock_admin_custody.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer"
+      - "scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs"
+      - "scripts/dev/test_gpt02_issue159_relock_shared_timer.mjs"
+      - "docs/dev/gpt02-issue159-scoped-reader-relock-add-only.REVIEW_ONLY.sql"
+      - "scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py"
+      - "docs/dev/gpt02-issue159-independent-relock-supervisor.PROPOSED.md"
+      - "docs/dev/gpt02-issue159-minimal-catalog-relock-auditor.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-minimal-catalog-auditor-existing-role.REVIEW_ONLY.sql"
+      - "scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py"
+      - "scripts/dev/test_gpt02_issue159_existing_auditor_addonly_pg.py"
+      - "scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py"
+      - "docs/dev/gpt02-issue159-store-owner-relock-helper.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-store-owner-relock-helper-maintenance.REVIEW_ONLY.sql"
+      - "scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py"
+      - "scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py"
+      - "scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py"
+      - "scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py"
+      - "scripts/dev/gpt02_issue159_one_pass_candidate.py"
+      - "scripts/dev/test_gpt02_issue159_one_pass_candidate.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent_schema.sql"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_approval_intent.py"
+      - "scripts/dev/gpt02_issue159_approval_intent_reader.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_approval_reader_runtime.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_owner_source_relay_review.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_owner_pg_bridge.py"
+      - "scripts/dev/test_gpt02_issue159_owner_pg_bridge.py"
+      - "scripts/dev/test_gpt02_issue159_owner_atomic_outbox.py"
+      - "scripts/dev/test_gpt02_issue159_owner_source_relay_review.py"
+      - "docs/dev/gpt02-issue159-owner-source-fence-binding.REVIEW_ONLY.sql"
+      - "scripts/dev/test_gpt02_issue159_owner_source_fence_binding_pg.py"
+      - "docs/dev/gpt02-issue159-two-phase-owner-split-relock.PROPOSED.sql"
+      - "scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_pinned_tls_ca.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_one_shot_reader_broker.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_native_one_shot_supervisor.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_systemd_native_factories.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_one_shot_native_runtime.py"
+      - "deploy/ai-coding-standalone-dev/gpt02-issue159-one-shot-native@.service"
+      - "scripts/dev/test_gpt02_issue159_systemd_native_factories.py"
+      - "scripts/dev/test_gpt02_issue159_one_shot_native_runtime.py"
+      - "scripts/dev/test_gpt02_issue159_native_one_shot_supervisor.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_native_relock_attestation.py"
+      - "scripts/dev/test_gpt02_issue159_native_relock_catalog_pg.py"
+      - "scripts/dev/test_gpt02_issue159_pinned_tls_ca.py"
+      - "scripts/dev/test_gpt02_issue159_one_shot_reader_broker.py"
+      - "scripts/dev/gpt02_issue159_supervisor_catalog_gate.READONLY.sql"
+      - "scripts/dev/test_gpt02_issue159_supervisor_catalog_gate_pg.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_positive_release_broker.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_bridge_handoff_preflight.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_exact_bridge_stage.py"
+      - "artifacts/api-server/src/services/localCodingControlBridgeService.ts"
+      - "artifacts/api-server/src/services/gpt02RecoveryGenericClaimQuarantine.ts"
+      - "artifacts/api-server/src/services/__tests__/gpt02RecoveryGenericClaimQuarantine.test.ts"
+      - "scripts/dev/prepare_gpt02_issue159_approval_request.py"
+      - "scripts/dev/test_gpt02_issue159_approval_request_prepare.py"
+      - "scripts/dev/test_gpt02_issue159_positive_permit_pg.py"
+      - "scripts/dev/test_gpt02_issue159_five_table_task_scope_pg.py"
+      - "scripts/dev/test_gpt02_issue159_ephemeral_role_revocation_pg.py"
+      - "scripts/dev/test_gpt02_issue159_disposable_login_relock_pg.py"
+      - "scripts/dev/test_gpt02_issue159_relock_active_session_pg.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_readback_contract.py"
+      - "scripts/dev/test_gpt02_issue159_positive_permit_handoff.py"
+      - "scripts/dev/test_gpt02_issue159_prelineage_reader_scope.py"
+      - "scripts/dev/test_gpt02_issue159_postlineage_reader_scope.py"
+      - "scripts/dev/test_gpt02_issue159_signed_scope_pg.py"
+      - "scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py"
+      - "docs/dev/gpt02-issue159-one-read-consumption-attestation.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-one-read-consumer-rpc.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-reader-issuance-server-clock.PROPOSED.sql"
+      - "scripts/dev/test_gpt02_issue159_issuance_server_clock_pg.py"
+      - "docs/dev/gpt02-issue159-canonical-approval-fence.PROPOSED.sql"
+      - "docs/dev/gpt02-issue159-canonical-reader-guard.PROPOSED.sql"
+      - "scripts/dev/test_gpt02_issue159_canonical_approval_fence_pg.py"
+      - "scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py"
+      - "scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py"
+      - "scripts/dev/test_gpt02_issue159_independent_relock_watchdog_pg.py"
+      - "scripts/dev/test_gpt02_issue159_broker_finally_relock_pg.py"
+      - "scripts/dev/gpt02_issue159_scoped_policy_proposal.py"
+      - "scripts/dev/test_gpt02_issue159_scoped_policy_proposal.py"
+      - "scripts/dev/test_gpt02_issue159_lineage_db_reader_failclosed.py"
+      - "scripts/dev/test_gpt02_issue159_live_approval_readiness.py"
+      - "scripts/dev/gpt02_issue159_live_approval_readiness.READONLY.py"
+      - "scripts/dev/test_gpt02_issue159_lineage_db_identity_pin.py"
+      - "scripts/dev/test_gpt02_issue159_approval_intent_reader.py"
+      - "scripts/dev/test_gpt02_issue159_approval_reader_runtime.py"
+      - "scripts/dev/test_gpt02_issue159_reader_authority_boundary.py"
+      - "scripts/dev/test_gpt02_issue159_writer_broker_runtime.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_reader_runtime.py"
+      - "deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_db_reader.py"
+      - "scripts/dev/gpt02_issue159_exact_task_release_gate.READONLY.sql"
+      - "scripts/dev/check_gpt02_issue159_approval_reader_parity.READONLY.py"
+      - "scripts/dev/test_gpt02_issue159_positive_release_broker.py"
+      - "scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py"
+      - "scripts/dev/test_gpt02_issue159_exact_bridge_stage.py"
+      - "scripts/dev-gpt02-issue159-release-authorization.mjs"
+      - "scripts/dev-gpt02-issue159-release-authorization.test.mjs"
+      - "scripts/dev-gpt02-issue159-claim-admission.mjs"
+      - "scripts/dev-gpt02-issue159-claim-admission.test.mjs"
+      - "scripts/dev-gpt02-gateway-bridge.mjs"
+      - "scripts/dev-gpt02-gateway-bridge.test.mjs"
+      - ".github/workflows/gpt02-issue159-positive-permit-draft.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout proposed source (no deploy)
+        uses: actions/checkout@v4
+      - name: Disposable PostgreSQL 16 one-use ledger regressions
+        run: python3 scripts/dev/test_gpt02_issue159_positive_permit_pg.py
+      - name: Five-table exact-task reader isolation and one-use relock (disposable only)
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test_gpt02_issue159_five_table_task_scope_pg.py
+          python3 scripts/dev/test_gpt02_issue159_ephemeral_role_revocation_pg.py
+          python3 scripts/dev/test_gpt02_issue159_disposable_login_relock_pg.py
+          python3 scripts/dev/test_gpt02_issue159_relock_active_session_pg.py
+          python3 scripts/dev/test_gpt02_issue159_supervisor_catalog_gate_pg.py
+          python3 scripts/dev/test_gpt02_issue159_existing_auditor_addonly_pg.py
+          GPT02_ADD_ONLY_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_existing_auditor_addonly_pg.py
+          python3 scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py
+          GPT02_CHAIN_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_existing_role_install_chain_pg.py
+          echo "PASS_SCOPED_SQL_REVOKE_ACTIVE_SESSION_RELOCK_DISPOSABLE_ONLY"
+      - name: Assert no runtime deployment path
+        run: |
+          test ! -f scripts/dev/gpt02_issue159_positive_permit_apply_live.py
+          echo "NO_LIVE_MIGRATION_NO_DEPLOY"
+
+  existing-verifier-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout proposed source (no deploy)
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned verification dependency
+        run: python3 -m pip install --no-cache-dir cryptography==50.0.2
+      - name: Verify pinned existing four-signature verifier handoff
+        env:
+          PYTHONPATH: "deploy/ai-coding-standalone-dev:scripts/dev"
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test_gpt02_issue159_positive_permit_handoff.py -q
+          python3 scripts/dev/test_gpt02_issue159_prelineage_reader_scope.py -q
+          python3 scripts/dev/test_gpt02_issue159_postlineage_reader_scope.py -q
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_pinned_tls_ca
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_one_shot_reader_broker
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_native_one_shot_supervisor
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_systemd_native_factories scripts.dev.test_gpt02_issue159_one_shot_native_runtime
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_one_pass_candidate
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_owner_atomic_outbox scripts.dev.test_gpt02_issue159_owner_source_relay_review scripts.dev.test_gpt02_issue159_owner_pg_bridge scripts.dev.test_gpt02_issue159_approval_reader_runtime scripts.dev.test_gpt02_issue159_approval_intent_reader scripts.dev.test_gpt02_issue159_approval_intent_writer
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_preissuer_signer_bootstrap scripts.dev.test_gpt02_issue159_issuer_reader_sysusers scripts.dev.test_gpt02_issue159_operational_signer
+          python3 scripts/dev/test_gpt02_issue159_native_relock_catalog_pg.py
+          python3 scripts/dev/test_gpt02_issue159_minimal_catalog_auditor_pg.py
+          # Owner-split permission boundary is real: postgres lacks
+          # GRANT OPTION on the five gpt02_store_owner tables.
+          # Isolated PG16 only, no connection to CST-DEV or PROD.
+          python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          # CST-DEV is PostgreSQL 17. Exercise the same owner boundary
+          # in another disposable network-isolated PG17 instance.
+          # This never connects to live Supabase or starts the VPS service.
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          echo "PASS_OWNER_SPLIT_RELOCK_PG16_AND_PG17_DISPOSABLE_ONLY"
+          # Independent owner maintenance installer review-only; distinct
+          # short-lived synthetic identity, no live roles or credentials.
+          python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_maintenance_pg.py
+          python3 scripts/dev/test_gpt02_issue159_owner_source_fence_binding_pg.py
+          GPT02_OWNER_SOURCE_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_source_fence_binding_pg.py
+          python3 scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py
+          GPT02_COLUMN_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_column_acl_relock_pg.py
+          python3 scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py
+          GPT02_SCOPED_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_scoped_reader_relock_existing_service_pg.py
+          echo "PASS_OWNER_MAINTENANCE_AND_SCOPED_READER_RELOCK_PG16_PG17"
+          # Sam/Supabase's proposed postgres SET ROLE path: isolated only.
+          # Preserve provider-granted ADMIN SET=false membership, restore
+          # NOLOGIN owner, and revoke seven-table + column ACLs.
+          python3 scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_sam_postgres_owner_route_pg.py
+          python3 scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py
+          GPT02_DUAL_GRANTOR_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_dual_grantor_owner_custody_pg.py
+          echo "PASS_SAM_POSTGRES_OWNER_ROUTE_PG16_PG17_DISPOSABLE_ONLY"
+          # Full two-phase owner split, recovery, ACL and membership proof
+          # after maintenance identity has been revoked and re-locked.
+          # Synthetic network-isolated containers ONLY; no Supabase DB.
+          GPT02_RELOCK_TEST_OWNER_INSTALLER=maintenance \
+            python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          GPT02_RELOCK_TEST_OWNER_INSTALLER=maintenance \
+          GPT02_RELOCK_TEST_PG_IMAGE=postgres:17-alpine \
+            python3 scripts/dev/test_gpt02_issue159_owner_split_relock_pg.py
+          echo "PASS_MAINTENANCE_OWNER_SPLIT_PG16_PG17_FULL_LIFECYCLE"
+          python3 scripts/dev/test_gpt02_issue159_signed_scope_pg.py
+          python3 scripts/dev/test_gpt02_issue159_signed_scoped_issuance_pg.py
+          python3 scripts/dev/test_gpt02_issue159_independent_read_consumption_pg.py
+          python3 scripts/dev/test_gpt02_issue159_issuance_server_clock_pg.py
+          python3 scripts/dev/test_gpt02_issue159_canonical_approval_fence_pg.py
+          python3 scripts/dev/test_gpt02_issue159_signed_scope_expiry_pg.py
+          python3 scripts/dev/test_gpt02_issue159_independent_relock_watchdog_pg.py
+          python3 scripts/dev/test_gpt02_issue159_broker_finally_relock_pg.py
+          python3 scripts/dev/test_gpt02_issue159_scoped_policy_proposal.py
+          python3 scripts/dev/test_gpt02_issue159_positive_release_broker.py -q
+          python3 scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py -q
+          python3 scripts/dev/test_gpt02_issue159_exact_bridge_stage.py -q
+          python3 scripts/dev/test_gpt02_issue159_approval_request_prepare.py -q
+          # Existing approval, verifier and lineage boundaries — source only.
+          python3 -m unittest -q \
+            scripts.dev.test_gpt02_issue159_live_approval_readiness \
+            scripts.dev.test_gpt02_issue159_lineage_db_identity_pin \
+            scripts.dev.test_gpt02_issue159_lineage_db_reader_failclosed \
+            scripts.dev.test_gpt02_issue159_approval_intent_reader \
+            scripts.dev.test_gpt02_issue159_approval_reader_runtime \
+            scripts.dev.test_gpt02_issue159_reader_authority_boundary \
+            scripts.dev.test_gpt02_issue159_writer_broker_runtime
+          # Source-only syntax guard: installed runtime files stay untouched.
+          python3 -m py_compile \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_reader_runtime.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_lineage_db_reader.py
+          python3 -m py_compile \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_positive_release_broker.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_bridge_handoff_preflight.py \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_exact_bridge_stage.py \
+            scripts/dev/test_gpt02_issue159_positive_permit_handoff.py \
+            scripts/dev/test_gpt02_issue159_positive_release_broker.py \
+            scripts/dev/test_gpt02_issue159_bridge_handoff_preflight.py \
+            scripts/dev/test_gpt02_issue159_exact_bridge_stage.py \
+            scripts/dev/prepare_gpt02_issue159_approval_request.py \
+            scripts/dev/test_gpt02_issue159_approval_request_prepare.py
+      - name: Preserve no-grant no-dispatch boundary
+        run: |
+          set -euo pipefail
+          grep -Fq 'releaseDecision": "NO_GO"' \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py
+          ! grep -Eq 'dispatchPermitted": True|authorizationGranted": True|signingPermitted": True' \
+            deploy/ai-coding-standalone-dev/gpt02_issue159_positive_permit_handoff.py
+
+  custody-unit-source-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source only
+        uses: actions/checkout@v4
+      - name: Assert reader boot gate and each signer's own explicit opt-in
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test_gpt02_issue159_issuer_reader_sysusers.py -q
+          python3 -m unittest -q scripts.dev.test_gpt02_issue159_relock_admin_custody
+          node --test scripts/dev/test_gpt02_issue159_relock_catalog_supervisor.mjs scripts/dev/test_gpt02_issue159_relock_shared_timer.mjs
+          node --check deploy/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
+          # On hosted CI, Node lives outside /usr/bin. Verify an isolated
+          # copy with the CI interpreter while keeping the reviewed VPS
+          # ExecStart pinned to /usr/bin/node in the real unit.
+          grep -Fq 'ExecStart=/usr/bin/node /opt/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs' deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service
+          test -x "$(command -v node)"
+          temp_units="$(mktemp -d)"
+          sed "s|^ExecStart=/usr/bin/node |ExecStart=$(command -v node) |" deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.service > "$temp_units/gpt02-issue159-relock-catalog-auditor.service"
+          cp deploy/ai-coding-standalone-dev/gpt02-issue159-relock-catalog-auditor.timer "$temp_units/"
+          systemd-analyze verify "$temp_units/gpt02-issue159-relock-catalog-auditor.service" "$temp_units/gpt02-issue159-relock-catalog-auditor.timer"
+          rm -r "$temp_units"
+          test ! -f scripts/dev/gpt02_issue159_issuer_reader_install_credential_live.py
+          echo "PASS_CUSTODY_STARTUP_GUARDS_NO_CREDENTIAL_ACTIVATION"
+
+  synthetic-signed-release-to-existing-gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source only
+        uses: actions/checkout@v4
+      - name: Verify signed release contract and existing once-only gateway
+        run: |
+          set -euo pipefail
+          node --test scripts/dev-gpt02-issue159-release-authorization.test.mjs
+          node --test scripts/dev-gpt02-issue159-claim-admission.test.mjs
+          node --test scripts/dev-gpt02-gateway-bridge.test.mjs
+      - name: Reject any release adapter network/worker side effects
+        run: |
+          set -euo pipefail
+          ! grep -Eq 'dispatchOnce\(|gateway\.send\(' scripts/dev-gpt02-issue159-release-authorization.mjs
+          ! grep -Eq 'dispatchOnce\(|gateway\.send\(' scripts/dev-gpt02-issue159-claim-admission.mjs
+          echo "NO_ACTUAL_GATEWAY_DISPATCH_OR_RELEASE_CREDENTIALS"

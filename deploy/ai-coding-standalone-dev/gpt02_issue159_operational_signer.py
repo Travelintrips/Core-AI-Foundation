@@ -247,7 +247,21 @@ class Handler(socketserver.StreamRequestHandler):
 class Server(socketserver.UnixStreamServer):
     allow_reuse_address=False; daemon_threads=True
 
+def require_bootstrap_reader_before_key(role:str):
+    """Signer issuer must not read its private key before native socket custody.
+
+    The common three-domain signer template intentionally does not require
+    issuer-reader; this runtime check independently guards against accidentally
+    installing the base unit without its issuer instance drop-in. All actual
+    issuer evidence still requires the existing persisted ledger readback.
+    """
+    if role not in ROLES: deny("SIGNER_ROLE_INVALID")
+    if role=="issuer": _assert_socket(ISSUER_READER)
+
+
 def serve(role:str,socket_path:str):
+    # Important order: check issuer reader custody BEFORE decrypting ANY key.
+    require_bootstrap_reader_before_key(role)
     creds=os.environ.get("CREDENTIALS_DIRECTORY","")
     if not creds: deny("SYSTEMD_CREDENTIALS_REQUIRED")
     key,public,fp=_read_private_key(role,creds)

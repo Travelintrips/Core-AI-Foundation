@@ -12,6 +12,9 @@ describe("generic worker never claims DEV GPT02 recovery",()=>{
     {gpt02RecoveryParentCommandId:"parent"},
     {recoveryParentCommandId:"parent"},
     {recovery_parent_command_id:"parent"},
+    {gpt02Issue159PositivePermit:false},
+    {gpt02Issue159PositivePermit:null},
+    {gpt02Issue159PositivePermit:{commandId:"fake"}},
     {capability:"chatgpt:wake",parentCommandId:"parent"},
   ])("quarantines recovery markers even when falsy: %j",(metadata)=>{
     expect(isQuarantinedGpt02RecoveryMetadata(metadata)).toBe(true);
@@ -29,6 +32,7 @@ describe("generic worker never claims DEV GPT02 recovery",()=>{
     const rendered=dialect.sqlToQuery(genericClaimNotGpt02RecoverySql()).sql;
     for(const key of ["gpt02Recovery","gpt02RecoveryParentCommandId",
       "recoveryParentCommandId","recovery_parent_command_id",
+      "gpt02Issue159PositivePermit",
       "parentCommandId","chatgpt:wake"])
       expect(rendered).toContain("'"+key+"'");
     expect(rendered).toContain("NOT");
@@ -48,6 +52,20 @@ describe("generic worker never claims DEV GPT02 recovery",()=>{
     expect(claim).toContain("AND ${genericClaimNotGpt02RecoverySql()}");
     expect(claim.indexOf("AND ${genericClaimNotGpt02RecoverySql()}")).toBeLessThan(
       claim.indexOf("FOR UPDATE SKIP LOCKED"));
+  });
+  it("duplicate protected bridge commands cannot re-notify when caller omits marker",async()=>{
+    const {readFileSync}=await import("node:fs");
+    const source=readFileSync(
+      new URL("../localCodingControlBridgeService.ts",import.meta.url),"utf8");
+    const submission=source.slice(source.indexOf("export async function submitCodingBridgeCommand("),
+      source.indexOf("async function deliverCodingBridgeWhatsappNotification"));
+    const start=submission.indexOf("if (existing) {");
+    const guard=submission.indexOf("isQuarantinedGpt02RecoveryMetadata(existing.metadataJson)",start);
+    const notification=submission.indexOf("notifyExternalAgentWork(input.assignedClientId, existing.id)",start);
+    expect(start).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(start);
+    expect(notification).toBeGreaterThan(guard);
+    expect(submission.slice(guard,notification)).toContain("GPT02_PROTECTED_GENERIC_RENOTIFY_FORBIDDEN");
   });
   it("DEV uses owner-owned candidate identity function without broad table grants",()=>{
     const prev=process.env["APP_ENV"];

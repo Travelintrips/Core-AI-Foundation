@@ -1,0 +1,36 @@
+[Unit]
+Description=GPT02 DEV independent catalog relock watchdog (NO SIGNING / NO DISPATCH)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn
+ConditionPathExists=/opt/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+User=gpt02-relock-auditor
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+Environment=APP_ENV=development
+LoadCredentialEncrypted=relock-catalog-dsn:/etc/credstore.encrypted/gpt02-issue159-relock-catalog-dsn
+ExecStart=/usr/bin/node /opt/ai-coding-standalone-dev/gpt02_issue159_relock_catalog_supervisor.mjs
+WorkingDirectory=/opt/ai-coding-standalone-dev
+ProtectHome=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+UMask=0077
+TimeoutStartSec=45s
+Restart=no
+
+# No enable/install section: it is never started automatically without
+# a separately reviewed operator-controlled timer activation.

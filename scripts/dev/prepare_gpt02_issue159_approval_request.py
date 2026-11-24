@@ -15,6 +15,7 @@ import secrets
 import sqlite3
 import stat
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -32,6 +33,53 @@ LIVE_OUTPUT = "/opt/ai-coding-standalone-dev/gpt02_issue159_pending_claims.json"
 UUID = re.compile(r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
 
 
+def _reject_reused_approval_intent(db_path: str, task_id: int,
+                                   command_id: str, attempt_id: str) -> None:
+    """A prior approval decision, even expired, cannot be rotated by CLI."""
+    try:
+        con = sqlite3.connect("file:" + db_path + "?mode=ro",
+                              uri=True, timeout=2)
+        try:
+            con.execute("PRAGMA query_only=ON")
+            prior = con.execute(
+                "SELECT count(*) FROM gpt02_issue159_approval_intents "
+                "WHERE task_id=? OR command_id=? OR attempt_id=?",
+                (task_id, command_id, attempt_id),
+            ).fetchone()
+        finally:
+            con.close()
+        if prior is None or len(prior) != 1:
+            raise RuntimeError("ISSUE159_APPROVAL_REPLAY_READBACK_INVALID")
+    except sqlite3.Error as exc:
+        raise RuntimeError("ISSUE159_APPROVAL_REPLAY_READBACK_UNAVAILABLE") from exc
+    if prior[0] != 0:
+        raise RuntimeError("ISSUE159_APPROVAL_INTENT_ALREADY_CONSUMED")
+
+
+def _require_operational_pre_sign(claims: dict, now_ms: int) -> None:
+    """Authenticate independent read-only Hub/Core facts, never caller JSON.
+
+    Import lazily because the refresh module reuses this preparer. Neither
+    this helper nor a missing reader can authorize signing or dispatch.
+    """
+    try:
+        from gpt02_issue159_approval_request_refresh import (
+            _socket_fact_reader, _verify_pre_sign_facts,
+        )
+        query = {
+            "companyId": claims["companyId"],
+            "hubTaskId": claims["taskId"],
+            "commandCandidateId": claims["commandId"],
+            "attemptId": claims["attemptId"],
+        }
+        facts = _socket_fact_reader(query)
+        preparation_expiry_ms = _verify_pre_sign_facts(facts, claims, now_ms)
+        if preparation_expiry_ms < claims["expiresAt"] + 1000:
+            raise RuntimeError("ISSUE159_APPROVAL_BEYOND_PREPARATION_EXPIRY")
+    except Exception as exc:
+        raise RuntimeError("ISSUE159_FRESH_TRUSTED_PRESIGN_REQUIRED") from exc
+
+
 def prepare(db_path: str, output_path: str, task_id: int,
             command_id: str, attempt_id: str, *, now_ms: int | None = None,
             operational: bool = True) -> dict:
@@ -43,6 +91,16 @@ def prepare(db_path: str, output_path: str, task_id: int,
                 or db_stat.st_uid != 0 or db_stat.st_gid != 0
                 or stat.S_IMODE(db_stat.st_mode) != 0o600):
             raise RuntimeError("ISSUE159_TASK_DB_SECURITY_INVALID")
+    else:
+        # --test-mode must never emit a real pending approval packet or read
+        # the live approval SQLite database, even if invoked as root.
+        live_dir = str(Path(LIVE_OUTPUT).parent.resolve())
+        db_resolved = str(Path(db_path).resolve())
+        output_resolved = str(Path(output_path).resolve())
+        if (db_resolved == str(Path(LIVE_DB).resolve())
+                or output_resolved == str(Path(LIVE_OUTPUT).resolve())
+                or output_resolved.startswith(live_dir + os.sep)):
+            raise RuntimeError("ISSUE159_TEST_MODE_LIVE_TARGET_FORBIDDEN")
     if not isinstance(task_id, int) or task_id <= 139:
         raise RuntimeError("ISSUE159_FRESH_TASK_AFTER_139_REQUIRED")
     if (not isinstance(command_id, str) or not UUID.fullmatch(command_id)
@@ -89,30 +147,56 @@ def prepare(db_path: str, output_path: str, task_id: int,
         "expiresAt": now_ms + 240_000,
     }
     validate_approval_claims(claims)
+    if operational:
+        # Even an expired persisted approval is one-use: never prepare another
+        # packet for its task/command/attempt through the direct CLI.
+        _reject_reused_approval_intent(db_path, task_id, command_id, attempt_id)
+        # The direct preparer CLI is NOT a substitute for trusted Hub/Core
+        # proof. Read the same pinned independent pre-sign-facts socket used
+        # by the already-deployed refresh path and bind exact immutable IDs,
+        # PIC audit, owner, Core PENDING, zero commands and freshness.
+        _require_operational_pre_sign(claims, now_ms)
 
     target = Path(output_path)
     parent = target.parent
-    parent_stat = os.stat(parent)
-    if operational and (parent_stat.st_uid != 0 or parent_stat.st_gid != 0):
+    parent_stat = os.lstat(parent)
+    if (not stat.S_ISDIR(parent_stat.st_mode)
+            or stat.S_ISLNK(parent_stat.st_mode)
+            or (operational and
+                (parent_stat.st_uid != 0 or parent_stat.st_gid != 0))):
         raise RuntimeError("ISSUE159_PENDING_DIRECTORY_OWNER_INVALID")
-    tmp = parent / ("." + target.name + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    # A deterministic .tmp name can strand an orphan after a crash and block
+    # all later fresh requests. A unique O_EXCL file isolates concurrent
+    # preparers, while hard-link publication still refuses to replace a
+    # pending request from another process.
+    fd, temporary_path = tempfile.mkstemp(
+        prefix="." + target.name + ".tmp.", dir=str(parent)
+    )
+    tmp = Path(temporary_path)
     try:
-        payload = (json.dumps({"claims": claims}, sort_keys=True,
-                              separators=(",", ":")) + "\n").encode("utf-8")
-        os.write(fd, payload)
-        os.fsync(fd)
+        try:
+            payload = (json.dumps({"claims": claims}, sort_keys=True,
+                                  separators=(",", ":")) + "\n").encode("utf-8")
+            remaining = memoryview(payload)
+            while remaining:
+                count = os.write(fd, remaining)
+                if count <= 0:
+                    raise RuntimeError("ISSUE159_PENDING_FILE_WRITE_INCOMPLETE")
+                remaining = remaining[count:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.chmod(tmp, 0o600)
+        if operational:
+            os.chown(tmp, 0, 0)
+        try:
+            os.link(tmp, target)
+        except FileExistsError as exc:
+            raise RuntimeError("ISSUE159_PENDING_REQUEST_ALREADY_EXISTS") from exc
     finally:
-        os.close(fd)
-    os.chmod(tmp, 0o600)
-    if operational:
-        os.chown(tmp, 0, 0)
-    try:
-        os.link(tmp, target)
-    except FileExistsError as exc:
-        os.unlink(tmp)
-        raise RuntimeError("ISSUE159_PENDING_REQUEST_ALREADY_EXISTS") from exc
-    os.unlink(tmp)
+        # This also covers chmod/chown/fsync/link exceptions. Never remove
+        # the published target here: its existence is the replay barrier.
+        tmp.unlink(missing_ok=True)
     return {
         "environment": "DEV",
         "taskId": task_id,
