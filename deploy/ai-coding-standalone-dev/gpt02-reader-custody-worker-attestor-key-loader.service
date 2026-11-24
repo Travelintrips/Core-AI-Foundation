@@ -1,0 +1,54 @@
+[Unit]
+Description=Load externally provisioned GPT02 CST-DEV worker attestor key
+After=systemd-tmpfiles-setup.service
+StartLimitIntervalSec=60s
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=root
+Environment=APP_ENV=development
+Environment=NODE_ENV=development
+# Release independently requires this opt-in in the application configuration.
+Environment=GPT02_DEV_CUSTODY_WORKER_ISSUER_ENABLED=true
+# The encrypted blob must be authenticated for the name private-key.pkcs8.
+LoadCredentialEncrypted=private-key.pkcs8:/etc/credstore.encrypted/gpt02-reader-custody-worker-attestor.pkcs8
+ExecStart=/usr/bin/python3 /usr/local/libexec/cst-dev/gpt02_owner_reader_credential_loader.py --worker-attestor-key
+RuntimeDirectory=credentials/gpt02-reader-custody-worker-attestor
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=no
+UMask=0077
+TimeoutStartSec=15s
+TimeoutStopSec=5s
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+ReadOnlyPaths=/usr/local/libexec/cst-dev
+ReadWritePaths=/run/credentials/gpt02-reader-custody-worker-attestor
+LimitNOFILE=64
+MemoryMax=64M
+TasksMax=8
+StandardOutput=journal
+StandardError=journal
+
+# No installation target: the reviewed DEV release caller controls activation.

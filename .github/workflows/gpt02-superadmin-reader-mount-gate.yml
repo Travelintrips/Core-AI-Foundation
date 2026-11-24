@@ -1,4 +1,4 @@
-name: GPT02 Owner reader credential loading (DEV)
+name: GPT02 custody credential loading (DEV)
 
 on:
   pull_request:
@@ -10,7 +10,9 @@ on:
       - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
       - 'scripts/vps/deploy_dev_release.py'
       - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
+      - 'scripts/vps/test_gpt02_worker_attestor_key_loading.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-reader-custody-worker-attestor-key-loader.service'
       - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
   push:
     branches: [develop]
@@ -21,7 +23,9 @@ on:
       - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
       - 'scripts/vps/deploy_dev_release.py'
       - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
+      - 'scripts/vps/test_gpt02_worker_attestor_key_loading.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-reader-custody-worker-attestor-key-loader.service'
       - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
 
 permissions:
@@ -38,8 +42,11 @@ jobs:
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_superadmin_reader_mount_gate.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_credential_loader.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_release_integration.py -v
-      - name: Verify dormant systemd unit
-        run: systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_worker_attestor_key_loading.py -v
+      - name: Verify dormant systemd units
+        run: |
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-reader-custody-worker-attestor-key-loader.service
       - name: Verify metadata gate cannot read credentials or execute processes
         run: |
           python3 - <<'PY'
