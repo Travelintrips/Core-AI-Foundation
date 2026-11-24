@@ -102,7 +102,7 @@ def finish(path: Path, *, nonce: str, command_id: str,
 def status(path: Path, nonce: str):
     con = _connect(path)
     try:
-        row = con.execute("SELECT state,command_id,receipt_digest FROM claims WHERE nonce=?", (nonce,)).fetchone()
-        return dict(zip(("state", "command_id", "receipt_digest"), row)) if row else None
+        row = con.execute("SELECT state,command_id,receipt_digest,signed_digest FROM claims WHERE nonce=?", (nonce,)).fetchone()
+        return dict(zip(("state", "command_id", "receipt_digest", "signed_digest"), row)) if row else None
     finally:
         con.close()
