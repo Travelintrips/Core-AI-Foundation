@@ -120,6 +120,8 @@ class DurableGateANonce(unittest.TestCase):
                   "expiresAt":(now+timedelta(minutes=2)).isoformat(timespec="milliseconds").replace("+00:00","Z")}
         role=[0,0,0,0,1]
         def query(sql):
+            if sql==jit.read_database_utc_clock.__globals__["CLOCK_SQL"]:
+                return [[now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]+"Z"]]
             if sql==jit.ACTIVE_QUERY:return [[0]]
             if sql==jit.ROLE_QUERY:return [role.copy()]
             if " LOGIN VALID UNTIL " in sql:role[0]=1;return []
@@ -130,14 +132,14 @@ class DurableGateANonce(unittest.TestCase):
             result=jit.run_signed_one_stage(query,lambda:None,
                 reserve_nonce=self.reserve,acquire_single_flight=nullcontext,envelope_path="SYNTHETIC",
                 public_key_path="SYNTHETIC",approved_public_pin="c"*64,
-                approved_source_sha=SHA,now=now)
+                approved_source_sha=SHA)
             self.assertEqual(result["releaseDecision"],"NO_GO")
             self.assertEqual(role[0],0)
             with self.assertRaisesRegex(jit.JitStageDenied,"NONCE_ALREADY_RESERVED"):
                 jit.run_signed_one_stage(query,lambda:None,
                     reserve_nonce=self.reserve,acquire_single_flight=nullcontext,envelope_path="SYNTHETIC",
                     public_key_path="SYNTHETIC",approved_public_pin="c"*64,
-                    approved_source_sha=SHA,now=now)
+                    approved_source_sha=SHA)
 
     def test_no_operational_entrypoint(self):
         s=Path(a.__file__).read_text()
