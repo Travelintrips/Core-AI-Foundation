@@ -1,0 +1,57 @@
+name: CST DEV Gate A JIT source-only QA
+
+on:
+  pull_request:
+    branches:
+      - integration/cst-dev-onejob-one-batch-20261120
+    paths:
+      - qa/gatea-jit/**
+      - .github/workflows/cst-dev-gatea-jit-source-qa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-jit-nonce-single-flight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned public cryptographic verifier dependency
+        run: python -m pip install cryptography==44.0.0
+      - name: Run exact tracked offline JIT, nonce and single-flight regression
+        working-directory: qa/gatea-jit
+        run: |
+          python -B -m unittest -v \
+            test_cst_onejob_stage_jit_open_controller \
+            test_cst_onejob_stage_nonce_adapter \
+            test_cst_onejob_stage_single_flight
+      - name: Confirm controller CLI entrypoints remain fail closed
+        working-directory: qa/gatea-jit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          expected = {
+              'cst_onejob_stage_jit_open_controller.py': 'CST_STAGE_JIT_SOURCE_ONLY_NO_OPERATIONAL_ENTRYPOINT',
+              'cst_onejob_stage_relock_controller.py': 'CST_STAGE_RELOCK_SOURCE_ONLY_NO_OPERATIONAL_ENTRYPOINT',
+              'cst_onejob_stage_nonce_adapter.py': 'CST_ONEJOB_STAGE_NONCE_SOURCE_ONLY_NO_OPERATIONAL_ENTRYPOINT',
+              'cst_onejob_stage_single_flight.py': 'CST_GATEA_SINGLE_FLIGHT_SOURCE_ONLY_NO_OPERATIONAL_CLI',
+          }
+          for name, marker in expected.items():
+              assert marker in Path(name).read_text(), name
+          print('GATE_A_SOURCE_ONLY_NO_OPERATIONAL_ENTRYPOINT_PASS')
+          PY
+      - name: Report non-authorizing result
+        run: |
+          echo CST_DEV_GATE_A_JIT_SOURCE_QA_PASS
+          echo LOGIN_ENABLED=false
+          echo REAL_DB_CONNECTION=false
+          echo SYSTEMD_DEPLOY=false
+          echo PROD_TOUCHED=false
+          echo GATE_A_RELEASE_DECISION=NO_GO
