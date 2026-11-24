@@ -4,8 +4,9 @@
 # No approved root, signer or job admission is enabled by this candidate.
 [Unit]
 Description=CST-DEV one-Super-Admin WAITING-only bootstrap candidate
-After=docker.service
-Requires=docker.service
+After=docker.service cst-onejob-owner-stage-egress-reconcile.service
+Requires=docker.service cst-onejob-owner-stage-egress-reconcile.service
+ConditionPathExists=/opt/cst-onejob-dev/qa/owner-stage-egress-scoped-20261124.sh
 ConditionPathExists=/etc/cst-onejob-dev/bootstrap-verified/owner-stage-runtime-ready.json
 ConditionPathExists=/etc/cst-onejob-dev/trust/prod-ca-2021.crt
 ConditionPathExists=/etc/credstore.encrypted/cst-onejob-owner-stage-database-url
@@ -30,7 +31,11 @@ Environment=CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true
 # It is checked against CST_TEAM_DEV_APPROVED_SOURCE_SHA by the read-only
 # provenance gate; absence of an independently verified image still denies boot.
 EnvironmentFile=/etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env
-ExecStart=/usr/bin/docker run --rm --name cst-onejob-owner-stage-bootstrap --network cst-onejob-owner-stage-egress --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 900m --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /run:rw,nosuid,nodev,size=24m --publish 127.0.0.1:18583:3000 --mount type=bind,src=%d,dst=/run/credentials/cst-onejob-owner-stage.service,readonly --mount type=bind,src=/etc/cst-onejob-dev/trust/prod-ca-2021.crt,dst=/run/cst-onejob-dev-db/ca/prod-ca-2021.crt,readonly --mount type=bind,src=/opt/cst-onejob-dev/bootstrap/entrypoint-stage-only.sh,dst=/run/cst-stage-entrypoint.sh,readonly --env APP_ENV=development --env NODE_ENV=development --env SUPABASE_URL_DEV=https://xssrfshdrtdfupgqwfdw.supabase.co --env CREDENTIALS_DIRECTORY=/run/credentials/cst-onejob-owner-stage.service --env AI_DISPATCHER_ENABLED=false --env AI_SCHEDULER_ENABLED=false --env OLLAMA_WORKER_RUNTIME_ENABLED=false --env CST_DEV_ONEJOB_BROKER_ENABLED=false --env CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true --env-file /etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env --entrypoint /bin/sh ${CST_ONEJOB_STAGE_IMAGE_REF} /run/cst-stage-entrypoint.sh
+# Re-verify the actual host bridge and scoped firewall chains immediately
+# before running the stage workload. The reconciler's success is not
+# sufficient: its chains might have changed after that earlier check.
+ExecStartPre=/opt/cst-onejob-dev/qa/owner-stage-egress-scoped-20261124.sh --verify
+ExecStart=/usr/bin/docker run --rm --name cst-onejob-owner-stage-bootstrap --network cst-onejob-owner-stage-egress --add-host aws-1-ap-southeast-2.pooler.supabase.com:52.62.122.103 --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 900m --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /run:rw,nosuid,nodev,size=24m --publish 127.0.0.1:18583:3000 --mount type=bind,src=%d,dst=/run/credentials/cst-onejob-owner-stage.service,readonly --mount type=bind,src=/etc/cst-onejob-dev/trust/prod-ca-2021.crt,dst=/run/cst-onejob-dev-db/ca/prod-ca-2021.crt,readonly --mount type=bind,src=/opt/cst-onejob-dev/bootstrap/entrypoint-stage-only.sh,dst=/run/cst-stage-entrypoint.sh,readonly --env APP_ENV=development --env NODE_ENV=development --env SUPABASE_URL_DEV=https://xssrfshdrtdfupgqwfdw.supabase.co --env CREDENTIALS_DIRECTORY=/run/credentials/cst-onejob-owner-stage.service --env AI_DISPATCHER_ENABLED=false --env AI_SCHEDULER_ENABLED=false --env OLLAMA_WORKER_RUNTIME_ENABLED=false --env CST_DEV_ONEJOB_BROKER_ENABLED=false --env CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true --env-file /etc/cst-onejob-dev/bootstrap-verified/owner-stage-public.env --entrypoint /bin/sh ${CST_ONEJOB_STAGE_IMAGE_REF} /run/cst-stage-entrypoint.sh
 ExecStop=/usr/bin/docker stop cst-onejob-owner-stage-bootstrap
 TimeoutStartSec=55
 TimeoutStopSec=18
