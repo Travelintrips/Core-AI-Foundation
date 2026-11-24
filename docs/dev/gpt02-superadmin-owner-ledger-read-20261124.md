@@ -21,7 +21,7 @@ The [Task190 investigation](https://github.com/Travelintrips/Core-AI-Foundation/
 
 **A new password for this shared PostgreSQL role would be a role-wide rotation and could break Task190 reconnects.** Do not copy its sealed credential, widen its socket permissions, or treat its process health as an independent GPT02-1782 custody receipt. The custodian must reconcile the exact approved read purpose, existing consumers, connection limit and recovery procedure before any credential or role change.
 
-The inspected implementation contains the V2 verifier and unsigned request endpoint, but no operational V2 attestation issuer, DBA receipt issuer or Owner-reader encrypted-credential loading unit. The existing service-token administration page creates/revokes tokens; it is not a custody issuer. The optional mount planner in `scripts/vps/gpt02_superadmin_reader_mount_gate.py` has no production caller. A source-only helper or an Owner coordination appointment must not be reported as an activated administrative service.
+The inspected implementation contains the V2 verifier and unsigned request endpoint, but no operational V2 attestation or DBA receipt issuer. The existing service-token administration page creates/revokes tokens; it is not a custody issuer. The next bounded continuation supplies a dormant encrypted-credential loading unit and calls the mount planner from the actual DEV release path; see [loading and mount integration](gpt02-superadmin-reader-runtime-mount-gate-20261124.md). Its installation and feature activation require separate evidence. An Owner coordination appointment must not be reported as an activated administrative issuer.
 
 ## Existing read path — feature OFF by default
 

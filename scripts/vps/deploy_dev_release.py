@@ -13,6 +13,13 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
+from gpt02_superadmin_reader_mount_gate import (
+    get_custody_mounts,
+    get_reader_mounts,
+    validate_custody_configuration,
+    validate_release_environment,
+)
+
 REPO = "https://github.com/Travelintrips/Core-AI-Foundation.git"
 SRC = Path("/opt/cst-vps-dev-release/source")
 ENV = Path("/opt/core-ai-dev/.env.dev")
@@ -84,12 +91,30 @@ def env_guard():
             raise RuntimeError("DEV credential absent: " + k)
     if keys.get("SUPABASE_URL", "") or keys.get("SUPABASE_SERVICE_ROLE_KEY", ""):
         raise RuntimeError("Production-style Supabase variables present in DEV environment")
+    return keys
+
+
+def prepare_reader_mounts(values):
+    # A disabled feature performs no credential/CA inspection and starts no unit.
+    if not validate_release_environment(values):
+        return ()
+    validate_custody_configuration(values)
+    # Reject absent public evidence before asking systemd to load sealed input.
+    custody_mounts = get_custody_mounts()
+    command("systemctl", "start", "gpt02-owner-ledger-credential-loader.service")
+    return get_reader_mounts(
+        enabled=True, environment="development", production=False,
+    ) + custody_mounts
 
 
 def start(name, port, image, sha):
+    # Revalidate immediately before both canary and live container creation.
+    # The loader unit never creates/rotates credentials or starts a signer.
+    reader_mounts = prepare_reader_mounts(env_guard())
     command("docker", "run", "-d", "--name", name,
             "--restart", "unless-stopped",
             "--network", DEV_NETWORK,
+            *reader_mounts,
             "--publish", "127.0.0.1:" + str(port) + ":3000",
             "--memory", "1536m", "--memory-swap", "1536m",
             "--cpus", "0.8", "--pids-limit", "256",
