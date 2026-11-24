@@ -1,0 +1,56 @@
+name: GPT02 OpenClaw reader custody coordination (DEV only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/services/externalAgentRegistryService.ts'
+      - 'artifacts/api-server/src/services/gpt02OpenClawReaderCustodyPolicy.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02OpenClawReaderCustodyPolicy.test.ts'
+      - '.github/workflows/gpt02-openclaw-reader-custody-coordination-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/services/externalAgentRegistryService.ts'
+      - 'artifacts/api-server/src/services/gpt02OpenClawReaderCustodyPolicy.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02OpenClawReaderCustodyPolicy.test.ts'
+      - '.github/workflows/gpt02-openclaw-reader-custody-coordination-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  coordination-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      APP_ENV: development
+      SUPABASE_URL_DEV: https://xssrfshdrtdfupgqwfdw.supabase.co
+      SUPABASE_DEV_DATABASE_URL: postgresql://test:test@db.xssrfshdrtdfupgqwfdw.supabase.co:1/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify 25 bounded allow/deny contracts (DB port 1; no live connection)
+        run: pnpm -C artifacts/api-server exec vitest run src/services/__tests__/gpt02OpenClawReaderCustodyPolicy.test.ts src/services/__tests__/externalAgentRegistryService.test.ts
+      - name: Check immutable no-secret/no-DDL policy surface
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          service = Path('artifacts/api-server/src/services/gpt02OpenClawReaderCustodyPolicy.ts').read_text()
+          registry = Path('artifacts/api-server/src/services/externalAgentRegistryService.ts').read_text()
+          assert service.count('databaseRoleMutationPermitted: false') >= 2
+          assert service.count('credentialsReadable: false') >= 2
+          assert 'workerAttestationVerified === true' in service
+          assert 'gpt02:reader-custody:coordinate:dev' in registry
+          assert 'ALTER ROLE ' not in service
+          assert 'systemctl ' not in service
+          assert 'exec(' not in service
+          assert 'postgres' not in service.lower()
+          print('GPT02_OPENCLAW_CUSTODY_COORDINATION_NO_SECRET_OR_DBA_PASS')
+          PY
