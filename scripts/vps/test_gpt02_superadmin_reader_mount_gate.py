@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 
 script=Path(__file__).with_name("gpt02_superadmin_reader_mount_gate.py")
 spec=importlib.util.spec_from_file_location("gpt02_reader_mount_gate",script)
@@ -78,9 +79,11 @@ class ReaderMountGateTests(unittest.TestCase):
 
     def test_no_secret_values_are_returned(self):
         # Synthetic test runs under a non-root user; stub only metadata custody.
-        with patch.object(gate,"_regular_root_file",return_value=True),patch.object(gate,"stat") as st:
-            st.S_ISDIR.return_value=True
-            st.S_IMODE.return_value=0o700
+        root_dir=SimpleNamespace(
+            exists=lambda: True, is_symlink=lambda: False,
+            lstat=lambda: SimpleNamespace(st_mode=stat.S_IFDIR | 0o700, st_uid=0, st_gid=0),
+        )
+        with patch.object(gate,"READER_DIR",root_dir), patch.object(gate,"_regular_root_file",return_value=True):
             flags=gate.get_reader_mounts(enabled=True,environment="development",production=False)
         self.assertEqual(flags.count("--mount"),2)
         self.assertTrue(all("readonly" in flags[i+1] for i,x in enumerate(flags) if x=="--mount"))
