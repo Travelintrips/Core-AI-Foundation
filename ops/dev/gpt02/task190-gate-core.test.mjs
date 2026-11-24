@@ -4,8 +4,8 @@ const now=1795600000000;
 const owner={ownerSubject:'owner:google_testowner01',companyId:'default'};
 const validAuthority={verified:true,environment:'DEV',taskId:190,executionId:TARGET.executionId,attemptId:TARGET.attemptId,ownerSubject:owner.ownerSubject,expiresAt:now+30000,dispatchPermitted:false,reference:'test-auth-1'};
 let count=0;
-const receipt={verified:true,receiptId:'d0b448c5-bb38-4c78-bbb7-00729af61c94',targetExecutionId:TARGET.executionId,targetAttemptId:TARGET.attemptId,ownerSubject:owner.ownerSubject};
-const gate=createGateCore({verifyOwner:async()=>owner,verifyIndependentAuthority:async()=>validAuthority,consumeVerifiedDecision:async()=>{count++;return receipt;},clock:()=>now});
+const receipt={verified:true,durableCommitVerified:true,authorityRef:'test-auth-1',receiptId:'d0b448c5-bb38-4c78-bbb7-00729af61c94',targetExecutionId:TARGET.executionId,targetAttemptId:TARGET.attemptId,ownerSubject:owner.ownerSubject};
+const gate=createGateCore({verifyOwner:async()=>owner,verifyIndependentAuthority:async()=>validAuthority,consumeVerifiedDecision:async({challengeId})=>{count++;return {...receipt,consumedChallengeId:challengeId};},clock:()=>now});
 const token='Bearer '+'x'.repeat(80);
 const run=(action,payload=TARGET,auth=token)=>gate.run(action,payload,auth);
 const tests=[];
@@ -30,11 +30,11 @@ await test('PARALLEL_SUBMITS_SINGLE_FLIGHT',async()=>{
   const concurrentOwner={ownerSubject:'owner:google_concurrent01',companyId:'default'};
   const now2=1795600000000;
   const auth2={...validAuthority,ownerSubject:concurrentOwner.ownerSubject,reference:'different-independent-reference'};
-  const receipt2={...receipt,ownerSubject:concurrentOwner.ownerSubject};
+  const receipt2={...receipt,ownerSubject:concurrentOwner.ownerSubject,authorityRef:auth2.reference};
   let calls=0;
   const subject=createGateCore({verifyOwner:async()=>concurrentOwner,
     verifyIndependentAuthority:async()=>auth2,
-    consumeVerifiedDecision:async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,30));return receipt2;},
+    consumeVerifiedDecision:async({challengeId})=>{calls++;await new Promise(resolve=>setTimeout(resolve,30));return {...receipt2,consumedChallengeId:challengeId};},
     clock:()=>now2});
   const token2='Bearer '+'x'.repeat(80);
   const ready=await subject.run('status',TARGET,token2);
@@ -45,4 +45,24 @@ await test('PARALLEL_SUBMITS_SINGLE_FLIGHT',async()=>{
   assert.equal(calls,1,'A local gate must issue at most one custodian consume call');
   assert.equal(attempts.filter(x=>x.state==='accepted').length,1);
   assert.equal(attempts.filter(x=>x.blocker==='CONCURRENT_CONSUMPTION_IN_PROGRESS').length,1);
+});
+
+await test('NO_DURABLE_COMMIT_DENY',async()=>{
+  const candidate=createGateCore({verifyOwner:async()=>owner,verifyIndependentAuthority:async()=>validAuthority,
+    consumeVerifiedDecision:async({challengeId})=>({...receipt,consumedChallengeId:challengeId,durableCommitVerified:false}),clock:()=>now});
+  const ready=await candidate.run('status',TARGET,token);
+  const outcome=await candidate.run('submit',{...TARGET,challengeId:ready.challengeId},token);
+  assert.equal(outcome.blocker,'VERIFIED_RECEIPT_MISSING');
+});
+await test('WRONG_AUTHORITY_OR_CHALLENGE_RECEIPT_DENY',async()=>{
+  for(const variant of [
+    {authorityRef:'wrong-independent-issuer'},
+    {consumedChallengeId:'11111111-1111-4111-8111-111111111111'},
+  ]){
+    const candidate=createGateCore({verifyOwner:async()=>owner,verifyIndependentAuthority:async()=>validAuthority,
+      consumeVerifiedDecision:async({challengeId})=>({...receipt,consumedChallengeId:challengeId,...variant}),clock:()=>now});
+    const ready=await candidate.run('status',TARGET,token);
+    const outcome=await candidate.run('submit',{...TARGET,challengeId:ready.challengeId},token);
+    assert.equal(outcome.blocker,'VERIFIED_RECEIPT_MISSING');
+  }
 });
