@@ -42,7 +42,11 @@ export function createGateCore({verifyOwner,verifyIndependentAuthority,consumeVe
     receipt=await consumeVerifiedDecision({...TARGET,ownerSubject:owner.ownerSubject,authorityRef:authority.reference,challengeId:challenge.id});
   }catch{return fail('INDEPENDENT_CONSUMPTION_FAILED');}
   finally{inFlight.delete(key);}
-  if(!receipt||receipt.verified!==true||!UUID.test(receipt.receiptId)||receipt.targetExecutionId!==TARGET.executionId||
+  // The independent custodian must attest a committed durable, one-use transaction.
+  // This is an adapter contract, NOT proof that a real custodian was installed.
+  if(!receipt||receipt.verified!==true||receipt.durableCommitVerified!==true||
+     receipt.consumedChallengeId!==challenge.id||receipt.authorityRef!==authority.reference||
+     !UUID.test(receipt.receiptId)||receipt.targetExecutionId!==TARGET.executionId||
      receipt.targetAttemptId!==TARGET.attemptId||receipt.ownerSubject!==owner.ownerSubject)
      return fail('VERIFIED_RECEIPT_MISSING');
   outstanding.delete(key);completed.set(key,receipt.receiptId);
