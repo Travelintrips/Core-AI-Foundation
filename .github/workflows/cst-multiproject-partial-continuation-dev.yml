@@ -1,0 +1,55 @@
+name: CST multiproject partial continuation DEV
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/cst-project-continue-partial.ts'
+      - 'artifacts/api-server/src/routes/__tests__/cst-project-continue-partial.test.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/cst-multiproject-partial-continuation-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/cst-project-continue-partial.ts'
+      - 'artifacts/api-server/src/routes/__tests__/cst-project-continue-partial.test.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/cst-multiproject-partial-continuation-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  multiproject-continuation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      APP_ENV: development
+      SUPABASE_URL_DEV: https://xssrfshdrtdfupgqwfdw.supabase.co
+      SUPABASE_DEV_DATABASE_URL: postgresql://test:test@db.xssrfshdrtdfupgqwfdw.supabase.co:1/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Existing GPT02 + multiproject tests, isolated
+        run: pnpm -C artifacts/api-server exec vitest run src/routes/__tests__/cst-project-continue-partial.test.ts src/routes/__tests__/gpt02-continue-partial-job.test.ts
+      - name: Project routing is scoped and no unverified default chat is added
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('artifacts/api-server/src/routes/cst-project-continue-partial.ts').read_text()
+          assert 'requireAgentServiceScope("agent:work")' in s
+          assert 'PROJECT_VERIFIED_CONVERSATION_NOT_CONFIGURED' in s
+          assert 'resolveVerifiedDevWakeTarget' in s
+          assert 'expectedBindingFingerprint' in s
+          assert 'browserConfirmed:false,assistantContinued:false' in s
+          assert 'routeForProject: async(project)=>' in s
+          assert 'if(!raw) return null;' in s
+          assert 'ALTER ROLE ' not in s and 'execSync' not in s
+          print('CST_ALL_PROJECTS_FAIL_CLOSED_ROUTING_PASS')
+          PY
