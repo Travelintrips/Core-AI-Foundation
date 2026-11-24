@@ -70,7 +70,7 @@ class ScopedExecutorTests(unittest.TestCase):
         self.assertFalse(kw["shell"])
         self.assertEqual(kw["timeout"],360)
         self.assertEqual(kw["env"],SAFE_ENV)
-        self.assertEqual(kw["env"]["ISSUE238_DBA_DISPOSABLE_QA_APPROVED"],"YES")
+        self.assertNotIn("ISSUE238_DBA_DISPOSABLE_QA_APPROVED",kw["env"])
         self.assertTrue(kw["capture_output"])
 
     def test_failed_script_records_failure_once(self):
