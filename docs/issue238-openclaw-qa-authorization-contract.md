@@ -61,5 +61,23 @@ immutable sources, and provide a separately approved host runner. Do not
 expose this function as a public API or treat a caller-provided identity as
 proof of authentication.
 
-The module tests are synthetic and do not prove a real executor or PG17 relock.
+The source-only `issue238_qa_executor.py` is a constrained subprocess
+adapter for an *already* verified RESERVED command. It requires the durable
+signed-claims digest to match its receipt, checks the reviewed source manifest
+and trusted image metadata again, snapshots all four sources into a private
+read-only staging directory, and passes a fixed minimal environment to a
+fixed `/usr/bin/bash` binary. Only the named QA scripts may run. It records
+the command's final exit status and output digest exactly once. A timeout or
+unexpected crash leaves a RESERVED record needing manual reconciliation;
+it never silently reports PASS or retries.
+
+**Deployment is still NOT authorized.** A signed custodian permit and genuine
+authenticated OpenClaw work item must be bound by the existing trusted
+control plane before this adapter can ever be invoked. The holder of this
+Python module alone cannot prove identity or permissions. The Docker engine
+must be restricted to the local immutable image, network-none synthetic QA,
+and an exclusive execution/cleanup lifecycle, preventing image replacement
+or source TOCTOU. Keep the live root host executor `host:read` only.
+Unit tests inject a fake process runner and do not execute PostgreSQL.
+
 **No disposable PostgreSQL runtime test has been executed by this module.**
