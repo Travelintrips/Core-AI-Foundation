@@ -1,5 +1,5 @@
-import { lstatSync, readFileSync } from "node:fs";
 import { PostgresPool, type PostgresPoolClient } from "@workspace/db";
+import { readProtectedRuntimeFile } from "./gpt02ProtectedRuntimeFile.js";
 import {
   digestGpt02RelockManifest,
   type Gpt02OwnerActor,
@@ -30,16 +30,17 @@ type ReaderConfig = Readonly<{
   projectId: string;
 }>;
 
-function readSealedCredential(): ReaderConfig {
+async function readSealedCredential(): Promise<ReaderConfig> {
   if (
     process.env.APP_ENV !== "development" ||
     process.env.NODE_ENV === "production" ||
     process.env.GPT02_OWNER_LEDGER_READER_ENABLED !== "true"
   ) deny();
   try {
-    const stat = lstatSync(CREDENTIAL_FILE);
-    if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || stat.size > 4096) deny();
-    const config = JSON.parse(readFileSync(CREDENTIAL_FILE, "utf8")) as ReaderConfig;
+    const bytes = await readProtectedRuntimeFile(CREDENTIAL_FILE, {
+      maxBytes: 4_096, forbiddenPermissionBits: 0o077, requireRootGroup: true,
+    });
+    const config = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as ReaderConfig;
     if (
       !config || typeof config !== "object" ||
       Object.keys(config).sort().join(",") !== "database,host,password,port,projectId,sslMode,user" ||
@@ -59,12 +60,19 @@ export async function readGpt02SuperAdminLedgerReceipt(
   challengeId: string,
   actor: Gpt02OwnerActor,
 ): Promise<OwnerLedgerReceipt | null> {
-  if (!UUID.test(challengeId) || actor.email.toLowerCase() !== OWNER_EMAIL ||
-      actor.role !== "super_admin" || !UUID.test(actor.authSupabaseId)) deny();
-  const config = readSealedCredential();
+  if (typeof challengeId !== "string" || !UUID.test(challengeId) ||
+      !actor || typeof actor !== "object" || typeof actor.email !== "string" ||
+      actor.email.toLowerCase() !== OWNER_EMAIL || actor.role !== "super_admin" ||
+      typeof actor.authSupabaseId !== "string" || !UUID.test(actor.authSupabaseId)) deny();
+  const config = await readSealedCredential();
   let ca: string;
-  try { ca = readFileSync(ROOT_CA, "utf8"); }
-  catch { return deny(); }
+  try {
+    // Public CA data may be readable by other users, but never writable by them.
+    const bytes = await readProtectedRuntimeFile(ROOT_CA, {
+      maxBytes: 16_384, forbiddenPermissionBits: 0o022, requireRootGroup: true,
+    });
+    ca = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch { return deny(); }
   if (!ca.includes("-----BEGIN CERTIFICATE-----")) deny();
   const pool = new PostgresPool({
     host: HOST, port: 5432, database: "postgres", user: ROLE,

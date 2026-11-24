@@ -7,6 +7,12 @@ on:
       - 'artifacts/api-server/src/routes/gpt02-reader-custody-broker.ts'
       - 'artifacts/api-server/src/routes/__tests__/gpt02-reader-custody-*.test.ts'
       - 'artifacts/api-server/src/services/gpt02ReaderCustody*.ts'
+      - 'artifacts/api-server/src/services/gpt02ProtectedRuntimeFile.ts'
+      - 'artifacts/api-server/src/services/gpt02SuperAdminLedgerReader.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02ProtectedRuntimeFile.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02SuperAdminLedgerReader.test.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-owner-ledger-*.test.ts'
+      - 'artifacts/api-server/src/routes/gpt02-owner-ledger-read.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02ReaderCustody*.test.ts'
       - 'artifacts/api-server/src/middleware/agentServiceAuth.ts'
       - 'artifacts/api-server/src/app.ts'
@@ -17,6 +23,12 @@ on:
       - 'artifacts/api-server/src/routes/gpt02-reader-custody-broker.ts'
       - 'artifacts/api-server/src/routes/__tests__/gpt02-reader-custody-*.test.ts'
       - 'artifacts/api-server/src/services/gpt02ReaderCustody*.ts'
+      - 'artifacts/api-server/src/services/gpt02ProtectedRuntimeFile.ts'
+      - 'artifacts/api-server/src/services/gpt02SuperAdminLedgerReader.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02ProtectedRuntimeFile.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02SuperAdminLedgerReader.test.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-owner-ledger-*.test.ts'
+      - 'artifacts/api-server/src/routes/gpt02-owner-ledger-read.ts'
       - 'artifacts/api-server/src/services/__tests__/gpt02ReaderCustody*.test.ts'
       - 'artifacts/api-server/src/middleware/agentServiceAuth.ts'
       - 'artifacts/api-server/src/app.ts'
@@ -51,3 +63,7 @@ jobs:
           src/services/__tests__/gpt02ReaderCustodyRuntime.test.ts
           src/services/__tests__/gpt02ReaderCustodyVerifiedAdapter.test.ts
           src/services/__tests__/gpt02OpenClawReaderCustodyPolicy.test.ts
+          src/services/__tests__/gpt02ProtectedRuntimeFile.test.ts
+          src/services/__tests__/gpt02SuperAdminLedgerReader.test.ts
+          src/routes/__tests__/gpt02-owner-ledger-read.test.ts
+          src/routes/__tests__/gpt02-owner-ledger-pre-admin-boundary.test.ts
