@@ -80,14 +80,14 @@ class Flight(unittest.TestCase):
             with patch.object(jit,"read_signed_manifest",return_value=manifest):
                 with self.assertRaisesRegex(lock.SingleFlightDenied,"ANOTHER_STAGE_ACTIVE"):
                     jit.run_signed_one_stage(
-                        lambda sql: operations.append(("sql",sql)),
+                        lambda sql: (operations.append(("sql",sql)), [[now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]+"Z"]])[1] if sql==jit.read_database_utc_clock.__globals__["CLOCK_SQL"] else operations.append(("sql",sql)),
                         lambda:operations.append(("stage",True)),
                         reserve_nonce=lambda *_: operations.append(("reserve",True)),
                         acquire_single_flight=self.acquire,
                         envelope_path="SYNTHETIC",public_key_path="SYNTHETIC",
                         approved_public_pin="b"*64,
-                        approved_source_sha="a"*40,now=now)
-            self.assertEqual(operations,[])
+                        approved_source_sha="a"*40)
+            self.assertEqual(operations,[("sql",jit.read_database_utc_clock.__globals__["CLOCK_SQL"])])
         finally:
             release.set()
             child.join(timeout=5)
