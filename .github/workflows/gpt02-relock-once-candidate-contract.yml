@@ -5,13 +5,21 @@ on:
     branches: [develop]
     paths:
       - 'scripts/vps/gpt02_relock_once_candidate.py'
+      - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
   push:
     branches: [develop]
     paths:
       - 'scripts/vps/gpt02_relock_once_candidate.py'
+      - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
 
 permissions:
@@ -21,16 +29,25 @@ jobs:
   source-only-qa:
     name: Relock one-shot isolated contract
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Python candidate tests (no database or credentials)
-        run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_relock_once_candidate.py -v
-      - name: Verify executor has no live entrypoint or credential/SQL access
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned isolated verification dependency
+        run: |
+          python3 -m venv /tmp/gpt02-one-shot-qa-venv
+          /tmp/gpt02-one-shot-qa-venv/bin/pip install --disable-pip-version-check cryptography==46.0.3
+      - name: Test candidate, Ed25519 and atomic nonce (temporary QA only)
+        run: |
+          /tmp/gpt02-one-shot-qa-venv/bin/python -B -m unittest discover -s scripts/vps -p 'test_gpt02_relock_*candidate.py' -v
+      - name: Verify candidate has no live entrypoint or credential/SQL access
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          s=Path('scripts/vps/gpt02_relock_once_candidate.py').read_text()
+          root=Path('scripts/vps')
+          s=(root/'gpt02_relock_once_candidate.py').read_text()
           assert 'if __name__' not in s
           assert 'subprocess' not in s
           assert 'psycopg' not in s
@@ -40,5 +57,14 @@ jobs:
           assert 'releaseDecision": "NO_GO"' in s
           assert 'signingPermitted": False' in s
           assert 'dispatchPermitted": False' in s
+          signed=(root/'gpt02_relock_grant_verifier_candidate.py').read_text()
+          assert 'Ed25519PublicKey' in signed
+          assert 'Ed25519PrivateKey' not in signed
+          assert 'ENVELOPE_DOMAIN +' in signed
+          assert 'if __name__' not in signed
+          cust=(root/'gpt02_relock_nonce_custody_candidate.py').read_text()
+          assert 'BEGIN IMMEDIATE' in cust
+          assert 'CREATE TABLE' not in cust
+          assert 'if __name__' not in cust
           print('GPT02_CANDIDATE_NO_LIVE_ADAPTER=PASS')
           PY
