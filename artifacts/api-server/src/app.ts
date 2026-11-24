@@ -25,6 +25,8 @@ import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
 import aiCoreMcpOauthRouter from "./routes/ai-core-mcp-oauth.js";
 import { oauthNavigationCors } from "./middleware/oauthNavigationCors.js";
 import { createGpt02RelockOwnerApprovalRouter } from "./routes/gpt02-relock-owner-approval.js";
+import { createGpt02OwnerLedgerReadRouter } from "./routes/gpt02-owner-ledger-read.js";
+import { readGpt02SuperAdminLedgerReceipt } from "./services/gpt02SuperAdminLedgerReader.js";
 import { verifyCstHubGpt02OwnerSession, verifyCstHubGpt02OwnerLink } from "./services/cstHubGpt02OwnerIdentityVerifier.js";
 
 const app: Express = express();
@@ -208,6 +210,20 @@ if (
   app.use("/api/gpt02-owner-approval", createGpt02RelockOwnerApprovalRouter({
     verifyOwnerSession: ({ bearerToken }) => verifyCstHubGpt02OwnerSession({ bearerToken }),
     verifyOwnerEligibility: verifyCstHubGpt02OwnerLink,
+  }));
+}
+
+// Isolated DEV-only Super Admin ledger reader: GET-only, separate Postgres
+// credentials/custody. Never fall back to the main application writer pool.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.APP_ENV === "development" &&
+  process.env.GPT02_OWNER_LEDGER_READER_ENABLED === "true"
+) {
+  app.use("/api/gpt02-owner-ledger", createGpt02OwnerLedgerReadRouter({
+    verifyOwnerSession: (token) => verifyCstHubGpt02OwnerSession({ bearerToken: token }),
+    verifyOwnerEligibility: verifyCstHubGpt02OwnerLink,
+    readReceipt: readGpt02SuperAdminLedgerReceipt,
   }));
 }
 
