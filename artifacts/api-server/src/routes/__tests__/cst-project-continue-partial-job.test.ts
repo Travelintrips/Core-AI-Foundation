@@ -72,7 +72,7 @@ describe("CST project-specific continuation on verified DEV DELL session", () =>
   it("routes to an explicitly selected GPT03 when already configured and verified", async () => {
     const r=rig(true,"GPT03","d816f67b-d56b-4c27-8391-44c082c7e6a1");
     const res=await request(r.app).post(route).set(auth).send({...input, accountAlias:"GPT03", targetConversationId:"d816f67b-d56b-4c27-8391-44c082c7e6a1"});
-    expect(res.status).toBe(202); expect(r.resolveTarget).toHaveBeenCalledWith("GPT03");
+    expect(res.status).toBe(202); expect(r.resolveTarget).toHaveBeenCalledWith("GPT03","d816f67b-d56b-4c27-8391-44c082c7e6a1");
     expect(r.enqueue.mock.calls[0][0].targetConversationId).toBe("d816f67b-d56b-4c27-8391-44c082c7e6a1");
   });
   it("requires verified DELL pairing", async () => {
