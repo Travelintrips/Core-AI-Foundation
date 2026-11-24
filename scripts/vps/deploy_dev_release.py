@@ -16,8 +16,11 @@ from urllib.request import urlopen
 from gpt02_superadmin_reader_mount_gate import (
     get_custody_mounts,
     get_reader_mounts,
+    get_worker_issuer_mounts,
     validate_custody_configuration,
     validate_release_environment,
+    validate_worker_issuer_configuration,
+    validate_worker_issuer_environment,
 )
 
 REPO = "https://github.com/Travelintrips/Core-AI-Foundation.git"
@@ -83,7 +86,18 @@ def env_guard():
     for line in ENV.read_text().splitlines():
         if line.strip() and not line.startswith("#") and "=" in line:
             k, v = line.split("=", 1)
-            keys[k.strip()] = v.strip().strip('"').strip("'")
+            key = k.strip()
+            # Docker --env-file passes quote/space characters literally. Keep
+            # activation and public trust exact so the loader and API cannot
+            # disagree about whether issuance is enabled with valid pins.
+            literal_custody_keys = {
+                "GPT02_DEV_CUSTODY_WORKER_ISSUER_ENABLED",
+                "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64",
+                "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256",
+                "GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64",
+                "GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256",
+            }
+            keys[key] = v if key in literal_custody_keys else v.strip().strip('"').strip("'")
     if keys.get("SUPABASE_URL_DEV", "").rstrip("/") != "https://" + EXPECTED_DEV_PROJECT + ".supabase.co":
         raise RuntimeError("Unexpected DEV database project reference")
     for k in ("SUPABASE_DATABASE_URL_DEV", "SUPABASE_SERVICE_ROLE_KEY_DEV", "SESSION_SECRET"):
@@ -107,14 +121,28 @@ def prepare_reader_mounts(values):
     ) + custody_mounts
 
 
+def prepare_worker_issuer_mounts(values):
+    # Independent of the Owner reader and its not-yet-issued custody proofs.
+    if not validate_worker_issuer_environment(values):
+        return ()
+    validate_worker_issuer_configuration(values)
+    command("systemctl", "start", "gpt02-reader-custody-worker-attestor-key-loader.service")
+    return get_worker_issuer_mounts(
+        enabled=True, environment="development", production=False,
+    )
+
+
 def start(name, port, image, sha):
     # Revalidate immediately before both canary and live container creation.
-    # The loader unit never creates/rotates credentials or starts a signer.
-    reader_mounts = prepare_reader_mounts(env_guard())
+    # Loader units only consume separately authorized, externally sealed inputs.
+    values = env_guard()
+    worker_issuer_mounts = prepare_worker_issuer_mounts(values)
+    reader_mounts = prepare_reader_mounts(values)
     command("docker", "run", "-d", "--name", name,
             "--restart", "unless-stopped",
             "--network", DEV_NETWORK,
             *reader_mounts,
+            *worker_issuer_mounts,
             "--publish", "127.0.0.1:" + str(port) + ":3000",
             "--memory", "1536m", "--memory-swap", "1536m",
             "--cpus", "0.8", "--pids-limit", "256",
