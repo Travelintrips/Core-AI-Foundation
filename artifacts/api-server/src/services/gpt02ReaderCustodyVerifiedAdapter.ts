@@ -1,6 +1,8 @@
-import { constants, type Stats } from "node:fs";
-import { lstat, open } from "node:fs/promises";
-import { dirname } from "node:path";
+import {
+  ProtectedRuntimeFileError as CustodyFileError,
+  readProtectedRuntimeFile,
+  inspectProtectedRuntimeFile,
+} from "./gpt02ProtectedRuntimeFile.js";
 import { assertDevelopmentDatabaseIsolation, pool } from "@workspace/db";
 import {
   verifyGpt02CustodyWorkerAttestation,
@@ -31,82 +33,23 @@ export type CustodyAttestationRequest = Readonly<{
   dispatchPermitted: false;
 }>;
 
+/** Retain the configured adapter's existing public error contract. */
+export { ProtectedRuntimeFileError as CustodyFileError } from "./gpt02ProtectedRuntimeFile.js";
+
 /** Only non-secret, signed evidence is read. The reader credential is inspected
- * with fstat only; this module never reads or decrypts its contents. */
-export class CustodyFileError extends Error {
-  constructor(readonly code: "MISSING" | "UNSAFE" | "INVALID") { super(code); }
-}
-
-async function assertTrustedParents(path: string): Promise<void> {
-  let parent = dirname(path);
-  while (true) {
-    const stat = await lstat(parent);
-    if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== 0 || (stat.mode & 0o022) !== 0) {
-      throw new CustodyFileError("UNSAFE");
-    }
-    if (parent === "/") return;
-    parent = dirname(parent);
-  }
-}
-
-function assertTrustedFile(stat: Stats, maxBytes: number) {
-  if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o077) !== 0 ||
-      stat.nlink !== 1 || stat.size < 1 || stat.size > maxBytes) {
-    throw new CustodyFileError("UNSAFE");
-  }
-}
-
-function fileError(error: unknown): CustodyFileError {
-  if (error instanceof CustodyFileError) return error;
-  const code = error && typeof error === "object" && "code" in error ? error.code : null;
-  return new CustodyFileError(code === "ENOENT" ? "MISSING" : "UNSAFE");
-}
-
-/** Fixed receipt paths only. O_NONBLOCK avoids hanging on an unexpected FIFO;
- * O_NOFOLLOW and fstat validate the object actually opened, before bounded IO. */
+ * through descriptor metadata only; this module never reads its contents. */
 export async function readProtectedGpt02CustodyDocument(kind: "worker" | "dba"): Promise<unknown> {
-  let file: Awaited<ReturnType<typeof open>> | undefined;
-  try {
-    const path = GPT02_CUSTODY_FILES[kind];
-    await assertTrustedParents(path);
-    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    const before = await file.stat();
-    assertTrustedFile(before, MAX_RECEIPT_BYTES);
-    const bytes = Buffer.alloc(MAX_RECEIPT_BYTES + 1);
-    let total = 0;
-    while (total < bytes.length) {
-      const { bytesRead } = await file.read(bytes, total, bytes.length - total, null);
-      if (bytesRead === 0) break;
-      total += bytesRead;
-    }
-    const after = await file.stat();
-    assertTrustedFile(after, MAX_RECEIPT_BYTES);
-    if (total > MAX_RECEIPT_BYTES || total !== before.size || total !== after.size ||
-        before.dev !== after.dev || before.ino !== after.ino ||
-        before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
-      throw new CustodyFileError("UNSAFE");
-    }
-    try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, total))); }
-    catch { throw new CustodyFileError("INVALID"); }
-  } catch (error) {
-    throw fileError(error);
-  } finally {
-    await file?.close().catch(() => undefined);
-  }
+  const bytes = await readProtectedRuntimeFile(GPT02_CUSTODY_FILES[kind], {
+    maxBytes: MAX_RECEIPT_BYTES, forbiddenPermissionBits: 0o077,
+  });
+  try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
+  catch { throw new CustodyFileError("INVALID"); }
 }
 
 export async function inspectProtectedGpt02ReaderMount(): Promise<void> {
-  let file: Awaited<ReturnType<typeof open>> | undefined;
-  try {
-    await assertTrustedParents(GPT02_CUSTODY_FILES.reader);
-    file = await open(GPT02_CUSTODY_FILES.reader, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    assertTrustedFile(await file.stat(), MAX_READER_BYTES);
-    // Intentionally no file.read(), readFile(), JSON parse, or secret hash.
-  } catch (error) {
-    throw fileError(error);
-  } finally {
-    await file?.close().catch(() => undefined);
-  }
+  await inspectProtectedRuntimeFile(GPT02_CUSTODY_FILES.reader, {
+    maxBytes: MAX_READER_BYTES, forbiddenPermissionBits: 0o077,
+  });
 }
 
 export interface Gpt02CustodyRuntimeDeps {

@@ -21,7 +21,9 @@ describe("GPT02 Super Admin separate ledger reader release boundary", () => {
     expect(readerSource).toContain('new PostgresPool(');
     expect(readerSource).toContain('user: ROLE');
     expect(readerSource).toContain('reader.json');
-    expect(readerSource).toContain('lstatSync(CREDENTIAL_FILE)');
+    expect(readerSource).toContain('await readProtectedRuntimeFile(CREDENTIAL_FILE,');
+    expect(readerSource).toContain('await readProtectedRuntimeFile(ROOT_CA,');
+    expect(readerSource).not.toMatch(/\b(?:lstatSync|readFileSync|readFile)\s*\(/);
     expect(readerSource).toContain('rejectUnauthorized: true');
     expect(readerSource).toContain('BEGIN TRANSACTION READ ONLY');
     expect(readerSource).toContain('current_setting(\'default_transaction_read_only\')');
