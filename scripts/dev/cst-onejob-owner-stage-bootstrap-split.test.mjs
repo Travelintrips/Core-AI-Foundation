@@ -18,7 +18,7 @@ test("WAITING-only bootstrap unit requires no future job release to start stagin
  assert.match(unit,/--read-only/);
  assert.match(unit,/--cap-drop ALL/);
  assert.match(unit,/--security-opt no-new-privileges:true/);
- assert.match(unit,/cst-onejob-stage-dev:d3cd194b/);
+ assert.match(unit,/\$\{CST_ONEJOB_STAGE_IMAGE_REF\}/);\n assert.doesNotMatch(unit,/cst-onejob-stage-dev:[a-f0-9]+/);\n assert.match(unit,/EnvironmentFile=\/etc\/cst-onejob-dev\/bootstrap-verified\/owner-stage-public\.env/);
  assert.match(unit,/CST_DEV_ONEJOB_OWNER_APPROVAL_ENABLED=true/);
  for(const name of ["AI_DISPATCHER_ENABLED","AI_SCHEDULER_ENABLED",
   "OLLAMA_WORKER_RUNTIME_ENABLED","CST_DEV_ONEJOB_BROKER_ENABLED"])
