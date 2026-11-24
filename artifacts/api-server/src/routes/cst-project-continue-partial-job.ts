@@ -33,7 +33,7 @@ type VerifiedService = { id?: string; name?: string; scopes?: string[] };
 type Target = Awaited<ReturnType<typeof resolveVerifiedDevWakeTarget>>;
 type DispatchResult = Awaited<ReturnType<typeof queueDevBrowserWake>>;
 export type CrossProjectContinueDeps = {
-  resolveTarget: (accountAlias: string) => Promise<Target>;
+  resolveTarget: (accountAlias: string, targetConversationId: string) => Promise<Target>;
   enqueue: (input: Parameters<typeof queueDevBrowserWake>[0]) => Promise<DispatchResult>;
 };
 
@@ -57,7 +57,7 @@ export function createCrossProjectContinuePartialRouter(deps: CrossProjectContin
     try {
       // Caller must explicitly select an already registered, verified account AND exact chat.
       // No automatic session enrollment and no fallback to GPT02 or another tab.
-      const target = await deps.resolveTarget(accountAlias);
+      const target = await deps.resolveTarget(accountAlias, targetConversationId);
       if (!target.wakeBinding || target.workerId !== DEV_WAKE_DELL_WORKER ||
           target.wakeBinding.accountAlias !== accountAlias ||
           target.targetConversationId !== targetConversationId.toLowerCase()) {
@@ -112,7 +112,7 @@ export function createCrossProjectContinuePartialRouter(deps: CrossProjectContin
 
 export function createDefaultCrossProjectContinuePartialRouter() {
   return createCrossProjectContinuePartialRouter({
-    resolveTarget: (accountAlias) => resolveVerifiedDevWakeTarget(accountAlias, DEV_HOST, undefined, DEV_WAKE_DELL_WORKER),
+    resolveTarget: (accountAlias, targetConversationId) => resolveVerifiedDevWakeTarget(accountAlias, DEV_HOST, undefined, DEV_WAKE_DELL_WORKER, targetConversationId),
     enqueue: queueDevBrowserWake,
   });
 }
