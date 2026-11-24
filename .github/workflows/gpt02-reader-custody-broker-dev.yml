@@ -1,0 +1,53 @@
+name: GPT02 reader custody broker DEV
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/gpt02-reader-custody-broker.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-reader-custody-broker.test.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/gpt02-reader-custody-broker-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/gpt02-reader-custody-broker.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-reader-custody-broker.test.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/gpt02-reader-custody-broker-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  broker-no-privilege-escalation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      APP_ENV: development
+      SUPABASE_URL_DEV: https://xssrfshdrtdfupgqwfdw.supabase.co
+      SUPABASE_DEV_DATABASE_URL: postgresql://test:test@db.xssrfshdrtdfupgqwfdw.supabase.co:1/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm -C artifacts/api-server exec vitest run src/routes/__tests__/gpt02-reader-custody-broker.test.ts src/services/__tests__/gpt02OpenClawReaderCustodyPolicy.test.ts
+      - name: Verify no DBA / password execution surface
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('artifacts/api-server/src/routes/gpt02-reader-custody-broker.ts').read_text()
+          assert 'requireAgentServiceScope("agent:presence")' in s
+          assert 'verifyWorkerAttestation: async () => false' in s
+          assert 'readDbaCustodyReceipt: async () => ({ verified: false' in s
+          assert 'databaseMutationGranted: false' in s
+          assert 'directPostgresPrivileges: false' in s
+          assert 'systemd-creds' not in s and 'ALTER ROLE ' not in s
+          assert 'execSync' not in s and 'spawn(' not in s
+          print('BROKER_DEV_FAIL_CLOSED_PASS')
+          PY
