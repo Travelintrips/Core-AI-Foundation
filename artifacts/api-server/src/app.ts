@@ -21,6 +21,7 @@ import aiCoreSignedCallbackReceiver from "./routes/ai-core-signed-callback-recei
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import task189ReleaseRouter from "./routes/task189-release.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
+import { createLockedGpt02ReaderCustodyBroker } from "./routes/gpt02-reader-custody-broker.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
 import aiCoreMcpOauthRouter from "./routes/ai-core-mcp-oauth.js";
 import { oauthNavigationCors } from "./middleware/oauthNavigationCors.js";
@@ -190,6 +191,10 @@ app.use("/api", optionalSessionAuth);
 // still fails closed in its own worker/service-token middleware.
 app.use("/api", remoteOllamaWorkerRouter);
 app.use("/api", agentRuntimeRouter);
+// DEV-only, authenticated custody broker; fail closed until real attestation + DBA receipt.
+if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
+  app.use("/api/gpt02-reader-custody", createLockedGpt02ReaderCustodyBroker());
+}
 app.use("/api", temporalCodingWorkerRouter);
 
 // ── Global rate limiting (P0-3) ───────────────────────────────────────────────
