@@ -21,7 +21,9 @@ SAFE_ENV = {
     "HOME": "/nonexistent",
     "LANG": "C",
     "LC_ALL": "C",
-    "ISSUE238_DBA_DISPOSABLE_QA_APPROVED": "YES",
+    # The executor is NOT the approving DBA custodian; never self-authorize QA.
+    # Existing fixtures will refuse execution with exit 73 until a separately
+    # reviewed, authenticated launch protocol supplies legitimate approval.
     "ISSUE238_APPROVED_SQL_SHA256": APPROVED_SQL_SHA256,
 }
 
