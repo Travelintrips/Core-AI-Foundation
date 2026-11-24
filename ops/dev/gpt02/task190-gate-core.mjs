@@ -3,9 +3,9 @@ const TARGET=Object.freeze({environment:'DEV',companyId:'default',taskId:190,pur
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const validTarget=(r)=>r && typeof r==='object' && !Array.isArray(r) && Object.keys(r).every(k=>Object.hasOwn(TARGET,k)||k==='challengeId') && Object.entries(TARGET).every(([k,v])=>r[k]===v);
 const fail=(error)=>Object.freeze({state:'waiting',blocker:error,...TARGET});
-export function createGateCore({verifyOwner,verifyIndependentAuthority,consumeVerifiedDecision,clock=Date.now}) {
- if (![verifyOwner,verifyIndependentAuthority,consumeVerifiedDecision].every(x=>typeof x==='function')) throw Error('INDEPENDENT_AUTHORITY_ADAPTER_REQUIRED');
- const outstanding=new Map(),completed=new Map(),inFlight=new Set();
+export function createGateCore({verifyOwner,verifyIndependentAuthority,consumeVerifiedDecision,readVerifiedReceipt,clock=Date.now}) {
+ if (![verifyOwner,verifyIndependentAuthority,consumeVerifiedDecision,readVerifiedReceipt].every(x=>typeof x==='function')) throw Error('INDEPENDENT_AUTHORITY_ADAPTER_REQUIRED');
+ const outstanding=new Map(),inFlight=new Set();
  async function run(action,request,authorization){
   if(!['status','submit'].includes(action)|| !validTarget(request))return fail('TARGET_NOT_VERIFIED');
   if(typeof authorization!=='string'||!/^Bearer [A-Za-z0-9_.-]{48,4096}$/.test(authorization))return fail('OWNER_AUTH_REQUIRED');
@@ -13,8 +13,25 @@ export function createGateCore({verifyOwner,verifyIndependentAuthority,consumeVe
   try{owner=await verifyOwner(authorization);}catch{return fail('OWNER_IDENTITY_UNVERIFIED');}
   if(!owner||!/^owner:google_[A-Za-z0-9_-]{6,120}$/.test(owner.ownerSubject)||owner.companyId!=='default') return fail('OWNER_IDENTITY_UNVERIFIED');
   const key=owner.ownerSubject+'|'+TARGET.attemptId;
-  const prior=completed.get(key);
-  if(prior) return Object.freeze({...TARGET,ownerSubject:owner.ownerSubject,state:'accepted',receiptVerified:true,receiptId:prior});
+
+  // Readback is an independent durable lookup, NOT a cache assertion.
+  // A restart or second process must obtain exactly the same evidence.
+  const durable = async () => {
+    try {
+      const row = await readVerifiedReceipt({...TARGET,ownerSubject:owner.ownerSubject});
+      if (!row || row.verified !== true || row.durableCommitVerified !== true ||
+          !UUID.test(row.receiptId) || !UUID.test(row.consumedChallengeId) ||
+          !Number.isSafeInteger(row.expiresAt) || row.expiresAt <= clock() ||
+          row.targetExecutionId !== TARGET.executionId ||
+          row.targetAttemptId !== TARGET.attemptId ||
+          row.ownerSubject !== owner.ownerSubject ||
+          typeof row.authorityRef !== 'string' || !row.authorityRef)
+        return null;
+      return row;
+    } catch { return null; }
+  };
+  const prior=await durable();
+  if(prior) return Object.freeze({...TARGET,ownerSubject:owner.ownerSubject,state:'accepted',receiptVerified:true,receiptId:prior.receiptId});
   let authority;
   try{authority=await verifyIndependentAuthority({...TARGET,ownerSubject:owner.ownerSubject});}catch{return fail('INDEPENDENT_AUTHORITY_UNAVAILABLE');}
   const now=clock();
@@ -49,8 +66,16 @@ export function createGateCore({verifyOwner,verifyIndependentAuthority,consumeVe
      !UUID.test(receipt.receiptId)||receipt.targetExecutionId!==TARGET.executionId||
      receipt.targetAttemptId!==TARGET.attemptId||receipt.ownerSubject!==owner.ownerSubject)
      return fail('VERIFIED_RECEIPT_MISSING');
-  outstanding.delete(key);completed.set(key,receipt.receiptId);
-  return Object.freeze({...TARGET,ownerSubject:owner.ownerSubject,state:'accepted',receiptVerified:true,receiptId:receipt.receiptId});
+
+  // A successful write acknowledgement is not sufficient; verify the
+  // committed independent record before returning "accepted".
+  const committed=await durable();
+  if(!committed || committed.receiptId !== receipt.receiptId ||
+     committed.consumedChallengeId !== challenge.id ||
+     committed.authorityRef !== authority.reference)
+    return fail('DURABLE_READBACK_NOT_VERIFIED');
+  outstanding.delete(key);
+  return Object.freeze({...TARGET,ownerSubject:owner.ownerSubject,state:'accepted',receiptVerified:true,receiptId:committed.receiptId});
  }
  return {run};
 }
