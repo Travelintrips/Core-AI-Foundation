@@ -46,5 +46,3 @@ await test('PARALLEL_SUBMITS_SINGLE_FLIGHT',async()=>{
   assert.equal(attempts.filter(x=>x.state==='accepted').length,1);
   assert.equal(attempts.filter(x=>x.blocker==='CONCURRENT_CONSUMPTION_IN_PROGRESS').length,1);
 });
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
