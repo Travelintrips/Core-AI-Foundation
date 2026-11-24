@@ -5,6 +5,7 @@ on:
     branches: [develop]
     paths:
       - 'artifacts/api-server/src/routes/cst-project-continue-partial-job.ts'
+      - 'artifacts/api-server/src/services/devChatGptWakeService.ts'
       - 'artifacts/api-server/src/routes/__tests__/cst-project-continue-partial-job.test.ts'
       - 'artifacts/api-server/src/app.ts'
       - '.github/workflows/cst-project-continue-partial-dev.yml'
@@ -44,7 +45,7 @@ jobs:
           from pathlib import Path
           s=Path('artifacts/api-server/src/routes/cst-project-continue-partial-job.ts').read_text()
           assert 'requireAgentServiceScope("agent:work")' in s
-          assert 'resolveVerifiedDevWakeTarget(ACCOUNT_ALIAS, DEV_HOST, undefined, DEV_WAKE_DELL_WORKER)' in s
+          assert 'resolveVerifiedDevWakeTarget(accountAlias, DEV_HOST, undefined, DEV_WAKE_DELL_WORKER, targetConversationId)' in s
           assert 'expectedBindingFingerprint' in s
           assert 'assistantContinued: false' in s and 'browserConfirmed: false' in s
           assert 'CST_DEV_PROJECTS' in s
