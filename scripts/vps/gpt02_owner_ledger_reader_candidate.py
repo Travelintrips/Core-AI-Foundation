@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Protocol
 
 from gpt02_relock_once_candidate import (
@@ -101,6 +102,9 @@ def verify_owner_ledger_record(cursor: ReadOnlyLedgerCursor, challenge_id: str) 
     canonical = CANONICAL_DOMAIN + _canonical(manifest).encode("utf-8")
     if hashlib.sha256(canonical).hexdigest() != digest:
         raise GateDenied("LEDGER_MANIFEST_DIGEST_MISMATCH")
+    times = [row.get(k) for k in ("issued_at", "decided_at", "expires_at", "consumed_at")]
+    if not all(isinstance(t, datetime) and t.tzinfo is not None and t.utcoffset() is not None for t in times):
+        raise GateDenied("OWNER_LEDGER_TIMESTAMPS_INVALID")
     required = (
         row.get("challenge_id") == challenge_id and
         row.get("scope") == SCOPE and row.get("environment") == "DEV" and

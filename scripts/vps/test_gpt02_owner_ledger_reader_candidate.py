@@ -74,6 +74,12 @@ class LedgerTests(unittest.TestCase):
     def test_invalid_id_or_missing_reader(self):
         with self.assertRaises(o.GateDenied):v.verify_owner_ledger_record(FakeTrustedRead([make_row()]),"DROP TABLE")
         with self.assertRaises(o.GateDenied):v.verify_owner_ledger_record(object(),ID)
+    def test_naive_or_non_timestamp_is_denied(self):
+        for value in (NOW.replace(tzinfo=None), "2026-11-24T07:25:16Z", None):
+            row=make_row();row["decided_at"]=value
+            with self.subTest(value=str(value)):
+                self.deny([row])
+
     def test_reader_unavailable(self):
         class Broken:
             def read_exact_owner_decision(self,*a):raise ConnectionError("fixture down")
