@@ -202,7 +202,8 @@ if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "prod
 if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
   app.use("/api/ai/agent-runtime/dev/gpt02/continue-partial", createDefaultGpt02ContinuePartialRouter());
   // Reuses the same verified DELL transport; each request carries a strict project scope.
-  app.use("/api/ai/agent-runtime/dev/projects/continue-partial", createDefaultCrossProjectContinuePartialRouter());
+  // Separate explicit verified-session route; never shadow the configured-project route.
+  app.use("/api/ai/agent-runtime/dev/projects/continue-partial/verified-session", createDefaultCrossProjectContinuePartialRouter());
 }
 // DEV-only, authenticated custody broker; fail closed until real attestation + DBA receipt.
 if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
