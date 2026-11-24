@@ -333,5 +333,3 @@ export async function main() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.exitCode = await main();
 }
-
-[executed on device: srv1792369 (0891e23a-6a6b-4f8c-a16a-962e888e2014)]
