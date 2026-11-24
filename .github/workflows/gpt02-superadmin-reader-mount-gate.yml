@@ -1,4 +1,4 @@
-name: GPT02 Super Admin reader mount gate (DEV source only)
+name: GPT02 Owner reader credential loading (DEV)
 
 on:
   pull_request:
@@ -6,12 +6,22 @@ on:
     paths:
       - 'scripts/vps/gpt02_superadmin_reader_mount_gate.py'
       - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/deploy_dev_release.py'
+      - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service'
       - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
   push:
     branches: [develop]
     paths:
       - 'scripts/vps/gpt02_superadmin_reader_mount_gate.py'
       - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/deploy_dev_release.py'
+      - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service'
       - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
 
 permissions:
@@ -23,9 +33,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Run fail-closed mount gate QA
-        run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_superadmin_reader_mount_gate.py -v
-      - name: Verify source cannot read plaintext secrets, change roles or restart containers
+      - name: Run isolated loader and release integration tests
+        run: |
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_superadmin_reader_mount_gate.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_credential_loader.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_release_integration.py -v
+      - name: Verify dormant systemd unit
+        run: systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service
+      - name: Verify metadata gate cannot read credentials or execute processes
         run: |
           python3 - <<'PY'
           from pathlib import Path

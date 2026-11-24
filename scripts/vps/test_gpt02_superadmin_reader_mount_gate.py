@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
+import hashlib
 import os
 import stat
 import tempfile
@@ -96,6 +98,123 @@ class ReaderMountGateTests(unittest.TestCase):
         with patch.object(gate,"READER_DIR",self.root/"missing-reader-directory"):
             with self.assertRaises(gate.ReaderMountDenied):
                 gate.get_reader_mounts(enabled=True,environment="development",production=False)
+
+
+def public_configuration():
+    values = {
+        gate.READER_FLAG: "true", "APP_ENV": "development", "NODE_ENV": "development",
+        "SUPABASE_URL_DEV": "https://xssrfshdrtdfupgqwfdw.supabase.co",
+    }
+    # Public test vectors only. These fixtures are never deployed or pinned.
+    for name, raw in (
+        ("ATTESTOR", "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"),
+        ("ISSUER", "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c"),
+    ):
+        der = bytes.fromhex("302a300506032b6570032100" + raw)
+        prefix = "GPT02_DEV_CUSTODY_" + name + "_PUBLIC_KEY_SPKI"
+        values[prefix + "_B64"] = base64.b64encode(der).decode("ascii")
+        values[prefix + "_SHA256"] = hashlib.sha256(der).hexdigest()
+    return values
+
+
+class CustodyConfigurationTests(unittest.TestCase):
+    def test_accepts_distinct_public_keys_with_matching_canonical_fingerprints(self):
+        self.assertIsNone(gate.validate_custody_configuration(public_configuration()))
+
+    def test_rejects_environment_project_and_public_pin_mismatches(self):
+        prefix = "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI"
+        for change in (
+            {"APP_ENV": "production"}, {"NODE_ENV": "test"},
+            {"SUPABASE_URL_DEV": "https://other-project.supabase.co"},
+            {"SUPABASE_SERVICE_ROLE_KEY": "synthetic-prod-field"},
+            {prefix + "_B64": "not-base64"}, {prefix + "_SHA256": "0" * 64},
+        ):
+            with self.subTest(fields=list(change)):
+                with self.assertRaises(gate.ReaderMountDenied) as caught:
+                    gate.validate_custody_configuration({**public_configuration(), **change})
+                self.assertRegex(str(caught.exception), r"^READER_[A-Z_]+$")
+                self.assertNotIn("synthetic", str(caught.exception))
+
+    def test_rejects_missing_public_pins_and_shared_issuer_keys(self):
+        values = public_configuration()
+        values.pop("GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256")
+        with self.assertRaisesRegex(gate.ReaderMountDenied, "TRUST_CONFIGURATION_INVALID"):
+            gate.validate_custody_configuration(values)
+        values = public_configuration()
+        for suffix in ("_B64", "_SHA256"):
+            values["GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI" + suffix] = values[
+                "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI" + suffix]
+        with self.assertRaisesRegex(gate.ReaderMountDenied, "ISSUERS_MUST_DIFFER"):
+            gate.validate_custody_configuration(values)
+
+
+class ProtectedCustodyMountTests(unittest.TestCase):
+    def setUp(self):
+        self.metadata = {}
+        for file, mode, size in (
+            (gate.READER_FILE, 0o600, 300), (gate.TRUST_CA, 0o644, 200),
+            (gate.WORKER_PROOF, 0o600, 500), (gate.DBA_PROOF, 0o600, 500),
+        ):
+            self.metadata[file] = SimpleNamespace(st_mode=stat.S_IFREG | mode, st_uid=0, st_gid=0, st_nlink=1, st_size=size)
+            for parent in file.parents:
+                self.metadata.setdefault(parent, SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0, st_gid=0))
+        for directory in (gate.READER_DIR, gate.CUSTODY_DIR):
+            self.metadata[directory].st_mode = stat.S_IFDIR | 0o700
+        self.patchers = [
+            patch.object(Path, "lstat", autospec=True, side_effect=self.stat),
+            patch.object(Path, "stat", autospec=True, side_effect=self.stat),
+            patch.object(Path, "read_bytes", side_effect=AssertionError("mount gate must not read content")),
+            patch.object(Path, "read_text", side_effect=AssertionError("mount gate must not read content")),
+        ]
+        for item in self.patchers: item.start()
+
+    def tearDown(self):
+        for item in reversed(self.patchers): item.stop()
+
+    def stat(self, path, *args, **kwargs):
+        if path not in self.metadata: raise FileNotFoundError()
+        return self.metadata[path]
+
+    def test_disabled_inspects_neither_reader_proof_nor_ca_paths(self):
+        with patch.object(Path, "lstat", side_effect=AssertionError("disabled stat")), \
+                patch.object(Path, "stat", side_effect=AssertionError("disabled stat")):
+            self.assertEqual(gate.get_reader_mounts(enabled=False, environment="development", production=False), ())
+
+    def test_mounts_the_custody_directory_so_receipt_removal_is_visible(self):
+        mounts = gate.get_reader_mounts(enabled=True, environment="development", production=False) + gate.get_custody_mounts()
+        self.assertEqual(mounts.count("--mount"), 3)
+        self.assertIn(f"type=bind,source={gate.CUSTODY_DIR},target={gate.CUSTODY_DIR},readonly", mounts)
+        self.assertFalse(any(str(path) in arg for path in (gate.WORKER_PROOF, gate.DBA_PROOF) for arg in mounts))
+        self.assertTrue(all(mounts[index + 1].endswith(",readonly") for index, arg in enumerate(mounts) if arg == "--mount"))
+        del self.metadata[gate.DBA_PROOF]
+        with self.assertRaisesRegex(gate.ReaderMountDenied, "CUSTODY_PROOF_FILE_UNAVAILABLE"):
+            gate.get_custody_mounts()
+
+    def test_rejects_unsafe_proof_files_and_ancestors_without_reading_them(self):
+        cases = (
+            (gate.WORKER_PROOF, "st_nlink", 2), (gate.DBA_PROOF, "st_size", 8193),
+            (gate.WORKER_PROOF, "st_mode", stat.S_IFLNK | 0o600),
+            (gate.DBA_PROOF, "st_mode", stat.S_IFREG | 0o640),
+            (gate.CUSTODY_DIR, "st_mode", stat.S_IFDIR | 0o755),
+            (gate.CUSTODY_DIR.parent, "st_uid", 1000),
+            (Path("/"), "st_mode", stat.S_IFDIR | 0o777),
+        )
+        for path, field, value in cases:
+            previous = getattr(self.metadata[path], field)
+            with self.subTest(path=str(path), field=field):
+                setattr(self.metadata[path], field, value)
+                with self.assertRaisesRegex(gate.ReaderMountDenied, "CUSTODY_PROOF_FILE_UNAVAILABLE"):
+                    gate.get_custody_mounts()
+            setattr(self.metadata[path], field, previous)
+
+    def test_rejects_unsafe_ca_and_reader_hardlinks(self):
+        self.metadata[gate.TRUST_CA].st_mode = stat.S_IFREG | 0o664
+        with self.assertRaisesRegex(gate.ReaderMountDenied, "PINNED_CA_CUSTODY_INVALID"):
+            gate.get_custody_mounts()
+        self.metadata[gate.TRUST_CA].st_mode = stat.S_IFREG | 0o644
+        self.metadata[gate.READER_FILE].st_nlink = 2
+        with self.assertRaisesRegex(gate.ReaderMountDenied, "CREDENTIAL_CUSTODY_INVALID"):
+            gate.get_reader_mounts(enabled=True, environment="development", production=False)
 
 
 if __name__=="__main__":
