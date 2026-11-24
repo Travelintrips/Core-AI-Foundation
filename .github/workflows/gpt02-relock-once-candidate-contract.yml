@@ -7,9 +7,11 @@ on:
       - 'scripts/vps/gpt02_relock_once_candidate.py'
       - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
       - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
   push:
     branches: [develop]
@@ -17,9 +19,11 @@ on:
       - 'scripts/vps/gpt02_relock_once_candidate.py'
       - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
       - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
 
 permissions:
@@ -39,10 +43,11 @@ jobs:
         run: |
           python3 -m venv /tmp/gpt02-one-shot-qa-venv
           /tmp/gpt02-one-shot-qa-venv/bin/pip install --disable-pip-version-check cryptography==46.0.3
-      - name: Test candidate, Ed25519 and atomic nonce (temporary QA only)
+      - name: Test candidate, signed grant, nonce, and ledger (QA fixtures only)
         run: |
           /tmp/gpt02-one-shot-qa-venv/bin/python -B -m unittest discover -s scripts/vps -p 'test_gpt02_relock_*candidate.py' -v
-      - name: Verify candidate has no live entrypoint or credential/SQL access
+          /tmp/gpt02-one-shot-qa-venv/bin/python -B -m unittest discover -s scripts/vps -p 'test_gpt02_owner_ledger_reader_candidate.py' -v
+      - name: Verify no live executor, database client, or credential loader
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -62,9 +67,16 @@ jobs:
           assert 'Ed25519PrivateKey' not in signed
           assert 'ENVELOPE_DOMAIN +' in signed
           assert 'if __name__' not in signed
-          cust=(root/'gpt02_relock_nonce_custody_candidate.py').read_text()
-          assert 'BEGIN IMMEDIATE' in cust
-          assert 'CREATE TABLE' not in cust
-          assert 'if __name__' not in cust
+          custody=(root/'gpt02_relock_nonce_custody_candidate.py').read_text()
+          assert 'BEGIN IMMEDIATE' in custody
+          assert 'CREATE TABLE' not in custody
+          assert 'if __name__' not in custody
+          ledger=(root/'gpt02_owner_ledger_reader_candidate.py').read_text()
+          assert 'if __name__' not in ledger
+          assert 'import os' not in ledger
+          assert 'psycopg' not in ledger
+          assert 'subprocess' not in ledger
+          assert 'read_exact_owner_decision' in ledger
+          assert 'OWNER_LEDGER_RECORD_BINDING_MISMATCH' in ledger
           print('GPT02_CANDIDATE_NO_LIVE_ADAPTER=PASS')
           PY
