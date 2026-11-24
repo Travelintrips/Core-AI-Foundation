@@ -102,11 +102,13 @@ export function createGpt02ReaderCustodyVerifiedAdapter(input: {
 }
 
 export function createConfiguredGpt02ReaderCustodyAdapter() {
-  // Unconfigured keys are intentional LOCKED behavior, never a permissive fallback.
+  // PROD and any ambiguous deployment remain locked even if pins are present.
+  const dev = process.env["APP_ENV"] === "development" &&
+    process.env["NODE_ENV"] !== "production";
   return createGpt02ReaderCustodyVerifiedAdapter({
     keys: {
-      worker: process.env["GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64"] ?? "",
-      issuer: process.env["GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64"] ?? "",
+      worker: dev ? process.env["GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64"] ?? "" : "",
+      issuer: dev ? process.env["GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64"] ?? "" : "",
     },
   });
 }
