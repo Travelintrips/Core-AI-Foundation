@@ -7,10 +7,12 @@ on:
       - 'scripts/vps/gpt02_relock_once_candidate.py'
       - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
       - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
   push:
@@ -19,10 +21,12 @@ on:
       - 'scripts/vps/gpt02_relock_once_candidate.py'
       - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
       - 'scripts/vps/test_gpt02_relock_once_candidate.py'
       - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
       - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_verified_chain_candidate.py'
       - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
       - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
 
@@ -45,8 +49,7 @@ jobs:
           /tmp/gpt02-one-shot-qa-venv/bin/pip install --disable-pip-version-check cryptography==46.0.3
       - name: Test candidate, signed grant, nonce, and ledger (QA fixtures only)
         run: |
-          /tmp/gpt02-one-shot-qa-venv/bin/python -B -m unittest discover -s scripts/vps -p 'test_gpt02_relock_*candidate.py' -v
-          /tmp/gpt02-one-shot-qa-venv/bin/python -B -m unittest discover -s scripts/vps -p 'test_gpt02_owner_ledger_reader_candidate.py' -v
+          /tmp/gpt02-one-shot-qa-venv/bin/python -B -m unittest discover -s scripts/vps -p 'test_gpt02_*candidate.py' -v
       - name: Verify no live executor, database client, or credential loader
         run: |
           python3 - <<'PY'
@@ -78,5 +81,12 @@ jobs:
           assert 'subprocess' not in ledger
           assert 'read_exact_owner_decision' in ledger
           assert 'OWNER_LEDGER_RECORD_BINDING_MISMATCH' in ledger
+          chain=(root/'gpt02_relock_verified_chain_candidate.py').read_text()
+          assert 'if __name__' not in chain
+          assert 'subprocess' not in chain
+          assert 'psycopg' not in chain
+          assert 'import os' not in chain
+          assert 'read_only_ledger' in chain
+          assert 'load_pinned_executor_root' in chain
           print('GPT02_CANDIDATE_NO_LIVE_ADAPTER=PASS')
           PY

@@ -6,11 +6,14 @@ import unittest
 from pathlib import Path
 
 p = Path(__file__).with_name("gpt02_relock_once_candidate.py")
-spec = importlib.util.spec_from_file_location("gpt02_once", p)
-m = importlib.util.module_from_spec(spec)
 import sys
-sys.modules[spec.name] = m
-spec.loader.exec_module(m)
+NAME = "gpt02_relock_once_candidate"
+if NAME not in sys.modules:
+    spec = importlib.util.spec_from_file_location(NAME, p)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[NAME] = module
+    spec.loader.exec_module(module)
+m = sys.modules[NAME]
 
 DIGEST = "d0f7ec8715502e62" + "a" * 48
 ID = "9c4f21e1-48af-4f7f-9830-931b84e3e846"

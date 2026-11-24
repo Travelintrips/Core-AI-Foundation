@@ -13,10 +13,11 @@ from cryptography.hazmat.primitives import serialization
 
 root = Path(__file__).parent
 for name in ("gpt02_relock_once_candidate", "gpt02_relock_grant_verifier_candidate"):
-    spec = importlib.util.spec_from_file_location(name, root / (name + ".py"))
-    m = importlib.util.module_from_spec(spec)
-    sys.modules[name] = m
-    spec.loader.exec_module(m)
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, root / (name + ".py"))
+        m = importlib.util.module_from_spec(spec)
+        sys.modules[name] = m
+        spec.loader.exec_module(m)
 o = sys.modules["gpt02_relock_once_candidate"]
 v = sys.modules["gpt02_relock_grant_verifier_candidate"]
 NOW = 1795500000000

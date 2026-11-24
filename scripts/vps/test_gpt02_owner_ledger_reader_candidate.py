@@ -6,8 +6,11 @@ from datetime import datetime,timedelta,timezone
 from pathlib import Path
 root=Path(__file__).parent
 for name in ("gpt02_relock_once_candidate","gpt02_owner_ledger_reader_candidate"):
-    spec=importlib.util.spec_from_file_location(name,root/(name+".py"))
-    mod=importlib.util.module_from_spec(spec);sys.modules[name]=mod;spec.loader.exec_module(mod)
+    if name not in sys.modules:
+        spec=importlib.util.spec_from_file_location(name,root/(name+".py"))
+        mod=importlib.util.module_from_spec(spec)
+        sys.modules[name]=mod
+        spec.loader.exec_module(mod)
 o=sys.modules["gpt02_relock_once_candidate"]
 v=sys.modules["gpt02_owner_ledger_reader_candidate"]
 ID="9c4f21e1-48af-4f7f-9830-931b84e3e846"
