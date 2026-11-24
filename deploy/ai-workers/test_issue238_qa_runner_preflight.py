@@ -42,8 +42,8 @@ class PreflightTests(unittest.TestCase):
             "authenticated_command_id": self.cmd,
             "public_key": self.key.public_key(), "sql_source": self.src,
             "test_root": self.test_root, "ledger_path": self.ledger,
-            "image_id": "sha256:" + APPROVED_IMAGE_SHA256,
-            "image_trusted": True, "now": 1050,
+            "image_metadata": {"Id": "sha256:" + APPROVED_IMAGE_SHA256, "RepoTags": ["cst-invoice-pgcron-qa:local"]},
+            "now": 1050,
         }
 
     def signed(self):
@@ -62,13 +62,13 @@ class PreflightTests(unittest.TestCase):
         self.assertFalse(self.ledger.exists())
 
     def test_unattested_image_denied(self):
-        with self.assertRaisesRegex(PermitDenied, "runtime_image_not_attested"):
-            preflight(envelope=self.signed(), **(self.kw | {"image_trusted": False}))
+        with self.assertRaisesRegex(PermitDenied, "image_metadata_missing"):
+            preflight(envelope=self.signed(), **(self.kw | {"image_metadata": None}))
         self.assertFalse(self.ledger.exists())
 
     def test_wrong_image_denied(self):
-        with self.assertRaisesRegex(PermitDenied, "runtime_image_not_attested"):
-            preflight(envelope=self.signed(), **(self.kw | {"image_id": "sha256:" + "a"*64}))
+        with self.assertRaisesRegex(PermitDenied, "qa_image_digest_mismatch"):
+            preflight(envelope=self.signed(), **(self.kw | {"image_metadata": {"Id": "sha256:" + "a"*64, "RepoTags": ["cst-invoice-pgcron-qa:local"]}}))
         self.assertFalse(self.ledger.exists())
 
     def test_missing_source_denied(self):
@@ -97,7 +97,8 @@ class PreflightTests(unittest.TestCase):
         self.claims["sql_sha256"] = digest
         # CI tests use an isolated fixture hash; production pins reviewed SHA.
         with patch("issue238_qa_permit.APPROVED_SQL_SHA256", digest), \
-             patch("issue238_qa_runner_preflight.APPROVED_SQL_SHA256", digest):
+             patch("issue238_qa_runner_preflight.APPROVED_SQL_SHA256", digest), \
+             patch("issue238_qa_runner_preflight.verify_source_manifest", return_value={self.test_name: "a"*64}):
             result = preflight(envelope=self.signed(), **self.kw)
             self.assertEqual(result["state"], "RESERVED")
             self.assertEqual(result["manifest"]["script"], self.test_name)

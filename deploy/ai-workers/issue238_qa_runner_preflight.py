@@ -4,37 +4,34 @@ No Docker/SQL, process execution, network, signer, or service socket is provided
 The authenticated worker identity MUST be injected by a trusted transport, never
 taken from the submitted permit. This is not authority to run hosted/PROD QA.
 """
-import hashlib
-import json
 import re
 from pathlib import Path
 
 from issue238_qa_ledger import reserve
+from issue238_qa_integrity import verify_image_metadata, verify_source_manifest
 from issue238_qa_permit import (
-    APPROVED_IMAGE_SHA256, APPROVED_SQL_SHA256, PermitDenied,
+    APPROVED_SQL_SHA256, PermitDenied,
     WORKER_ID, verify_permit,
 )
 
-IMAGE_ID = "sha256:" + APPROVED_IMAGE_SHA256
 COMMAND_RE = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
 
 
 def preflight(*, envelope, authenticated_worker_id: str,
               authenticated_command_id: str, public_key,
               sql_source: Path, test_root: Path, ledger_path: Path,
-              image_id: str, image_trusted: bool,
+              image_metadata: dict,
               now: int | None = None):
     """Verify exact scope, runtime image attestation and durable reservation.
 
-    image_id/image_trusted MUST be supplied by a trusted local image inspector,
-    NOT a request field. No executable approval flag is issued.
+    image_metadata MUST be supplied by an authenticated local image inspector,
+    NEVER from the request. No executable approval flag is issued.
     """
     if authenticated_worker_id != WORKER_ID:
         raise PermitDenied("unauthenticated_worker")
     if not isinstance(authenticated_command_id, str) or not COMMAND_RE.fullmatch(authenticated_command_id):
         raise PermitDenied("unauthenticated_command")
-    if not isinstance(image_trusted, bool) or not image_trusted or image_id != IMAGE_ID:
-        raise PermitDenied("runtime_image_not_attested")
+    image_id = verify_image_metadata(image_metadata)
     claims = envelope.get("claims", {}) if isinstance(envelope, dict) else {}
     if not isinstance(claims, dict) or claims.get("command_id") != authenticated_command_id:
         raise PermitDenied("command_identity_mismatch")
@@ -45,15 +42,14 @@ def preflight(*, envelope, authenticated_worker_id: str,
     )
     if test_path.parent.resolve() != test_root.resolve():
         raise PermitDenied("test_escaped_review_root")
-    # Signed claims rechecked here, including post-read source and test bytes.
-    if hashlib.sha256(sql_source.read_bytes()).hexdigest() != APPROVED_SQL_SHA256:
-        raise PermitDenied("source_changed_during_check")
+    # All four reviewed sources must match the manifest before reserving.
+    manifest_hashes = verify_source_manifest(test_root)
     if not test_path.is_file() or test_path.is_symlink():
         raise PermitDenied("test_not_regular")
     manifest = {"sql_sha256": APPROVED_SQL_SHA256,
-                "image_id": IMAGE_ID,
+                "image_id": image_id,
                 "script": test_path.name,
-                "script_sha256": hashlib.sha256(test_path.read_bytes()).hexdigest()}
+                "script_sha256": manifest_hashes[test_path.name]}
     # Atomic reservation rejects nonce/command replays, even across restarts.
     reserve(ledger_path, signed_claims=claims)
     # No command, Docker socket or approval token is returned.
