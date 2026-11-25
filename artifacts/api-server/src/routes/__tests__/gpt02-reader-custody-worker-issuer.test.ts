@@ -65,7 +65,7 @@ function fixture() {
   const authLimit = vi.fn(async () => state.authOwner ? [{ ...state.authOwner }] : []);
   mocks.authSelect.mockImplementation(() => ({ from: () => ({ where: () => ({ limit: authLimit }) }) }));
   const shareLocks = vi.fn();
-  const auditReturning = vi.fn().mockResolvedValue([{ id: 41 }]);
+  const auditExecute = vi.fn().mockResolvedValue({ rowCount: 1 });
   const tx = {
     select: vi.fn(() => {
       let selected: unknown;
@@ -85,7 +85,7 @@ function fixture() {
       if (table !== mocks.auditTable) throw new Error("Unexpected non-audit insert");
       return { values: (value: Record<string, unknown>) => {
         state.staged.push(value);
-        return { returning: auditReturning };
+        return { execute: auditExecute };
       } };
     }),
     update: vi.fn(), delete: vi.fn(), execute: vi.fn(),
@@ -105,7 +105,7 @@ function fixture() {
     const pending = request(app).post(url).set("Host", HOST).set("Origin", ORIGIN);
     return token === null ? pending : pending.set("Cookie", "internal_session=" + token);
   };
-  return { app, post, state, tx, authLimit, shareLocks, auditReturning, privateDer, publicB64, fingerprint };
+  return { app, post, state, tx, authLimit, shareLocks, auditExecute, privateDer, publicB64, fingerprint };
 }
 
 describe("GPT02 worker issuer HTTP boundary", () => {
@@ -151,7 +151,7 @@ describe("GPT02 worker issuer HTTP boundary", () => {
       details: { credentialBinding: BINDING, workerAttestationSha256: verified!.digest,
         attestorPublicKeySha256: f.fingerprint, delivery: "response_only", activeProofPublished: false },
     });
-    expect(f.auditReturning).toHaveBeenCalledOnce();
+    expect(f.auditExecute).toHaveBeenCalledOnce();
     expect(f.tx.update).not.toHaveBeenCalled(); expect(f.tx.delete).not.toHaveBeenCalled(); expect(f.tx.execute).not.toHaveBeenCalled();
     expect(JSON.stringify([response.body, f.state.committed])).not.toContain(TOKEN_HASH);
     expect(response.text).not.toContain(f.privateDer.toString("base64"));
@@ -256,9 +256,9 @@ describe("GPT02 worker issuer HTTP boundary", () => {
     expect(mocks.readProtected).not.toHaveBeenCalled(); expect(f.tx.insert).not.toHaveBeenCalled();
   });
 
-  it.each([[], [{ id: 0 }], [{ id: "41" }], [{ id: 41 }, { id: 42 }]])(
-    "requires exactly one confirmed positive audit serial (%j)", async (...rows) => {
-      const f = fixture(); f.auditReturning.mockResolvedValue(rows);
+  it.each([0, 2, null, undefined])(
+    "requires exactly one confirmed inserted audit row (%j)", async (rowCount) => {
+      const f = fixture(); f.auditExecute.mockResolvedValue({ rowCount });
       const response = await f.post().send(BODY);
       expect(response.status).toBe(503);
       expect(response.body).toEqual({ error: "WORKER_CUSTODY_AUDIT_UNAVAILABLE" });
@@ -268,7 +268,7 @@ describe("GPT02 worker issuer HTTP boundary", () => {
   );
 
   it("withholds proof when the actual strict audit INSERT fails", async () => {
-    const f = fixture(); f.auditReturning.mockRejectedValue(new Error(PRIVATE_MARKER));
+    const f = fixture(); f.auditExecute.mockRejectedValue(new Error(PRIVATE_MARKER));
     const response = await f.post().send(BODY);
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ error: "WORKER_CUSTODY_AUDIT_UNAVAILABLE" });

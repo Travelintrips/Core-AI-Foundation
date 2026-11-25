@@ -116,7 +116,7 @@ async function issuanceTransaction(
     },
     async insertAudit(audit) {
       try {
-        const rows = await tx.insert(aiAuditLogsTable).values({
+        const writeResult = await tx.insert(aiAuditLogsTable).values({
           module: "gpt02_reader_custody",
           action: "issue_worker_custody_attestation",
           resourceId: audit.credentialId,
@@ -134,8 +134,12 @@ async function issuanceTransaction(
             delivery: "response_only",
             activeProofPublished: false,
           },
-        }).returning({ id: aiAuditLogsTable.id });
-        if (rows.length !== 1 || !Number.isSafeInteger(rows[0]?.id) || rows[0]!.id < 1) {
+        }).execute();
+        // The canonical DEV audit table is INSERT-only under RLS for this
+        // runtime role. RETURNING id requires row SELECT policy and fails 42501.
+        // Validate the PostgreSQL committed-row count instead, without
+        // broadening read privileges or suppressing the audit transaction.
+        if (writeResult.rowCount !== 1) {
           throw new Error("AUDIT_INSERT_NOT_CONFIRMED");
         }
       } catch { throw new Gpt02WorkerCustodyIssuerError("WORKER_CUSTODY_AUDIT_UNAVAILABLE"); }
