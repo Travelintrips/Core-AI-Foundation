@@ -1,0 +1,66 @@
+name: GPT02 Task190 exact claim completion binding DEV
+on:
+  pull_request:
+    paths:
+      - 'ops/dev/gpt02/task190_execution_claim_completion_binding.sql'
+      - 'ops/dev/gpt02/test_task190_claim_completion_binding_pg.sh'
+      - '.github/workflows/gpt02-task190-claim-completion-binding-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'ops/dev/gpt02/task190_execution_claim_completion_binding.sql'
+      - 'ops/dev/gpt02/test_task190_claim_completion_binding_pg.sh'
+      - '.github/workflows/gpt02-task190-claim-completion-binding-dev.yml'
+permissions:
+  contents: read
+jobs:
+  exact-claim-fk-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: task190_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-task190-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d task190_ci"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: task190_ci
+      PGUSER: postgres
+      PGPASSWORD: isolated-task190-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client if unavailable
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Set up inert custody and claim parent tables
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f ops/dev/gpt02/task190_execution_custody_inert.sql
+          psql -X -v ON_ERROR_STOP=1 -f ops/dev/gpt02/task190_execution_claim_inert.sql
+      - name: Add non-deferrable exact claim/completion foreign key
+        run: psql -X -v ON_ERROR_STOP=1 -f ops/dev/gpt02/task190_execution_claim_completion_binding.sql
+      - name: Run mismatched-proof and replay failure tests on real PostgreSQL
+        run: bash ops/dev/gpt02/test_task190_claim_completion_binding_pg.sh
+      - name: Prevent permissions or execution enablement
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('ops/dev/gpt02/task190_execution_claim_completion_binding.sql').read_text().lower()
+          for forbidden in ('grant ', 'alter role', 'dispatch_permitted', 'security definer'):
+            assert forbidden not in s, forbidden
+          assert 'not deferrable' in s
+          assert 'foreign key' in s
+          print('NO_PRIVILEGE_OR_DISPATCH_CHANGE=PASS')
+          PY
