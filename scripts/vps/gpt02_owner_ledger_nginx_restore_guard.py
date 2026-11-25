@@ -118,20 +118,60 @@ def restore(active: Path, backup: Path, test_cmd: list[str],
     return "RESTORED_GATE_CLOSED"
 
 
+def arm(active: Path, backup: Path, delay_seconds: int, executable: Path) -> str:
+    """Create an independent transient timer BEFORE the operator removes the gate.
+
+    The timer's command only restores. Timer execution is not a permanent
+    boot-persistent guard; do not open the gate if arming/verification fails.
+    """
+    if delay_seconds < 30 or delay_seconds > 180:
+        raise GuardError("WATCHDOG_DURATION_INVALID")
+    if not executable.is_absolute() or not executable.is_file():
+        raise GuardError("INSTALLED_GUARD_REQUIRED")
+    identity = executable.stat()
+    if identity.st_uid != 0 or stat.S_IMODE(identity.st_mode) & 0o022:
+        raise GuardError("UNTRUSTED_GUARD_PATH")
+    fingerprint = prepare(active, backup)
+    unit = "gpt02-1782-owner-ledger-restore"
+    args = [
+        "systemd-run", "--unit=" + unit, "--on-active=" +
+        str(delay_seconds) + "s", "--collect",
+        "/usr/bin/python3", str(executable), "--restore",
+        "--active", str(active), "--backup", str(backup),
+    ]
+    scheduled = subprocess.run(args, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=15,
+                               check=False)
+    if scheduled.returncode != 0:
+        raise GuardError("WATCHDOG_SCHEDULE_FAILED")
+    confirmed = subprocess.run(["systemctl", "is-active", "--quiet",
+                                unit + ".timer"], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=10,
+                               check=False)
+    if confirmed.returncode != 0:
+        raise GuardError("WATCHDOG_NOT_ARMED")
+    return "WATCHDOG_ARMED sha256=" + fingerprint
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--restore", action="store_true")
+    parser.add_argument("--arm", action="store_true")
+    parser.add_argument("--delay-seconds", type=int, default=90)
     parser.add_argument("--active", type=Path, default=NGINX)
     parser.add_argument("--backup", type=Path, default=BACKUP)
     args = parser.parse_args()
-    if args.prepare == args.restore:
-        parser.error("Choose exactly one of --prepare or --restore")
+    if sum((args.prepare, args.restore, args.arm)) != 1:
+        parser.error("Choose exactly one of --prepare, --restore or --arm")
     if os.geteuid() != 0:
         print("GPT02_GUARD=BLOCKED_ROOT_REQUIRED", file=sys.stderr)
         return 2
     try:
-        if args.prepare:
+        if args.arm:
+            print("GPT02_GUARD=" + arm(args.active, args.backup, args.delay_seconds,
+                                      Path(__file__).resolve()))
+        elif args.prepare:
             print("GPT02_GUARD=BACKUP_READY sha256=" + prepare(args.active, args.backup))
         else:
             outcome = restore(args.active, args.backup, ["nginx", "-t"],
