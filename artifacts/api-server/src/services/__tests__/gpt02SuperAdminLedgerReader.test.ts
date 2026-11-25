@@ -306,6 +306,33 @@ describe("GPT02 separated Super Admin ledger custody", () => {
     expect(pool.end).toHaveBeenCalledOnce();
   });
 
+  it("does not return the original approval for another well-formed challenge UUID", async () => {
+    const different = "00000000-0000-4000-8000-000000000000";
+    const { client, pool } = installFixture(IDENTITY, null);
+    await expect(readGpt02SuperAdminLedgerReceipt(different, ACTOR)).resolves.toBeNull();
+    const query = client.query.mock.calls.find(([sql]) =>
+      typeof sql === "string" && sql.includes("FROM gpt02_owner_approval."));
+    expect(query).toBeDefined();
+    expect(query?.[0]).toContain("c.id = $1::uuid");
+    expect(query?.[0]).toContain("c.owner_auth_supabase_id = $3::uuid");
+    expect(query?.[0]).toContain("d.owner_subject = $4");
+    expect(query?.[1]).toEqual([
+      different, ACTOR.email, ACTOR.authSupabaseId, `owner:${ACTOR.id}`,
+    ]);
+    expect(client.query).toHaveBeenCalledWith("COMMIT");
+    expect(client.release).toHaveBeenCalledOnce();
+    expect(pool.end).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a returned row whose challenge differs from the parameter", async () => {
+    const different = "00000000-0000-4000-8000-000000000000";
+    const { client, pool } = installFixture(IDENTITY, { ...DECISION, challenge_id: different });
+    await expectCustodyDenied(readGpt02SuperAdminLedgerReceipt(CHALLENGE, ACTOR));
+    expect(client.query).toHaveBeenCalledWith("COMMIT");
+    expect(client.release).toHaveBeenCalledOnce();
+    expect(pool.end).toHaveBeenCalledOnce();
+  });
+
   it("sanitizes database connection errors and closes the isolated pool", async () => {
     const { pool, handles } = installFixture();
     pool.connect.mockRejectedValue(new Error("SYNTHETIC_PRIVATE_DATABASE_DIAGNOSTIC"));
