@@ -2,7 +2,7 @@
 """Restore the GPT02-1782 DEV Nginx GET gate after a bounded owner-ledger test.
 
 This tool NEVER opens the gate, accesses credentials, or changes PostgreSQL.
-Schedule --restore via an independent systemd transient timer BEFORE any test.
+Use --arm to register an independent systemd transient rollback timer BEFORE any test.
 Only the single exact, approved gate-line removal is accepted as a restore input.
 """
 from __future__ import annotations
@@ -118,6 +118,13 @@ def restore(active: Path, backup: Path, test_cmd: list[str],
     return "RESTORED_GATE_CLOSED"
 
 
+def trusted_script(executable: Path) -> bool:
+    if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
+        return False
+    identity = executable.stat()
+    return identity.st_uid == 0 and not (stat.S_IMODE(identity.st_mode) & 0o022)
+
+
 def arm(active: Path, backup: Path, delay_seconds: int, executable: Path) -> str:
     """Create an independent transient timer BEFORE the operator removes the gate.
 
@@ -126,10 +133,7 @@ def arm(active: Path, backup: Path, delay_seconds: int, executable: Path) -> str
     """
     if delay_seconds < 30 or delay_seconds > 180:
         raise GuardError("WATCHDOG_DURATION_INVALID")
-    if not executable.is_absolute() or not executable.is_file():
-        raise GuardError("INSTALLED_GUARD_REQUIRED")
-    identity = executable.stat()
-    if identity.st_uid != 0 or stat.S_IMODE(identity.st_mode) & 0o022:
+    if not trusted_script(executable):
         raise GuardError("UNTRUSTED_GUARD_PATH")
     fingerprint = prepare(active, backup)
     unit = "gpt02-1782-owner-ledger-restore"
