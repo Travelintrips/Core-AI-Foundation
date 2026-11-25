@@ -70,7 +70,7 @@ try{
     consumeVerifiedDecision:async()=>receipt,verifyCompletedReceipt:verifier,store:st,clock:()=>now});
   const gate=mk(async()=>({verified:true}));
   const ready=await gate.run('status',TARGET,token);
-  assert.equal((await gate.run('submit',{...TARGET,challengeId:ready.challengeId},token)).state,'accepted');
+  assert.equal((await gate.run('submit',{...TARGET,challengeId:ready.challengeId},token)).blocker,'COMPLETED_RECEIPT_NOT_VERIFIED');
   const renewed=mk(async()=>{throw Error('ISSUER_DOWN')});
   assert.equal((await renewed.run('status',TARGET,token)).blocker,'COMPLETED_RECEIPT_REVALIDATION_UNAVAILABLE');
   const invalid=mk(async()=>({verified:false}));
@@ -95,5 +95,31 @@ try{
   assert.equal((await newGate(receiptProof(undefined)).run('status',TARGET,token)).blocker,'COMPLETED_RECEIPT_NOT_VERIFIED');
   assert.equal((await newGate(receiptProof(now+30000)).run('status',TARGET,token)).state,'accepted');
   console.log('PASS:EXPIRED_AND_MISSING_RECEIPT_EXPIRY_REJECTED');
+ }finally{rmSync(dir,{recursive:true,force:true})}
+}
+
+// A first-time successful local commit must be independently reverified before
+// returning 'accepted'; a forged/missing issuer receipt cannot become PASS.
+{
+ const dir=mkdtempSync(join(tmpdir(),'gpt02-first-submit-verification-'));
+ try{
+  const good=(x={})=>({verified:true,receiptId:uuid,ownerSubject:owner.ownerSubject,
+    executionId:TARGET.executionId,attemptId:TARGET.attemptId,
+    environment:'DEV',authorizationExpiresAt:now+30000,...x});
+  for(const [name,verifier,expected] of [
+   ['WRONG_RECEIPT',async()=>good({receiptId:'11111111-1111-4111-8111-111111111111'}),'COMPLETED_RECEIPT_NOT_VERIFIED'],
+   ['EXPIRED_RECEIPT',async()=>good({authorizationExpiresAt:now-1}),'COMPLETED_RECEIPT_NOT_VERIFIED'],
+   ['ISSUER_UNAVAILABLE',async()=>{throw Error('offline')},'COMPLETED_RECEIPT_REVALIDATION_UNAVAILABLE']
+  ]){
+   const st=createDurableStore({dbPath:join(dir,name+'.sqlite3')});
+   const gate=createDurableGateCore({verifyOwner:async()=>owner,verifyIndependentAuthority:async()=>authority,
+      consumeVerifiedDecision:async()=>receipt,verifyCompletedReceipt:verifier,store:st,clock:()=>now});
+   const ready=await gate.run('status',TARGET,token);
+   const result=await gate.run('submit',{...TARGET,challengeId:ready.challengeId},token);
+   assert.equal(result.blocker,expected,name);
+   assert.equal(result.state,'waiting',name);
+   assert.equal(result.receiptVerified,undefined,name);
+  }
+  console.log('PASS:FIRST_SUBMISSION_REQUIRES_INDEPENDENT_RECEIPT_VERIFICATION');
  }finally{rmSync(dir,{recursive:true,force:true})}
 }
