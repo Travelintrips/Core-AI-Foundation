@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Publish one externally provisioned CST-DEV reader credential into /run.
+"""Publish an externally provisioned CST-DEV credential into its fixed /run path.
 
 Only the companion systemd unit decrypts the separately authorized credential.
 This helper does not issue credentials, change a database role, or produce any
 custody attestation. It never accepts an input/output path from its caller.
+The default reader profile is unchanged; the explicit worker-key profile only
+loads a separately authorized Ed25519 key and never generates or signs with it.
 """
 from __future__ import annotations
 
@@ -20,6 +22,14 @@ SOURCE_FILE = Path(
 READER_DIR = Path("/run/credentials/gpt02-owner-ledger-reader")
 READER_FILE = READER_DIR / "reader.json"
 MAX_BYTES = 4096
+WORKER_ISSUER_FLAG = "GPT02_DEV_CUSTODY_WORKER_ISSUER_ENABLED"
+WORKER_SOURCE_FILE = Path(
+    "/run/credentials/gpt02-reader-custody-worker-attestor-key-loader.service/private-key.pkcs8"
+)
+WORKER_KEY_DIR = Path("/run/credentials/gpt02-reader-custody-worker-attestor")
+WORKER_KEY_FILE = WORKER_KEY_DIR / "private-key.pkcs8"
+WORKER_KEY_BYTES = 48
+_WORKER_KEY_PREFIX = bytes.fromhex("302e020100300506032b657004220420")
 
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
@@ -38,6 +48,7 @@ _SAFE_CODES = frozenset({
     "READER_SOURCE_CHANGED", "READER_SOURCE_TOO_LARGE",
     "READER_PAYLOAD_INVALID", "READER_DESTINATION_UNSAFE",
     "READER_PUBLICATION_FAILED", "READER_LOADER_FAILED",
+    "WORKER_ATTESTOR_KEY_DISABLED", "WORKER_ATTESTOR_KEY_INVALID",
 })
 
 
@@ -57,6 +68,15 @@ def _guard_environment() -> None:
         raise LoaderDenied("READER_LOADER_ENV_INVALID")
     if os.geteuid() != 0 or os.getegid() != 0:
         raise LoaderDenied("READER_LOADER_ROOT_REQUIRED")
+
+
+def _profile_paths(profile: str) -> tuple[Path, Path, Path, int, str]:
+    # These are the only profiles. No path comes from CLI arguments or env.
+    if profile == "reader":
+        return SOURCE_FILE, READER_DIR, READER_FILE, MAX_BYTES, "reader.json"
+    if profile == "worker-attestor-key":
+        return WORKER_SOURCE_FILE, WORKER_KEY_DIR, WORKER_KEY_FILE, WORKER_KEY_BYTES, "private-key.pkcs8"
+    raise LoaderDenied("READER_LOADER_ARGUMENTS_INVALID")
 
 
 def _check_directory(meta: os.stat_result, exact_mode: int | None = None) -> None:
@@ -98,14 +118,14 @@ def _open_trusted_directory(path: Path, exact_mode: int | None = None) -> int:
             os.close(descriptor)
 
 
-def _private_file(meta: os.stat_result) -> bool:
+def _private_file(meta: os.stat_result, max_bytes: int = MAX_BYTES) -> bool:
     return (
         stat.S_ISREG(meta.st_mode)
         and meta.st_uid == 0
         and meta.st_gid == 0
         and meta.st_nlink == 1
         and stat.S_IMODE(meta.st_mode) in (0o400, 0o600)
-        and 0 < meta.st_size <= MAX_BYTES
+        and 0 < meta.st_size <= max_bytes
     )
 
 
@@ -116,24 +136,25 @@ def _identity(meta: os.stat_result) -> tuple[int, ...]:
     )
 
 
-def _read_source() -> bytes:
+def _read_source(profile: str = "reader") -> bytes:
+    source_file, _, _, max_bytes, _ = _profile_paths(profile)
     parent: int | None = None
     descriptor: int | None = None
     try:
-        parent = _open_trusted_directory(SOURCE_FILE.parent)
-        descriptor = os.open(SOURCE_FILE.name, _FILE_FLAGS, dir_fd=parent)
+        parent = _open_trusted_directory(source_file.parent)
+        descriptor = os.open(source_file.name, _FILE_FLAGS, dir_fd=parent)
         before = os.fstat(descriptor)
-        if not _private_file(before):
+        if not _private_file(before, max_bytes):
             raise LoaderDenied("READER_SOURCE_UNSAFE")
         chunks: list[bytes] = []
         total = 0
-        while total <= MAX_BYTES:
-            chunk = os.read(descriptor, MAX_BYTES + 1 - total)
+        while total <= max_bytes:
+            chunk = os.read(descriptor, max_bytes + 1 - total)
             if not chunk:
                 break
             chunks.append(chunk)
             total += len(chunk)
-            if total > MAX_BYTES:
+            if total > max_bytes:
                 raise LoaderDenied("READER_SOURCE_TOO_LARGE")
         after = os.fstat(descriptor)
         if _identity(before) != _identity(after) or total != before.st_size:
@@ -185,25 +206,27 @@ def _validate_payload(payload: bytes) -> None:
         raise LoaderDenied("READER_PAYLOAD_INVALID") from None
 
 
-def _check_destination(directory: int) -> None:
+def _check_destination(directory: int, profile: str = "reader") -> None:
+    _, _, target, max_bytes, _ = _profile_paths(profile)
     try:
-        existing = os.stat(READER_FILE.name, dir_fd=directory, follow_symlinks=False)
+        existing = os.stat(target.name, dir_fd=directory, follow_symlinks=False)
     except FileNotFoundError:
         return
-    if not _private_file(existing) or stat.S_IMODE(existing.st_mode) != 0o600:
+    if not _private_file(existing, max_bytes) or stat.S_IMODE(existing.st_mode) != 0o600:
         raise LoaderDenied("READER_DESTINATION_UNSAFE")
 
 
-def _publish(payload: bytes) -> None:
+def _publish(payload: bytes, profile: str = "reader") -> None:
+    _, target_dir, target_file, max_bytes, filename = _profile_paths(profile)
     directory: int | None = None
     descriptor: int | None = None
     temporary: str | None = None
     try:
-        if READER_FILE.parent != READER_DIR or READER_FILE.name != "reader.json":
+        if target_file.parent != target_dir or target_file.name != filename:
             raise LoaderDenied("READER_DESTINATION_UNSAFE")
-        directory = _open_trusted_directory(READER_DIR, exact_mode=0o700)
-        _check_destination(directory)
-        candidate_name = ".reader.json-" + secrets.token_hex(16)
+        directory = _open_trusted_directory(target_dir, exact_mode=0o700)
+        _check_destination(directory, profile)
+        candidate_name = "." + filename + "-" + secrets.token_hex(16)
         descriptor = os.open(
             candidate_name,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
@@ -222,7 +245,7 @@ def _publish(payload: bytes) -> None:
         os.fsync(descriptor)
         candidate = os.fstat(descriptor)
         if (
-            not _private_file(candidate)
+            not _private_file(candidate, max_bytes)
             or stat.S_IMODE(candidate.st_mode) != 0o600
             or candidate.st_size != len(payload)
         ):
@@ -230,8 +253,8 @@ def _publish(payload: bytes) -> None:
         os.close(descriptor)
         descriptor = None
         # Recheck the existing destination before the single atomic commit.
-        _check_destination(directory)
-        os.replace(temporary, READER_FILE.name, src_dir_fd=directory, dst_dir_fd=directory)
+        _check_destination(directory, profile)
+        os.replace(temporary, target_file.name, src_dir_fd=directory, dst_dir_fd=directory)
         temporary = None
         os.fsync(directory)
     except OSError:
@@ -255,19 +278,37 @@ def load_reader_credential() -> None:
     _publish(payload)
 
 
+def load_worker_attestor_key() -> None:
+    _guard_environment()
+    if os.environ.get(WORKER_ISSUER_FLAG) != "true":
+        raise LoaderDenied("WORKER_ATTESTOR_KEY_DISABLED")
+    payload = _read_source("worker-attestor-key")
+    # Canonical PKCS8 Ed25519 AlgorithmIdentifier + one 32-byte private seed.
+    # The API separately verifies that its derived public key matches the pin.
+    if len(payload) != WORKER_KEY_BYTES or not payload.startswith(_WORKER_KEY_PREFIX):
+        raise LoaderDenied("WORKER_ATTESTOR_KEY_INVALID")
+    _publish(payload, "worker-attestor-key")
+
+
 def main(argv: list[str] | None = None) -> int:
-    if (sys.argv[1:] if argv is None else argv):
+    arguments = sys.argv[1:] if argv is None else argv
+    worker_key = arguments == ["--worker-attestor-key"]
+    if arguments and not worker_key:
         print("GPT02_READER_LOAD=BLOCKED code=READER_LOADER_ARGUMENTS_INVALID", file=sys.stderr)
         return 1
+    marker = "GPT02_WORKER_ATTESTOR_KEY_LOAD" if worker_key else "GPT02_READER_LOAD"
     try:
-        load_reader_credential()
+        if worker_key:
+            load_worker_attestor_key()
+        else:
+            load_reader_credential()
     except LoaderDenied as error:
-        print("GPT02_READER_LOAD=BLOCKED code=" + error.code, file=sys.stderr)
+        print(marker + "=BLOCKED code=" + error.code, file=sys.stderr)
         return 1
     except Exception:
-        print("GPT02_READER_LOAD=BLOCKED code=READER_LOADER_FAILED", file=sys.stderr)
+        print(marker + "=BLOCKED code=READER_LOADER_FAILED", file=sys.stderr)
         return 1
-    print("GPT02_READER_LOAD=PASS")
+    print(marker + "=PASS")
     return 0
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Metadata-only GPT02 Owner reader/custody mount gate for CST-DEV.
+"""Metadata-only GPT02 Owner reader/custody and worker-key mounts for CST-DEV.
 
 Called by the DEV release wrapper. No CLI, plaintext credential reading,
 decryption, signing, or process execution. This gate never replaces existing
@@ -22,6 +22,9 @@ CUSTODY_DIR = Path("/run/credentials/gpt02-reader-custody")
 WORKER_PROOF = CUSTODY_DIR / "worker-attestation.json"
 DBA_PROOF = CUSTODY_DIR / "issuer-receipt.json"
 DEV_PROJECT = "xssrfshdrtdfupgqwfdw"
+WORKER_ISSUER_FLAG = "GPT02_DEV_CUSTODY_WORKER_ISSUER_ENABLED"
+WORKER_KEY_DIR = Path("/run/credentials/gpt02-reader-custody-worker-attestor")
+WORKER_KEY_FILE = WORKER_KEY_DIR / "private-key.pkcs8"
 
 
 class ReaderMountDenied(RuntimeError):
@@ -42,7 +45,9 @@ def _root_parents(path: Path) -> bool:
     return True
 
 
-def _regular_root_file(path: Path, *, mode: int, max_bytes: int) -> bool:
+def _regular_root_file(
+    path: Path, *, mode: int, max_bytes: int, exact_bytes: int | None = None,
+) -> bool:
     try:
         meta = path.lstat()
     except OSError:
@@ -53,6 +58,7 @@ def _regular_root_file(path: Path, *, mode: int, max_bytes: int) -> bool:
         and meta.st_nlink == 1 and _root_parents(path)
         and stat.S_IMODE(meta.st_mode) == mode
         and 0 < meta.st_size <= max_bytes
+        and (exact_bytes is None or meta.st_size == exact_bytes)
     )
 
 
@@ -105,6 +111,25 @@ def validate_release_environment(values: dict[str, str]) -> bool:
     return flag == "true"
 
 
+def _public_key(values: dict[str, str], name: str, error: str) -> bytes:
+    prefix = f"GPT02_DEV_CUSTODY_{name}_PUBLIC_KEY_SPKI"
+    encoded, fingerprint = values.get(prefix + "_B64"), values.get(prefix + "_SHA256")
+    try:
+        if not isinstance(encoded, str) or len(encoded) != 60 or not isinstance(fingerprint, str):
+            raise ValueError()
+        der = base64.b64decode(encoded, validate=True)
+        if (
+            len(der) != 44 or not der.startswith(bytes.fromhex("302a300506032b6570032100"))
+            or base64.b64encode(der).decode("ascii") != encoded
+            or not re.fullmatch(r"[a-f0-9]{64}", fingerprint)
+            or hashlib.sha256(der).hexdigest() != fingerprint
+        ):
+            raise ValueError()
+        return der
+    except (ValueError, TypeError):
+        raise ReaderMountDenied(error) from None
+
+
 def validate_custody_configuration(values: dict[str, str]) -> None:
     """Check public trust configuration only; never confer issuer authority."""
     if not validate_release_environment(values):
@@ -113,24 +138,10 @@ def validate_custody_configuration(values: dict[str, str]) -> None:
         raise ReaderMountDenied("READER_PROJECT_MISMATCH")
     if values.get("SUPABASE_URL") or values.get("SUPABASE_SERVICE_ROLE_KEY"):
         raise ReaderMountDenied("READER_PROJECT_MISMATCH")
-    keys = []
-    for name in ("ATTESTOR", "ISSUER"):
-        prefix = f"GPT02_DEV_CUSTODY_{name}_PUBLIC_KEY_SPKI"
-        encoded, fingerprint = values.get(prefix + "_B64"), values.get(prefix + "_SHA256")
-        try:
-            if not isinstance(encoded, str) or len(encoded) != 60 or not isinstance(fingerprint, str):
-                raise ValueError()
-            der = base64.b64decode(encoded, validate=True)
-            if (
-                len(der) != 44 or not der.startswith(bytes.fromhex("302a300506032b6570032100"))
-                or base64.b64encode(der).decode("ascii") != encoded
-                or not re.fullmatch(r"[a-f0-9]{64}", fingerprint)
-                or hashlib.sha256(der).hexdigest() != fingerprint
-            ):
-                raise ValueError()
-        except (ValueError, TypeError):
-            raise ReaderMountDenied("READER_CUSTODY_TRUST_CONFIGURATION_INVALID") from None
-        keys.append(der)
+    keys = [
+        _public_key(values, name, "READER_CUSTODY_TRUST_CONFIGURATION_INVALID")
+        for name in ("ATTESTOR", "ISSUER")
+    ]
     if keys[0] == keys[1]:
         raise ReaderMountDenied("READER_CUSTODY_ISSUERS_MUST_DIFFER")
 
@@ -160,4 +171,58 @@ def get_custody_mounts() -> tuple[str, ...]:
     # removal/replacement of a receipt must be visible on the next request.
     return (
         "--mount", f"type=bind,source={CUSTODY_DIR},target={CUSTODY_DIR},readonly",
+    )
+
+
+def validate_worker_issuer_environment(values: dict[str, str]) -> bool:
+    """Separate worker issuance opt-in; disabled means no private-file IO."""
+    if not isinstance(values, dict):
+        raise ReaderMountDenied("WORKER_ISSUER_RELEASE_ENV_INVALID")
+    flag = values.get(WORKER_ISSUER_FLAG, "false")
+    if flag not in ("true", "false"):
+        raise ReaderMountDenied("WORKER_ISSUER_FEATURE_FLAG_INVALID")
+    if flag == "true" and (
+        values.get("APP_ENV") != "development" or values.get("NODE_ENV") != "development"
+    ):
+        raise ReaderMountDenied("WORKER_ISSUER_DEV_ONLY")
+    return flag == "true"
+
+
+def validate_worker_issuer_configuration(values: dict[str, str]) -> None:
+    """Validate existing public pins without requiring reader/DBA bootstrap."""
+    if not validate_worker_issuer_environment(values):
+        raise ReaderMountDenied("WORKER_ISSUER_FEATURE_DISABLED")
+    if (
+        values.get("SUPABASE_URL_DEV") != f"https://{DEV_PROJECT}.supabase.co"
+        or values.get("SUPABASE_URL") or values.get("SUPABASE_SERVICE_ROLE_KEY")
+    ):
+        raise ReaderMountDenied("WORKER_ISSUER_PROJECT_MISMATCH")
+    error = "WORKER_ISSUER_TRUST_CONFIGURATION_INVALID"
+    attestor = _public_key(values, "ATTESTOR", error)
+    issuer_prefix = "GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI"
+    if issuer_prefix + "_B64" in values or issuer_prefix + "_SHA256" in values:
+        issuer = _public_key(values, "ISSUER", error)
+        if attestor == issuer:
+            raise ReaderMountDenied("WORKER_ISSUER_KEYS_MUST_DIFFER")
+
+
+def get_worker_issuer_mounts(*, enabled: bool, environment: str, production: bool) -> tuple[str, ...]:
+    if type(enabled) is not bool:
+        raise ReaderMountDenied("WORKER_ISSUER_FEATURE_FLAG_INVALID")
+    if not enabled:
+        return ()
+    if environment != "development" or production:
+        raise ReaderMountDenied("WORKER_ISSUER_DEV_ONLY")
+    try:
+        directory = WORKER_KEY_DIR.lstat()
+    except OSError:
+        raise ReaderMountDenied("WORKER_ISSUER_KEY_CUSTODY_UNAVAILABLE") from None
+    if (
+        not stat.S_ISDIR(directory.st_mode) or directory.st_uid != 0
+        or directory.st_gid != 0 or stat.S_IMODE(directory.st_mode) != 0o700
+        or not _regular_root_file(WORKER_KEY_FILE, mode=0o600, max_bytes=48, exact_bytes=48)
+    ):
+        raise ReaderMountDenied("WORKER_ISSUER_KEY_CUSTODY_UNAVAILABLE")
+    return (
+        "--mount", f"type=bind,source={WORKER_KEY_FILE},target={WORKER_KEY_FILE},readonly",
     )
