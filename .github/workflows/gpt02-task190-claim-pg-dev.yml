@@ -1,0 +1,63 @@
+name: GPT02 Task190 durable claim once PostgreSQL DEV
+on:
+  pull_request:
+    paths:
+      - 'ops/dev/gpt02/task190_execution_claim_inert.sql'
+      - 'ops/dev/gpt02/test_task190_execution_claim_pg.sh'
+      - '.github/workflows/gpt02-task190-claim-pg-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'ops/dev/gpt02/task190_execution_claim_inert.sql'
+      - 'ops/dev/gpt02/test_task190_execution_claim_pg.sh'
+      - '.github/workflows/gpt02-task190-claim-pg-dev.yml'
+permissions:
+  contents: read
+jobs:
+  atomic-claim-pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: task190_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: task190-disposable-claim-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d task190_ci"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: task190_ci
+      PGUSER: postgres
+      PGPASSWORD: task190-disposable-claim-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install psql if unavailable
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Install parent inert custody source in disposable DB
+        run: psql -X -v ON_ERROR_STOP=1 -f ops/dev/gpt02/task190_execution_custody_inert.sql
+      - name: Install irreversible claim table with no grants
+        run: psql -X -v ON_ERROR_STOP=1 -f ops/dev/gpt02/task190_execution_claim_inert.sql
+      - name: Live PostgreSQL two-process conflict, failure and replay
+        run: bash ops/dev/gpt02/test_task190_execution_claim_pg.sh
+      - name: Guard against permission escalation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('ops/dev/gpt02/task190_execution_claim_inert.sql').read_text().lower()
+          assert 'revoke all on table' in s
+          for word in ('grant ', 'alter role', 'security definer', 'dispatch_permitted'):
+            assert word not in s, word
+          print('NO_GRANT_NO_DISPATCH=PASS')
+          PY
