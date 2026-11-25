@@ -54,6 +54,19 @@ export function createDurableGateCore({verifyOwner,verifyIndependentAuthority,co
    const complete=store('complete',{key,now,receipt:receipt.receiptId});
    if(complete.state!=='COMPLETED'||complete.receipt!==receipt.receiptId)return waiting('DURABLE_COMPLETION_NOT_VERIFIED');
   }catch{return waiting('DURABLE_STORE_UNAVAILABLE')}
+  // Completion in the local durable store does not prove the independent issuer
+  // committed a matching, still-valid receipt. Verify independently on this
+  // first submission, just as on a later readback after a process restart.
+  let proof;
+  try{proof=await verifyCompletedReceipt({...TARGET,ownerSubject:owner.ownerSubject,receiptId:receipt.receiptId})}
+  catch{return waiting('COMPLETED_RECEIPT_REVALIDATION_UNAVAILABLE')}
+  const afterVerify=clock();
+  if(proof?.verified!==true||proof.receiptId!==receipt.receiptId||
+     proof.ownerSubject!==owner.ownerSubject||proof.executionId!==TARGET.executionId||
+     proof.attemptId!==TARGET.attemptId||proof.environment!=='DEV'||
+     !Number.isSafeInteger(proof.authorizationExpiresAt)||
+     proof.authorizationExpiresAt<=afterVerify||proof.authorizationExpiresAt>afterVerify+120000)
+    return waiting('COMPLETED_RECEIPT_NOT_VERIFIED');
   return {...TARGET,ownerSubject:owner.ownerSubject,state:'accepted',receiptVerified:true,receiptId:receipt.receiptId};
  }}
 }
