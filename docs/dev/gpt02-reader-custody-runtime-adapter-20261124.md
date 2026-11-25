@@ -70,7 +70,7 @@ DBA receipt fields, in canonical order:
 2. `project`: `xssrfshdrtdfupgqwfdw`
 3. `scope`: `GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV`
 4. `principal`: `openclaw-vps-main`
-5. `readerRole`: `gpt02_owner_ledger_reader_dev`
+5. `readerRole`: `gpt02_owner_ledger_reader_1782_dev`
 6. `runtimeCredentialPath`: `/run/credentials/gpt02-owner-ledger-reader/reader.json`
 7. `issuer`: `CST_DEV_READER_CREDENTIAL_CUSTODIAN`
 8. `credentialId`: same authenticated credential UUID
@@ -82,11 +82,13 @@ DBA receipt fields, in canonical order:
 
 The DBA validity interval must be contained within the worker interval. The worker receipt and DBA receipt are checked again on each request. Removing a protected receipt revokes that evidence for subsequent requests; no grant is cached. A changed/renewed worker receipt requires a new matching DBA receipt. Repeated GETs are permissible because they only verify evidence and have no provisioning side effect. Existing token revocation/expiry stays enforced by authentication.
 
+The reader identity is now dedicated to GPT02-1782. A receipt naming the old shared `gpt02_owner_ledger_reader_dev` is rejected even with a valid signature; there is no role alias or fallback. Worker receipt fields and the fixed credential paths are unchanged. See the [exact-challenge reader staging plan](gpt02-independent-owner-reader-1782-20261125.md).
+
 ## Concrete remaining operational handoff
 
-There is no custody-registration UI or authorized attestation/credential issuer endpoint in the inspected baseline. The existing `/ai/agent-runtime/credentials` management route creates/revokes service tokens; it is not an attestation issuer. This change does not invent an administrative panel or label a metadata update as authorization.
+The original verifier baseline had no custody issuer. The later [Owner-authenticated worker endpoint and separate host DBA custodian](gpt02-reader-custody-issuers-20261125.md) supply those source callsites. The existing `/ai/agent-runtime/credentials` create/revoke route is still distinct from custody issuance; metadata edits cannot authorize it.
 
-After the source change passes review and the established DEV release gates, the existing worker can retrieve `/api/gpt02-reader-custody/attestation-request`. The authorized credential administrator must verify that public packet against the canonical worker identity and produce the first signed document through its real issuer. Before provisioning this separate reader purpose, the authorized custodian must reconcile the shared role's existing Task190 consumer and connection limit: no password reset or copying Task190's sealed material is implied. It then supplies independently scoped encrypted storage, verifies the limited TLS/SELECT identity, and supplies the matching non-secret DBA receipt. The [dormant encrypted loading and release integration](gpt02-superadmin-reader-runtime-mount-gate-20261124.md) consumes those approved inputs; it does not issue them. The deployment operator installs only verified public trust and evidence. If those issuer capabilities do not exist, they remain a specific integration prerequisite; this verifier cannot create their authority.
+After the source change passes review and the established DEV release gates, the existing worker retrieves `/api/gpt02-reader-custody/attestation-request`. The authorized credential administrator verifies that public packet against the canonical worker identity and produces the signed document through the real Owner-authenticated issuer. The authorized database custodian provisions the independent `gpt02_owner_ledger_reader_1782_dev` credential with the exact-challenge grants/RLS, supplies encrypted storage, verifies the limited TLS/SELECT identity, and supplies the matching non-secret DBA receipt. Task190's shared role, password, sealed input and consumer remain unchanged. The [encrypted loading and release integration](gpt02-superadmin-reader-runtime-mount-gate-20261124.md) consumes those approved inputs; it does not issue a password. The deployment operator installs only verified public trust and evidence.
 
 Then check the same authenticated worker's `/status` and require the fixed receipt ID, verify a rotated/revoked credential or removed receipt is denied, and perform the separate real Super Admin request:
 

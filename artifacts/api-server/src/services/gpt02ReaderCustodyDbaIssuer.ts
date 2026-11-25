@@ -20,7 +20,7 @@ export const GPT02_DBA_CUSTODIAN_PATHS = Object.freeze({
   auditDirectory: "/var/lib/gpt02-reader-custodian-audit",
 });
 const HOST = "db.xssrfshdrtdfupgqwfdw.supabase.co";
-const ROLE = "gpt02_owner_ledger_reader_dev";
+const ROLE = "gpt02_owner_ledger_reader_1782_dev";
 const TTL_MS = 15 * 60_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256 = /^[0-9a-f]{64}$/;

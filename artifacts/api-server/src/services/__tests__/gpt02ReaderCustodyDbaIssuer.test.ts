@@ -35,7 +35,7 @@ const BINDING = gpt02CustodyCredentialBinding(TOKEN_HASH);
 const CONFIG = {
   database: "postgres", host: "db.xssrfshdrtdfupgqwfdw.supabase.co", port: 5432,
   password: "synthetic-test-only-reader-password-123456789", projectId: "xssrfshdrtdfupgqwfdw",
-  sslMode: "verify-full", user: "gpt02_owner_ledger_reader_dev",
+  sslMode: "verify-full", user: "gpt02_owner_ledger_reader_1782_dev",
 };
 const CA = "-----BEGIN CERTIFICATE-----\nSYNTHETIC_TEST_ONLY\n-----END CERTIFICATE-----";
 const IDENTITY = {
@@ -272,6 +272,7 @@ describe("separate host DBA custody issuer", () => {
 
   it.each([
     ["different host", { host: "other-project.invalid" }], ["different role", { user: "postgres" }],
+    ["Task190 shared credential", { user: "gpt02_owner_ledger_reader_dev" }],
     ["unverified TLS", { sslMode: "require" }], ["extra credential field", { token: PRIVATE_MARKER }],
   ])("does not connect using %s", async (_name, patch) => {
     const f = fixture(); f.files.set(PATHS.reader, Buffer.from(JSON.stringify({ ...CONFIG, ...patch })));
@@ -288,6 +289,8 @@ describe("separate host DBA custody issuer", () => {
 
   it.each([
     ["login identity", { actor: "postgres" }], ["effective identity", { effective: "postgres" }],
+    ["Task190 shared login", { actor: "gpt02_owner_ledger_reader_dev" }],
+    ["Task190 shared effective role", { effective: "gpt02_owner_ledger_reader_dev" }],
     ["database", { database_name: "other" }], ["transaction writes", { transaction_read_only: "off" }],
     ["default writes", { default_read_only: "off" }], ["plaintext connection", { ssl: false }],
     ["superuser", { role_superuser: true }], ["RLS bypass", { role_bypassrls: true }],

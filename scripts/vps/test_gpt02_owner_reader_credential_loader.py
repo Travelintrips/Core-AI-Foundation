@@ -24,7 +24,7 @@ CONFIG = {
     "database": "postgres", "host": "db.xssrfshdrtdfupgqwfdw.supabase.co",
     "password": SYNTHETIC_PASSWORD, "port": 5432,
     "projectId": "xssrfshdrtdfupgqwfdw", "sslMode": "verify-full",
-    "user": "gpt02_owner_ledger_reader_dev",
+    "user": "gpt02_owner_ledger_reader_1782_dev",
 }
 PAYLOAD = json.dumps(CONFIG, separators=(",", ":")).encode()
 
@@ -259,7 +259,7 @@ class ReaderCredentialLoaderTests(unittest.TestCase):
 
     def test_invalid_utf8_duplicate_json_and_target_mismatches_do_not_publish(self):
         invalid = [b"\xff\xfe", b"{", b"[]", b"null", b'{"password":NaN}',
-                   PAYLOAD[:-1] + b',"user":"gpt02_owner_ledger_reader_dev"}']
+                   PAYLOAD[:-1] + b',"user":"gpt02_owner_ledger_reader_1782_dev"}']
         for patch_values in (
             {"host": "db.other.example.invalid"}, {"projectId": "other-project"},
             {"user": "aicore_dev_runtime"}, {"database": "other"}, {"port": "5432"},
@@ -272,6 +272,12 @@ class ReaderCredentialLoaderTests(unittest.TestCase):
                 self.assert_denied("READER_PAYLOAD_INVALID")
                 self.assertFalse(self.target.exists())
                 self.assert_no_temporary_files()
+
+    def test_task190_shared_reader_role_is_rejected_without_publication(self):
+        self.set_source(json.dumps({**CONFIG, "user": "gpt02_owner_ledger_reader_dev"}).encode())
+        self.assert_denied("READER_PAYLOAD_INVALID")
+        self.assertFalse(self.target.exists())
+        self.assert_no_temporary_files()
 
     def test_untrusted_or_missing_destination_directory_is_not_created(self):
         self.reader_dir.chmod(0o750)
