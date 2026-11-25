@@ -150,7 +150,7 @@ job stopped; reconcile unit state and published public evidence before retrying.
 
 The service first verifies the existing signed V2 worker document. It then uses
 the approved reader input to open one bounded TLS connection to the fixed DEV
-host as `gpt02_owner_ledger_reader_dev`. It checks exact session/effective role
+host as `gpt02_owner_ledger_reader_1782_dev`. It checks exact session/effective role
 identity, verified SSL, current and default read-only settings, no administrative
 or RLS-bypass role privileges, schema usage without creation, no table-wide
 SELECT or write privileges, and enabled RLS on the two Owner ledger tables.
@@ -158,7 +158,8 @@ Two zero-row SELECTs cover every column used by the actual reader, including
 its filters and joins. This checks usable column access without retrieving an
 Owner decision or modifying PostgreSQL state. Catalog functions are explicitly
 qualified. Historical inheritance, connection-limit and FORCE RLS observations
-are not new requirements to alter a shared role.
+are not requirements to alter Task190's shared role. The dedicated GPT02-1782
+staging plan sets its own read-only defaults and exact-challenge permissions.
 
 Only after that probe passes does the service load its canonical Ed25519 key
 and check its correspondence to the independent pinned DBA public key. The
@@ -191,10 +192,13 @@ custodian must supply and enroll the actual purpose-specific keys and the
 separately approved reader input. Ephemeral test keys must never be promoted to
 live trust merely to obtain a PASS.
 
-The dedicated reader role `gpt02_owner_ledger_reader_dev` is shared with the
-existing Task190 consumer and has a one-connection limit. This work does not
-reset that password, copy Task190's sealed material, terminate another
-consumer, broaden OpenClaw's database rights, or grant root/postgres access.
+The current reader identity is `gpt02_owner_ledger_reader_1782_dev`, with its own
+password custody and direct column grants restricted by RLS to the original
+GPT02 challenge. The old `gpt02_owner_ledger_reader_dev` remains with Task190.
+The issuer rejects that shared identity in credential JSON, native role checks
+and signed DBA receipts. It never resets Task190's password, copies its sealed
+material, changes its connection limit, adds membership, or terminates its
+consumer. See the [dedicated-reader staging plan](gpt02-independent-owner-reader-1782-20261125.md).
 
 Worker issuance proves only the current credential's canonical worker binding.
 It does not by itself prove actual DBA custody, Owner-ledger E2E, final ACK,

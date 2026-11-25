@@ -13,7 +13,7 @@ This section records the original read-only acceptance baseline; it is not a cur
 - Original RLS verification matched the CST-DEV GPT02 scope, exact Owner email, worker and final consumed/approved states.
 - A temporary transactional role test originally verified one APPROVED decision and one CONSUMED challenge, rejecting writes and sensitive hash columns. That test is not evidence of a current dedicated-role TLS connection.
 
-## Current integration evidence — 25 Nov 2026
+## Prior integration evidence — 25 Nov 2026
 
 [PR #1814](https://github.com/Travelintrips/Core-AI-Foundation/pull/1814) deployed the generation-bound custody verifier to DEV as `21717d1300889cea9166f399f0c14bb26f6a2e1c`. Its six live GET checks verified the unsigned attestation-request packet and correct denials. They did not establish Owner ledger access.
 
@@ -21,7 +21,13 @@ The [Task190 investigation](https://github.com/Travelintrips/Core-AI-Foundation/
 
 **A new password for this shared PostgreSQL role would be a role-wide rotation and could break Task190 reconnects.** Do not copy its sealed credential, widen its socket permissions, or treat its process health as an independent GPT02-1782 custody receipt. The custodian must reconcile the exact approved read purpose, existing consumers, connection limit and recovery procedure before any credential or role change.
 
-The inspected implementation contains the V2 verifier and unsigned request endpoint, but no operational V2 attestation or DBA receipt issuer. The existing service-token administration page creates/revokes tokens; it is not a custody issuer. The next bounded continuation supplies a dormant encrypted-credential loading unit and calls the mount planner from the actual DEV release path; see [loading and mount integration](gpt02-superadmin-reader-runtime-mount-gate-20261124.md). Its installation and feature activation require separate evidence. An Owner coordination appointment must not be reported as an activated administrative issuer.
+That baseline contained the V2 verifier and unsigned request endpoint. The later [worker issuer and host DBA custodian](gpt02-reader-custody-issuers-20261125.md) implement issuance through their real authentication and protected-input boundaries. The [loading and mount integration](gpt02-superadmin-reader-runtime-mount-gate-20261124.md) consumes an independently provisioned encrypted reader input. None of those components creates a PostgreSQL password.
+
+## Dedicated GPT02-1782 identity — 25 Nov 2026
+
+The current source accepts only `gpt02_owner_ledger_reader_1782_dev` for credential loading, the native reader, the DBA probe and the signed DBA receipt. The prior `gpt02_owner_ledger_reader_dev` is rejected even if presented with otherwise valid credentials or a valid custody signature. Task190 retains its original role, password, sealed input and consumer unchanged; no membership or `SET ROLE` path connects the new reader to that shared identity.
+
+The [dedicated-reader staging plan](gpt02-independent-owner-reader-1782-20261125.md) separates two capabilities: Phase A creates the new role with `NOLOGIN` and no password; Phase B requires the existing schema/table-owner custodian to add direct column grants and SELECT policies restricted to original challenge `9c4f21e1-48af-4f7f-9830-931b84e3e846`. Role creation or sealed-password custody alone does not establish ledger access. Legitimate fresh password provisioning, bounded login activation and the encrypted input remain operational steps; source changes alone do not perform them.
 
 ## Existing read path — feature OFF by default
 
@@ -30,7 +36,7 @@ DEV-only `GET /api/gpt02-owner-ledger/decision/:challengeId`:
 1. Exact Host and allowed Origin, one Bearer token, no cookie-based identity.
 2. Trusted Hub verifies a fresh Google Super Admin session and active GPT02 Owner link.
 3. Fixed credential path `/run/credentials/gpt02-owner-ledger-reader/reader.json`; no credentials in API output, frontend, dotenv or GitHub.
-4. TLS-pinned PostgreSQL connection uses only `gpt02_owner_ledger_reader_dev`, never the main application writer pool. Session identity, effective identity, read-only transaction and default read-only setting are checked before SELECT.
+4. TLS-pinned PostgreSQL connection uses only `gpt02_owner_ledger_reader_1782_dev`, never the main application writer pool. Session identity, effective identity, read-only transaction and default read-only setting are checked before SELECT.
 5. Parameterized SQL matches the original challenge, authenticated Owner, project, worker, scope, APPROVED/CONSUMED state and chronology. The canonical signed manifest is rehashed before returning a redacted receipt.
 6. No grant, executor, signer, dispatch, new approval or timer action.
 
@@ -51,7 +57,7 @@ Invalid UTF-8, malformed JSON, unsafe metadata and I/O failures produce the exis
 
 The existing Owner remains the human decision maker. The attestor and database custodian are technical capabilities with independently verified scope; their absence is not a request for a second human reviewer.
 
-1. Establish the legitimate GPT02-1782 read contract and reconcile the shared role's Task190 consumer and connection limit. Do not automatically reset a password, add role membership or widen SELECT permissions.
+1. Stage the dedicated GPT02-1782 login identity and exact-challenge grants/RLS using the reviewed plan. Provision its own password through the authorized custodian. Preserve Task190's role, password, connection limit, credential and consumer; do not add membership in the shared role.
 2. Use the authorized worker-credential attestor and reader custodian to produce the V2 documents specified in [the custody adapter contract](gpt02-reader-custody-runtime-adapter-20261124.md). Existing Issue159/Task190 signing contracts do not implement these purposes.
 3. Through that authorized custodian, supply a legitimately scoped encrypted reader credential and its protected runtime loading path. The existing credential format has exactly `database`, `host`, `password`, `port`, `projectId`, `sslMode` and `user`; mode 0600 and root custody are required.
 4. Verify the public CA at `/etc/gpt02-dev/supabase-root-ca-2021.crt`, host `db.xssrfshdrtdfupgqwfdw.supabase.co`, port 5432, database `postgres`, `verify-full` and exact reader principal. Keep TLS validation enabled.

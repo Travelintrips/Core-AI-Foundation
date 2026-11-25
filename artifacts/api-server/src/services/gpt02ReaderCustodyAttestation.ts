@@ -17,7 +17,7 @@ export const GPT02_DBA_CUSTODY_TARGET = Object.freeze({
   project: "xssrfshdrtdfupgqwfdw",
   scope: "GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV",
   principal: "openclaw-vps-main",
-  readerRole: "gpt02_owner_ledger_reader_dev",
+  readerRole: "gpt02_owner_ledger_reader_1782_dev",
   runtimeCredentialPath: "/run/credentials/gpt02-owner-ledger-reader/reader.json",
   issuer: "CST_DEV_READER_CREDENTIAL_CUSTODIAN",
 } as const);

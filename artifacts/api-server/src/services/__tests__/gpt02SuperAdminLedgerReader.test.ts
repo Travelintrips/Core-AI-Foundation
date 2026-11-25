@@ -28,7 +28,7 @@ const ACTOR = {
 const CONFIG = {
   database: "postgres", host: "db.xssrfshdrtdfupgqwfdw.supabase.co",
   password: "synthetic-test-only-not-real-credential", port: 5432,
-  projectId: "xssrfshdrtdfupgqwfdw", sslMode: "verify-full", user: "gpt02_owner_ledger_reader_dev",
+  projectId: "xssrfshdrtdfupgqwfdw", sslMode: "verify-full", user: "gpt02_owner_ledger_reader_1782_dev",
 };
 const IDENTITY = {
   actor: CONFIG.user, effective: CONFIG.user, database_name: "postgres",
@@ -215,6 +215,7 @@ describe("GPT02 separated Super Admin ledger custody", () => {
   it.each([
     ["different host", { host: "db.attacker.example.invalid" }],
     ["writer role", { user: "aicore_dev_runtime" }],
+    ["Task190 shared role", { user: "gpt02_owner_ledger_reader_dev" }],
     ["disabled TLS", { sslMode: "disable" }],
     ["extra connection option", { connectionString: "synthetic-untrusted-connection" }],
   ] as const)("refuses credential configuration with %s", async (_name, patch) => {
@@ -275,6 +276,8 @@ describe("GPT02 separated Super Admin ledger custody", () => {
   it.each([
     ["writer session user", { actor: "aicore_dev_runtime" }],
     ["writer effective role", { effective: "aicore_dev_runtime" }],
+    ["Task190 shared session user", { actor: "gpt02_owner_ledger_reader_dev" }],
+    ["Task190 shared effective role", { effective: "gpt02_owner_ledger_reader_dev" }],
     ["different database", { database_name: "other" }],
     ["writable transaction", { transaction_read_only: "off" }],
     ["writable role default", { default_read_only: "off" }],

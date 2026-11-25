@@ -18,7 +18,7 @@ export type OwnerLedgerReadOptions = Readonly<{
   verifyOwnerSession: (token: string) => Promise<Gpt02OwnerActor>;
   verifyOwnerEligibility: (actor: Gpt02OwnerActor, token: string) => Promise<boolean>;
   // This MUST use the separately authenticated, pinned-TLS, least-privilege
-  // gpt02_owner_ledger_reader_dev Postgres role. No main runtime DB fallback.
+  // gpt02_owner_ledger_reader_1782_dev Postgres role. No main runtime DB fallback.
   readReceipt: (challengeId: string, actor: Gpt02OwnerActor) => Promise<OwnerLedgerReceipt | null>;
 }>;
 

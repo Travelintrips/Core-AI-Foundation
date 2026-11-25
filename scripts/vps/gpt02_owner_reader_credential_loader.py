@@ -39,7 +39,7 @@ _EXPECTED = {
     "port": 5432,
     "projectId": "xssrfshdrtdfupgqwfdw",
     "sslMode": "verify-full",
-    "user": "gpt02_owner_ledger_reader_dev",
+    "user": "gpt02_owner_ledger_reader_1782_dev",
 }
 _SAFE_CODES = frozenset({
     "READER_LOADER_ENV_INVALID", "READER_LOADER_ROOT_REQUIRED",

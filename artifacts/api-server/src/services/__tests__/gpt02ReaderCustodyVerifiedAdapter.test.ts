@@ -84,7 +84,7 @@ function fixture() {
   const oldDba = {
     kind: "GPT02_DEV_OWNER_READER_ISSUER_RECEIPT_V1",
     receiptId,
-    role: "gpt02_owner_ledger_reader_dev",
+    role: "gpt02_owner_ledger_reader_1782_dev",
     projectId: "xssrfshdrtdfupgqwfdw",
     issuedAt: now - 1000,
     expiresAt: now + 60_000,

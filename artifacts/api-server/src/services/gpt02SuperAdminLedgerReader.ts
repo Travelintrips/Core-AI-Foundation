@@ -9,7 +9,7 @@ import type { OwnerLedgerReceipt } from "../routes/gpt02-owner-ledger-read.js";
 
 type ReaderClient = PostgresPoolClient;
 const HOST = "db.xssrfshdrtdfupgqwfdw.supabase.co";
-const ROLE = "gpt02_owner_ledger_reader_dev";
+const ROLE = "gpt02_owner_ledger_reader_1782_dev";
 const OWNER_EMAIL = "admcst001@gmail.com";
 const CREDENTIAL_FILE = "/run/credentials/gpt02-owner-ledger-reader/reader.json";
 const ROOT_CA = "/etc/gpt02-dev/supabase-root-ca-2021.crt";
