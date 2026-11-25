@@ -110,6 +110,47 @@ describe("GPT02 Super Admin Owner ledger read-only HTTP boundary", () => {
     expect(readReceipt).not.toHaveBeenCalled();
   });
 
+  it("rejects a different well-formed challenge without revealing the original", async () => {
+    const { app, verifyOwnerSession, readReceipt } = makeApp();
+    const differentChallenge = "00000000-0000-4000-8000-000000000000";
+    readReceipt.mockResolvedValue(null);
+    const result = await request(app)
+      .get(`/api/gpt02-owner-ledger/decision/${differentChallenge}`)
+      .set({ Host: HOST, Origin: `https://${HOST}`, Authorization: `Bearer ${TOKEN}` });
+    expect(result.status).toBe(404);
+    expect(result.body).toEqual({ error: "GPT02_LEDGER_DECISION_NOT_FOUND" });
+    expect(verifyOwnerSession).toHaveBeenCalledOnce();
+    expect(readReceipt).toHaveBeenCalledWith(differentChallenge, ACTOR);
+  });
+
+  it("rejects a correctly shaped receipt for a different challenge", async () => {
+    const { get, readReceipt } = makeApp();
+    readReceipt.mockResolvedValue({
+      ...RECEIPT, challengeId: "00000000-0000-4000-8000-000000000000",
+    });
+    const result = await get();
+    expect(result.status).toBe(503);
+    expect(result.body).toEqual({ error: "GPT02_LEDGER_RECEIPT_INVALID" });
+    expect(JSON.stringify(result.body)).not.toContain(RECEIPT.manifestSha256);
+  });
+
+  it("denies a Super Admin from a different company", async () => {
+    const { get, verifyOwnerSession, readReceipt } = makeApp();
+    verifyOwnerSession.mockResolvedValue({ ...ACTOR, companyId: "other-company" });
+    const result = await get();
+    expect(result.status).toBe(403);
+    expect(readReceipt).not.toHaveBeenCalled();
+  });
+
+  it("fails closed if the Hub rejects an expired signed session", async () => {
+    const { get, verifyOwnerSession, readReceipt } = makeApp();
+    verifyOwnerSession.mockRejectedValue(new Error("expired"));
+    const result = await get();
+    expect(result.status).toBe(503);
+    expect(result.body).toEqual({ error: "GPT02_LEDGER_READER_OR_SESSION_UNAVAILABLE" });
+    expect(readReceipt).not.toHaveBeenCalled();
+  });
+
   it("does not permit POST or mutating methods", async () => {
     const { app, readReceipt } = makeApp();
     const result = await request(app).post(`/api/gpt02-owner-ledger/decision/${CHALLENGE}`)
