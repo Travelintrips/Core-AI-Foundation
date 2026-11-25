@@ -197,6 +197,7 @@ class WorkerKeyReleaseTests(unittest.TestCase):
         self.values = worker_configuration()
         self.environment = self.stack.enter_context(patch.object(release, "env_guard", return_value=self.values))
         self.command = self.stack.enter_context(patch.object(release, "command"))
+        self.reader_ipv6 = self.stack.enter_context(patch.object(release, "verify_gpt02_reader_ipv6_network"))
         self.stack.enter_context(patch.object(release.subprocess, "run", side_effect=AssertionError("process forbidden")))
         self.stack.enter_context(patch.object(Path, "read_bytes", side_effect=AssertionError("private key read forbidden")))
         self.stack.enter_context(patch.object(Path, "read_text", side_effect=AssertionError("credential read forbidden")))
@@ -309,6 +310,8 @@ class WorkerKeyReleaseTests(unittest.TestCase):
         calls = [item.args for item in self.command.call_args_list]
         self.assertEqual(calls[:2], [WORKER_UNIT, READER_UNIT])
         args = calls[2]
+        self.assertEqual(calls[3], ("docker", "network", "connect", release.GPT02_READER_IPV6_NETWORK, "test-canary"))
+        self.reader_ipv6.assert_called_once()
         mounts = {args[i + 1] for i, part in enumerate(args) if part == "--mount"}
         self.assertEqual(mounts, {
             f"type=bind,source={path},target={path},readonly"
