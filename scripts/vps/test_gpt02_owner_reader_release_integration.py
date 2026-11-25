@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import json
 import stat
 import subprocess
 import tempfile
@@ -32,6 +33,7 @@ class ReaderReleaseIntegrationTests(unittest.TestCase):
         self.values["SESSION_SECRET"] = "SYNTHETIC_NEVER_PRINT_OR_PASS_AS_ARG"
         self.environment = self.stack.enter_context(patch.object(release, "env_guard", return_value=self.values))
         self.command = self.stack.enter_context(patch.object(release, "command"))
+        self.v6check = self.stack.enter_context(patch.object(release, "verify_gpt02_reader_ipv6_network"))
         self.stack.enter_context(patch.object(release.subprocess, "run", side_effect=AssertionError("real process forbidden")))
         self.stack.enter_context(patch.object(release, "urlopen", side_effect=AssertionError("network forbidden")))
         self.stack.enter_context(patch.object(gate, "_root_parents", return_value=True))
@@ -68,13 +70,16 @@ class ReaderReleaseIntegrationTests(unittest.TestCase):
         self.start(live=True)
         commands = [call.args for call in self.command.call_args_list]
         self.assertEqual(commands[0], LOADER)
-        self.assertEqual(commands[2], LOADER)
+        self.assertEqual(commands[3], LOADER)
         self.assertEqual(self.environment.call_count, 2)
+        self.assertEqual(commands[2], ("docker", "network", "connect", release.GPT02_READER_IPV6_NETWORK, "cst-dev-canary-" + SHA[:12]))
+        self.assertEqual(commands[5], ("docker", "network", "connect", release.GPT02_READER_IPV6_NETWORK, "core-ai-dev"))
+        self.assertEqual(self.v6check.call_count, 2)
         expected = {
             f"type=bind,source={path},target={path},readonly"
             for path in (gate.READER_FILE, gate.TRUST_CA, gate.CUSTODY_DIR)
         }
-        for argv in (commands[1], commands[3]):
+        for argv in (commands[1], commands[4]):
             self.assertEqual(argv[:2], ("docker", "run"))
             mounts = {argv[index + 1] for index, value in enumerate(argv) if value == "--mount"}
             self.assertTrue(expected.issubset(mounts))
@@ -84,6 +89,12 @@ class ReaderReleaseIntegrationTests(unittest.TestCase):
             self.assertIn("NODE_ENV=development", argv)
             self.assertNotIn(self.values["SESSION_SECRET"], " ".join(map(str, argv)))
             self.assertFalse(any(value in argv for value in ("psql", "systemd-creds", "--privileged")))
+
+    def test_ipv6_network_rejected_before_loading_reader_or_running_docker(self):
+        self.v6check.side_effect = RuntimeError("GPT02_READER_IPV6_NETWORK_UNTRUSTED")
+        with self.assertRaisesRegex(RuntimeError, "GPT02_READER_IPV6_NETWORK_UNTRUSTED"):
+            self.start()
+        self.command.assert_not_called()
 
     def test_environment_project_or_pin_mismatch_prevents_unit_and_docker(self):
         cases = (
@@ -116,6 +127,52 @@ class ReaderReleaseIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.ReaderMountDenied, "CREDENTIAL_CUSTODY_INVALID"):
             self.start()
         self.assertEqual([call.args for call in self.command.call_args_list], [LOADER])
+
+
+class OwnerReaderIpv6NetworkTests(unittest.TestCase):
+    def test_exact_network_allowed_and_wrong_network_rejected(self):
+        expected = {
+            "Name": release.GPT02_READER_IPV6_NETWORK, "Driver": "bridge",
+            "Internal": False, "EnableIPv6": True,
+            "Options": {"com.docker.network.bridge.name": release.GPT02_READER_IPV6_BRIDGE},
+            "IPAM": {"Config": [
+                {"Subnet": release.GPT02_READER_IPV6_SUBNET},
+                {"Subnet": release.GPT02_READER_IPV4_SUBNET},
+            ]},
+            "Containers": {"x": {"Name": "core-ai-dev"}},
+        }
+        with patch.object(release, "command", return_value=json.dumps([expected])):
+            release.verify_gpt02_reader_ipv6_network()
+        old_release = {**expected, "Containers": {
+            "old": {"Name": "core-ai-dev-prev-20261125171639"},
+            "canary": {"Name": "cst-dev-canary-" + SHA[:12]},
+        }}
+        with patch.object(release, "command", return_value=json.dumps([old_release])):
+            release.verify_gpt02_reader_ipv6_network()
+        for altered in (
+            {**expected, "EnableIPv6": False},
+            {**expected, "Internal": True},
+            {**expected, "Containers": {"x": {"Name": "ai-task189-other"}}},
+            {**expected, "IPAM": {"Config": [{"Subnet": "fd76:189:ac:53::/64"}]}},
+        ):
+            with patch.object(release, "command", return_value=json.dumps([altered])):
+                with self.assertRaisesRegex(RuntimeError, "GPT02_READER_IPV6_NETWORK_UNTRUSTED"):
+                    release.verify_gpt02_reader_ipv6_network()
+
+
+class OwnerPagePreservationTests(unittest.TestCase):
+    def test_owner_page_is_preserved_as_public_static_without_secrets(self):
+        with tempfile.TemporaryDirectory() as base:
+            source = Path(base) / "owner-template.html"
+            destination = Path(base) / "public"
+            destination.mkdir()
+            source.write_bytes(b"<html>Terbitkan sebagai Owner custody-attestation" + b"_" * 1024 + b"</html>")
+            meta = SimpleNamespace(st_mode=stat.S_IFREG | 0o600,st_uid=0,st_gid=0,st_size=source.stat().st_size)
+            with patch.object(release,"GPT02_OWNER_PAGE_SOURCE",source),patch.object(Path,"lstat",return_value=meta):
+                release.preserve_gpt02_worker_approval_ui(destination)
+            output=destination / "gpt02-worker-attestation.html"
+            self.assertEqual(source.read_bytes(),output.read_bytes())
+            self.assertEqual(output.stat().st_mode & 0o777,0o644)
 
 
 class SyntheticEnvironmentTests(unittest.TestCase):
