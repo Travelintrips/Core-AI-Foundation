@@ -143,6 +143,12 @@ class OwnerReaderIpv6NetworkTests(unittest.TestCase):
         }
         with patch.object(release, "command", return_value=json.dumps([expected])):
             release.verify_gpt02_reader_ipv6_network()
+        old_release = {**expected, "Containers": {
+            "old": {"Name": "core-ai-dev-prev-20261125171639"},
+            "canary": {"Name": "cst-dev-canary-" + SHA[:12]},
+        }}
+        with patch.object(release, "command", return_value=json.dumps([old_release])):
+            release.verify_gpt02_reader_ipv6_network()
         for altered in (
             {**expected, "EnableIPv6": False},
             {**expected, "Internal": True},

@@ -157,6 +157,7 @@ def verify_gpt02_reader_ipv6_network():
             raise ValueError()
         if any(container.get("Name") != DEV
                and not container.get("Name", "").startswith("cst-dev-canary-")
+               and not container.get("Name", "").startswith(DEV + "-prev-")
                for container in net.get("Containers", {}).values()):
             raise ValueError()
     except (KeyError, TypeError, ValueError):
