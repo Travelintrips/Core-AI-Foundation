@@ -77,5 +77,33 @@ class GuardTests(unittest.TestCase):
             mod.prepare(self.active, self.backup)
 
 
+    def test_arm_sets_timer_and_verifies_active(self):
+        self.assertFalse(self.backup.exists())
+        with patch.object(mod, "trusted_script", return_value=True), \
+             patch.object(mod.subprocess, "run") as runner:
+            runner.return_value.returncode = 0
+            message = mod.arm(self.active, self.backup, 90, SOURCE)
+            self.assertIn("WATCHDOG_ARMED", message)
+            self.assertEqual(runner.call_count, 2)
+            self.assertIn("--on-active=90s", runner.call_args_list[0].args[0])
+            self.assertEqual(runner.call_args_list[1].args[0][-1],
+                             "gpt02-1782-owner-ledger-restore.timer")
+        self.assertEqual(self.backup.read_bytes(), self.original)
+
+    def test_arm_rejects_unbounded_duration(self):
+        for duration in (0, 29, 181, 600):
+            with self.assertRaisesRegex(mod.GuardError, "WATCHDOG_DURATION"):
+                mod.arm(self.active, self.backup, duration, SOURCE)
+        self.assertFalse(self.backup.exists())
+
+    def test_arm_schedule_failure_does_not_open_gate(self):
+        with patch.object(mod, "trusted_script", return_value=True), \
+             patch.object(mod.subprocess, "run") as runner:
+            runner.return_value.returncode = 1
+            with self.assertRaisesRegex(mod.GuardError, "WATCHDOG_SCHEDULE_FAILED"):
+                mod.arm(self.active, self.backup, 90, SOURCE)
+        self.assertEqual(self.active.read_bytes(), self.original)
+
+
 if __name__ == "__main__":
     unittest.main()
