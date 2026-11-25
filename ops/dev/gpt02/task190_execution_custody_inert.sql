@@ -37,6 +37,23 @@ BEGIN
 END
 $fn$;
 
+CREATE OR REPLACE FUNCTION gpt02_task190_execution_custody.deny_expired_insert()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = ''
+AS $fn$
+BEGIN
+  IF NEW.expires_at <= clock_timestamp() OR
+     NEW.issued_at > clock_timestamp() + interval '5 seconds' THEN
+    RAISE EXCEPTION 'TASK190_CUSTODY_EXPIRED_OR_FUTURE' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+REVOKE ALL ON FUNCTION gpt02_task190_execution_custody.deny_expired_insert() FROM PUBLIC;
+DROP TRIGGER IF EXISTS task190_consumption_fresh ON gpt02_task190_execution_custody.consumptions;
+CREATE TRIGGER task190_consumption_fresh
+BEFORE INSERT ON gpt02_task190_execution_custody.consumptions
+FOR EACH ROW EXECUTE FUNCTION gpt02_task190_execution_custody.deny_expired_insert();
+
 REVOKE ALL ON FUNCTION gpt02_task190_execution_custody.deny_mutation() FROM PUBLIC;
 DROP TRIGGER IF EXISTS task190_consumption_immutable ON gpt02_task190_execution_custody.consumptions;
 CREATE TRIGGER task190_consumption_immutable
