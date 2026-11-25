@@ -26,6 +26,7 @@ deny "INSERT INTO gpt02_task190_execution_custody.consumptions $cc VALUES $recei
 deny "DELETE FROM gpt02_task190_execution_custody.claims" 'CLAIM_IMMUTABLE_WITH_COMPLETION'
 [[ "$(sql "SELECT count(*) FROM pg_constraint WHERE conname='task190_consumption_requires_exact_claim' AND contype='f' AND condeferrable=false")" == '1' ]] || exit 1
 echo 'PASS:FOREIGN_KEY_NON_DEFERRABLE'
+sql "CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN"
 [[ "$(sql "SELECT has_table_privilege('anon','gpt02_task190_execution_custody.consumptions','INSERT')")" == 'f' ]] || exit 1
 [[ "$(sql "SELECT has_table_privilege('authenticated','gpt02_task190_execution_custody.consumptions','INSERT')")" == 'f' ]] || exit 1
 echo 'PASS:PUBLIC_WRITE_NOT_GRANTED'
