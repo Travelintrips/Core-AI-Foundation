@@ -32,9 +32,11 @@ The protection is still whole-file integrity **with only four explicitly enumera
 
 The new rollback guard **depends on the newly reviewed boot module providing `canonical_closed`**. They must be installed together under an authorized, pinned-SHA, atomic root-only handoff, before any test; deploying the rollback guard alone against the old installed boot module would fail import and therefore **must be prohibited**. The historic v9 one-shot recovery has its own old SHA restrictions and cannot be used as the new executable, even after these two source changes.
 
+After a successful file restoration or when the file is already closed, the rollback guard **runs Nginx syntax validation and reload** to reconcile possibly stale worker state, then uses a local loopback HTTPS GET without credentials to require **HTTP/1.1 503, JSON `GPT02_LEDGER_READER_NOT_PROVISIONED`, and `Cache-Control: no-store`**. If the public check fails, it reports `PUBLIC_GATE_NOT_VERIFIED_503` and does **not** claim rollback PASS. This avoids declaring success from closed file bytes when old Nginx workers might still serve an open route.
+
 The rollback guard also performs a pre-write readback to detect ordinary concurrent edits. It is **not a cross-process filesystem compare-and-swap**, so a race can still occur between the last read and the atomic replacement. Accordingly, **freeze shared Nginx edits throughout any separately approved ≤90-second Owner E2E window**, and require the independently armed timer, verified rollback response HTTP503, exact closed vhost SHA, and expired reader/zero sessions afterward. If an unknown edit causes rollback refusal, consider it an incident and keep E2E NO-GO; never declare success simply because the timer ran.
 
-Dedicated CI executes **11 boot-hook tests and 14 rollback tests** with synthetic data, including all 16 allowlisted proxy combinations, denial of arbitrary changes and refusal to overwrite a non-allowlisted concurrent edit. No real Nginx or host credentials are used.
+Dedicated CI executes **11 boot-hook tests and 16 rollback tests** with synthetic data, including all 16 allowlisted proxy combinations, denial of arbitrary changes, refusal to overwrite a non-allowlisted concurrent edit, and rejection of false success when active HTTPS is not the exact 503 JSON/no-store contract. No real Nginx or host credentials are used.
 
 ## Test and operational acceptance
 
