@@ -113,7 +113,7 @@ def verify_public_gate_closed() -> None:
     are mandatory; a saved file alone cannot prove active workers are closed.
     """
     args = [
-        "curl", "--noproxy", "*", "-sS", "--connect-timeout", "3",
+        "curl", "--noproxy", "*", "-sS", "--http1.1", "--connect-timeout", "3",
         "--max-time", "5", "--resolve",
         "dev-ai-task.cstlogistic.co.id:443:127.0.0.1",
         "-i", PUBLIC_GATE_URL,
