@@ -1,0 +1,48 @@
+name: GPT02 Owner Ledger fresh custody readiness (DEV read-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_owner_ledger_fresh_readiness_readonly.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_fresh_readiness_readonly.py'
+      - '.github/workflows/gpt02-owner-ledger-fresh-readiness-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_owner_ledger_fresh_readiness_readonly.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_fresh_readiness_readonly.py'
+      - '.github/workflows/gpt02-owner-ledger-fresh-readiness-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-readonly-public-custody:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolated Python runtime with pinned public-key verifier
+        run: |
+          python3 -m venv .venv-gpt02-readonly
+          .venv-gpt02-readonly/bin/python -m pip install --disable-pip-version-check --no-input cryptography==41.0.7
+      - name: Syntax and synthetic cryptographic negative tests (no live network or secret)
+        run: |
+          .venv-gpt02-readonly/bin/python -B -m py_compile scripts/vps/gpt02_owner_ledger_fresh_readiness_readonly.py scripts/vps/test_gpt02_owner_ledger_fresh_readiness_readonly.py
+          .venv-gpt02-readonly/bin/python -B -m unittest discover -s scripts/vps -p test_gpt02_owner_ledger_fresh_readiness_readonly.py -v
+      - name: Assert no live executor, DB login, secret/role mutation or gate opening
+        run: |
+          .venv-gpt02-readonly/bin/python - <<'PY'
+          from pathlib import Path
+          source=Path('scripts/vps/gpt02_owner_ledger_fresh_readiness_readonly.py').read_text()
+          for forbidden in ('import subprocess', 'systemctl', 'subprocess.run(',
+                            'psycopg.connect(', 'pg8000', 'ALTER ROLE', 'GRANT ',
+                            'os.replace(', 'os.system(', 'systemd-run',
+                            'nginx -s reload', 'requests.', 'CREATE ROLE'):
+              assert forbidden not in source, forbidden
+          assert 'live_e2e_ready": False' in source
+          assert 'owner_fresh_one_use_authorization_verified": False' in source
+          assert 'RETAIN_NGINX_503' in source
+          print('GPT02_FRESH_READINESS_INERT_BOUNDARY=PASS')
+          PY
