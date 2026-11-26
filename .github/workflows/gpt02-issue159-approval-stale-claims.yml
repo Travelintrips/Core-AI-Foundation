@@ -33,7 +33,9 @@ jobs:
           s=Path("deploy/ai-coding-standalone-dev/admin_login.html").read_text()
           assert "const redirectTo='https://dev.cstlogistic.co.id/gpt02-approval.html'" in s
           assert "a.nonce!==c.nonce" in s
-          assert "fresh.expiresAt<=Date.now()+1500" in s
+          assert "MIN_CHAIN_WINDOW_MS=120000" in s
+          assert "fresh.expiresAt-Date.now()<=MIN_CHAIN_WINDOW_MS" in s
+          assert "d.expiresAt-Date.now()<=MIN_CHAIN_WINDOW_MS" in s
           assert "await api('/api/gpt02/issue159/approval-intent/pending')" in s
           assert "b.disabled=true" in s
           assert "Signing, authorization, dan dispatch tetap NO-GO." in s

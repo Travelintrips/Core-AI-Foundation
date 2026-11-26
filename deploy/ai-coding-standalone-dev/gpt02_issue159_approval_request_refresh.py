@@ -186,10 +186,12 @@ def refresh_pending(db_path: str, output_path: str, actor_id: str, *,
         if (os.geteuid() != 0 or db_path != LIVE_DB or output_path != LIVE_OUTPUT):
             raise RefreshDenied("ISSUE159_REFRESH_TARGET_NOT_PINNED", 503)
         _root_private_file(db_path)
-        _root_private_file(output_path)
-    elif not os.path.isfile(db_path) or not os.path.isfile(output_path):
+    elif not os.path.isfile(db_path):
         raise RefreshDenied("ISSUE159_TEST_SOURCE_MISSING", 409)
 
+    # Hold the refresh lock before checking whether the pending file exists.
+    # Another approved refresh may temporarily move it to a private archive
+    # before atomically publishing the new nonce. Pre-lock checks race there.
     # Independent lock separate from SQLite; no task, approval or DB write.
     lock_path = output_path + ".refresh.lock"
     fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -197,6 +199,10 @@ def refresh_pending(db_path: str, output_path: str, actor_id: str, *,
         if operational:
             _root_private_file(lock_path)
         fcntl.flock(fd, fcntl.LOCK_EX)
+        if operational:
+            _root_private_file(output_path)
+        elif not os.path.isfile(output_path):
+            raise RefreshDenied("ISSUE159_TEST_SOURCE_MISSING", 409)
         now_ms = now_fn()
         if type(now_ms) is not int or now_ms <= 0:
             raise RefreshDenied("ISSUE159_SERVER_CLOCK_INVALID", 503)
@@ -237,7 +243,10 @@ def refresh_pending(db_path: str, output_path: str, actor_id: str, *,
                  "commandCandidateId": claims["commandId"],
                  "attemptId": claims["attemptId"]}
         facts = fact_reader(query)
-        prep_expiry = _verify_pre_sign_facts(facts, claims, now_ms)
+        # Reader results must be checked against the clock AFTER its I/O,
+        # while retaining the original strict 5s trust window.
+        post_reader_now_ms = now_fn()
+        prep_expiry = _verify_pre_sign_facts(facts, claims, post_reader_now_ms)
         # The existing, independently tested preparer is reused, not rewritten.
         target = Path(output_path)
         archive = target.with_name(
@@ -249,7 +258,7 @@ def refresh_pending(db_path: str, output_path: str, actor_id: str, *,
         try:
             result = prepare(db_path, output_path, claims["taskId"],
                              claims["commandId"], claims["attemptId"],
-                             now_ms=now_ms, operational=operational)
+                             now_ms=post_reader_now_ms, operational=operational)
             newest = json.loads(target.read_text("utf-8"))["claims"]
             validate_approval_claims(newest)
             if (newest["nonce"] == claims["nonce"]

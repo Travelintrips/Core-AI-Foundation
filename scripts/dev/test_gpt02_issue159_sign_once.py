@@ -1,4 +1,5 @@
-import base64, hashlib, json, os, subprocess, sys, tempfile, time, unittest
+import base64, hashlib, importlib.util, json, os, subprocess, sys, tempfile, time, unittest
+from types import SimpleNamespace
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -6,6 +7,24 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 ROOT=Path(__file__).resolve().parents[2]
 SIGNER=ROOT/"deploy/ai-coding-standalone-dev/gpt02_issue159_sign_once.py"
 ROLES=("approval","hub","core","issuer")
+# Running the CLI would require the real systemd credential/output bindings.
+# Invoke only the TEST-DESIGNATED pure signing backend with freshly generated
+# ephemeral keys. No live service, key, approval, or host runtime is touched.
+sys.path.insert(0, str(SIGNER.parent))
+spec=importlib.util.spec_from_file_location("issue159_signer_fixture", SIGNER)
+signer=importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(signer)
+
+
+def run_signer_fixture(role, data, credentials, output, now):
+    try:
+        signer.sign_detached_for_test_or_gated_cli(
+            role, data, str(credentials), str(output), now_ms=now
+        )
+        return SimpleNamespace(returncode=0,stderr="")
+    except Exception as exc:
+        return SimpleNamespace(returncode=2,stderr=str(exc))
 
 def fixture(root:Path):
     creds=root/"creds"; creds.mkdir()
@@ -62,10 +81,7 @@ class SignOnceTest(unittest.TestCase):
                 os.chmod(creds/"private-key.pkcs8",0o600)
                 c=claims(role,now); cp=root/"claims.json"; cp.write_text(json.dumps(c)); os.chmod(cp,0o600)
                 out=root/"result.json"
-                env=dict(os.environ,APP_ENV="development",CREDENTIALS_DIRECTORY=str(creds))
-                p=subprocess.run([sys.executable,str(SIGNER),"--role",role,
-                                  "--claims",str(cp),"--output",str(out)],
-                                 env=env,capture_output=True,text=True,timeout=5)
+                p=run_signer_fixture(role,c,creds,out,now)
                 self.assertEqual(p.returncode,0,p.stderr)
                 d=json.loads(out.read_text())
                 self.assertEqual(d["role"],role)
@@ -94,16 +110,63 @@ class SignOnceTest(unittest.TestCase):
                 serialization.NoEncryption())); os.chmod(creds/"private-key.pkcs8",0o600)
             now=int(time.time()*1000); c=claims("approval",now)
             cp=root/"claims.json"; cp.write_text(json.dumps(c)); os.chmod(cp,0o600)
-            env=dict(os.environ,APP_ENV="development",CREDENTIALS_DIRECTORY=str(creds))
-            p=subprocess.run([sys.executable,str(SIGNER),"--role","approval","--claims",str(cp),
-                              "--output",str(root/"o.json")],env=env,capture_output=True,text=True)
+            p=run_signer_fixture("approval",c,creds,root/"o.json",now)
             self.assertEqual(p.returncode,2); self.assertIn("PRIVATE_PUBLIC_FINGERPRINT_MISMATCH",p.stderr)
             (creds/"private-key.pkcs8").write_bytes(keys["approval"].private_bytes(
                 serialization.Encoding.DER,serialization.PrivateFormat.PKCS8,
                 serialization.NoEncryption())); os.chmod(creds/"private-key.pkcs8",0o600)
             c["issuedAt"]=now-10000;c["expiresAt"]=now-5000;cp.write_text(json.dumps(c));os.chmod(cp,0o600)
-            p=subprocess.run([sys.executable,str(SIGNER),"--role","approval","--claims",str(cp),
-                              "--output",str(root/"o2.json")],env=env,capture_output=True,text=True)
+            p=run_signer_fixture("approval",c,creds,root/"o2.json",now)
             self.assertEqual(p.returncode,2); self.assertIn("CLAIMS_TIME_INVALID",p.stderr)
+
+    def test_signature_output_is_immutable_no_clobber_or_symlink(self):
+        now=int(time.time()*1000)
+        with tempfile.TemporaryDirectory(prefix="issue159-sign-once-") as td:
+            root=Path(td); creds,keys,_=fixture(root)
+            (creds/"private-key.pkcs8").write_bytes(keys["approval"].private_bytes(
+                serialization.Encoding.DER, serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            ))
+            os.chmod(creds/"private-key.pkcs8",0o600)
+            c=claims("approval",now)
+            output=root/"approval-signature.json"
+            output.write_text("PRIOR_TASK_EVIDENCE")
+            p=run_signer_fixture("approval",c,creds,output,now)
+            self.assertEqual(p.returncode,2)
+            self.assertIn("SIGNATURE_OUTPUT_ALREADY_EXISTS",p.stderr)
+            self.assertEqual(output.read_text(),"PRIOR_TASK_EVIDENCE")
+            output.unlink()
+            tmp=output.with_name("."+output.name+".tmp")
+            tmp.write_text("PARTIAL_PRIOR_TASK_EVIDENCE")
+            p=run_signer_fixture("approval",c,creds,output,now)
+            self.assertEqual(p.returncode,2)
+            self.assertIn("SIGNATURE_OUTPUT_ALREADY_EXISTS",p.stderr)
+            self.assertEqual(tmp.read_text(),"PARTIAL_PRIOR_TASK_EVIDENCE")
+            self.assertFalse(output.exists())
+            tmp.unlink()
+            prior=root/"historical-evidence.json"
+            prior.write_text("PRESERVED")
+            output.symlink_to(prior)
+            p=run_signer_fixture("approval",c,creds,output,now)
+            self.assertEqual(p.returncode,2)
+            self.assertIn("SIGNATURE_OUTPUT_ALREADY_EXISTS",p.stderr)
+            self.assertEqual(prior.read_text(),"PRESERVED")
+            output.unlink()
+            p=run_signer_fixture("approval",c,creds,output,now)
+            self.assertEqual(p.returncode,0,p.stderr)
+            self.assertTrue(output.is_file())
+            self.assertEqual(output.stat().st_mode & 0o777,0o600)
+            self.assertEqual(json.loads(output.read_text())["releaseDecision"],"NO_GO")
+            p=run_signer_fixture("approval",c,creds,output,now)
+            self.assertEqual(p.returncode,2)
+            self.assertIn("SIGNATURE_OUTPUT_ALREADY_EXISTS",p.stderr)
+
+    def test_source_preserves_one_shot_cli_credentials_and_no_replace(self):
+        source=SIGNER.read_text()
+        self.assertIn("ONE_SHOT_CREDENTIAL_OR_OUTPUT_PATH_NOT_PINNED",source)
+        self.assertIn("SIGNATURE_OUTPUT_ALREADY_EXISTS",source)
+        self.assertIn("os.link(str(tmp), str(target))",source)
+        self.assertNotIn("os.replace(tmp,target)",source)
+        self.assertIn("GPT02_ISSUE159_SIGNING_ENABLED",source)
 
 if __name__=="__main__": unittest.main()

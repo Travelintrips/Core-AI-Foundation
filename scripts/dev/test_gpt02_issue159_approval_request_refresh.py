@@ -2,6 +2,8 @@
 """Offline tests for DEV Issue159 on-demand approval REQUEST refresh only."""
 import copy
 import concurrent.futures
+import threading
+import time
 import json
 import os
 import sqlite3
@@ -82,6 +84,29 @@ class RefreshRequestTest(unittest.TestCase):
              fact_reader=lambda query: copy.deepcopy(evidence or facts(now=now)),
              now_fn=lambda:now, operational=False)
 
+    def test_slow_reader_uses_post_io_clock_without_widening_trust_window(self):
+        """Eight seconds of trusted I/O must not be compared to a pre-I/O clock."""
+        clock = iter((NOW, NOW + 8000))
+        evidence = facts(now=NOW + 8000)
+        result = mod.refresh_pending(str(self.db), str(self.pending), ADMIN,
+            fact_reader=lambda query: copy.deepcopy(evidence),
+            now_fn=lambda: next(clock), operational=False)
+        self.assertTrue(result["requestRefreshed"])
+        newest = json.loads(self.pending.read_text())["claims"]
+        self.assertEqual(newest["issuedAt"], NOW + 8000)
+        self.assertEqual(newest["expiresAt"], NOW + 248000)
+
+    def test_reader_older_than_five_seconds_remains_fail_closed(self):
+        """Clock correction must never relax the existing five-second bound."""
+        clock = iter((NOW, NOW + 8000))
+        before = self.pending.read_bytes()
+        with self.assertRaisesRegex(mod.RefreshDenied,
+                "ISSUE159_PRESIGN_LINEAGE_MISMATCH"):
+            mod.refresh_pending(str(self.db), str(self.pending), ADMIN,
+                fact_reader=lambda query: facts(now=NOW + 1000),
+                now_fn=lambda: next(clock), operational=False)
+        self.assertEqual(self.pending.read_bytes(), before)
+
     def test_rotates_only_expired_nonce_on_same_preparation_without_approval(self):
         result=self.refresh()
         self.assertTrue(result["requestRefreshed"])
@@ -101,6 +126,33 @@ class RefreshRequestTest(unittest.TestCase):
         con=sqlite3.connect(self.db)
         self.assertEqual(con.execute("SELECT count(*) FROM gpt02_issue159_approval_intents").fetchone()[0],0)
         con.close()
+
+    def test_concurrent_refresh_ignores_temporary_archive_gap(self):
+        """Another click must wait for the first refresh, not reject missing file."""
+        entered, release = threading.Event(), threading.Event()
+        actual_prepare = mod.prepare
+
+        def pause_after_archive(*args, **kwargs):
+            entered.set()
+            if not release.wait(timeout=4):
+                raise AssertionError("fixture refresh was never released")
+            return actual_prepare(*args, **kwargs)
+
+        with patch.object(mod, "prepare", side_effect=pause_after_archive):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                first = pool.submit(self.refresh)
+                self.assertTrue(entered.wait(timeout=3))
+                # The first call has already renamed the expired pending file.
+                self.assertFalse(self.pending.exists())
+                second = pool.submit(self.refresh)
+                try:
+                    time.sleep(0.08)
+                finally:
+                    release.set()
+                results = [first.result(timeout=5), second.result(timeout=5)]
+        self.assertEqual(sum(v["requestRefreshed"] is True for v in results), 1)
+        self.assertEqual(sum(v["alreadyFresh"] is True for v in results), 1)
+        self.assertEqual(len(list(self.root.glob("pending.json.expired-task148-*.json"))), 1)
 
     def test_two_concurrent_clicks_do_not_rotate_twice(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
