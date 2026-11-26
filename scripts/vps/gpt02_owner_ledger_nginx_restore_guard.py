@@ -3,7 +3,8 @@
 
 This tool NEVER opens the gate, accesses credentials, or changes PostgreSQL.
 Use --arm to register an independent systemd transient rollback timer BEFORE any test.
-Only the single exact, approved gate-line removal is accepted as a restore input.
+Only an exact gate-to-comment change and the four previously verified
+unrelated upstream cutovers are accepted; unknown changes fail closed.
 """
 from __future__ import annotations
 
@@ -111,24 +112,29 @@ def restore(active: Path, backup: Path, test_cmd: list[str],
     if not active.is_file() or not backup.is_file():
         raise GuardError("MISSING_GUARD_FILES")
     old = backup.stat()
-    if not stat.S_ISREG(old.st_mode) or old.st_size > 200_000:
+    if (not stat.S_ISREG(old.st_mode) or old.st_uid != 0 or
+        old.st_gid != 0 or stat.S_IMODE(old.st_mode) != 0o600 or
+        old.st_nlink != 1 or not 0 < old.st_size <= 200_000):
         raise GuardError("INVALID_BACKUP")
     original = backup.read_bytes()
     current = active.read_bytes()
     if not checked(original):
         raise GuardError("UNTRUSTED_BACKUP_GATE")
-    if current == original:
+    if checked(current):
+        # A previous rollback may have closed the gate before the timer fires.
+        # This is safe even if the 4 permitted upstreams changed in between.
         return "ALREADY_CLOSED"
-    # Restore only if this single exact gate removal took place.
-    if current != original.replace(GATE, COMMENT, 1):
-        raise GuardError("UNEXPECTED_NGINX_CHANGE_REFUSED")
+    closed = permitted_open_to_closed(current)
+    # Conservative re-read before replace. A separately coordinated short
+    # Nginx deployment freeze is still required; not an atomic filesystem CAS.
+    if active.read_bytes() != current:
+        raise GuardError("ACTIVE_CHANGED_BEFORE_RESTORE")
     mode = stat.S_IMODE(active.stat().st_mode)
-    atomic_root_write(active, original, mode)
+    atomic_root_write(active, closed, mode)
     run_maintenance(test_cmd, reload_cmd)
-    if active.read_bytes() != original:
+    if active.read_bytes() != closed:
         raise GuardError("RESTORE_READBACK_MISMATCH")
     return "RESTORED_GATE_CLOSED"
-
 
 def trusted_script(executable: Path) -> bool:
     if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
