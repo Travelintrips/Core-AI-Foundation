@@ -126,6 +126,16 @@ describe("AI Core workload router", () => {
     });
   });
 
+  it("routes the Command Center website repair instruction to coding", () => {
+    expect(
+      classifyAiCoreWorkload("@pakai akun travelincars : perbaiki website aifront.cstlogistic.co.id"),
+    ).toMatchObject({
+      workload: "CODING",
+      requiresAgent: true,
+      requiresApproval: false,
+    });
+  });
+
   it("routes production deploy to the explicit approval gate", () => {
     expect(classifyAiCoreWorkload("deploy ke production sekarang")).toMatchObject({
       workload: "CRITICAL_ACTION",
