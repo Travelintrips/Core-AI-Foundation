@@ -179,6 +179,48 @@ class FreshPublicCustodyTests(unittest.TestCase):
         self.assertFalse(result["dba_preparation_off"])
 
 
+class CanonicalInstalledBootTests(unittest.TestCase):
+    def test_merged_pr1851_boot_source_hash_pinned_and_any_tamper_refused(self):
+        source=SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()
+        self.assertEqual(hashlib.sha256(source).hexdigest(),m.BOOT_SHA)
+        self.assertFalse(m._pinned_canonical_closed(b"not-an-approved-nginx-site",source))
+        self.assertFalse(m._pinned_canonical_closed(b"anything",source+b"\n# tamper"))
+        self.assertFalse(m._pinned_canonical_closed(b"anything",b"wrong-helper"))
+
+    def test_fixture_requires_entire_canonical_site_not_just_closed_owner_line(self):
+        site=(
+            b"server {\n"
+            b"    location ^~ /api/gpt02-owner-ledger/ {\n"
+            +b"    "+m.GATE+b"\n"
+            +b"    proxy_pass http://127.0.0.1:18082;\n"
+            +b"    }\n"
+            b"    location = /api/bridge/admin/jobs {\n"
+            b"    proxy_pass http://127.0.0.1:18296;\n"
+            b"    }\n"
+            b"    location = /api/bridge/admin/sessions {\n"
+            b"    proxy_pass http://127.0.0.1:18296;\n"
+            b"    }\n"
+            b"    location ^~ /api/bridge/admin/jobs/ {\n"
+            b"    proxy_pass http://127.0.0.1:18296;\n"
+            b"    }\n"
+            b"    location / {\n"
+            b"    proxy_pass http://127.0.0.1:18501;\n"
+            b"    }\n"
+            b"}\n"
+        )
+        base=SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()
+        original=b"e34dde83f676dec15d27b56241b830cbffe7cb3ba0b07e6699f011d48fb651ed"
+        self.assertEqual(base.count(original),1)
+        pinned=base.replace(original,hashlib.sha256(site).hexdigest().encode(),1)
+        with patch.object(m,"BOOT_SHA",hashlib.sha256(pinned).hexdigest()):
+            self.assertTrue(m._pinned_canonical_closed(site,pinned))
+            self.assertFalse(m._pinned_canonical_closed(site+b"\n# unapproved-other-route",pinned))
+            self.assertFalse(m._pinned_canonical_closed(site.replace(m.GATE,b"return 200;",1),pinned))
+            bridge=site.replace(b"proxy_pass http://127.0.0.1:18296;",
+                                b"proxy_pass http://127.0.0.1:18181;")
+            self.assertTrue(m._pinned_canonical_closed(bridge,pinned))
+
+
 class ClosedGateTests(unittest.TestCase):
     def setUp(self):
         self.vhost=(
@@ -187,10 +229,11 @@ class ClosedGateTests(unittest.TestCase):
             b" location / { proxy_pass http://127.0.0.1:18181; }\n}\n"
         )
         self.boot=b"approved-bounded-boot-script"
-        self.patch_v=patch.object(m,"VHOST_SHA",hashlib.sha256(self.vhost).hexdigest())
+        self.patch_canonical=patch.object(m,"_pinned_canonical_closed",
+                            side_effect=lambda site, source: site == self.vhost and source == self.boot)
         self.patch_b=patch.object(m,"BOOT_SHA",hashlib.sha256(self.boot).hexdigest())
-        self.patch_v.start();self.patch_b.start()
-        self.addCleanup(self.patch_v.stop);self.addCleanup(self.patch_b.stop)
+        self.patch_canonical.start();self.patch_b.start()
+        self.addCleanup(self.patch_canonical.stop);self.addCleanup(self.patch_b.stop)
 
     def test_strict_closed_vhost_and_boot_hash(self):
         result=m.verify_closed_files(self.vhost,self.boot,True)
