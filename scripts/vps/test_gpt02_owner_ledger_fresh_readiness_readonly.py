@@ -150,7 +150,7 @@ class FreshPublicCustodyTests(unittest.TestCase):
         result=m.verify_public_custody(env,json_bytes(tampered),dba,NOW)
         self.assertFalse(result["worker_signature_valid"])
         self.assertFalse(result["public_custody_current"])
-        self.assertNotIn("signature",repr(result))
+        self.assertNotIn(tampered["signature"], repr(result))
         self.assertNotIn(BINDING,repr(result))
 
     def test_duplicate_or_extra_key_and_noncanonical_signature_are_denied(self):
