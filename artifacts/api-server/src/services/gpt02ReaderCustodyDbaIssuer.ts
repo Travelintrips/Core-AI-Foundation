@@ -4,6 +4,7 @@ import { lstat, open, rename, link, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Pool, type PoolConfig } from "@workspace/db/pg";
 import { readProtectedRuntimeFile, type ProtectedRuntimeFilePolicy } from "./gpt02ProtectedRuntimeFile.js";
+import { GPT02_CUSTODY_READER_ROLE, resolveGpt02ReaderDbTransport, type Gpt02PinnedReaderDbTransport } from "./gpt02ReaderCustodyDbTransport.js";
 import {
   GPT02_DBA_CUSTODY_TARGET, verifyGpt02CustodyWorkerAttestation,
   verifyGpt02DbaCustodyReceipt, type VerifiedGpt02CustodyWorker,
@@ -19,8 +20,7 @@ export const GPT02_DBA_CUSTODIAN_PATHS = Object.freeze({
   ca: "/etc/gpt02-dev/supabase-root-ca-2021.crt",
   auditDirectory: "/var/lib/gpt02-reader-custodian-audit",
 });
-const HOST = "db.xssrfshdrtdfupgqwfdw.supabase.co";
-const ROLE = "gpt02_owner_ledger_reader_1782_dev";
+const ROLE = GPT02_CUSTODY_READER_ROLE;
 const TTL_MS = 15 * 60_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -186,15 +186,15 @@ function publicTrust(encoded: unknown, fingerprint: unknown): Trust {
 function json(bytes: Buffer): unknown {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
-function readerConfig(bytes: Buffer): { password: string } {
+function readerConfig(bytes: Buffer): { password: string; transport: Gpt02PinnedReaderDbTransport } {
   try {
     const config = json(bytes) as Record<string, unknown>;
     if (!config || typeof config !== "object" || Array.isArray(config) ||
         Object.keys(config).sort().join(",") !== "database,host,password,port,projectId,sslMode,user" ||
-        config.host !== HOST || config.port !== 5432 || config.database !== "postgres" || config.user !== ROLE ||
-        config.projectId !== GPT02_DBA_CUSTODY_TARGET.project || config.sslMode !== "verify-full" ||
         typeof config.password !== "string" || config.password.length < 32 || config.password.length > 256) throw new Error();
-    return { password: config.password };
+    const transport = resolveGpt02ReaderDbTransport(config);
+    if (!transport) throw new Error();
+    return { password: config.password, transport };
   } catch { return deny("CUSTODY_DBA_READER_UNAVAILABLE"); }
 }
 
@@ -349,8 +349,9 @@ export function createGpt02ReaderCustodyDbaIssuer(overrides: Partial<Gpt02DbaCus
           if (!ca.includes("-----BEGIN CERTIFICATE-----")) throw new Error();
         } catch { return deny("CUSTODY_DBA_CA_UNAVAILABLE"); }
         await probeGpt02ReaderCustodyRole(deps.createPool, {
-          host: HOST, port: 5432, database: "postgres", user: ROLE, password: config.password,
-          ssl: { ca, rejectUnauthorized: true, servername: HOST }, max: 1,
+          host: config.transport.host, port: 5432, database: "postgres",
+          user: config.transport.databaseUser, password: config.password,
+          ssl: { ca, rejectUnauthorized: true, servername: config.transport.tlsServerName }, max: 1,
           connectionTimeoutMillis: 4000, idleTimeoutMillis: 500, query_timeout: 3000,
           statement_timeout: 3000, application_name: "gpt02-reader-custodian-dev",
         });
