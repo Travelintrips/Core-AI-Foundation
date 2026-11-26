@@ -60,6 +60,7 @@ import commercialAnalyticsRouter from "./commercialAnalytics";
 import storageRouter from "./storage";
 import observabilityRouter from "./observability";
 import internalAuthRouter from "./internal-auth";
+import cstTeamOneJobOwnerConsentRouter from "./cst-team-onejob-owner-consent";
 import internalCatalogRouter from "./internal-catalog";
 import brandKitEnterpriseRouter from "./brand-kit-enterprise";
 import assetLibraryRouter from "./asset-library";
@@ -186,7 +187,11 @@ import aicodingDashboardRouter from "./aicoding-dashboard.js";
 import localMediaRouter from "./local-media.js";
 import local3dRouter from "./local-3d.js";
 
+
 const router: IRouter = Router();
+
+
+
 
 router.use(healthRouter);
 router.use(storageRouter);
@@ -207,6 +212,7 @@ router.use(aicodingDashboardRouter);
 router.use(localMediaRouter);
 router.use(local3dRouter);
 router.use(internalAuthRouter);
+router.use(cstTeamOneJobOwnerConsentRouter);
 router.use(internalCatalogRouter);
 router.use(agentsRouter);
 router.use(registryRouter);

@@ -1,0 +1,46 @@
+name: GPT02 relock executor readiness (DEV source only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_relock_executor_preflight.py'
+      - 'scripts/vps/test_gpt02_relock_executor_preflight.py'
+      - '.github/workflows/gpt02-relock-executor-readiness.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_relock_executor_preflight.py'
+      - 'scripts/vps/test_gpt02_relock_executor_preflight.py'
+      - '.github/workflows/gpt02-relock-executor-readiness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-contract:
+    name: GPT02 DEV relock preflight contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax only
+        run: python3 -B -m py_compile scripts/vps/gpt02_relock_executor_preflight.py scripts/vps/test_gpt02_relock_executor_preflight.py
+      - name: Test positive/negative non-authorizing behavior
+        run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_relock_executor_preflight.py -v
+      - name: Confirm source-only gate cannot mutate or grant execution
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('scripts/vps/gpt02_relock_executor_preflight.py').read_text()
+          assert 'authorizationGranted": False' in s
+          assert 'executionPermitted": False' in s
+          assert 'signingPermitted": False' in s
+          assert 'dispatchPermitted": False' in s
+          assert 'releaseDecision": NO_GO' in s
+          assert '["systemctl", "show"' in s
+          assert 'subprocess.Popen' not in s
+          assert 'shell=True' not in s
+          assert 'eval(' not in s
+          print('GPT02_READ_ONLY_GATE_STATIC=PASS')
+          PY

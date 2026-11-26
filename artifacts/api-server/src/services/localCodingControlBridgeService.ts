@@ -27,6 +27,7 @@ import { verifyDevWakeCommandReceipt } from "./devChatGptWakeEvidenceService.js"
 import {genericClaimNotGpt02RecoverySql,genericClaimNotReservedCandidateSql,
   isQuarantinedGpt02RecoveryMetadata}
   from "./gpt02RecoveryGenericClaimQuarantine.js";
+import { genericClaimNotIssue238QaSql, isReservedIssue238GenericMetadata } from "./issue238GenericBridgeQuarantine.js";
 import { issueVerifiedDevSopCheckpoint, parseDevSopCheckpointIntent } from "./devSopCheckpointIssuer.js";
 import { assertNoSelfAttestedCheckpoint } from "./devCheckpointClaimGuard.js";
 import { codingBridgeTerminalEventPredicate, codingBridgeSignedCheckpointCandidatePredicate } from "./codingBridgeTerminalEventPredicate.js";
@@ -192,6 +193,12 @@ export async function submitCodingBridgeCommand(input: {
     throw Object.assign(new Error("GPT02_RECOVERY_GENERIC_SUBMISSION_FORBIDDEN"),{
       bridgeStage:"RECOVERY_ISSUER_REQUIRED",
     });
+  // The generic submission route must never mint a reserved Issue238 QA
+  // marker, even when its value is null/false/empty or a command already exists.
+  if (isReservedIssue238GenericMetadata(input.metadata))
+    throw Object.assign(new Error("ISSUE238_QA_GENERIC_SUBMISSION_FORBIDDEN"), {
+      bridgeStage: "DEDICATED_OWNER_QA_ISSUER_REQUIRED",
+    });
   let stage = "SCHEMA_CHECK_FAILED";
   try {
   await ensureCodingControlBridgeTables();
@@ -215,10 +222,18 @@ export async function submitCodingBridgeCommand(input: {
 
   const { operationalSop, operationalSopSource, replyTemplates } =
     await readHandshakeSopSettings();
+  const bundledDevelopmentSop =
+    process.env["APP_ENV"] === "development" &&
+    process.env["NODE_ENV"] !== "production" &&
+    input.source === "ai-core-chat" &&
+    typeof input.metadata?.["chatSubmissionOwnerId"] === "string"
+      ? process.env.CST_BUNDLED_DEV_SOP
+      : undefined;
   const metadataJson = {
     ...(input.metadata ?? {}),
     operationalSop,
     operationalSopSource,
+    ...(bundledDevelopmentSop ? { developmentSop: JSON.parse(bundledDevelopmentSop) } : {}),
     ...(input.assignedClientId
       ? { assignedClientId: input.assignedClientId }
       : {}),
@@ -237,8 +252,14 @@ export async function submitCodingBridgeCommand(input: {
       authorityJson: input.authority ?? {},
       metadataJson,
     })
+    .onConflictDoNothing({
+      target: [
+        aiCodingBridgeCommandsTable.source,
+        aiCodingBridgeCommandsTable.externalCommandId,
+      ],
+    })
     .returning();
-  if (!command) throw new Error("Failed to persist bridge command");
+  if (!command) return null;
 
   stage = "ACK_INSERT_FAILED";
   await tx.insert(aiCodingBridgeResponsesTable).values({
@@ -257,6 +278,24 @@ export async function submitCodingBridgeCommand(input: {
 
   return command;
   });
+  if (!command) {
+    // A concurrent submit won the unique key. Its transaction persists the
+    // command and its initial ACK together before this insert can return.
+    stage = "CONCURRENT_COMMAND_LOOKUP_FAILED";
+    const [winner] = await db
+      .select()
+      .from(aiCodingBridgeCommandsTable)
+      .where(
+        and(
+          eq(aiCodingBridgeCommandsTable.source, source),
+          eq(aiCodingBridgeCommandsTable.externalCommandId, input.externalCommandId),
+        ),
+      )
+      .limit(1);
+    if (!winner) throw new Error("Concurrent bridge command is missing");
+    return { command: winner, created: false };
+  }
+
   stage = "EVENT_PUBLISH_FAILED";
   publishSafe({
     eventType: "coding.bridge.command.received",
@@ -948,6 +987,7 @@ export async function claimCodingBridgeCommand(input: {
         -- A direct UUID target, SSE or expired claim cannot bypass
         -- the dedicated GPT02 recovery fencing issuer/worker protocol.
         AND ${genericClaimNotGpt02RecoverySql()}
+        AND ${genericClaimNotIssue238QaSql()}
         AND ${genericClaimNotReservedCandidateSql()}
         AND CASE WHEN command_type = 'EXTERNAL_AGENT_WORK'
           AND metadata_json ->> 'capability' = 'chatgpt:wake'

@@ -24,7 +24,7 @@ function readAgentToken(req: Request): string | null {
   return null;
 }
 
-export function requireAgentServiceScope(requiredScope: string) {
+export function requireAgentServiceScope(requiredScope: string, credentialBinding?: (tokenHash: string) => string) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const token = readAgentToken(req);
     if (!token || token.length > MAX_TOKEN_LENGTH) {
@@ -62,6 +62,7 @@ export function requireAgentServiceScope(requiredScope: string) {
       res.locals["aiAgentService"] = {
         id: record.id,
         name: record.name,
+        ...(credentialBinding && { credentialBinding: credentialBinding(tokenHash) }),
         scopes,
       };
 

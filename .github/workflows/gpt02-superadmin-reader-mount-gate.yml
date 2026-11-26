@@ -1,0 +1,137 @@
+name: GPT02 custody credential loading (DEV)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/deploy_dev_release.py'
+      - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
+      - 'scripts/vps/test_gpt02_worker_attestor_key_loading.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-reader-custody-worker-attestor-key-loader.service'
+      - 'artifacts/api-server/src/services/gpt02ReaderCustodyDbaIssuer.ts'
+      - 'artifacts/api-server/src/services/gpt02ReaderCustodyAttestation.ts'
+      - 'artifacts/api-server/src/services/gpt02ProtectedRuntimeFile.ts'
+      - 'lib/db/package.json'
+      - 'lib/db/src/pg.ts'
+      - 'scripts/dev/gpt02-reader-custodian-runtime.ts'
+      - 'scripts/dev/build-gpt02-reader-custodian-runtime.sh'
+      - 'scripts/vps/gpt02_reader_custodian_start.py'
+      - 'scripts/vps/test_gpt02_reader_custodian_start.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-reader-custodian*'
+      - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
+      - 'scripts/vps/gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/deploy_dev_release.py'
+      - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
+      - 'scripts/vps/test_gpt02_worker_attestor_key_loading.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service'
+      - 'deploy/ai-coding-standalone-dev/gpt02-reader-custody-worker-attestor-key-loader.service'
+      - 'artifacts/api-server/src/services/gpt02ReaderCustodyDbaIssuer.ts'
+      - 'artifacts/api-server/src/services/gpt02ReaderCustodyAttestation.ts'
+      - 'artifacts/api-server/src/services/gpt02ProtectedRuntimeFile.ts'
+      - 'lib/db/package.json'
+      - 'lib/db/src/pg.ts'
+      - 'scripts/dev/gpt02-reader-custodian-runtime.ts'
+      - 'scripts/dev/build-gpt02-reader-custodian-runtime.sh'
+      - 'scripts/vps/gpt02_reader_custodian_start.py'
+      - 'scripts/vps/test_gpt02_reader_custodian_start.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-reader-custodian*'
+      - '.github/workflows/gpt02-superadmin-reader-mount-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-no-secret-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run isolated loader and release integration tests
+        run: |
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_superadmin_reader_mount_gate.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_credential_loader.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_release_integration.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_worker_attestor_key_loading.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_reader_custodian_start.py -v
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 18.19.1
+      - name: Provide the production executable path in this disposable runner
+        run: |
+          # The VPS has /usr/bin/node; hosted runners use a tool-cache path.
+          # Keep the real unit unchanged and verify its fixed executable path.
+          if [[ ! -e /usr/bin/node && ! -L /usr/bin/node ]]; then
+            sudo ln -s -- "$(command -v node)" /usr/bin/node
+          fi
+          test -x /usr/bin/node
+      - name: Verify dormant systemd units
+        run: |
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-owner-ledger-credential-loader.service
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-reader-custody-worker-attestor-key-loader.service
+          systemd-analyze verify deploy/ai-coding-standalone-dev/gpt02-reader-custodian.service
+      - name: Verify metadata gate cannot read credentials or execute processes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/vps/gpt02_superadmin_reader_mount_gate.py').read_text()
+          assert 'get_reader_mounts' in s
+          assert 'reader.json' in s
+          assert 'readonly' in s
+          assert 'subprocess' not in s
+          assert 'password' not in s.lower()
+          assert 'read_text(' not in s
+          assert 'read_bytes(' not in s
+          assert 'systemctl' not in s
+          assert 'docker run' not in s
+          assert 'pg_' not in s
+          assert 'if __name__' not in s
+          print('GPT02_READ_ONLY_MOUNT_GATE_STATIC_PASS')
+          PY
+
+  custodian-runtime-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build the standalone bounded custodian
+        run: bash scripts/dev/build-gpt02-reader-custodian-runtime.sh
+      - name: Select the isolated host compatibility runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 18.19.1
+      - name: Verify host runtime compatibility and disabled boundary
+        run: |
+          node --check artifacts/api-server/dist/gpt02-reader-custodian-runtime.cjs
+          python3 - <<'PY'
+          import os, subprocess
+          result = subprocess.run(
+              ['node', 'artifacts/api-server/dist/gpt02-reader-custodian-runtime.cjs'],
+              env={'PATH': os.environ['PATH'], 'APP_ENV': 'development',
+                   'NODE_ENV': 'development', 'GPT02_DEV_CUSTODY_DBA_PREPARATION_ENABLED': 'false'},
+              capture_output=True, text=True, timeout=10,
+          )
+          assert result.returncode == 1, 'DISABLED_CUSTODIAN_MUST_DENY'
+          assert result.stdout == '', 'DISABLED_CUSTODIAN_RETURNED_OUTPUT'
+          assert result.stderr == 'GPT02_DBA_CUSTODIAN=BLOCKED code=CUSTODY_DBA_DISABLED\n', 'DISABLED_BOUNDARY_NOT_REACHED'
+          print('GPT02_CUSTODIAN_NODE18_DISABLED_PASS')
+          PY

@@ -1,0 +1,33 @@
+{
+  "evidenceType": "DEV_SYNTHETIC_LOOPBACK_REMOTE_OLLAMA_E2E",
+  "testedOn": "2026-11-18",
+  "workerSourceCommit": "d9a05db834aa15bcc6da9bec364ff0e4678de8fe",
+  "script": "scripts/dev/cst-ai-team-remote-ollama-loopback-e2e.mjs",
+  "sourceCode": "artifacts/api-server/src/scripts/remoteOllamaWorker.ts",
+  "result": {
+    "status": "PASS",
+    "model": "qwen2.5:3b",
+    "workerId": 777,
+    "jobId": 421,
+    "registered": 1,
+    "claimed": 1,
+    "completed": 1,
+    "heartbeats": 0,
+    "answer": "CST_DEV_OUTBOUND_READY",
+    "outputTokens": 7,
+    "durationSec": 4,
+    "evidence": "synthetic_loopback_api_and_real_ollama_inference",
+    "environment": "DELL_LOCAL_ONLY",
+    "externalCore": false,
+    "companyDbWrites": false,
+    "publicPortsOpened": false,
+    "attestationVerified": false,
+    "finalAckVerified": false
+  },
+  "releaseLimitations": [
+    "Local mock API only; NOT authenticated or connected to CST-DEV Core API",
+    "Synthetic worker/job identities, no real DB or independent agent receipts",
+    "No Attestation, no QA Final ACK, no GPT02 or PROD authority",
+    "Model qwen2.5:3b smoke test is not proof of specialized coding quality"
+  ]
+}

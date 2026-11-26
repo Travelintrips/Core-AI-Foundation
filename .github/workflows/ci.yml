@@ -40,6 +40,63 @@ jobs:
         run: node --test scripts/github-event-correlation.test.mjs scripts/github-ci-handoff-decision.test.mjs
       - name: Verify serialized GitHub CI quorum transitions
         run: node --test scripts/ci-quorum-row-lock.test.mjs
+      - name: Verify scoped CST team DEV readiness is non-authorizing
+        run: node --experimental-strip-types --test scripts/cst-team-scoped-readiness.test.mjs
+      - name: Verify read-only CST-DEV one-job pilot preflight cannot execute or sign
+        run: node --test scripts/dev/cst-team-onejob-readiness-gate.test.mjs
+      - name: Verify independent Owner approval cannot be forged from DB Owner ID
+        run: node --test scripts/dev/cst-team-onejob-owner-approval-receipt.test.mjs
+      - name: Verify one-click session-bound Owner intent rejects replay and unsafe Origin
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-owner-session-intent.test.mjs
+      - name: Verify bounded one-WAITING-job preparer and rollback cannot approve or dispatch
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-prestage-once.test.mjs
+      - name: Verify signed independent one-job subscriber receipt cannot fake delivery or Final ACK
+        run: node --test scripts/dev/cst-team-onejob-subscriber-receipt.test.mjs
+      - name: Verify isolated one-job subscriber consumes only one RLS event and signs exactly once
+        run: node --test scripts/dev/cst-team-onejob-subscriber-consumer-qa.test.mjs
+      - name: Verify disposable PG16 subscriber functional driver source is safe
+        run: |
+          node --check scripts/dev/cst-team-onejob-subscriber-functional-client-qa.mjs
+          node --check scripts/dev/cst-team-onejob-subscriber-functional-review-qa.mjs
+          python3 -c "import ast,pathlib;[ast.parse(pathlib.Path(p).read_text()) for p in ['scripts/dev/cst-team-onejob-subscriber-functional-rls-qa.py','scripts/dev/cst_team_onejob_signer_sidecar_qa.py']]"
+      - name: Verify host-gateway deny test before one-job DEV admission
+        run: node --test scripts/dev/cst-team-host-gateway-probe.test.mjs
+      - name: Verify QA kernel nftables allow-deny evidence cannot promote live pilot
+        run: node --test scripts/dev/cst-team-onejob-nft-egress-qa.test.mjs
+      - name: Verify mock broker ACL-before-start lifecycle cannot touch live services
+        run: node --test scripts/dev/cst-team-onejob-broker-acl-lifecycle-qa.test.mjs
+      - name: Verify default-off CST-DEV Unix socket PG TLS/SNI contract
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-pg-socket.test.mjs
+      - name: Verify pinned Supabase Root CA fingerprint and strict TLS
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-ca-pin.test.mjs
+      - name: Verify inert fixed-destination broker rejects unsafe sockets and concurrency
+        run: node --test scripts/dev/cst-team-onejob-fixed-db-broker.test.mjs
+      - name: Verify accepted Unix peer credentials before mock upstream dial
+        run: node --test scripts/dev/cst-team-onejob-peercred-broker.test.mjs
+      - name: Verify non-root Unix socket identity boundary is fail-closed
+        run: node --test scripts/dev/cst-team-onejob-unix-peer-boundary.test.mjs
+      - name: Verify Linux kernel SO_PEERCRED rejects unauthorized Unix peer
+        run: python3 scripts/dev/test_cst_team_onejob_peercred.py -q
+      - name: Validate independent signature and one-session operational broker source
+        run: |
+          python3 -m venv /tmp/cst-onejob-broker-ci-venv
+          /tmp/cst-onejob-broker-ci-venv/bin/python -m pip install --disable-pip-version-check cryptography==41.0.7
+          /tmp/cst-onejob-broker-ci-venv/bin/python -B scripts/dev/test_cst_team_onejob_operational_broker.py
+          bash -n scripts/dev/cst-team-onejob-operational-broker-no-network-qa.sh
+      - name: Verify offline PostgreSQL TLS passes through fixed broker
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-broker-pg-integration.test.mjs
+      - name: Verify untrusted TLS certificate is rejected through offline broker
+        run: node --experimental-strip-types --test scripts/dev/cst-team-onejob-broker-tls-negative.test.mjs
+      - name: Verify QA image marker readback rejects stale or privileged image
+        run: node --test scripts/dev/cst-team-onejob-image-provenance.test.mjs
+      - name: Verify DEV QA image source marker is never stale
+        run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
+      - name: Verify scoped pilot RLS and rollback in disposable PostgreSQL
+        run: python3 scripts/dev/cst-team-dedicated-model-role-rehearsal.py
+      - name: Verify one-WAITING-job prestage cannot approve, queue or create second active job
+        run: python3 scripts/dev/cst-team-onejob-prestage-rls-pg16-qa.py
+      - name: Verify separate subscriber one-event RLS, immutable receipt and rollback
+        run: python3 scripts/dev/cst-team-onejob-independent-subscriber-role-rehearsal.py
       - name: Verify host executor private runtime directory
         run: node --test scripts/host-executor-runtime-directory.test.mjs
       - name: Verify bounded PostgreSQL pool cap

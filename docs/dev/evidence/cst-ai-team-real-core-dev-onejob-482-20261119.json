@@ -1,0 +1,81 @@
+{
+  "title": "CST AI Team — real CST-DEV bounded model job and fully revoked pilot access",
+  "localDate": "2026-11-19 Asia/Jakarta",
+  "utcDate": "2026-11-18",
+  "environment": "CST-DEV_ONLY",
+  "databaseProject": "xssrfshdrtdfupgqwfdw",
+  "sourceHeadBeforeEvidence": "862135c95e2129a1b7aec9c2455cd3bf1ff0f60f",
+  "transaction": {
+    "jobId": 482,
+    "jobCode": "OLLAMA-B7F9B5E2",
+    "jobType": "ollama_model_invocation",
+    "companyId": "1",
+    "requestId": "cst-ai-team-company1-dev:pilot-13b8cdb223d7a35a578a",
+    "model": "qwen2.5:3b",
+    "workerId": 3628,
+    "workerName": "cst-dev-dell-onejob-20261119",
+    "workerCapabilities": [
+      "ollama_inference"
+    ],
+    "workerMaximumConcurrentJobs": 1,
+    "transitions": [
+      "queued",
+      "running",
+      "completed"
+    ],
+    "status": "completed",
+    "retryCount": 0,
+    "modelOutput": "CST_AI_TEAM_DELL_MODEL_DEV_OK",
+    "createdAtUtc": "2026-11-18T17:56:17.402Z",
+    "claimedAtUtc": "2026-11-18T17:57:05.113Z",
+    "completedAtUtc": "2026-11-18T17:58:33.176Z",
+    "dellModelInferenceElapsedSeconds": 9.2,
+    "persistedResultVerifiedWithDatabaseSelect": true,
+    "completedViaExistingCoreService": true,
+    "actualDellOllamaModel": true,
+    "actualOutboundWorkerPolling": false,
+    "deliveryMethod": "Model inference on DELL through connected device; Core AI service claim and completion from isolated VPS process with scoped DB login"
+  },
+  "audit": {
+    "workerRegisteredAudit": true,
+    "jobCompletedAudit": true,
+    "coreJobCompletedEventPersisted": false,
+    "eventBusPublishFailure": "ai_events role policy did not allow job.completed; publication failed without failing the committed job",
+    "perAgentIndependentReceipts": false,
+    "callbackVerified": false,
+    "attestationVerified": false,
+    "finalAckVerified": false,
+    "independentQaVerified": false,
+    "fourAutonomousAgentsVerified": false
+  },
+  "rollback": {
+    "provisioningMigration": "cst_team_dev_model_pilot_role_20261119",
+    "revocationMigration": "cst_team_dev_model_pilot_rollback_20261119",
+    "rollbackApplied": true,
+    "remainingPilotRoles": 0,
+    "remainingPilotPolicies": 0,
+    "remainingPilotSessions": 0,
+    "jobEvidencePreserved": true,
+    "workerStatus": "offline",
+    "workerRunningJobs": 0,
+    "workerHeartbeatTokenCleared": true,
+    "workerLeaseExpired": true,
+    "rlsEnabledFor": [
+      "ai_jobs",
+      "ai_workers",
+      "ai_audit_logs"
+    ],
+    "gpt02RolesChanged": false,
+    "mainRuntimeCredentialsChanged": false,
+    "productionChanged": false
+  },
+  "releaseGate": {
+    "scopedModelTransportAndDatabaseE2E": "PASS",
+    "fullyAutonomousOutboundModelWorker": "NOT_TESTED",
+    "eventBusReconciliation": "NOT_PASS",
+    "independentQaAndFinalAck": "NOT_PASS",
+    "fourIndependentAgents": "NOT_PASS",
+    "prodDeployment": "NO_GO",
+    "nextStep": "Review least-privilege event completion publication and verify independent QA through deterministic task-bound receipts before multi-agent promotion."
+  }
+}

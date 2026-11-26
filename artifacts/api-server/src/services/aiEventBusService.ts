@@ -24,6 +24,7 @@ import {
   db,
   aiEventsTable,
   aiEventSubscriptionsTable,
+  aiAuditLogsTable,
 } from "@workspace/db";
 import type {
   AiEvent,
@@ -86,6 +87,71 @@ export async function publish(opts: PublishOptions): Promise<AiEvent> {
     logger.error({ err, eventId }, "[event-bus] Background dispatch failed"),
   );
 
+  return event;
+}
+
+/**
+ * Exact CST-DEV model-pilot event + audit receipt.
+ * Both INSERTs commit in ONE transaction. If the audit permission/RLS write
+ * fails, no completion event is persisted by this method. This is NOT a
+ * subscriber delivery receipt, independent QA approval or signed Final ACK.
+ *
+ * Existing publish()/publishSafe() paths stay unchanged for ordinary jobs.
+ */
+/** Construct one guarded pilot event and one matching audit record.
+ * Pure metadata preparation; caller must persist BOTH records atomically.
+ */
+export function prepareCstDevModelCompletionEvent(opts: PublishOptions) {
+  const payload = opts.payload;
+  if (process.env.APP_ENV !== "development" ||
+      process.env.NODE_ENV !== "development" ||
+      process.env.CST_TEAM_DEV_SCOPED_MODEL_CLAIM_ENABLED !== "true" ||
+      opts.eventType !== "job.completed" || opts.sourceModule !== "job-engine" ||
+      !payload || payload.jobType !== "ollama_model_invocation" ||
+      typeof payload.jobId !== "number" ||
+      !Number.isSafeInteger(payload.jobId) || payload.jobId < 1 ||
+      typeof payload.workerId !== "number" ||
+      !Number.isSafeInteger(payload.workerId) || payload.workerId < 1 ||
+      opts.sourceId !== String(payload.jobId) ||
+      typeof payload.jobCode !== "string" || !payload.jobCode) {
+    throw new Error("CST_DEV_MODEL_EVENT_AUDIT_SCOPE_INVALID");
+  }
+  const eventId = randomUUID();
+  const correlationId = opts.correlationId ?? randomUUID();
+  const row: InsertAiEvent = {
+    eventId, eventType: "job.completed", sourceModule: "job-engine",
+    sourceId: opts.sourceId, correlationId, causationId: opts.causationId ?? null,
+    payloadJson: payload, metadataJson: opts.metadata ?? {},
+    status: "published", publishedAt: new Date(),
+  };
+  const audit = {
+    module: "event-bus", action: "event_published", resourceId: eventId,
+    resourceType: "ai_event", status: "success",
+    details: { eventType: "job.completed", sourceModule: "job-engine", correlationId },
+  };
+  return { row, audit };
+}
+
+/** After a successful DB commit only: delivery is best-effort and not proof of QA. */
+export function dispatchCstDevModelCompletionAfterCommit(event: AiEvent): void {
+  dispatch(event).catch(err =>
+    logger.error({ err, eventId: event.eventId },
+      "[event-bus] CST-DEV subscriber dispatch failed"),
+  );
+}
+
+export async function publishAuditedCstDevModelCompletion(
+  opts: PublishOptions,
+): Promise<AiEvent> {
+  const { row, audit } = prepareCstDevModelCompletionEvent(opts);
+  const event = await db.transaction(async tx => {
+    const [persisted] = await tx.insert(aiEventsTable).values(row).returning();
+    if (!persisted) throw new Error("CST_DEV_MODEL_EVENT_INSERT_FAILED");
+    // A failed audit INSERT must roll back the event INSERT.
+    await tx.insert(aiAuditLogsTable).values(audit);
+    return persisted;
+  });
+  dispatchCstDevModelCompletionAfterCommit(event);
   return event;
 }
 

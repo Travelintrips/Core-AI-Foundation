@@ -1,0 +1,76 @@
+name: CST DEV One-Job QA Image Provenance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cst-onejob-image-qa.yml"
+      - "deploy/hostinger-dev/**"
+      - "scripts/dev/stamp-dev-build-sha.mjs"
+      - "scripts/dev/stamp-dev-build-sha.test.mjs"
+      - "artifacts/api-server/**"
+      - "lib/db/**"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cst-onejob-image-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-source-image:
+    name: Build and check DEV image without deployment
+    # A fork or unrelated PR must not consume this bounded pilot QA lane.
+    if: >-
+      github.repository == 'Travelintrips/Core-AI-Foundation' &&
+      ((github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.head_ref == 'feat/cst-ai-team-scoped-readiness-20261118') ||
+       (github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/feat/cst-ai-team-scoped-readiness-20261118'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test fail-closed source stamping
+        run: node --test scripts/dev/stamp-dev-build-sha.test.mjs
+      - name: Build actual image with exact checked-out commit
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          test "$SOURCE_SHA" = "$EXPECTED_SOURCE_SHA"
+          echo "QA_SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+          docker build \
+            --file deploy/hostinger-dev/Dockerfile \
+            --build-arg "GITHUB_SHA=$SOURCE_SHA" \
+            --label "cst.qa.source_commit=$SOURCE_SHA" \
+            --label "cst.qa.scope=DEV_ONEJOB_IMAGE_PROVENANCE_ONLY" \
+            --label "cst.qa.prod_deploy=false" \
+            --tag cst-core-onejob-pr1763-image-qa:local \
+            .
+      - name: Readback embedded SHA and image label without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE=cst-core-onejob-pr1763-image-qa:local
+          IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          ACTUAL_MARKER="$(docker run --rm --network none --entrypoint cat "$IMAGE" /app/.cst-build-sha)"
+          ACTUAL_LABEL="$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "cst.qa.source_commit"}}')"
+          test "$ACTUAL_MARKER" = "$QA_SOURCE_SHA"
+          test "$ACTUAL_LABEL" = "$QA_SOURCE_SHA"
+          test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "cst.qa.prod_deploy"}}')" = false
+          echo "CST_DEV_QA_IMAGE_SOURCE_PROVENANCE_PASS"
+          echo "Image digest: $IMAGE_ID"
+          echo "Source: $QA_SOURCE_SHA"
+      - name: Prevent accidental QA image deployment
+        shell: bash
+        run: |
+          echo "NO IMAGE PUSH / NO DEV OR PROD DEPLOY / NO DB CONNECTION / NO SIGNER CHANGE"

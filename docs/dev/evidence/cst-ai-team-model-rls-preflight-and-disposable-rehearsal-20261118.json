@@ -1,0 +1,76 @@
+{
+  "title": "CST AI Team — read-only remote-model RLS admission audit and disposable rehearsal",
+  "date": "2026-11-18",
+  "sourceCommit": "2d39fe7d30639352d22df5f81b143296ba48f983",
+  "project": "CST-DEV",
+  "databaseProjectRef": "xssrfshdrtdfupgqwfdw",
+  "applicationRole": "aicore_dev_runtime",
+  "runtimeDbRlsPreflight": {
+    "status": "blocked",
+    "requiredChecks": 16,
+    "passedChecks": 10,
+    "blockers": [
+      "JOBS_REQUIRED_UPDATE_COLUMNS",
+      "JOBS_MODEL_SELECT_RLS",
+      "JOBS_MODEL_INSERT_RLS",
+      "JOBS_MODEL_UPDATE_RLS",
+      "WORKERS_REMOTE_INSERT_RLS",
+      "WORKERS_REMOTE_UPDATE_RLS"
+    ],
+    "modelJobsQueuedBeforeAndAfter": 0,
+    "tool": "artifacts/api-server/src/scripts/cstTeamModelAdmissionAudit.ts",
+    "databaseMutationsByAudit": 0,
+    "executionEnvironment": "APP_ENV=development; NODE_ENV=development",
+    "missingJobUpdateColumns": [
+      "actual_cost",
+      "actual_duration",
+      "next_retry_at",
+      "payload_json",
+      "result_json",
+      "retry_count"
+    ],
+    "note": "The role already has column-level UPDATE on some job fields (status, started_at, completed_at, updated_at, error_message), but not on the six fields above needed for model-claim, completion and failure recovery. This is not a blanket absence of all UPDATE permissions."
+  },
+  "disposablePostgres16Rehearsal": {
+    "script": "scripts/dev/cst-team-model-rls-disposable-rehearsal.sql",
+    "database": "cst_team_rls_rehearsal",
+    "network": "none",
+    "publicPorts": 0,
+    "outcome": "DISPOSABLE_RLS_REHEARSAL_PASS",
+    "denied": [
+      "job for Company3",
+      "wrong job type",
+      "unapproved worker name"
+    ],
+    "accepted": [
+      "one Company1 model job",
+      "one approved worker"
+    ],
+    "transitions": [
+      "queued",
+      "running",
+      "completed"
+    ],
+    "workerRestoredToIdle": true,
+    "unrelatedCompanyRowRemainedHidden": true,
+    "disposableContainerRemoved": true,
+    "testResult": "PASS"
+  },
+  "integrity": {
+    "allRealRlsUnchanged": true,
+    "rolesUnchanged": true,
+    "existingWorkerRegistrationsUnchanged": true,
+    "noProdChange": true,
+    "noEnrollmentCredentialCreated": true,
+    "noRealRemoteJobDispatched": true,
+    "noSignedFinalAck": true
+  },
+  "nextReleaseRequirements": [
+    "Review and authorize a temporary least-privilege DEV-only role/RLS change with automatic expiration and verified rollback",
+    "Do not reuse any GPT02 roles or privileged postgres application login",
+    "Verify exact Company1 job and worker binding, no cross-company claim, one-shot expiry, audit-log writes and rollback",
+    "Then run authenticated DELL outbound worker on a single approved real CST-DEV job",
+    "Require independent deterministic QA and separate Final ACK before operational PASS or PROD promotion"
+  ],
+  "releaseStatus": "NO_GO_FOR_REAL_DEV_ENROLLMENT_OR_PROD"
+}

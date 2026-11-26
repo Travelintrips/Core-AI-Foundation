@@ -21,7 +21,9 @@ export const EXTERNAL_AGENT_RULES = {
   "openclaw-vps-main": {
     source: "openclaw",
     role: "bounded_orchestration_agent",
-    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
+    // Owner appointment: GPT02 CST-DEV dedicated reader custody coordination.
+    // Not DB ALTER ROLE, password access, signing, dispatch or PROD authority.
+    capabilities: ["model:chat", "tools:bounded", "task:coordinate", "gpt02:reader-custody:coordinate:dev"],
     permissions: {
       codingWorkspaceWrite: false,
       gitCommit: false,
@@ -243,8 +245,9 @@ export async function heartbeatExternalAgent(input: {
   };
 }
 
-export async function getExternalAgentRegistrySnapshot() {
-  await ensureCodingControlBridgeTables();
+export async function getExternalAgentRegistrySnapshot(options: { skipSchemaEnsure?: boolean } = {}) {
+  // Diagnostic-only callers must not create/alter schema. Missing tables fail closed on SELECT.
+  if (!options.skipSchemaEnsure) await ensureCodingControlBridgeTables();
   const now = Date.now();
 
   return Promise.all(
@@ -284,4 +287,33 @@ export async function getExternalAgentRegistrySnapshot() {
       };
     }),
   );
+}
+
+/** Presence-only DEV diagnostic for the existing Travelintrips tools heartbeat.
+ * This ID is deliberately not in EXTERNAL_AGENT_RULES and gains NO dispatch,
+ * registry capability, token, write permission, or worker authorization.
+ * A healthy heartbeat here is not evidence of execution eligibility.
+ */
+export async function getCstTeamPresenceOnlyWorkerReadback() {
+  const clientId = "openclaw-travelintrips-tools-dev" as const;
+  const [row] = await db.select({
+    clientId: aiCodingBridgePresenceTable.clientId,
+    leaseExpiresAt: aiCodingBridgePresenceTable.leaseExpiresAt,
+    lastSeenAt: aiCodingBridgePresenceTable.lastSeenAt,
+    metadataJson: aiCodingBridgePresenceTable.metadataJson,
+  }).from(aiCodingBridgePresenceTable)
+    .where(eq(aiCodingBridgePresenceTable.clientId, clientId)).limit(1);
+  if (!row) return null;
+  const metadata = (row.metadataJson ?? {}) as Record<string, unknown>;
+  const reportedHealth =
+    metadata["reportedHealth"] === "healthy" || metadata["reportedHealth"] === "degraded"
+      ? metadata["reportedHealth"] as "healthy" | "degraded" : "unknown" as const;
+  return {
+    clientId,
+    eligible: false as const, // Not registered for dispatch; intentionally never eligible.
+    presenceState: row.leaseExpiresAt.getTime() > Date.now() ? "ACTIVE" as const : "UNAVAILABLE" as const,
+    reportedHealth,
+    lastSeenAt: row.lastSeenAt,
+    leaseExpiresAt: row.leaseExpiresAt,
+  };
 }

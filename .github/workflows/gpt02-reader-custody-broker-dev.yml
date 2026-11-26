@@ -1,0 +1,69 @@
+name: GPT02 reader custody broker DEV
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/gpt02-reader-custody-broker.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-reader-custody-*.test.ts'
+      - 'artifacts/api-server/src/services/gpt02ReaderCustody*.ts'
+      - 'artifacts/api-server/src/services/gpt02ProtectedRuntimeFile.ts'
+      - 'artifacts/api-server/src/services/gpt02SuperAdminLedgerReader.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02ProtectedRuntimeFile.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02SuperAdminLedgerReader.test.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-owner-ledger-*.test.ts'
+      - 'artifacts/api-server/src/routes/gpt02-owner-ledger-read.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02ReaderCustody*.test.ts'
+      - 'artifacts/api-server/src/middleware/agentServiceAuth.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/gpt02-reader-custody-broker-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'artifacts/api-server/src/routes/gpt02-reader-custody-broker.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-reader-custody-*.test.ts'
+      - 'artifacts/api-server/src/services/gpt02ReaderCustody*.ts'
+      - 'artifacts/api-server/src/services/gpt02ProtectedRuntimeFile.ts'
+      - 'artifacts/api-server/src/services/gpt02SuperAdminLedgerReader.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02ProtectedRuntimeFile.test.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02SuperAdminLedgerReader.test.ts'
+      - 'artifacts/api-server/src/routes/__tests__/gpt02-owner-ledger-*.test.ts'
+      - 'artifacts/api-server/src/routes/gpt02-owner-ledger-read.ts'
+      - 'artifacts/api-server/src/services/__tests__/gpt02ReaderCustody*.test.ts'
+      - 'artifacts/api-server/src/middleware/agentServiceAuth.ts'
+      - 'artifacts/api-server/src/app.ts'
+      - '.github/workflows/gpt02-reader-custody-broker-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  broker-no-privilege-escalation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      APP_ENV: development
+      SUPABASE_URL_DEV: https://xssrfshdrtdfupgqwfdw.supabase.co
+      SUPABASE_DEV_DATABASE_URL: postgresql://test:test@db.xssrfshdrtdfupgqwfdw.supabase.co:1/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify mounted adapter, signatures, protected files and denied actions
+        run: >-
+          pnpm -C artifacts/api-server exec vitest run --maxWorkers=2
+          src/routes/__tests__/gpt02-reader-custody-broker.test.ts
+          src/routes/__tests__/gpt02-reader-custody-runtime.test.ts
+          src/services/__tests__/gpt02ReaderCustodyAttestation.test.ts
+          src/services/__tests__/gpt02ReaderCustodyRuntime.test.ts
+          src/services/__tests__/gpt02ReaderCustodyVerifiedAdapter.test.ts
+          src/services/__tests__/gpt02OpenClawReaderCustodyPolicy.test.ts
+          src/services/__tests__/gpt02ProtectedRuntimeFile.test.ts
+          src/services/__tests__/gpt02SuperAdminLedgerReader.test.ts
+          src/routes/__tests__/gpt02-owner-ledger-read.test.ts
+          src/routes/__tests__/gpt02-owner-ledger-pre-admin-boundary.test.ts

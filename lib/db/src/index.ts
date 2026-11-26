@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";
 import { resolveDatabaseUrl } from "./env";
+import { createCstDevOneJobSocketOptions } from "./cstOneJobDevSocketTransport";
 
 const { Pool } = pg;
 
@@ -9,6 +10,11 @@ const { Pool } = pg;
 // unqualified table names, so every new connection must default its search
 // path to our dedicated schema instead of "public".
 //
+const databaseUrl = resolveDatabaseUrl();
+// Strict opt-in for one-job CST-DEV only. Disabled for all existing pools,
+// unless an approved dedicated pilot identity and fixed Unix transport exist.
+const oneJobSocketOptions = createCstDevOneJobSocketOptions(databaseUrl);
+
 // Do not pass search_path through libpq's startup "options" parameter here.
 // Supabase's transaction/session pooler rejects that startup parameter with
 // "unsupported startup parameter in options: search_path". pg-pool's
@@ -27,7 +33,8 @@ const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax >= 1
   : isProduction ? 10 : 5;
 
 const poolConfig = {
-  connectionString: resolveDatabaseUrl(),
+  connectionString: databaseUrl,
+  ...(oneJobSocketOptions ?? {}),
   // Production stays at 10 application connections by default, and can opt
   // into a smaller per-process maximum (1..10). No environment may exceed 10.
   max: poolMax,
@@ -136,6 +143,7 @@ export const db = drizzle(pool, { schema });
 
 // Additional admin read connections use the same installed Postgres driver.
 export { Pool as PostgresPool } from "pg";
+export type { PoolClient as PostgresPoolClient } from "pg";
 
 export * from "./schema";
 export * from "./env";

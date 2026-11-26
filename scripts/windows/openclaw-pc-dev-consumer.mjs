@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,8 +17,36 @@ async function request(route, payload) {
  if (!response.ok) throw Error('AI Core HTTP ' + response.status);
  return response.json();
 }
+function readCstDevelopmentSop(work) {
+ const metadata = work.metadata;
+ const pin = metadata?.developmentSop;
+ const valid = work.commandType === 'EXTERNAL_AGENT_WORK' &&
+   metadata?.assignedClientId === workerId &&
+   typeof metadata?.chatSubmissionOwnerId === 'string' &&
+   /^ai-core-chat-[a-f0-9]{64}$/.test(String(work.externalCommandId || '')) &&
+   pin?.path === 'CST-GLOBAL-DEVELOPMENT-SOP.md' &&
+   /^[0-9]+\.[0-9]+\.[0-9]+$/.test(String(pin.version || '')) &&
+   /^[a-f0-9]{40}$/.test(String(pin.commit || '')) &&
+   /^[a-f0-9]{64}$/.test(String(pin.sha256 || ''));
+ if (!valid) return {ok:false,message:'CST_SOP_REFERENCE_INVALID'};
+ const gh = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'GitHub CLI', 'gh.exe');
+ const endpoint = 'repos/Travelintrips/Core-AI-Foundation/contents/CST-GLOBAL-DEVELOPMENT-SOP.md?ref=' + pin.commit;
+ const result = spawnSync(gh,['api',endpoint,'--jq','.content'],{windowsHide:true,encoding:'utf8',timeout:12000,maxBuffer:65536});
+ if (result.status !== 0 || !result.stdout?.trim()) return {ok:false,message:'CST_SOP_READ_FAILED'};
+ const bytes = Buffer.from(result.stdout.replace(/\s/g,''),'base64');
+ const sha256 = createHash('sha256').update(bytes).digest('hex');
+ if (sha256 !== pin.sha256) return {ok:false,message:'CST_SOP_DIGEST_MISMATCH'};
+ const doc = bytes.toString('utf8');
+ const version = /^Versi (\d+\.\d+\.\d+) /m.exec(doc)?.[1];
+ const rule = doc.split(/\r?\n/).find(line => line.startsWith('| Operasional |'));
+ if (version !== pin.version || !rule) return {ok:false,message:'CST_SOP_CLASSIFICATION_INVALID'};
+ const checkpoint = {action:'READ_CANONICAL_DEV_SOP',classification:'Operasional',commandId:work.commandId,version,commit:pin.commit,sha256,ruleSha256:createHash('sha256').update(rule,'utf8').digest('hex')};
+ return {ok:true,message:'CST_SOP_DEV_READ_PASS '+JSON.stringify(checkpoint),details:{runtime:'openclaw-pc2',exitCode:0,developmentSopCheckpoint:checkpoint}};
+}
+
 function execute(work) {
  let message=String(work.instruction||'').trim();
+ if (/^SOP_DEV_READ_V1 [A-Z0-9-]{1,50}$/.test(message)) return readCstDevelopmentSop(work);
  const directBrowserE2e = message === 'AI_CORE_CHATGPT_BROWSER_E2E';
  if ((work?.metadata?.browserProfile === 'travelincars-dev' || work?.metadata?.accountAlias === 'GPT02') && !directBrowserE2e) {
    return {ok:false,message:'GPT02 travelincars-dev is reserved for openclaw-dell-chatgpt-wake-dev',details:{reason:'dedicated_worker_required',workerId:'openclaw-dell-chatgpt-wake-dev'}};
@@ -136,6 +165,17 @@ if (message==='AI_CORE_CHATGPT_BROWSER_E2E') {
  if (safeCloseRequested) {
    message='This safe action is approved. Call your local exec tool and run exactly: powershell.exe -NoProfile -File C:\\Users\\user\\AppData\\Local\\Temp\\oc-close-notepad-12124-safe-20261011.ps1 . Do not use a simulation. Do not force kill Notepad. Only report completion if the tool outputs NOTEPAD_WINDOW_CLOSED_VERIFIED_PID_12124 or NOTEPAD_ALREADY_CLOSED; otherwise report the actual error and stop.';
  }
+ // Verify the server-pinned document before invoking the agent for a scoped DEV chat job.
+ let developmentSopVerified;
+ if (work.metadata?.developmentSop !== undefined &&
+     /^ai-core-chat-[a-f0-9]{64}$/.test(String(work.externalCommandId || ''))) {
+   const receipt = readCstDevelopmentSop(work);
+   if (!receipt.ok) {
+     return { ...receipt, details: { runtime:'openclaw-pc2', reason:receipt.message } };
+   }
+   const { version, commit, sha256 } = receipt.details.developmentSopCheckpoint;
+   developmentSopVerified = { version, commit, sha256 };
+ }
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ai-core-worker-'));
  const filename=path.join(dir,'instruction.txt');
  try {
@@ -146,10 +186,10 @@ if (message==='AI_CORE_CHATGPT_BROWSER_E2E') {
      ['OPEN_NOTEPAD','MOVE_MOUSE_TOP','CLOSE_NOTEPAD'].includes(String(work.metadata?.safePcAction||''));
    const args = safePcWork
      ? [entry,'agent','--agent','main','--session-key','agent:main:pc-safe-'+work.commandId,'--message-file',filename,'--timeout','45','--json']
-     : [entry,'agent','--agent','main','--session-key','agent:main:pc-work-'+work.commandId,'--message-file',filename,'--timeout','45','--json'];
+     : [entry,'agent','--agent','gpt02-dev','--session-key','agent:gpt02-dev:pc-work-'+work.commandId,'--message-file',filename,'--timeout','45','--json'];
    const run=spawnSync(node,args,{windowsHide:true,encoding:'utf8',timeout:safePcWork?60000:105000,maxBuffer:1024*1024});
   const output=String(run.stdout||run.stderr||run.error?.message||'').slice(-3000);
-  return {ok:run.status===0,message:output||'OpenClaw returned no output',details:{runtime:'openclaw-pc2',exitCode:run.status}};
+  return {ok:run.status===0,message:output||'OpenClaw returned no output',details:{runtime:'openclaw-pc2',exitCode:run.status,...(developmentSopVerified ? { developmentSopVerified } : {})}};
  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 }
 let idleDelayMs = 5000;

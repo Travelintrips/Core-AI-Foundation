@@ -4,6 +4,7 @@ import fcntl
 import json
 import os
 import re
+import stat
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,16 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
+from gpt02_superadmin_reader_mount_gate import (
+    get_custody_mounts,
+    get_reader_mounts,
+    get_worker_issuer_mounts,
+    validate_custody_configuration,
+    validate_release_environment,
+    validate_worker_issuer_configuration,
+    validate_worker_issuer_environment,
+)
+
 REPO = "https://github.com/Travelintrips/Core-AI-Foundation.git"
 SRC = Path("/opt/cst-vps-dev-release/source")
 ENV = Path("/opt/core-ai-dev/.env.dev")
@@ -21,6 +32,13 @@ DOMAIN = "dev.cstlogistic.co.id"
 PROD = "ai-core-prod-api"
 DEV = "core-ai-dev"
 DEV_NETWORK = "ai-core-workers_control"
+# Separate egress-only IPv6 bridge for the independently provisioned DEV Owner reader.
+# Never join Task189's unrelated network or touch PROD networking.
+GPT02_READER_IPV6_NETWORK = "gpt02-owner-reader-dev-v6"
+GPT02_READER_IPV6_BRIDGE = "br-gpt02-1782"
+GPT02_READER_IPV6_SUBNET = "fd76:190:ac:53::/64"
+GPT02_READER_IPV4_SUBNET = "192.168.96.0/20"
+GPT02_OWNER_PAGE_SOURCE = Path("/opt/gpt02-owner-approval-page-20261125.html")
 EXPECTED_DEV_PROJECT = "xssrfshdrtdfupgqwfdw"
 
 
@@ -76,7 +94,18 @@ def env_guard():
     for line in ENV.read_text().splitlines():
         if line.strip() and not line.startswith("#") and "=" in line:
             k, v = line.split("=", 1)
-            keys[k.strip()] = v.strip().strip('"').strip("'")
+            key = k.strip()
+            # Docker --env-file passes quote/space characters literally. Keep
+            # activation and public trust exact so the loader and API cannot
+            # disagree about whether issuance is enabled with valid pins.
+            literal_custody_keys = {
+                "GPT02_DEV_CUSTODY_WORKER_ISSUER_ENABLED",
+                "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_B64",
+                "GPT02_DEV_CUSTODY_ATTESTOR_PUBLIC_KEY_SPKI_SHA256",
+                "GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_B64",
+                "GPT02_DEV_CUSTODY_ISSUER_PUBLIC_KEY_SPKI_SHA256",
+            }
+            keys[key] = v if key in literal_custody_keys else v.strip().strip('"').strip("'")
     if keys.get("SUPABASE_URL_DEV", "").rstrip("/") != "https://" + EXPECTED_DEV_PROJECT + ".supabase.co":
         raise RuntimeError("Unexpected DEV database project reference")
     for k in ("SUPABASE_DATABASE_URL_DEV", "SUPABASE_SERVICE_ROLE_KEY_DEV", "SESSION_SECRET"):
@@ -84,12 +113,97 @@ def env_guard():
             raise RuntimeError("DEV credential absent: " + k)
     if keys.get("SUPABASE_URL", "") or keys.get("SUPABASE_SERVICE_ROLE_KEY", ""):
         raise RuntimeError("Production-style Supabase variables present in DEV environment")
+    return keys
+
+
+def prepare_reader_mounts(values):
+    # A disabled feature performs no credential/CA inspection and starts no unit.
+    if not validate_release_environment(values):
+        return ()
+    validate_custody_configuration(values)
+    # Reject absent public evidence before asking systemd to load sealed input.
+    custody_mounts = get_custody_mounts()
+    command("systemctl", "start", "gpt02-owner-ledger-credential-loader.service")
+    return get_reader_mounts(
+        enabled=True, environment="development", production=False,
+    ) + custody_mounts
+
+
+def prepare_worker_issuer_mounts(values):
+    # Independent of the Owner reader and its not-yet-issued custody proofs.
+    if not validate_worker_issuer_environment(values):
+        return ()
+    validate_worker_issuer_configuration(values)
+    command("systemctl", "start", "gpt02-reader-custody-worker-attestor-key-loader.service")
+    return get_worker_issuer_mounts(
+        enabled=True, environment="development", production=False,
+    )
+
+
+
+def verify_gpt02_reader_ipv6_network():
+    """Refuse unpinned networks before attaching a DEV reader container."""
+    try:
+        data = json.loads(command("docker", "network", "inspect",
+                                  GPT02_READER_IPV6_NETWORK, output=True))
+        if not isinstance(data, list) or len(data) != 1:
+            raise ValueError()
+        net = data[0]
+        subnets = {item["Subnet"] for item in net["IPAM"]["Config"]}
+        if (net["Name"] != GPT02_READER_IPV6_NETWORK or net["Driver"] != "bridge"
+                or net["Internal"] is not False or net["EnableIPv6"] is not True
+                or net["Options"].get("com.docker.network.bridge.name") != GPT02_READER_IPV6_BRIDGE
+                or subnets != {GPT02_READER_IPV6_SUBNET, GPT02_READER_IPV4_SUBNET}):
+            raise ValueError()
+        if any(container.get("Name") != DEV
+               and not container.get("Name", "").startswith("cst-dev-canary-")
+               and not container.get("Name", "").startswith(DEV + "-prev-")
+               for container in net.get("Containers", {}).values()):
+            raise ValueError()
+    except (KeyError, TypeError, ValueError):
+        raise RuntimeError("GPT02_READER_IPV6_NETWORK_UNTRUSTED") from None
+
+
+def preserve_gpt02_worker_approval_ui(staged_static):
+    """Retain the existing Owner login UI during validated DEV static swaps."""
+    source = GPT02_OWNER_PAGE_SOURCE
+    try:
+        meta = source.lstat()
+        if (not stat.S_ISREG(meta.st_mode) or source.is_symlink()
+                or meta.st_uid != 0 or meta.st_gid != 0
+                or stat.S_IMODE(meta.st_mode) != 0o600
+                or not 1024 <= meta.st_size <= 8192):
+            raise ValueError()
+        content = source.read_bytes()
+        if (b"Terbitkan sebagai Owner" not in content
+                or b"custody-attestation" not in content
+                or b"Authorization" in content):
+            raise ValueError()
+    except (OSError, ValueError):
+        raise RuntimeError("GPT02_OWNER_UI_SOURCE_UNTRUSTED") from None
+    target = staged_static / "gpt02-worker-attestation.html"
+    if target.exists() or target.is_symlink():
+        raise RuntimeError("GPT02_OWNER_UI_COLLISION")
+    target.write_bytes(content)
+    target.chmod(0o644)
+    if target.read_bytes() != content:
+        raise RuntimeError("GPT02_OWNER_UI_COPY_FAILED")
 
 
 def start(name, port, image, sha):
+    # Revalidate immediately before both canary and live container creation.
+    # Loader units only consume separately authorized, externally sealed inputs.
+    values = env_guard()
+    reader_ipv6 = validate_release_environment(values)
+    if reader_ipv6:
+        verify_gpt02_reader_ipv6_network()
+    worker_issuer_mounts = prepare_worker_issuer_mounts(values)
+    reader_mounts = prepare_reader_mounts(values)
     command("docker", "run", "-d", "--name", name,
             "--restart", "unless-stopped",
             "--network", DEV_NETWORK,
+            *reader_mounts,
+            *worker_issuer_mounts,
             "--publish", "127.0.0.1:" + str(port) + ":3000",
             "--memory", "1536m", "--memory-swap", "1536m",
             "--cpus", "0.8", "--pids-limit", "256",
@@ -109,6 +223,8 @@ def start(name, port, image, sha):
             "-e", "GCP_CODING_WORKER_AUTOSTART_ENABLED=false",
             "-e", "OLLAMA_WORKER_RUNTIME_ENABLED=false",
             "--label", "cst.dev.commit=" + sha, image)
+    if reader_ipv6:
+        command("docker", "network", "connect", GPT02_READER_IPV6_NETWORK, name)
 
 
 def remove(name):
@@ -192,6 +308,7 @@ def main(sha):
             command("docker", "cp", canary + ":/app/artifacts/api-server/dist/public/.", str(tempstatic) + "/")
             if not (tempstatic / "index.html").is_file() or not (tempstatic / "assets").is_dir():
                 raise RuntimeError("Frontend artifacts missing from verified image")
+            preserve_gpt02_worker_approval_ui(tempstatic)
             # tempfile.mkdtemp creates 0700 directories. Nginx serves this
             # directory as www-data, so make the vetted static tree readable.
             tempstatic.chmod(0o755)

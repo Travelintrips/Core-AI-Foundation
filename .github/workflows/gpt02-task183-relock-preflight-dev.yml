@@ -1,0 +1,37 @@
+name: GPT02 Task183 relock non-secret preflight DEV
+on:
+  pull_request:
+    paths:
+      - 'ops/dev/gpt02/task183_relock_nonsecret_preflight.py'
+      - 'ops/dev/gpt02/test_task183_relock_nonsecret_preflight.py'
+      - '.github/workflows/gpt02-task183-relock-preflight-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'ops/dev/gpt02/task183_relock_nonsecret_preflight.py'
+      - 'ops/dev/gpt02/test_task183_relock_nonsecret_preflight.py'
+      - '.github/workflows/gpt02-task183-relock-preflight-dev.yml'
+permissions:
+  contents: read
+jobs:
+  readonly-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check fixture-only negative tests
+        run: python3 -m unittest discover -s ops/dev/gpt02 -p 'test_task183_relock_nonsecret_preflight.py' -v
+      - name: Reject privileged operations in preflight
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('ops/dev/gpt02/task183_relock_nonsecret_preflight.py').read_text()
+          assert 'canActivate": False' in s
+          assert 'databaseQueried": False' in s
+          assert 'relockExecuted": False' in s
+          assert 'systemctl", *args' in s
+          assert 'return 0 if not report["blockers"] else 2' in s
+          assert 'ALTER ROLE ' not in s and 'GRANT ' not in s
+          assert 'systemctl", "start"' not in s
+          print('TASK183_NO_EXECUTION_AUTHORITY_PASS')
+          PY

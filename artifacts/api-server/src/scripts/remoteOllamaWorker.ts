@@ -53,6 +53,62 @@ async function markGpuActivity(): Promise<void> {
   }
 }
 
+/** Fail closed when the legacy outbound worker runs for a DEV pilot.
+ * Existing production worker behavior is unchanged. Never silently use the
+ * old production-default URL from a DEV shell or Windows worker.
+ */
+function assertCstDevOutboundTarget(env: NodeJS.ProcessEnv): void {
+  const devRequested = env["APP_ENV"] === "development" ||
+    env["NODE_ENV"] === "development" ||
+    env["CST_TEAM_OUTBOUND_DEV_ONLY"] === "true";
+  if (!devRequested) return;
+  if (env["APP_ENV"] !== "development" || env["NODE_ENV"] !== "development") {
+    throw new Error("CST_TEAM_DEV_RUNTIME_REQUIRED");
+  }
+  const raw = env["AICORE_REMOTE_URL"]?.trim();
+  if (!raw) throw new Error("CST_TEAM_EXPLICIT_DEV_CORE_URL_REQUIRED");
+  let target: URL;
+  try { target = new URL(raw); }
+  catch { throw new Error("CST_TEAM_DEV_CORE_URL_INVALID"); }
+  if (target.username || target.password || target.search || target.hash ||
+      (target.pathname !== "/" && target.pathname !== "")) {
+    throw new Error("CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED");
+  }
+  const allowedDev = target.protocol === "https:" &&
+    ["dev.cstlogistic.co.id", "dev-aicore.cstlogistic.co.id"].includes(target.hostname) &&
+    !target.port;
+  const syntheticLoopback = env["CST_TEAM_SYNTHETIC_LOOPBACK_TEST"] === "true" &&
+    target.protocol === "http:" && target.hostname === "127.0.0.1" &&
+    target.port === "18444";
+  if (!allowedDev && !syntheticLoopback) {
+    throw new Error("CST_TEAM_DEV_CORE_HOST_NOT_ALLOWED");
+  }
+  let local: URL;
+  try { local = new URL(env["OLLAMA_BASE_URL"] ?? "http://127.0.0.1:11434/v1"); }
+  catch { throw new Error("CST_TEAM_LOCAL_OLLAMA_URL_INVALID"); }
+  if (local.origin !== "http://127.0.0.1:11434" || local.pathname !== "/v1" ||
+      local.username || local.password || local.search || local.hash) {
+    throw new Error("CST_TEAM_LOCAL_OLLAMA_ONLY");
+  }
+  if (Number(env["OLLAMA_WORKER_MAX_CONCURRENCY"] ?? "1") !== 1) {
+    throw new Error("CST_TEAM_DEV_SINGLE_WORKER_SLOT_REQUIRED");
+  }
+  if (env["GCP_GPU_AUTO_STOP_ENABLED"] === "true") {
+    throw new Error("CST_TEAM_DEV_GCP_SELF_STOP_FORBIDDEN");
+  }
+  const oneShotId = Number(env["CST_TEAM_DEV_SINGLE_JOB_ID"] ?? "");
+  if (!Number.isSafeInteger(oneShotId) || oneShotId < 1 || oneShotId > 2147483647) {
+    throw new Error("CST_TEAM_DEV_SINGLE_JOB_ID_REQUIRED");
+  }
+  if (process.argv.includes("--self-test")) {
+    throw new Error("CST_TEAM_DEV_POWERSHELL_SELF_TEST_NOT_ALLOWED");
+  }
+}
+assertCstDevOutboundTarget(process.env);
+const devOneShotJobId = process.env["APP_ENV"] === "development" &&
+  process.env["NODE_ENV"] === "development"
+    ? Number(process.env["CST_TEAM_DEV_SINGLE_JOB_ID"]) : null;
+
 if (!enrollmentSecret) throw new Error("OLLAMA_REMOTE_ENROLLMENT_SECRET is required");
 
 async function json(response: Response): Promise<Record<string, any>> {
@@ -131,7 +187,9 @@ async function heartbeat(workerId: number, token: string): Promise<void> {
 async function claim(workerId: number, token: string): Promise<Record<string, any> | null> {
   const url = apiBase + `/api/ai/ollama-workers/${workerId}/claim`;
   const response = await fetch(url, {
-    method: "POST", headers: workerHeaders(token), body: "{}",
+    method: "POST", headers: workerHeaders(token),
+    body: devOneShotJobId !== null
+      ? JSON.stringify({ devExpectedJobId: devOneShotJobId }) : "{}",
   });
   if (response.status === 204) return null;
   if (response.status === 503) {
@@ -297,12 +355,17 @@ async function retry(workerId: number, token: string, jobId: number, error: unkn
 }
 
 async function registerWithRetry(): Promise<{ workerId: number; token: string }> {
+  let attempts = 0;
   for (;;) {
     try {
       const registration = await register();
       console.log(`Remote Ollama worker registered: ${registration.workerId} (${modelId})`);
       return registration;
     } catch (error) {
+      attempts += 1;
+      if (devOneShotJobId !== null && attempts >= 2) {
+        throw new Error("CST_TEAM_DEV_REGISTRATION_FAILED");
+      }
       console.error("Remote Ollama registration failed; retrying in 5s:", error);
       await new Promise((resolve) => setTimeout(resolve, 5_000));
     }
@@ -370,6 +433,10 @@ async function executeClaimedJob(
   heartbeatTimer.unref?.();
 
   try {
+    if (devOneShotJobId !== null &&
+        (jobId !== devOneShotJobId || job["jobType"] !== "ollama_model_invocation")) {
+      throw new Error("CST_TEAM_DEV_JOB_OR_TYPE_MISMATCH");
+    }
     const result =
       job["jobType"] === "ollama_powershell_execution"
         ? await executePowerShell(job["payload"] ?? {})
@@ -379,6 +446,7 @@ async function executeClaimedJob(
   } catch (error) {
     await retry(registration.workerId, registration.token, jobId, error).catch(() => undefined);
     console.error(`Remote Ollama job ${jobId} failed:`, error);
+    if (devOneShotJobId !== null) throw error;
   } finally {
     clearInterval(heartbeatTimer);
     await markGpuActivity();
@@ -392,6 +460,31 @@ async function main(): Promise<void> {
 
   if (runSelfTest) {
     await queueSelfTest(registration.workerId, registration.token);
+  }
+
+  // Opt-in DEV pilot: poll ONLY the exact server-filtered model job, then exit.
+  // Never claim shared-queue work or remain in a perpetual worker loop.
+  if (devOneShotJobId !== null) {
+    const deadline = Date.now() + 120_000;
+    let lastHeartbeat = Date.now();
+    while (Date.now() < deadline) {
+      if (Date.now() - lastHeartbeat >= 20_000) {
+        await heartbeat(registration.workerId, registration.token);
+        lastHeartbeat = Date.now();
+      }
+      const job = await claim(registration.workerId, registration.token);
+      if (job) {
+        if (job["jobId"] !== devOneShotJobId ||
+            job["jobType"] !== "ollama_model_invocation") {
+          throw new Error("CST_TEAM_DEV_JOB_OR_TYPE_MISMATCH");
+        }
+        await executeClaimedJob(registration, job);
+        console.log("CST_TEAM_DEV_SINGLE_JOB_COMPLETED");
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    throw new Error("CST_TEAM_DEV_SINGLE_JOB_NOT_AVAILABLE");
   }
 
   const activeJobs = new Set<Promise<void>>();

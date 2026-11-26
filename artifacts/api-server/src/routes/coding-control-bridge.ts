@@ -31,6 +31,8 @@ import {
   OPENCLAW_VPS_CLIENT_ID,
 } from "../services/externalAgentDispatchService.js";
 import { queueDevBrowserWake, resolveVerifiedDevWakeTarget } from "../services/devChatGptWakeService.js";
+import { getExternalAgentRegistrySnapshot, getCstTeamPresenceOnlyWorkerReadback } from "../services/externalAgentRegistryService.js";
+import { isCstTeamDevMode, projectCstTeamReadiness } from "../lib/cstTeamReadinessProjection.js";
 const router=Router(); const Uuid=z.string().uuid();
 
 const AI_TASK_CHATGPT_CORRELATION = /^ai-task:([A-Za-z0-9_-]{1,100}):([1-9][0-9]*):([A-Za-z0-9_-]{8,80})$/;
@@ -169,6 +171,25 @@ async function resolveAiTaskGptOwnerChannel(): Promise<string | undefined> {
     return undefined;
   }
 }
+// Exact-route, DEV-only visibility for AI Task. Never returns the full agent registry,
+// grants execution rights, claims work, or implies a completed task.
+router.get("/ai/coding/bridge/cst-team-readiness", async (_req, res): Promise<void> => {
+  if (!isCstTeamDevMode()) {
+    res.status(404).json({ error: "DEV_ONLY" });
+    return;
+  }
+  try {
+    const [registry, presenceOnlyWorker] = await Promise.all([
+      getExternalAgentRegistrySnapshot({ skipSchemaEnsure: true }),
+      getCstTeamPresenceOnlyWorkerReadback(),
+    ]);
+    const readinessRows = presenceOnlyWorker ? [...registry, presenceOnlyWorker] : registry;
+    res.setHeader("Cache-Control", "no-store");
+    res.json(projectCstTeamReadiness(readinessRows));
+  } catch {
+    res.status(503).json({ error: "AGENT_READINESS_UNAVAILABLE" });
+  }
+});
 router.get("/ai/coding/bridge/ai-task-timeline",async(req,res):Promise<void>=>{
  const externalCommandId=String(req.query["externalCommandId"]??"");
  if(!/^ai-task:[a-zA-Z0-9_-]{1,100}:[1-9][0-9]*$/.test(externalCommandId)){res.status(400).json({error:"INVALID_EXTERNAL_COMMAND_ID"});return;}
