@@ -20,7 +20,7 @@ import sys
 RELEASE = Path("/usr/local/sbin/cst-vps-dev-release.py")
 RELEASE_SHA256 = "ad0063421453184a7d3a66d1dffd2de3b7e74dced081e232315425e9aff1c2c8"
 WATCHER = Path("/usr/local/sbin/cst-vps-dev-ci-watcher.py")
-WATCHER_SHA256 = "5126bfd118e8352e979b5ab5c6929d8baf290dc6ef2e51c5076109d5f6f1b3dea"
+WATCHER_SHA256 = "5126bfd118e8352e979b5ab5c6929d8bf290dc6ef2e51c5076109d5f6f1b3dea"
 LOCK = Path("/run/lock/cst-vps-dev-release.lock")
 MAX_SCRIPT = 60_000
 
