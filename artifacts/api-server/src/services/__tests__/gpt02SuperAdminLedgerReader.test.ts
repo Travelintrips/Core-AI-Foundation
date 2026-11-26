@@ -32,7 +32,7 @@ const CONFIG = {
 };
 const IDENTITY = {
   actor: CONFIG.user, effective: CONFIG.user, database_name: "postgres",
-  transaction_read_only: "on", default_read_only: "on",
+  transaction_read_only: "on", default_read_only: "on", backend_ssl: true,
 };
 const DECISION = {
   challenge_id: CHALLENGE, status: "CONSUMED", decision: "APPROVED",
@@ -303,6 +303,7 @@ describe("GPT02 separated Super Admin ledger custody", () => {
     ["different database", { database_name: "other" }],
     ["writable transaction", { transaction_read_only: "off" }],
     ["writable role default", { default_read_only: "off" }],
+    ["unencrypted backend despite frontend TLS", { backend_ssl: false }],
   ] as const)("rejects %s before querying owner decisions", async (_name, patch) => {
     const { client, pool } = installFixture({ ...IDENTITY, ...patch });
     await expectCustodyDenied(readGpt02SuperAdminLedgerReceipt(CHALLENGE, ACTOR));
