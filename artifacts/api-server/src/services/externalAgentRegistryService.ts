@@ -21,7 +21,9 @@ export const EXTERNAL_AGENT_RULES = {
   "openclaw-vps-main": {
     source: "openclaw",
     role: "bounded_orchestration_agent",
-    capabilities: ["model:chat", "tools:bounded", "task:coordinate"],
+    // Owner appointment: GPT02 CST-DEV dedicated reader custody coordination.
+    // Not DB ALTER ROLE, password access, signing, dispatch or PROD authority.
+    capabilities: ["model:chat", "tools:bounded", "task:coordinate", "gpt02:reader-custody:coordinate:dev"],
     permissions: {
       codingWorkspaceWrite: false,
       gitCommit: false,

@@ -21,9 +21,17 @@ import aiCoreSignedCallbackReceiver from "./routes/ai-core-signed-callback-recei
 import remoteOllamaWorkerRouter from "./routes/remote-ollama-worker.js";
 import task189ReleaseRouter from "./routes/task189-release.js";
 import agentRuntimeRouter from "./routes/agent-runtime.js";
+import { createDefaultCstProjectContinuePartialRouter } from "./routes/cst-project-continue-partial.js";
+import { createDefaultGpt02ContinuePartialRouter } from "./routes/gpt02-continue-partial-job.js";
+import { createDefaultCrossProjectContinuePartialRouter } from "./routes/cst-project-continue-partial-job.js";
+import { createLockedGpt02ReaderCustodyBroker } from "./routes/gpt02-reader-custody-broker.js";
 import temporalCodingWorkerRouter from "./routes/temporal-coding-worker.js";
 import aiCoreMcpOauthRouter from "./routes/ai-core-mcp-oauth.js";
 import { oauthNavigationCors } from "./middleware/oauthNavigationCors.js";
+import { createGpt02RelockOwnerApprovalRouter } from "./routes/gpt02-relock-owner-approval.js";
+import { createGpt02OwnerLedgerReadRouter } from "./routes/gpt02-owner-ledger-read.js";
+import { readGpt02SuperAdminLedgerReceipt } from "./services/gpt02SuperAdminLedgerReader.js";
+import { verifyCstHubGpt02OwnerSession, verifyCstHubGpt02OwnerLink } from "./services/cstHubGpt02OwnerIdentityVerifier.js";
 
 const app: Express = express();
 
@@ -186,6 +194,21 @@ app.use("/api", optionalSessionAuth);
 // still fails closed in its own worker/service-token middleware.
 app.use("/api", remoteOllamaWorkerRouter);
 app.use("/api", agentRuntimeRouter);
+// Shared continuation API for CST projects; project-specific verified pairing required.
+if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
+  app.use("/api/ai/agent-runtime/dev/projects/continue-partial", createDefaultCstProjectContinuePartialRouter());
+}
+// DEV-only paired GPT02 continuation lane; existing DELL identity and browser proof remain mandatory.
+if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
+  app.use("/api/ai/agent-runtime/dev/gpt02/continue-partial", createDefaultGpt02ContinuePartialRouter());
+  // Reuses the same verified DELL transport; each request carries a strict project scope.
+  // Separate explicit verified-session route; never shadow the configured-project route.
+  app.use("/api/ai/agent-runtime/dev/projects/continue-partial/verified-session", createDefaultCrossProjectContinuePartialRouter());
+}
+// DEV-only, authenticated custody broker; fail closed until real attestation + DBA receipt.
+if (process.env["NODE_ENV"] !== "production" && process.env["APP_ENV"] !== "production") {
+  app.use("/api/gpt02-reader-custody", createLockedGpt02ReaderCustodyBroker());
+}
 app.use("/api", temporalCodingWorkerRouter);
 
 // ── Global rate limiting (P0-3) ───────────────────────────────────────────────
@@ -195,6 +218,33 @@ app.use("/api", temporalCodingWorkerRouter);
 app.use("/api", globalLimiter);
 app.use("/api", mcpLimiter);
 app.use("/api", task189ReleaseRouter);
+
+// DEV-only Owner approval uses its own signed Google session and Owner-link checks.
+// Mount BEFORE the generic admin API key guard; no other API bypass is granted.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.APP_ENV === "development" &&
+  process.env.GPT02_RELOCK_OWNER_APPROVAL_ENABLED === "true"
+) {
+  app.use("/api/gpt02-owner-approval", createGpt02RelockOwnerApprovalRouter({
+    verifyOwnerSession: ({ bearerToken }) => verifyCstHubGpt02OwnerSession({ bearerToken }),
+    verifyOwnerEligibility: verifyCstHubGpt02OwnerLink,
+  }));
+}
+
+// Isolated DEV-only Super Admin ledger reader: GET-only, separate Postgres
+// credentials/custody. Never fall back to the main application writer pool.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.APP_ENV === "development" &&
+  process.env.GPT02_OWNER_LEDGER_READER_ENABLED === "true"
+) {
+  app.use("/api/gpt02-owner-ledger", createGpt02OwnerLedgerReadRouter({
+    verifyOwnerSession: (token) => verifyCstHubGpt02OwnerSession({ bearerToken: token }),
+    verifyOwnerEligibility: verifyCstHubGpt02OwnerLink,
+    readReceipt: readGpt02SuperAdminLedgerReceipt,
+  }));
+}
 
 // ── Auth + routing ────────────────────────────────────────────────────────────
 // adminAuthWithExceptions enforces the key/session guard for non-public routes,

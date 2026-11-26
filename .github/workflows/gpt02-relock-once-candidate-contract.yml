@@ -1,0 +1,102 @@
+name: GPT02 relock once candidate contract (DEV only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_relock_once_candidate.py'
+      - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/gpt02_relock_verified_chain_candidate.py'
+      - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/gpt02_relock_pg_reader_adapter_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_once_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_verified_chain_candidate.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_pg_reader_adapter_candidate.py'
+      - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_relock_once_candidate.py'
+      - 'scripts/vps/gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/gpt02_relock_verified_chain_candidate.py'
+      - 'scripts/vps/gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/gpt02_relock_pg_reader_adapter_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_once_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_grant_verifier_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_nonce_custody_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_verified_chain_candidate.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_reader_candidate.py'
+      - 'scripts/vps/test_gpt02_relock_pg_reader_adapter_candidate.py'
+      - '.github/workflows/gpt02-relock-once-candidate-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-only-qa:
+    name: Relock one-shot isolated contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned isolated verification dependency
+        run: |
+          python3 -m venv /tmp/gpt02-one-shot-qa-venv
+          /tmp/gpt02-one-shot-qa-venv/bin/pip install --disable-pip-version-check cryptography==46.0.3
+      - name: Test candidate, signed grant, nonce, and ledger (QA fixtures only)
+        run: |
+          /tmp/gpt02-one-shot-qa-venv/bin/python -B -m unittest discover -s scripts/vps -p 'test_gpt02_*candidate.py' -v
+      - name: Verify no live executor, database client, or credential loader
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('scripts/vps')
+          s=(root/'gpt02_relock_once_candidate.py').read_text()
+          assert 'if __name__' not in s
+          assert 'subprocess' not in s
+          assert 'psycopg' not in s
+          assert 'import os' not in s
+          assert 'systemctl' not in s
+          assert 'import socket' not in s
+          assert 'releaseDecision": "NO_GO"' in s
+          assert 'signingPermitted": False' in s
+          assert 'dispatchPermitted": False' in s
+          signed=(root/'gpt02_relock_grant_verifier_candidate.py').read_text()
+          assert 'Ed25519PublicKey' in signed
+          assert 'Ed25519PrivateKey' not in signed
+          assert 'ENVELOPE_DOMAIN +' in signed
+          assert 'if __name__' not in signed
+          custody=(root/'gpt02_relock_nonce_custody_candidate.py').read_text()
+          assert 'BEGIN IMMEDIATE' in custody
+          assert 'CREATE TABLE' not in custody
+          assert 'if __name__' not in custody
+          ledger=(root/'gpt02_owner_ledger_reader_candidate.py').read_text()
+          assert 'if __name__' not in ledger
+          assert 'import os' not in ledger
+          assert 'psycopg' not in ledger
+          assert 'subprocess' not in ledger
+          assert 'read_exact_owner_decision' in ledger
+          assert 'OWNER_LEDGER_RECORD_BINDING_MISMATCH' in ledger
+          chain=(root/'gpt02_relock_verified_chain_candidate.py').read_text()
+          assert 'if __name__' not in chain
+          assert 'subprocess' not in chain
+          assert 'psycopg' not in chain
+          assert 'import os' not in chain
+          assert 'read_only_ledger' in chain
+          assert 'load_pinned_executor_root' in chain
+          pg=(root/'gpt02_relock_pg_reader_adapter_candidate.py').read_text()
+          assert 'if __name__' not in pg
+          assert 'psycopg' not in pg
+          assert 'import os' not in pg
+          assert 'transaction_read_only' in pg
+          assert 'sql != _OWNER_READ_SQL' in pg
+          print('GPT02_CANDIDATE_NO_LIVE_ADAPTER=PASS')
+          PY

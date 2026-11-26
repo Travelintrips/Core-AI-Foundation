@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import HandshakeSopSettings from "@/components/HandshakeSopSettings";
+import { Gpt02CustodyAttestationPanel } from "@/components/Gpt02CustodyAttestationPanel";
 import { useListSettings } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -441,6 +442,7 @@ function AgentCredentialsPanel() {
     <Card>
       <CardHeader><CardTitle>Agent Credentials</CardTitle></CardHeader>
       <CardContent className="space-y-3">
+        <Gpt02CustodyAttestationPanel credentials={items} credentialsReady={!!lastRefresh && !refreshing && !loading && !error} />
         <div className="space-y-3 rounded-md border p-4">
           <p className="text-sm font-semibold">Uji Handshake SOP PCHP — tanpa Console</p>
           <p className="text-sm text-muted-foreground">

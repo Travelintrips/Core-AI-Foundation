@@ -1,0 +1,48 @@
+name: GPT02 Task183 auditor safe diagnostics DEV
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'ops/dev/gpt02/gpt02_issue159_relock_catalog_supervisor.mjs'
+      - 'ops/dev/gpt02/gpt02_issue159_relock_catalog_supervisor.test.mjs'
+      - '.github/workflows/gpt02-task183-auditor-diagnostics-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'ops/dev/gpt02/gpt02_issue159_relock_catalog_supervisor.mjs'
+      - 'ops/dev/gpt02/gpt02_issue159_relock_catalog_supervisor.test.mjs'
+      - '.github/workflows/gpt02-task183-auditor-diagnostics-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test-safe-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse auditor and run mock-only tests
+        run: |
+          node --check ops/dev/gpt02/gpt02_issue159_relock_catalog_supervisor.mjs
+          node --test ops/dev/gpt02/gpt02_issue159_relock_catalog_supervisor.test.mjs
+      - name: Ensure no privilege expansion or executable relock in tests
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('ops/dev/gpt02')
+          auditor=(root/'gpt02_issue159_relock_catalog_supervisor.mjs').read_text()
+          tests=(root/'gpt02_issue159_relock_catalog_supervisor.test.mjs').read_text()
+          assert 'safeTask183FailureCode' in auditor
+          assert 'RELOCK_TASK183_DATABASE_OR_RUNTIME_UNAVAILABLE' in auditor
+          assert 'runCombinedRelockLanes' in tests
+          assert 'runTask183: async' in tests
+          assert 'await main()' not in tests
+          assert 'systemctl' not in tests
+          assert 'pg_terminate_backend' not in tests
+          print('GPT02_TASK183_SAFE_DIAGNOSTICS_STATIC_PASS')
+          PY
