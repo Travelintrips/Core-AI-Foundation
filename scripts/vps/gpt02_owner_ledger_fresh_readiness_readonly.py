@@ -26,8 +26,10 @@ PRINCIPAL = "openclaw-vps-main"
 ROLE = "gpt02_owner_ledger_reader_1782_dev"
 SCOPE = "GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV"
 READER_PATH = "/run/credentials/gpt02-owner-ledger-reader/reader.json"
-VHOST_SHA = "ff4a9c5c3a6399898b90c8990647c9430aee5251c84eb3fe38db92ddf0621d6d"
-BOOT_SHA = "0c7a67958476235ab7ae27d359b9aa1e38bf3638e30162bd23e1502b9f6e3fd5"
+BOOT_SHA = "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32"
+# PR #1851 owns the full-file canonical Nginx integrity rule. This read-only
+# diagnostic invokes only that PINNED boot source's pure canonical_closed check.
+# No duplicated or separately relaxed upstream allowlist is maintained here.
 GATE = b"""return 503 '{"error":"GPT02_LEDGER_READER_NOT_PROVISIONED"}';"""
 LOCATION = b"location ^~ /api/gpt02-owner-ledger/ {"
 PROXY = b"proxy_pass http://127.0.0.1:18082;"
@@ -218,9 +220,28 @@ def verify_public_custody(config: bytes, worker: bytes, dba: bytes, now_ms: int)
     return result
 
 
+def _pinned_canonical_closed(vhost: bytes, boot: bytes) -> bool:
+    """Reuse approved root boot precheck's *pure* closed-site verifier.
+
+    The exact installed root script was read using _root_file, verified by SHA,
+    and compiled in memory with __name__ != "__main__". Its service prestart
+    entry point never runs, nor any file, network or database mutation.
+    """
+    if hashlib.sha256(boot).hexdigest() != BOOT_SHA:
+        return False
+    try:
+        context = {"__name__": "gpt02_cst_dev_public_readonly_boot_source",
+                   "__builtins__": __builtins__}
+        exec(compile(boot, "<sha256-pinned-pr1851-boot-source>", "exec"), context)
+        canonical = context.get("canonical_closed")
+        return callable(canonical) and canonical(vhost) is True
+    except Exception:
+        return False
+
+
 def verify_closed_files(vhost: bytes, boot: bytes, backup_absent: bool) -> dict:
     return {
-        "closed_vhost_sha": hashlib.sha256(vhost).hexdigest() == VHOST_SHA,
+        "closed_vhost_sha": _pinned_canonical_closed(vhost, boot),
         "exactly_one_closed_gate": vhost.count(GATE) == 1 and vhost.count(LOCATION) == 1 and
                                    vhost.count(PROXY) >= 1 and vhost.count(COMMENT) == 0,
         "boot_guard_sha": hashlib.sha256(boot).hexdigest() == BOOT_SHA,
