@@ -19,7 +19,7 @@
 - The **installed boot script byte hash** must equal `26ea880f...`. The diagnostic compiles that exact trusted read-only source **in memory, without invoking its `__main__` entry point**, and delegates full-vhost canonical integrity to the already-approved PR #1851 `canonical_closed` predicate. This avoids duplicating or weakening the four exact upstream allowlist: a vhost that merely has a visible HTTP503 line but contains any unknown edit is rejected. The diagnostic also verifies exactly one Owner Ledger location/gate, unchanged dedicated upstream and absent rollback backup.
 - A bounded JSON status with no signature, password, token, underlying exception, credential generation, ledger row, Owner identity or secret file path.
 
-The result can report `PUBLIC_EVIDENCE_CURRENT_ONLY` when these limited conditions PASS. **It always reports `worker_token_authenticated=false`, `reader_login_verified=false`, `owner_fresh_one_use_authorization_verified=false`, `live_negative_http404_verified=false`, `live_e2e_ready=false` and `action=RETAIN_NGINX_503`.** Public evidence never grants permission to open the gate.
+The result can report `PUBLIC_EVIDENCE_CURRENT_ONLY` only when these limited conditions PASS **and `GPT02_DEV_CUSTODY_DBA_PREPARATION_ENABLED=false`**. Even fresh, correctly signed public receipts must produce `readiness=BLOCKED` while DBA preparation is enabled; this diagnostic never starts/stops that service. **It always reports `worker_token_authenticated=false`, `reader_login_verified=false`, `owner_fresh_one_use_authorization_verified=false`, `live_negative_http404_verified=false`, `live_e2e_ready=false` and `action=RETAIN_NGINX_503`.** Public evidence never grants permission to open the gate.
 
 ### Source-only CI validation
 
