@@ -37,6 +37,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           src=Path("scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py").read_text()
+          assert 'NGINX = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")' in src
           assert 'PRIMARY_RESTORE_DELAY_SECONDS = 30' in src
           assert 'PRIMARY_TIMER_ACCURACY = "1s"' in src
           assert 'PRIMARY_TIMER_RANDOMIZED_DELAY = "0"' in src
