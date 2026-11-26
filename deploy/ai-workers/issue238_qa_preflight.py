@@ -4,6 +4,9 @@ THIS IS NOT A RUNNER: no Docker calls, subprocess, SQL, network, or credential
 provisioning. The caller MUST be an independently authenticated trusted adapter.
 """
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import re
+import uuid
 from pathlib import Path
 from typing import Callable
 
@@ -28,7 +31,7 @@ class AuthenticatedWork:
 # Source-only adapter for the *already authenticated* AI Core work/claim result.
 # Both inputs MUST originate from the trusted control plane. Parsing a JSON
 # message from a worker or Owner is not itself proof of authentication.
-def bind_claimed_ai_core_work(*, credential: dict, claimed_work: dict) -> AuthenticatedWork:
+def bind_claimed_ai_core_work(*, credential: dict, claimed_work: dict, now: datetime | None = None) -> AuthenticatedWork:
     """Fail closed if a service token can claim a different worker's work.
 
     This does not fetch/authorize work, sign a permit or execute QA. The caller
@@ -57,8 +60,31 @@ def bind_claimed_ai_core_work(*, credential: dict, claimed_work: dict) -> Authen
         raise PermitDenied("claim_token_required")
     command_id = claimed_work.get("commandId")
     job_id = claimed_work.get("taskId")
-    if not isinstance(command_id, str) or not command_id or not isinstance(job_id, str) or not job_id:
+    if not isinstance(command_id, str) or not isinstance(job_id, str):
         raise PermitDenied("durable_command_and_job_required")
+    try:
+        if any(str(uuid.UUID(value)) != value.lower() for value in (claim_token, command_id, job_id)):
+            raise ValueError("noncanonical UUID")
+    except ValueError as exc:
+        raise PermitDenied("malformed_durable_claim_id") from exc
+    # AI Core writes a PostgreSQL timestamptz rendered with a space or T,
+    # and an offset. Never interpret offset-less timestamps as local time.
+    expires = metadata.get("claimLeaseExpiresAt")
+    if not isinstance(expires, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::?\d{2})?)",
+        expires,
+    ):
+        raise PermitDenied("claim_lease_missing_or_unbounded")
+    try:
+        lease_end = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PermitDenied("claim_lease_invalid") from exc
+    clock = datetime.now(timezone.utc) if now is None else now
+    if not isinstance(clock, datetime) or clock.tzinfo is None or clock.utcoffset() is None:
+        raise PermitDenied("trusted_utc_clock_required")
+    remaining = (lease_end - clock).total_seconds()
+    if not (0 < remaining <= 300):
+        raise PermitDenied("claim_lease_expired_or_unbounded")
     return AuthenticatedWork(WORKER_ID, command_id, job_id)
 
 
