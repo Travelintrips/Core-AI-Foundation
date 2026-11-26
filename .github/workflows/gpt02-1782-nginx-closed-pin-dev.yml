@@ -47,7 +47,11 @@ jobs:
           for forbidden in ("import subprocess", "subprocess.run(", "os.system(", "requests.", "psycopg", "password", "ssh ", "nginx -s reload"):
               assert forbidden not in source, forbidden
           source2 = Path("scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py").read_text()
-          assert "from gpt02_1782_failclosed_boot_precheck import canonical_closed" in source2
+          assert 'LIVE_BOOT = Path("/usr/local/sbin/gpt02-1782-failclosed-boot-precheck.py")' in source2
+          assert 'BOOT_SOURCE_SHA256 = "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32"' in source2
+          assert "os.O_NOFOLLOW" in source2
+          assert "load_pinned_boot_canonical" in source2
+          assert "from gpt02_1782_failclosed_boot_precheck import" not in source2
           assert "permitted_open_to_closed" in source2
           assert "ACTIVE_CHANGED_BEFORE_RESTORE" in source2
           print("GPT02_CONCURRENT_ALLOWED_CUTOVER_ROLLBACK_BOUNDARY=PASS")
