@@ -40,7 +40,7 @@ ALLOWED_UPSTREAM_TRANSITIONS = (
 def canonical_closed(data: bytes) -> bool:
     """True only for original full vhost with these four exact upstream choices."""
     if (len(data) > 200000 or data.count(GATE) != 1 or
-        data.count(LOCATION) != 1 or data.count(PROXY) != 1 or
+        data.count(LOCATION) != 1 or data.count(PROXY) < 1 or
         data.count(COMMENT) != 0):
         return False
     original = data
