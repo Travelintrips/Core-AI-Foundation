@@ -18,9 +18,11 @@ import { getExternalAgentRule } from "../services/externalAgentRegistryService.j
 import { subscribeExternalAgentWork } from "../services/externalAgentWorkEventService.js";
 import { DEV_DELL_WAKE_CLIENT_ID, listDevDellQueuedWakeCommandIds } from "../services/gpt02DevQueuedWakeService.js";
 import { createGpt02ReaderCustodyWorkerIssuerRouter } from "./gpt02-reader-custody-worker-issuer.js";
+import { createIssue238ReadonlyClaimRouter } from "./dev-issue238-readonly-claim.js";
 
 const router = Router();
 router.use(createGpt02ReaderCustodyWorkerIssuerRouter());
+router.use("/ai/agent-runtime/dev/issue238/claim-readiness", createIssue238ReadonlyClaimRouter());
 
 // Agent credentials management. Secrets are returned once, never persisted in plaintext.
 function requireSameOrigin(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): void {
