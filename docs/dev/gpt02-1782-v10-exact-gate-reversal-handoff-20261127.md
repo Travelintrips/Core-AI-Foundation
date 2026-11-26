@@ -34,6 +34,18 @@ Command for a future separately authorized operator reviewer (after candidate so
 
 The checker **always exits 2**, even when `byte_reversibility=PASS`, with `ready_to_open=false`, `live_e2e_ready=false`, `action=RETAIN_NGINX_503`. There is **no `--execute` mode**, no root vhost write, no `nginx -t` or reload, no systemd operation and no database role operation. This PR is kept draft to avoid a normal Core DEV deployment triggered by changes under `scripts/vps/` in the existing CI watcher. The already merged v10 module must be available in the reviewer environment; if not, its absence is BLOCKED, not substituted with a weaker check.
 
+## Recovery if the future operator or browser disconnects — pure contract, NOT installed
+
+The proposed reviewer now contains `assess_watcher_recovery_contract`, a **pure evidence predicate** with 8 additional offline regressions. It does **not** modify the watcher, schedule a recovery timer, reload Nginx, extend PostgreSQL, or supply a live attestation. A future independently authorized recovery operator must collect the following facts directly from the host before it can consider restarting a previously running CI watcher:
+
+- The exact approved **closed** Nginx vhost was restored byte-for-byte and no unrelated directive changed.
+- `nginx -t` succeeded and **the live loopback HTTPS endpoint** returned the exact HTTP503 JSON with `Cache-Control: no-store`, not just a closed file on disk.
+- The independent gate rollback timer is inactive and its protected backup was cleaned only **after** the previous two facts were checked.
+- The dedicated reader role is expired and an authoritative database query shows **exactly zero sessions**.
+- The release service has finished and is idle, the watcher timer is currently inactive, and it was active before the test so that its earlier operating state can be restored deliberately.
+
+For any missing, false, malformed, or merely truthy value the review returns **BLOCKED**, and even when all facts are supplied it returns only `recovery_review=CANDIDATE_ONLY`, `action=NO_HOST_OPERATION`, `watcher_resumed=false`. This closes a dangerous assumption: an automatic watcher resume after 90 seconds must **not** occur merely because the rollback timer elapsed. The independently supervised time-bounded recovery service, crash handling, and future systemd integration are still **unimplemented** and must be developed/reviewed before a real window can be called safe. Do not claim the source-only policy guarantees recovery if the operator process crashes.
+
 ## Separate future high-risk steps NOT implemented here
 
 - An **explicit fresh one-use Owner authorization** for one named CST-DEV negative challenge HTTP404 test and a genuinely fresh signed Owner browser session at the time of the test, with Owner ready to click once.
