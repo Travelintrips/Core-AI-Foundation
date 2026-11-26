@@ -182,6 +182,27 @@ describe("separate host DBA custody issuer", () => {
     expect(secretBuffers.every(({ bytes }) => bytes.every((byte) => byte === 0))).toBe(true);
   });
 
+  it("probes the exact pinned session pooler with verified TLS and the native reader as session_user", async () => {
+    const f = fixture();
+    const host = "aws-0-ap-southeast-2.pooler.supabase.com";
+    f.files.set(PATHS.reader, Buffer.from(JSON.stringify({ ...CONFIG, host })));
+    await f.issuer.issueAndPublish();
+    expect(f.deps.createPool).toHaveBeenCalledWith(expect.objectContaining({
+      host, port: 5432, database: "postgres",
+      user: `${CONFIG.user}.${CONFIG.projectId}`,
+      ssl: { ca: CA, rejectUnauthorized: true, servername: host },
+      max: 1,
+    }));
+    // PostgreSQL identity is verified on the server, not inferred from the
+    // Supavisor wire username. A wrong session_user still rejects the receipt.
+    expect(f.state.published).toHaveLength(1);
+    const wrong = fixture();
+    wrong.files.set(PATHS.reader, Buffer.from(JSON.stringify({ ...CONFIG, host })));
+    wrong.state.identity.actor = "postgres";
+    await denied(wrong.issuer.issueAndPublish(), "CUSTODY_DBA_PROBE_FAILED");
+    expect(wrong.state.published).toHaveLength(0);
+  });
+
   it("tests every real reader projection, predicate and join column while retrieving zero ledger rows", async () => {
     const f = fixture(); await f.issuer.issueAndPublish();
     for (const [sql, columns] of [
