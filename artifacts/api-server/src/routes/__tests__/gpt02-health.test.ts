@@ -16,7 +16,11 @@ vi.mock("../../middleware/agentServiceAuth.js", () => ({
   },
   hashAgentServiceToken: vi.fn(),
 }));
-vi.mock("../../middleware/internalAuth.js", () => ({ requireAuth: (_req: unknown, _res: unknown, next: () => void) => next(), requireInternalRole: () => (_req: unknown, _res: unknown, next: () => void) => next() }));
+vi.mock("../../middleware/internalAuth.js", () => ({
+  requireAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireInternalRole: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requirePasswordChanged: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
 vi.mock("../../services/aiSecretService.js", () => ({ getProviderApiKey: vi.fn(() => null) }));
 vi.mock("../../lib/logger.js", () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock("../../services/localCodingControlBridgeService.js", () => ({ submitCodingBridgeCommand: vi.fn(), claimCodingBridgeCommand: vi.fn(), completeCodingBridgeCommand: vi.fn(), renewCodingBridgeCommandClaim: vi.fn(), recordClaimedCodingBridgeProgress: vi.fn(), getCodingBridgeCommandExecutionState: vi.fn() }));

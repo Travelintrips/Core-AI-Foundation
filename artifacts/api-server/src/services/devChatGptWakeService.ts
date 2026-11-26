@@ -51,6 +51,7 @@ export async function resolveVerifiedDevWakeTarget(
   requestHost?: string,
   expectedOwnerChannel?: string,
   expectedWorkerId?: string,
+  expectedConversationId?: string,
 ): Promise<DevWakeTarget> {
   if (!isDevWakeRuntime(requestHost)) throw new Error("DEV_CHATGPT_DEV_HOST_REQUIRED");
   const config = await loadDevWakeRuntimeConfig(requestHost);
@@ -72,8 +73,10 @@ export async function resolveVerifiedDevWakeTarget(
     const candidates = config.bindings.filter(value =>
       value.accountAlias === alias &&
       (expectedOwnerChannel === undefined || value.ownerChannel === expectedOwnerChannel) &&
-      (expectedWorkerId === undefined || value.workerId === expectedWorkerId));
+      (expectedWorkerId === undefined || value.workerId === expectedWorkerId) &&
+      (expectedConversationId === undefined || value.targetConversationId === expectedConversationId.toLowerCase()));
     if (!candidates.length) {
+      if (expectedConversationId !== undefined) throw new Error("DEV_CHATGPT_ALIAS_CONVERSATION_NOT_CONFIGURED");
       if (expectedOwnerChannel !== undefined && !config.bindings.some(value =>
         value.accountAlias === alias && value.ownerChannel === expectedOwnerChannel)) {
         throw new Error("DEV_CHATGPT_ALIAS_OWNER_MISMATCH");
