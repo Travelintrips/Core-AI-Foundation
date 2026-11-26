@@ -154,6 +154,47 @@ def add_quiescence_snapshot(evidence: dict, v10: dict) -> dict:
     }
 
 
+RECOVERY_REVIEW_TRUE_FIELDS = (
+    "nginx_config_exact_restored",
+    "nginx_syntax_pass",
+    "loopback_http503_json_no_store",
+    "guard_rollback_timer_inactive",
+    "guard_backup_cleaned_after_verification",
+    "dedicated_reader_expired",
+    "shared_dev_release_service_idle",
+    "watcher_timer_currently_inactive",
+    "watcher_timer_was_active_before_test",
+    "no_unknown_shared_nginx_edits",
+)
+
+
+def assess_watcher_recovery_contract(observed: dict) -> dict:
+    """Pure proposed post-window recovery acceptance, never control systemd.
+
+    The evidence must eventually be gathered independently by an authorized
+    operator; arbitrary provided booleans are NOT live attestation.
+    This reviewer cannot re-enable the watcher itself, even if all flags pass.
+    """
+    if not isinstance(observed, dict):
+        observed = {}
+    missing = [
+        name for name in RECOVERY_REVIEW_TRUE_FIELDS
+        if observed.get(name) is not True
+    ]
+    sessions = observed.get("dedicated_reader_active_sessions")
+    if type(sessions) is not int or sessions != 0:
+        missing.append("dedicated_reader_active_sessions_zero")
+    return {
+        "recovery_review": "CANDIDATE_ONLY" if not missing else "BLOCKED",
+        "missing": missing,
+        "review_is_live_attestation": False,
+        "watcher_resumed": False,
+        "nginx_reloaded": False,
+        "reader_lease_modified": False,
+        "action": "NO_HOST_OPERATION",
+    }
+
+
 def main() -> int:
     if os.geteuid() != 0 or os.getegid() != 0 or sys.argv[1:] != ["--check"]:
         print('{"action":"RETAIN_NGINX_503","ready_to_open":false,"readiness":"BLOCKED"}')
