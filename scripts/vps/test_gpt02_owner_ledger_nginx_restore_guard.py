@@ -302,19 +302,32 @@ class GuardTests(unittest.TestCase):
         with self.assertRaisesRegex(mod.GuardError, "ACTIVE_NOT_REGULAR"):
             mod.prepare(link, self.backup)
 
-    def test_arm_bounded_timer_exact_90_seconds_and_never_opens_gate_itself(self):
+    def test_arm_early_30_seconds_with_explicit_accuracy_and_no_gate_open(self):
+        unit = "gpt02-1782-owner-ledger-restore"
+        properties = (b"ActiveState=active\nAccuracyUSec=1s\n"
+                      b"RandomizedDelayUSec=0\nUnit=" + unit.encode() + b".service\n")
         with patch.object(mod, "trusted_script", return_value=True), \
              patch.object(mod.subprocess, "run") as run:
             run.return_value.returncode = 0
-            answer = mod.arm(self.active, self.backup, 90, SOURCE)
-            self.assertIn("WATCHDOG_ARMED", answer)
-            self.assertIn("--on-active=90s", run.call_args_list[0].args[0])
-            self.assertIn("gpt02-1782-owner-ledger-restore.timer", run.call_args_list[1].args[0])
+            run.return_value.stdout = properties
+            answer = mod.arm(self.active, self.backup, 30, SOURCE)
+            self.assertIn("WATCHDOG_ARMED_EARLY_WITH_VERIFIED_ACCURACY", answer)
+            scheduled = run.call_args_list[0].args[0]
+            self.assertIn("--on-active=30s", scheduled)
+            self.assertIn("--timer-property=AccuracySec=1s", scheduled)
+            self.assertIn("--timer-property=RandomizedDelaySec=0", scheduled)
+            self.assertNotIn("--on-active=90s", scheduled)
+            confirm = run.call_args_list[1].args[0]
+            self.assertEqual(confirm[:3],
+                             ["systemctl", "show", unit + ".timer"])
+            self.assertIn("--property=AccuracyUSec", confirm)
+            self.assertIn("--property=RandomizedDelayUSec", confirm)
+            self.assertIn("--property=Unit", confirm)
         self.assertEqual(self.active.read_bytes(), BASELINE)
         self.assertEqual(self.backup.read_bytes(), BASELINE)
 
-    def test_arm_rejects_timer_0_29_181_600_seconds(self):
-        for delay in (0, 29, 181, 600):
+    def test_arm_rejects_all_non_30_second_delays_including_old_90(self):
+        for delay in (0, 29, 31, 90, 91, 181, 600):
             with self.subTest(delay=delay):
                 with self.assertRaisesRegex(mod.GuardError, "WATCHDOG_DURATION_INVALID"):
                     mod.arm(self.active, self.backup, delay, SOURCE)
@@ -325,9 +338,66 @@ class GuardTests(unittest.TestCase):
              patch.object(mod.subprocess, "run") as run:
             run.return_value.returncode = 1
             with self.assertRaisesRegex(mod.GuardError, "WATCHDOG_SCHEDULE_FAILED"):
-                mod.arm(self.active, self.backup, 90, SOURCE)
+                mod.arm(self.active, self.backup, 30, SOURCE)
         self.assertEqual(self.active.read_bytes(), BASELINE)
         self.assertTrue(self.backup.exists())
+
+
+    def test_timer_properties_reject_default_one_minute_accuracy(self):
+        unit = "gpt02-1782-owner-ledger-restore"
+        baseline = (
+            "ActiveState=active\nAccuracyUSec=1s\nRandomizedDelayUSec=0\n"
+            "Unit=" + unit + ".service\n"
+        ).encode()
+        invalid = [
+            baseline.replace(b"AccuracyUSec=1s", b"AccuracyUSec=1min"),
+            baseline.replace(b"AccuracyUSec=1s", b"AccuracyUSec=30s"),
+            baseline.replace(b"RandomizedDelayUSec=0", b"RandomizedDelayUSec=5s"),
+            baseline.replace(b"ActiveState=active", b"ActiveState=inactive"),
+            baseline.replace(b"Unit=" + unit.encode(), b"Unit=other-unit"),
+            baseline + b"AccuracyUSec=1s\n",
+            baseline.replace(b"RandomizedDelayUSec=0\n", b""),
+            b"UNEXPECTED_SYSTEMD_STATE",
+            b"\xff\xff",
+        ]
+        for contents in invalid:
+            with self.subTest(payload=contents[:90]), patch.object(mod.subprocess,"run") as run:
+                run.return_value.returncode=0
+                run.return_value.stdout=contents
+                with self.assertRaisesRegex(mod.GuardError,"WATCHDOG_PROPERTIES_UNVERIFIED"):
+                    mod.verify_armed_timer_properties(unit)
+
+    def test_timer_property_check_rejects_systemctl_failure_or_huge_output(self):
+        unit="gpt02-1782-owner-ledger-restore"
+        for code,payload in ((1,b""),(0,b"A"*4097)):
+            with self.subTest(code=code),patch.object(mod.subprocess,"run") as run:
+                run.return_value.returncode=code
+                run.return_value.stdout=payload
+                with self.assertRaisesRegex(mod.GuardError,"WATCHDOG_PROPERTIES_UNVERIFIED"):
+                    mod.verify_armed_timer_properties(unit)
+
+    def test_arm_rejects_unsafe_actual_timer_properties_before_nginx_changes(self):
+        with patch.object(mod, "trusted_script", return_value=True), \
+             patch.object(mod.subprocess, "run") as run:
+            run.return_value.returncode=0
+            run.return_value.stdout=(
+                b"ActiveState=active\nAccuracyUSec=1min\n"
+                b"RandomizedDelayUSec=0\n"
+                b"Unit=gpt02-1782-owner-ledger-restore.service\n"
+            )
+            with self.assertRaisesRegex(mod.GuardError,"WATCHDOG_PROPERTIES_UNVERIFIED"):
+                mod.arm(self.active,self.backup,30,SOURCE)
+        self.assertEqual(self.active.read_bytes(),BASELINE)
+        self.assertEqual(self.backup.read_bytes(),BASELINE)
+
+    def test_timer_contract_is_early_but_not_real_time_guarantee(self):
+        self.assertEqual(mod.PRIMARY_RESTORE_DELAY_SECONDS,30)
+        self.assertEqual(mod.PRIMARY_TIMER_ACCURACY,"1s")
+        self.assertEqual(mod.PRIMARY_TIMER_RANDOMIZED_DELAY,"0")
+        modeled=30+1+20+20+7+6
+        self.assertEqual(modeled,84)
+        self.assertLess(modeled,90)
+        self.assertIn("Scheduling latency remains unbounded", SOURCE.read_text())
 
 if __name__ == "__main__":
     unittest.main()
