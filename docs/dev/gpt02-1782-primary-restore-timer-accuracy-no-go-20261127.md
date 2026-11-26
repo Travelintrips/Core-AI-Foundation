@@ -21,6 +21,10 @@ This proposed diff changes ONLY the existing `scripts/vps/gpt02_owner_ledger_ngi
 - A timer may expire while the operator is still preparing the Nginx opening; in that case the operator must abort rather than reopen the gate.
 - The independent **110s secondary fallback** proposed in draft #1854 cannot serve as a primary ≤90s bound. It is only a separate recovery layer and not reboot-persistent. The original root boot precheck is a separate failclosed protection upon Nginx startup.
 
+## Active Nginx target corrected in the same source candidate
+
+The on-host `/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id` is a distinct root-owned regular file (SHA256 `496dac900c7228ddbebeb06151d17693de5bcf744fc8a0426d5eb3739dbcab3f`) from `sites-available` (SHA256 `6d604cfaeea8a17f0c0a91de14feae5efe6248ce939cc761999f99ac603c9ca4`). The original restore guard's implicit `NGINX` target was **sites-available**, which could cause an operator who omitted `--active` to arm or restore the wrong vhost. The candidate now defaults to the existing, boot-guarded **sites-enabled** path and tests that `mod.NGINX == boot.ACTIVE`. This is a source-only correctness improvement, **not a live Nginx write**. Future operators must still pass the exact `--active` path explicitly and verify that the loaded Nginx config is the file under review.
+
 ## Operational security boundary
 
 This PR **does not install or arm any root script, open Nginx, extend the PostgreSQL reader, create Owner approval, issue signed credentials, stop/resume the shared DEV watcher, touch Task190 or PROD, or complete an HTTP404 E2E**. The preinstalled older root guard remains the only authorized live version.
