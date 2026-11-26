@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, verify } from "node:crypto";
+import { createHash } from "node:crypto";
 
 export const task189Target = Object.freeze({
   purpose: "CST-DEV/task189/second-preparation/signer-window/v1",
@@ -24,19 +24,12 @@ export class ReleaseError extends Error {
   constructor(status: number, code: string) { super(code); this.status = status; }
 }
 
-// This identifier can be shown to the independent registrar. The stored token
-// hash itself is never returned. Rotation invalidates grants even if the row ID is reused.
+// Rotation invalidates grants even when the service credential retains its row ID.
 export function releaseCredentialBinding(tokenHash: string): string {
   return createHash("sha256").update("CST-DEV/task189/credential/v1\0").update(tokenHash).digest("hex");
 }
 
-export function verifyMandate(value: unknown, signature: unknown, publicDer: string | undefined, now: number): Mandate {
-  if (!publicDer) throw new ReleaseError(503, "RELEASE_AUTHORITY_UNCONFIGURED");
-  let key;
-  try {
-    key = createPublicKey({ key: Buffer.from(publicDer, "base64"), type: "spki", format: "der" });
-    if (key.asymmetricKeyType !== "ed25519") throw new Error();
-  } catch { throw new ReleaseError(503, "RELEASE_AUTHORITY_INVALID"); }
+export function verifyOwnerMandate(value: unknown, now: number): Mandate {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new ReleaseError(400, "INVALID_MANDATE");
   const raw = value as Record<string, unknown>;
@@ -50,15 +43,7 @@ export function verifyMandate(value: unknown, signature: unknown, publicDer: str
       Object.keys(raw).length !== Object.keys(task189Target).length + 6 ||
       Object.entries(task189Target).some(([k,v]) => raw[k] !== v))
     throw new ReleaseError(400, "INVALID_MANDATE_TARGET");
-  // Explicit field order is the signature wire format, independent of JSONB key ordering.
-  const grant = { ...task189Target, grantId, credentialId, credentialBinding, redeemerUserId, notBefore, expiresAt };
-  if (typeof signature !== "string" || !/^[A-Za-z0-9_-]{86}$/.test(signature))
-    throw new ReleaseError(403, "INVALID_MANDATE_SIGNATURE");
-  const bytes = Buffer.from(signature, "base64url");
-  if (bytes.toString("base64url") !== signature ||
-      !verify(null, Buffer.from(JSON.stringify(grant)), key, bytes))
-    throw new ReleaseError(403, "INVALID_MANDATE_SIGNATURE");
   if (!Number.isSafeInteger(now) || notBefore > now || expiresAt <= now || expiresAt <= notBefore || expiresAt - notBefore > grantLifetimeMs)
     throw new ReleaseError(409, "MANDATE_OUTSIDE_VALIDITY");
-  return grant;
+  return { ...task189Target, grantId, credentialId, credentialBinding, redeemerUserId, notBefore, expiresAt };
 }

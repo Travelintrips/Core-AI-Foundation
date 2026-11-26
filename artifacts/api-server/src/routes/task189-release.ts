@@ -9,8 +9,7 @@ import { task189Release, type ReleaseAction } from "../services/task189ReleaseRe
 const router = Router();
 const origin = "https://dev.cstlogistic.co.id";
 const root = "/ai/agent-runtime/dev/task189-release";
-const id = z.string().uuid();
-const grantBody = z.object({ mandate: z.record(z.string(), z.unknown()), signature: z.string().length(86) }).strict();
+const id = z.string().uuid().transform(value => value.toLowerCase());
 const grantIdBody = z.object({ grantId: id }).strict();
 const redeemBody = grantIdBody.extend({ permitId: id }).strict();
 const admin = [requireAuth, requireInternalRole("owner", "admin"), requirePasswordChanged];
@@ -38,7 +37,10 @@ router.use(root, (req,res,next) => {
 function handle(action: (req: Parameters<RequestHandler>[0], res: Parameters<RequestHandler>[1]) => ReleaseAction): RequestHandler {
   return async (req,res) => {
     try {
-      const result = await task189Release(action(req,res), process.env["CST_DEV_TASK189_REGISTRAR_PUBLIC_DER_B64"]);
+      const ownerId = Number(process.env["CST_DEV_TASK189_OWNER_USER_ID"]);
+      if (!Number.isSafeInteger(ownerId) || ownerId < 1 || ownerId > 2147483647)
+        throw new ReleaseError(503, "MANDATE_OWNER_UNCONFIGURED");
+      const result = await task189Release(action(req,res), ownerId);
       res.json(result);
     } catch (err) {
       if (err instanceof z.ZodError) { res.status(400).json({ error: "INVALID_REQUEST" }); return; }
@@ -49,7 +51,7 @@ function handle(action: (req: Parameters<RequestHandler>[0], res: Parameters<Req
 }
 router.get(root, ...admin, handle(req => ({ kind: "inspect", admin: { userId: req.internalUser!.id } })));
 router.post(root+"/register", ...admin, mutation, handle(req => ({
-  kind: "register", admin: { userId: req.internalUser!.id }, ...grantBody.parse(req.body),
+  kind: "register", admin: { userId: req.internalUser!.id }, ...grantIdBody.parse(req.body),
 })));
 router.post(root+"/revoke", ...admin, mutation, handle(req => ({
   kind: "revoke", admin: { userId: req.internalUser!.id }, ...grantIdBody.parse(req.body),

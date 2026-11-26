@@ -6,6 +6,7 @@ on:
       - 'artifacts/api-server/src/app.ts'
       - 'artifacts/api-server/src/middleware/agentServiceAuth.ts'
       - 'scripts/migrations/20261124_task189_release_delegation.sql'
+      - 'scripts/migrations/20261124_task189_owner_mandate.sql'
       - 'scripts/task189-release-mandate.test.mjs'
       - '.github/workflows/task189-delegation.yml'
 permissions:
