@@ -89,19 +89,21 @@ export async function readGpt02SuperAdminLedgerReceipt(
     inTransaction = true;
     const identity = await client.query<{
       actor: string; effective: string; database_name: string;
-      transaction_read_only: string; default_read_only: string;
+      transaction_read_only: string; default_read_only: string; backend_ssl: boolean;
     }>(`
       SELECT session_user::text AS actor, current_user::text AS effective,
              current_database()::text AS database_name,
              current_setting('transaction_read_only') AS transaction_read_only,
-             current_setting('default_transaction_read_only') AS default_read_only
+             current_setting('default_transaction_read_only') AS default_read_only,
+             (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS backend_ssl
     `);
     if (
       identity.rowCount !== 1 || identity.rows[0]?.actor !== ROLE ||
       identity.rows[0]?.effective !== ROLE ||
       identity.rows[0]?.database_name !== "postgres" ||
       identity.rows[0]?.transaction_read_only !== "on" ||
-      identity.rows[0]?.default_read_only !== "on"
+      identity.rows[0]?.default_read_only !== "on" ||
+      identity.rows[0]?.backend_ssl !== true
     ) deny();
 
     const decision = await client.query<{
