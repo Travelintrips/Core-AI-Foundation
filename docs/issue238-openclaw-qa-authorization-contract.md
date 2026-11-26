@@ -118,3 +118,18 @@ is not permission to perform QA, sign Owner receipts or mutate DB roles.
 Hosted read-only inspection found **zero PROCESSING** canonical VPS commands
 and **zero likely Issue238** assigned VPS commands. No real QA work item was
 claimed, no signed permit issued, and no PG17 fixture executed.
+
+## QA #238 claim lease and UUID preflight hardening (26 Nov 2026)
+
+The source-only `bind_claimed_ai_core_work` now also verifies canonical
+UUIDs for the claim token, durable command ID and durable task/job ID; it
+parses an explicitly timezone-qualified PostgreSQL timestamp from
+`metadata.claimLeaseExpiresAt`, rejects missing/expired/unreasonably distant
+(>300s) leases, and refuses timezone-naive clocks. A `PROCESSING` flag alone
+is not sufficient evidence of an active claim.
+
+This check is **defense in depth** and does not replace independent
+server-side verification that the returned credential is the real DB-backed
+service token and that the command/lease currently exists in the durable AI
+Core record. It cannot mint a claim, issue an Owner permit, or run a fixture.
+Only source-only unit tests have executed; no worker runtime or SQL changes.
