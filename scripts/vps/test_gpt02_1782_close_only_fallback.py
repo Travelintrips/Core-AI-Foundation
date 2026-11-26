@@ -109,6 +109,27 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(result["active_target"],"sites-enabled")
         self.assertEqual(result["action"],"KEEP_GATE_CLOSED")
 
+    def test_primary_rollback_already_closed_live_503_skips_secondary_reload(self):
+        with patch.object(m,"capture_evidence",
+                          return_value=("CLOSED_WITH_BACKUP_RELOAD_AND_VERIFY",CLOSED)),\
+             patch.object(m,"run_existing_restore",
+                          side_effect=AssertionError("DO_NOT_RELOAD_TWICE")),\
+             patch.object(m,"verify_live_503",return_value=True) as web:
+            result=m.close_only()
+        self.assertFalse(result["existing_guard_invoked"])
+        self.assertTrue(result["nginx_http503_json_no_store"])
+        self.assertGreaterEqual(web.call_count, 2)
+
+    def test_closed_file_but_live_worker_not_503_invokes_existing_guard(self):
+        with patch.object(m,"capture_evidence",
+                          return_value=("CLOSED_WITH_BACKUP_RELOAD_AND_VERIFY",CLOSED)),\
+             patch.object(m,"run_existing_restore",return_value=True) as restore,\
+             patch.object(m,"verify_live_503",side_effect=[False,True]):
+            result=m.close_only()
+        restore.assert_called_once_with()
+        self.assertTrue(result["existing_guard_invoked"])
+        self.assertTrue(result["nginx_http503_json_no_store"])
+
     def test_live_503_is_mandatory_after_guard_success(self):
         with patch.object(m,"capture_evidence",
                           return_value=("CLOSED_WITH_BACKUP_RELOAD_AND_VERIFY",CLOSED)),\
