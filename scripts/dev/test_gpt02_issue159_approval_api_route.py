@@ -168,6 +168,34 @@ class ApprovalApiIssue159RouteTest(unittest.TestCase):
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read().decode())
 
+    def test_task189_routes_require_exact_host_method_query_and_own_session(self):
+        calls = []
+        def delegate(request):
+            calls.append((request.command, request.path))
+            request.send(403, {'error': 'OWNER_SESSION_REQUIRED'})
+        def status(method, path, host, token=None):
+            headers = {'Host': host}
+            if token:
+                headers['Authorization'] = 'Bearer ' + token
+            url = f'http://127.0.0.1:{self.server.server_port}' + path
+            req = urllib.request.Request(url, method=method, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=3) as response:
+                    return response.status
+            except urllib.error.HTTPError as err:
+                err.close()
+                return err.code
+        host = 'dev-ai-task.cstlogistic.co.id'
+        with patch.object(api, 'task189_handler', return_value=delegate):
+            self.assertEqual(status('POST', api.TASK189_FINAL, host), 401)
+            self.assertEqual(status('GET', api.TASK189_READINESS, 'another.invalid', 'fixture'), 404)
+            self.assertEqual(status('GET', api.TASK189_FINAL, host), 401)
+            self.assertEqual(status('GET', api.TASK189_READINESS.replace('default','other'), host), 401)
+            self.assertEqual(calls, [])
+            self.assertEqual(status('GET', api.TASK189_READINESS, host, 'fixture'), 403)
+            self.assertEqual(status('POST', api.TASK189_FINAL, host, 'fixture'), 403)
+            self.assertEqual(calls, [('GET', api.TASK189_READINESS), ('POST', api.TASK189_FINAL)])
+
     def test_pending_route_requires_real_active_super_admin_session(self):
         api.admin_identity = lambda token, connection: None
         status, body = self.pending_request()
