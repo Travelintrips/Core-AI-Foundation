@@ -6,12 +6,16 @@ on:
     paths:
       - 'scripts/vps/gpt02_1782_failclosed_boot_precheck.py'
       - 'scripts/vps/test_gpt02_1782_failclosed_boot_precheck.py'
+      - 'scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_nginx_restore_guard.py'
       - '.github/workflows/gpt02-1782-nginx-closed-pin-dev.yml'
   push:
     branches: [develop]
     paths:
       - 'scripts/vps/gpt02_1782_failclosed_boot_precheck.py'
       - 'scripts/vps/test_gpt02_1782_failclosed_boot_precheck.py'
+      - 'scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_nginx_restore_guard.py'
       - '.github/workflows/gpt02-1782-nginx-closed-pin-dev.yml'
 
 permissions:
@@ -24,9 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compile source without opening any live services
-        run: python3 -B -m py_compile scripts/vps/gpt02_1782_failclosed_boot_precheck.py scripts/vps/test_gpt02_1782_failclosed_boot_precheck.py
+        run: python3 -B -m py_compile scripts/vps/gpt02_1782_failclosed_boot_precheck.py scripts/vps/test_gpt02_1782_failclosed_boot_precheck.py scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py scripts/vps/test_gpt02_owner_ledger_nginx_restore_guard.py
       - name: Test full-vhost SHA with only four approved upstream cutovers and safe rollback
         run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_1782_failclosed_boot_precheck.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_ledger_nginx_restore_guard.py -v
       - name: Verify startup precheck has no administrative executor
         run: |
           python3 - <<'PY'
@@ -40,5 +45,10 @@ jobs:
           assert 'EXPECTED_OWNER_BLOCK_SHA256' not in source
           for forbidden in ("import subprocess", "subprocess.run(", "os.system(", "requests.", "psycopg", "password", "ssh ", "nginx -s reload"):
               assert forbidden not in source, forbidden
+          source2 = Path("scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py").read_text()
+          assert "from gpt02_1782_failclosed_boot_precheck import canonical_closed" in source2
+          assert "permitted_open_to_closed" in source2
+          assert "ACTIVE_CHANGED_BEFORE_RESTORE" in source2
+          print("GPT02_CONCURRENT_ALLOWED_CUTOVER_ROLLBACK_BOUNDARY=PASS")
           print("GPT02_BOOT_GATE_WHOLE_VHOST_EXACT_4_CUTOVERS=PASS")
           PY
