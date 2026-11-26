@@ -80,7 +80,9 @@ def load_pinned_boot_canonical(source_path: Path, live: bool):
 _BOOT_SOURCE, _LIVE_RUNTIME = boot_source_path(Path(__file__))
 canonical_closed = load_pinned_boot_canonical(_BOOT_SOURCE, _LIVE_RUNTIME)
 
-NGINX = Path("/etc/nginx/sites-available/dev-ai-task.cstlogistic.co.id")
+# The VPS has DIFFERENT regular files in sites-available and sites-enabled.
+# The active boot-guarded route is sites-enabled; default to that EXACT path.
+NGINX = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")
 BACKUP = Path("/etc/nginx/dev-ai-task.gpt02-1782-guard-backup.conf")
 GATE = b"""return 503 '{"error":"GPT02_LEDGER_READER_NOT_PROVISIONED"}';"""
 LOCATION = b"location ^~ /api/gpt02-owner-ledger/ {"
