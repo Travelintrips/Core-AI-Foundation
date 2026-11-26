@@ -96,8 +96,44 @@ class GuardTests(unittest.TestCase):
 
     def test_original_restore_uses_same_whole_file_integrity_gate_as_boot_guard(self):
         self.assertTrue(mod.checked(BASELINE))
-        self.assertEqual(mod.canonical_closed, boot.canonical_closed)
+        self.assertTrue(mod.canonical_closed(BASELINE))
+        self.assertEqual(mod.canonical_closed(BASELINE), boot.canonical_closed(BASELINE))
         self.assertFalse(mod.checked(BASELINE + b"unexpected"))
+
+    def test_runtime_uses_the_existing_hyphen_named_boot_script_not_uninstalled_underscore_module(self):
+        path, is_live = mod.boot_source_path(mod.LIVE_RESTORE)
+        self.assertEqual(path, Path("/usr/local/sbin/gpt02-1782-failclosed-boot-precheck.py"))
+        self.assertTrue(is_live)
+        local, is_live = mod.boot_source_path(SOURCE)
+        self.assertEqual(local, SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py"))
+        self.assertFalse(is_live)
+
+    def test_verified_helper_is_byte_pinned_and_does_not_start_the_boot_script(self):
+        pinned = SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py")
+        helper = mod.load_pinned_boot_canonical(pinned, live=False)
+        self.assertTrue(helper(BASELINE))
+        self.assertFalse(helper(BASELINE+b"unexpected"))
+        self.assertEqual(mod.BOOT_SOURCE_SHA256, hashlib.sha256(pinned.read_bytes()).hexdigest())
+
+    def test_rejects_wrong_or_old_boot_script_sha_before_parsing_or_exec(self):
+        path = self.root / "old-boot-source.py"
+        path.write_bytes(SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()+b"\n# unapproved edit\n")
+        with self.assertRaisesRegex(RuntimeError, "BOOT_MODULE_SHA_NOT_APPROVED"):
+            mod.load_pinned_boot_canonical(path, live=False)
+
+    def test_rejects_boot_helper_symlink_missing_path_and_bad_root_file_mode(self):
+        existing = SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py")
+        symlink = self.root / "boot-link.py"
+        symlink.symlink_to(existing)
+        with self.assertRaisesRegex(RuntimeError, "BOOT_MODULE_UNAVAILABLE"):
+            mod.load_pinned_boot_canonical(symlink, live=False)
+        with self.assertRaisesRegex(RuntimeError, "BOOT_MODULE_UNAVAILABLE"):
+            mod.load_pinned_boot_canonical(self.root/"does-not-exist.py", live=False)
+        temp = self.root/"boot-root-mode.py"
+        temp.write_bytes(existing.read_bytes())
+        temp.chmod(0o644)
+        with self.assertRaisesRegex(RuntimeError, "BOOT_MODULE_ROOT0700_REQUIRED"):
+            mod.load_pinned_boot_canonical(temp, live=True)
 
     def test_prepare_requires_full_canonical_closed_baseline_not_just_a_visible_gate(self):
         candidate = BASELINE.replace(b'"no-store"', b'"public"')
