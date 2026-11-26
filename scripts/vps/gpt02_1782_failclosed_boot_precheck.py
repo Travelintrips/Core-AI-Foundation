@@ -11,6 +11,7 @@ No network, credentials, SQL, or systemctl calls.
 """
 import hashlib
 import os
+import re
 from pathlib import Path
 import stat
 import sys
@@ -36,7 +37,10 @@ def closed_owner_gate(data: bytes) -> bool:
     if (len(data) > 200000 or data.count(LOCATION) != 1 or
         data.count(OWNER_URI) != 1 or data.count(SERVER_NAME) != 2 or
         data.count(END_MARKER) != 1 or data.count(GATE) != 1 or
-        data.count(COMMENT) != 0):
+        data.count(COMMENT) != 0 or
+        # A server-level 503 error_page can turn a closed return 503 into
+        # an alternate response without touching the protected location.
+        re.search(rb"(?m)^[ \t]*error_page[ \t]+[^;\r\n]*\b503\b", data)):
         return False
     try:
         start = data.index(LOCATION)
