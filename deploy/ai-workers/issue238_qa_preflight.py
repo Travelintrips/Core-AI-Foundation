@@ -21,6 +21,39 @@ class AuthenticatedWork:
     durable_job_id: str
 
 
+# Source-only adapter for the *already authenticated* AI Core work/claim result.
+# Both inputs MUST originate from the trusted control plane. Parsing a JSON
+# message from a worker or Owner is not itself proof of authentication.
+def bind_claimed_ai_core_work(*, credential: dict, claimed_work: dict) -> AuthenticatedWork:
+    """Fail closed if a service token can claim a different worker's work.
+
+    This does not fetch/authorize work, sign a permit or execute QA. The caller
+    must independently authenticate the token and confirm the claim lease in
+    AI Core's durable command store before relying on this returned identity.
+    """
+    if not isinstance(credential, dict) or not isinstance(claimed_work, dict):
+        raise PermitDenied("trusted_work_context_required")
+    if (credential.get("name") != WORKER_ID or credential.get("isActive") is not True):
+        raise PermitDenied("worker_credential_mismatch")
+    scopes = credential.get("scopes")
+    if not isinstance(scopes, list) or "agent:work" not in scopes:
+        raise PermitDenied("agent_work_scope_required")
+    metadata = claimed_work.get("metadata")
+    if not isinstance(metadata, dict) or any(metadata.get(key) != WORKER_ID
+                                             for key in ("claimedBy", "assignedClientId")):
+        raise PermitDenied("claimed_worker_mismatch")
+    if claimed_work.get("status") != "PROCESSING":
+        raise PermitDenied("active_claim_required")
+    claim_token = claimed_work.get("claimToken")
+    if not isinstance(claim_token, str) or not claim_token:
+        raise PermitDenied("claim_token_required")
+    command_id = claimed_work.get("commandId")
+    job_id = claimed_work.get("taskId")
+    if not isinstance(command_id, str) or not command_id or not isinstance(job_id, str) or not job_id:
+        raise PermitDenied("durable_command_and_job_required")
+    return AuthenticatedWork(WORKER_ID, command_id, job_id)
+
+
 @dataclass(frozen=True)
 class PreparedQa:
     command_id: str

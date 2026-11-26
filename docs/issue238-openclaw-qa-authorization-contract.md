@@ -81,3 +81,22 @@ or source TOCTOU. Keep the live root host executor `host:read` only.
 Unit tests inject a fake process runner and do not execute PostgreSQL.
 
 **No disposable PostgreSQL runtime test has been executed by this module.**
+
+## Trusted AI Core claim binding (source-only addition, 26 Nov 2026)
+
+`bind_claimed_ai_core_work` rejects token-principal/claimed-worker mismatch,
+missing `agent:work`, inactive credentials, missing active claim token,
+and unbound `commandId` or `taskId` before the original signed-permit preflight.
+The adapter requires **separately authenticated** credential and durable AI
+Core claim records; the function does **not** authenticate caller-supplied dicts.
+The control-plane implementation must verify the token's canonical `name`
+and claim lease against the AI Core database, and bind the actual command/task
+identifiers to a *new* exact Owner-signed QA approval. The older BizPortal
+consent UI generates independent random `CMD-`/`JOB-` fields and therefore
+cannot be assumed to match an existing durable AI Core work claim. Do not
+forge those IDs or recycle the short-lived receipt. The existing generic
+`agent:work` claim route must not be treated as QA authorization.
+
+This addition only supplies a failing-closed parser for a future trusted
+adapter. **It is not a host runner, cannot provision Docker or keys, and has
+not executed PostgreSQL**. No active service, Finance or PROD modifications.
