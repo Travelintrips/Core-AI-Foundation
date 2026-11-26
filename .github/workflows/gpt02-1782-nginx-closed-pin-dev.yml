@@ -30,7 +30,8 @@ jobs:
       - name: Compile source without opening any live services
         run: python3 -B -m py_compile scripts/vps/gpt02_1782_failclosed_boot_precheck.py scripts/vps/test_gpt02_1782_failclosed_boot_precheck.py scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py scripts/vps/test_gpt02_owner_ledger_nginx_restore_guard.py
       - name: Test full-vhost SHA with only four approved upstream cutovers and safe rollback
-        run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_1782_failclosed_boot_precheck.py -v
+        run: |
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_1782_failclosed_boot_precheck.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_ledger_nginx_restore_guard.py -v
       - name: Verify startup precheck has no administrative executor
         run: |
