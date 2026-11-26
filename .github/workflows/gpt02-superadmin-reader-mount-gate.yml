@@ -8,6 +8,8 @@ on:
       - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
       - 'scripts/vps/gpt02_owner_reader_credential_loader.py'
       - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/gpt02_reader_login_readonly.py'
+      - 'scripts/vps/test_gpt02_reader_login_readonly.py'
       - 'scripts/vps/deploy_dev_release.py'
       - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
       - 'scripts/vps/test_gpt02_worker_attestor_key_loading.py'
@@ -31,6 +33,8 @@ on:
       - 'scripts/vps/test_gpt02_superadmin_reader_mount_gate.py'
       - 'scripts/vps/gpt02_owner_reader_credential_loader.py'
       - 'scripts/vps/test_gpt02_owner_reader_credential_loader.py'
+      - 'scripts/vps/gpt02_reader_login_readonly.py'
+      - 'scripts/vps/test_gpt02_reader_login_readonly.py'
       - 'scripts/vps/deploy_dev_release.py'
       - 'scripts/vps/test_gpt02_owner_reader_release_integration.py'
       - 'scripts/vps/test_gpt02_worker_attestor_key_loading.py'
@@ -61,6 +65,7 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_superadmin_reader_mount_gate.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_credential_loader.py -v
+          python3 -B -m unittest discover -s scripts/vps -p test_gpt02_reader_login_readonly.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_owner_reader_release_integration.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_worker_attestor_key_loading.py -v
           python3 -B -m unittest discover -s scripts/vps -p test_gpt02_reader_custodian_start.py -v
