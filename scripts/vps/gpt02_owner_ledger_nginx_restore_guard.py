@@ -17,7 +17,68 @@ import subprocess
 import sys
 import tempfile
 
-from gpt02_1782_failclosed_boot_precheck import canonical_closed
+# The installed systemd ExecStartPre filename uses hyphens, not the module
+# underscores used by the GitHub source tree. Load the PINNED bytes from that
+# exact existing root-owned file in production; do NOT deploy a second copy.
+LIVE_RESTORE = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
+LIVE_BOOT = Path("/usr/local/sbin/gpt02-1782-failclosed-boot-precheck.py")
+BOOT_SOURCE_SHA256 = "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32"
+MAX_BOOT_SOURCE = 8192
+
+
+def boot_source_path(restore_script: Path) -> tuple[Path, bool]:
+    """Resolve exact installed hyphen filename vs source-tree sibling."""
+    if restore_script.is_symlink():
+        raise RuntimeError("RESTORE_SCRIPT_SYMLINK")
+    resolved = restore_script.absolute()
+    if resolved.name != "gpt02_owner_ledger_nginx_restore_guard.py":
+        raise RuntimeError("RESTORE_SCRIPT_UNEXPECTED_PATH")
+    if resolved == LIVE_RESTORE:
+        return LIVE_BOOT, True
+    return resolved.with_name("gpt02_1782_failclosed_boot_precheck.py"), False
+
+
+def load_pinned_boot_canonical(source_path: Path, live: bool):
+    """Verify file metadata and SHA BEFORE compiling the read bytes.
+
+    Compiling the same byte buffer avoids hash-then-import filesystem races.
+    The module's main block never runs; no service or Nginx is invoked.
+    """
+    fd = None
+    try:
+        fd = os.open(source_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or
+            not 0 < before.st_size <= MAX_BOOT_SOURCE):
+            raise RuntimeError("BOOT_MODULE_FILE_INVALID")
+        if live and (before.st_uid != 0 or before.st_gid != 0 or
+                     stat.S_IMODE(before.st_mode) != 0o700):
+            raise RuntimeError("BOOT_MODULE_ROOT0700_REQUIRED")
+        source_bytes = os.read(fd, MAX_BOOT_SOURCE + 1)
+        after = os.fstat(fd)
+        fields = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if len(source_bytes) != before.st_size or any(
+            getattr(before, field) != getattr(after, field) for field in fields
+        ):
+            raise RuntimeError("BOOT_MODULE_CHANGED_DURING_READ")
+        if hashlib.sha256(source_bytes).hexdigest() != BOOT_SOURCE_SHA256:
+            raise RuntimeError("BOOT_MODULE_SHA_NOT_APPROVED")
+        scope = {"__name__": "gpt02_verified_boot_from_pinned_bytes",
+                 "__file__": str(source_path)}
+        exec(compile(source_bytes, str(source_path), "exec"), scope)
+        value = scope.get("canonical_closed")
+        if not callable(value):
+            raise RuntimeError("BOOT_MODULE_CONTRACT_UNAVAILABLE")
+        return value
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("BOOT_MODULE_UNAVAILABLE") from None
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+_BOOT_SOURCE, _LIVE_RUNTIME = boot_source_path(Path(__file__))
+canonical_closed = load_pinned_boot_canonical(_BOOT_SOURCE, _LIVE_RUNTIME)
 
 NGINX = Path("/etc/nginx/sites-available/dev-ai-task.cstlogistic.co.id")
 BACKUP = Path("/etc/nginx/dev-ai-task.gpt02-1782-guard-backup.conf")
