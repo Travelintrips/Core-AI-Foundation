@@ -317,7 +317,8 @@ def inspect(now_ms: int | None = None) -> dict:
                                          _root_file(DBA, 8192, 0o600), now_ms)
         result.update(evidence)
         result["readiness"] = "PUBLIC_EVIDENCE_CURRENT_ONLY" if (
-            all(closed.values()) and evidence["public_custody_current"]) else "BLOCKED"
+            all(closed.values()) and evidence["public_custody_current"] and
+            evidence["dba_preparation_off"]) else "BLOCKED"
     except Exception:
         result["readiness"] = "BLOCKED"
     return result
