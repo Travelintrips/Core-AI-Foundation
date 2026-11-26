@@ -274,6 +274,27 @@ class ClosedGateTests(unittest.TestCase):
         self.assertFalse(result["live_e2e_ready"])
         self.assertEqual(result["action"],"RETAIN_NGINX_503")
 
+    def test_current_signed_proofs_do_not_mark_ready_when_dba_preparation_active(self):
+        f=fixture()
+        f["env"]["GPT02_DEV_CUSTODY_DBA_PREPARATION_ENABLED"]="true"
+        payloads={
+            m.VHOST:self.vhost,m.BOOT:self.boot,
+            m.CONFIG:("\n".join(f"{k}={v}" for k,v in f["env"].items())+"\n").encode(),
+            m.WORKER:signed(f["worker_key"],f["worker"]),
+            m.DBA:signed(f["issuer_key"],f["dba"]),
+        }
+        with patch.object(m.os,"geteuid",return_value=0),\
+             patch.object(m.os,"getegid",return_value=0),\
+             patch.object(m.sys,"argv",["safe-preflight.py"]),\
+             patch.object(m.os.path,"lexists",return_value=False),\
+             patch.object(m,"_root_file",side_effect=lambda path,*_:payloads[path]):
+            result=m.inspect(NOW)
+        self.assertTrue(result["public_custody_current"])
+        self.assertFalse(result["dba_preparation_off"])
+        self.assertEqual(result["readiness"],"BLOCKED")
+        self.assertFalse(result["live_e2e_ready"])
+        self.assertEqual(result["action"],"RETAIN_NGINX_503")
+
     def test_wrong_cli_arguments_and_nonroot_cannot_read_protected_inputs(self):
         with patch.object(m.os,"geteuid",return_value=1234),\
              patch.object(m,"_root_file",side_effect=AssertionError("forbidden")):
