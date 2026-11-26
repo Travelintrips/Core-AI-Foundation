@@ -6,6 +6,9 @@ on:
     paths:
       - 'scripts/vps/gpt02_1782_close_only_fallback.py'
       - 'scripts/vps/test_gpt02_1782_close_only_fallback.py'
+      - 'scripts/vps/gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_close_only_boot_reboot_fixture.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.*'
       - 'docs/dev/gpt02-1782-close-only-fallback-20261127.md'
       - '.github/workflows/gpt02-1782-close-only-fallback-dev.yml'
@@ -14,6 +17,9 @@ on:
     paths:
       - 'scripts/vps/gpt02_1782_close_only_fallback.py'
       - 'scripts/vps/test_gpt02_1782_close_only_fallback.py'
+      - 'scripts/vps/gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_close_only_boot_reboot_fixture.py'
       - 'deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.*'
       - 'docs/dev/gpt02-1782-close-only-fallback-20261127.md'
       - '.github/workflows/gpt02-1782-close-only-fallback-dev.yml'
@@ -31,9 +37,16 @@ jobs:
         run: |
           python3 -B -m py_compile \
             scripts/vps/gpt02_1782_close_only_fallback.py \
-            scripts/vps/test_gpt02_1782_close_only_fallback.py
+            scripts/vps/test_gpt02_1782_close_only_fallback.py \
+            scripts/vps/gpt02_1782_primary_timer_budget_readonly.py \
+            scripts/vps/test_gpt02_1782_primary_timer_budget_readonly.py \
+            scripts/vps/test_gpt02_1782_close_only_boot_reboot_fixture.py
           python3 -B -m unittest discover -s scripts/vps \
             -p test_gpt02_1782_close_only_fallback.py -v
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_1782_primary_timer_budget_readonly.py -v
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_1782_close_only_boot_reboot_fixture.py -v
       - name: Verify DORMANT systemd service and timer files
         run: |
           systemd-analyze verify \
@@ -60,5 +73,14 @@ jobs:
           assert '[Install]' not in t.split('# INTENTIONALLY NO [Install]')[0]
           assert 'OnActiveSec=110s' in t
           assert 'ExecStart=/usr/bin/python3 /usr/local/sbin/gpt02_1782_close_only_fallback.py --close-only' in s
+          budget=Path('scripts/vps/gpt02_1782_primary_timer_budget_readonly.py').read_text()
+          assert 'DEFAULT_SYSTEMD_ACCURACY_S = 60' in budget
+          assert 'WINDOW_LIMIT_S = 90' in budget
+          assert 'REVIEW_PRIMARY_DELAY_S = 30' in budget
+          assert 'return 2  # NO timer arming' in budget
+          for forbidden in ('systemctl stop', 'systemctl start', 'ALTER ROLE',
+                            'psycopg.connect(', 'os.replace('):
+              assert forbidden not in budget
+          print('GPT02_UNSAFE_PRIMARY_TIMER_DEFAULT_EXPOSED=PASS')
           print('GPT02_CLOSE_ONLY_FALLBACK_SOURCE_BOUNDARIES=PASS')
           PY
