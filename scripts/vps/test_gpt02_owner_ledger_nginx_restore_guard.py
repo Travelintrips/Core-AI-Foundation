@@ -302,6 +302,14 @@ class GuardTests(unittest.TestCase):
         with self.assertRaisesRegex(mod.GuardError, "ACTIVE_NOT_REGULAR"):
             mod.prepare(link, self.backup)
 
+    def test_default_active_path_uses_installed_sites_enabled_not_sites_available(self):
+        self.assertEqual(
+            mod.NGINX,
+            Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id"),
+        )
+        self.assertEqual(mod.NGINX, boot.ACTIVE)
+        self.assertNotIn("/sites-available/", str(mod.NGINX))
+
     def test_arm_early_30_seconds_with_explicit_accuracy_and_no_gate_open(self):
         unit = "gpt02-1782-owner-ledger-restore"
         properties = (b"ActiveState=active\nAccuracyUSec=1s\n"
