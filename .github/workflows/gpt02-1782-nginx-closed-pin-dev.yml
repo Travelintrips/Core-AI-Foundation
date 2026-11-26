@@ -1,4 +1,4 @@
-name: GPT02-1782 scoped Owner Ledger Nginx boot guard (DEV source-only)
+name: GPT02-1782 full-vhost 4-upstream allowlist boot guard (DEV source-only)
 
 on:
   pull_request:
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile source without opening any live services
         run: python3 -B -m py_compile scripts/vps/gpt02_1782_failclosed_boot_precheck.py scripts/vps/test_gpt02_1782_failclosed_boot_precheck.py
-      - name: Test byte-pinned Owner Ledger route under unrelated upstream changes and safe rollback
+      - name: Test full-vhost SHA with only four approved upstream cutovers and safe rollback
         run: python3 -B -m unittest discover -s scripts/vps -p test_gpt02_1782_failclosed_boot_precheck.py -v
       - name: Verify startup precheck has no administrative executor
         run: |
@@ -33,11 +33,12 @@ jobs:
           from pathlib import Path
           source = Path("scripts/vps/gpt02_1782_failclosed_boot_precheck.py").read_text()
           assert "GPT02_LEDGER_READER_NOT_PROVISIONED" in source
-          assert 'cdbd857bddb84579257182e746281f7e5f12eb1052bab1df64cc101e01a16319' in source
-          assert 'EXPECTED_OWNER_BLOCK_BYTES = 1015' in source
-          assert 'OWNER_URI = b"/api/gpt02-owner-ledger"' in source
-          assert 'EXPECTED_CLOSED_SHA256' not in source
+          assert 'e34dde83f676dec15d27b56241b830cbffe7cb3ba0b07e6699f011d48fb651ed' in source
+          assert 'ORIGINAL_CLOSED_SHA256' in source
+          assert 'ALLOWED_UPSTREAM_TRANSITIONS' in source
+          assert 'canonical_closed(data)' in source
+          assert 'EXPECTED_OWNER_BLOCK_SHA256' not in source
           for forbidden in ("import subprocess", "subprocess.run(", "os.system(", "requests.", "psycopg", "password", "ssh ", "nginx -s reload"):
               assert forbidden not in source, forbidden
-          print("GPT02_BOOT_GATE_SCOPED_OWNER_ROUTE_BOUNDARY=PASS")
+          print("GPT02_BOOT_GATE_WHOLE_VHOST_EXACT_4_CUTOVERS=PASS")
           PY
