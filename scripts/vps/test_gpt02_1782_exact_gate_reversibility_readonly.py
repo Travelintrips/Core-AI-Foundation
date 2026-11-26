@@ -141,6 +141,14 @@ class GateReversibilityTests(unittest.TestCase):
              patch.object(m.os, "getegid", return_value=0), \
              patch.object(m.sys, "argv", ["simulator", "--check"]), \
              patch.object(m, "pinned_guard_source", return_value=helper), \
+             patch.object(m, "inspect_deploy_quiescence", return_value={
+                 "action": "RETAIN_NGINX_503", "ready_to_arm": False,
+                 "live_e2e_ready": False, "dev_ci_watcher_paused": False,
+                 "dev_ci_watcher_service_idle": False,
+                 "public_custody_current": True, "rollback_timer_idle": True,
+                 "unresolved": ["DEV_CI_WATCHER_NOT_PAUSED",
+                                "FRESH_ONE_USE_OWNER_AUTHORIZATION_NOT_VERIFIED"],
+             }), \
              patch.object(m, "checked_file", return_value=BASE):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
@@ -151,6 +159,80 @@ class GateReversibilityTests(unittest.TestCase):
         self.assertEqual(data["readiness"], "SOURCE_SIMULATION_ONLY")
         self.assertEqual(data["action"], "RETAIN_NGINX_503")
         self.assertFalse(data["ready_to_open"])
+
+    def test_watcher_active_snapshot_remains_no_go_despite_exact_reversibility(self):
+        result = {"byte_reversibility": "PASS", "ready_to_open": False}
+        v10 = {
+            "action": "RETAIN_NGINX_503", "ready_to_arm": False,
+            "live_e2e_ready": False, "dev_ci_watcher_paused": False,
+            "dev_ci_watcher_service_idle": False,
+            "public_custody_current": True, "rollback_timer_idle": True,
+            "unresolved": ["DEV_CI_WATCHER_NOT_PAUSED"],
+        }
+        snapshot = m.add_quiescence_snapshot(result, v10)
+        self.assertFalse(snapshot["dev_ci_watcher_paused_snapshot"])
+        self.assertIn("DEV_CI_WATCHER_NOT_PAUSED", snapshot["v10_unresolved"])
+        self.assertFalse(snapshot["ready_to_open"])
+        self.assertEqual(snapshot["action"], "RETAIN_NGINX_503")
+
+    def test_expired_custody_snapshot_cannot_be_called_ready(self):
+        snapshot = m.add_quiescence_snapshot({}, {
+            "action": "RETAIN_NGINX_503", "ready_to_arm": False,
+            "live_e2e_ready": False, "dev_ci_watcher_paused": True,
+            "dev_ci_watcher_service_idle": True,
+            "public_custody_current": False, "rollback_timer_idle": True,
+            "unresolved": ["CUSTODY_OR_CLOSED_SITE_NOT_CURRENT"],
+        })
+        self.assertFalse(snapshot["public_custody_current_snapshot"])
+        self.assertIn("CUSTODY_OR_CLOSED_SITE_NOT_CURRENT", snapshot["v10_unresolved"])
+        self.assertFalse(snapshot["ready_to_open"])
+
+    def test_forged_v10_ready_to_arm_is_rejected(self):
+        for forged in (
+            {"action": "RETAIN_NGINX_503", "ready_to_arm": True,
+             "live_e2e_ready": False, "unresolved": []},
+            {"action": "RETAIN_NGINX_503", "ready_to_arm": False,
+             "live_e2e_ready": True, "unresolved": []},
+            {"action": "OPEN_GATE", "ready_to_arm": False,
+             "live_e2e_ready": False, "unresolved": []},
+        ):
+            with self.subTest(forged=forged), self.assertRaises(m.NotApproved):
+                m.add_quiescence_snapshot({}, forged)
+
+    def test_invalid_or_unbounded_unresolved_reasons_are_rejected(self):
+        for reasons in (["bad-lower-case"], ["FRESH;SYSTEMCTL_STOP"],
+                        ["X" * 81], ["X"] * 13, "WRONG_TYPE"):
+            with self.subTest(reasons=reasons), self.assertRaises(m.NotApproved):
+                m.add_quiescence_snapshot({}, {
+                    "action": "RETAIN_NGINX_503", "ready_to_arm": False,
+                    "live_e2e_ready": False, "unresolved": reasons,
+                })
+
+    def test_unavailable_v10_snapshot_cannot_produce_byte_pass(self):
+        helper = {"GATE": GATE, "COMMENT": COMMENT, "checked": lambda v: v == BASE,
+                  "permitted_open_to_closed": exact_restore}
+        with patch.object(m.os, "geteuid", return_value=0), \
+             patch.object(m.os, "getegid", return_value=0), \
+             patch.object(m.sys, "argv", ["simulator", "--check"]), \
+             patch.object(m, "pinned_guard_source", return_value=helper), \
+             patch.object(m, "checked_file", return_value=BASE), \
+             patch.object(m, "inspect_deploy_quiescence",
+                          side_effect=RuntimeError("UNAVAILABLE")):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = m.main()
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(out.getvalue())["readiness"], "BLOCKED")
+        self.assertEqual(json.loads(out.getvalue())["action"], "RETAIN_NGINX_503")
+
+    def test_no_mutating_watcher_calls_in_source(self):
+        text = SRC.read_text()
+        self.assertIn("v10.read_unit_state", text)
+        self.assertIn("v10.root_guard_verified", text)
+        self.assertIn("v10.public_inspect", text)
+        for forbidden in ("systemctl stop", "systemctl start", "systemd-run",
+                          "subprocess.run(", "os.replace(", "flock(", "ALTER ROLE"):
+            self.assertNotIn(forbidden, text)
 
     def test_unknown_cli_or_private_executor_is_absent(self):
         source = SRC.read_text()
