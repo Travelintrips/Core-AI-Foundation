@@ -11,6 +11,10 @@ from issue238_qa_permit import PermitDenied, verify_permit, WORKER_ID
 from issue238_qa_integrity import verify_source_manifest, verify_image_metadata
 from issue238_qa_ledger import reserve
 
+# Verified CST-DEV AI Core service-token record (separate from worker client ID).
+# A future adapter must authenticate this exact DB-backed credential.
+VPS_AGENT_TOKEN_NAME = "openclaw-vps-dev-consumer"
+
 
 @dataclass(frozen=True)
 class AuthenticatedWork:
@@ -33,7 +37,11 @@ def bind_claimed_ai_core_work(*, credential: dict, claimed_work: dict) -> Authen
     """
     if not isinstance(credential, dict) or not isinstance(claimed_work, dict):
         raise PermitDenied("trusted_work_context_required")
-    if (credential.get("name") != WORKER_ID or credential.get("isActive") is not True):
+    # AI Core registers the canonical work client as openclaw-vps-main,
+    # but its actual scoped service credential is openclaw-vps-dev-consumer.
+    # Do not compare these two different identifiers for equality or accept
+    # an arbitrary agent:work token merely because its scope is sufficient.
+    if (credential.get("name") != VPS_AGENT_TOKEN_NAME or credential.get("isActive") is not True):
         raise PermitDenied("worker_credential_mismatch")
     scopes = credential.get("scopes")
     if not isinstance(scopes, list) or "agent:work" not in scopes:

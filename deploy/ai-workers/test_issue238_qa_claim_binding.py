@@ -5,7 +5,7 @@ from issue238_qa_preflight import bind_claimed_ai_core_work
 
 class ClaimBindingTests(unittest.TestCase):
     def setUp(self):
-        self.credential={"name":"openclaw-vps-main","isActive":True,"scopes":["agent:work"]}
+        self.credential={"name":"openclaw-vps-dev-consumer","isActive":True,"scopes":["agent:work"]}
         self.work={"commandId":"CMD-issue238-123","taskId":"JOB-issue238-123",
                    "status":"PROCESSING","claimToken":"claim-1",
                    "metadata":{"claimedBy":"openclaw-vps-main","assignedClientId":"openclaw-vps-main"}}
@@ -14,6 +14,12 @@ class ClaimBindingTests(unittest.TestCase):
         self.assertEqual(identity.authenticated_worker_id,"openclaw-vps-main")
         self.assertEqual(identity.durable_command_id,self.work["commandId"])
         self.assertEqual(identity.durable_job_id,self.work["taskId"])
+    def test_canonical_worker_name_is_not_an_agent_token_identity(self):
+        with self.assertRaisesRegex(PermitDenied,"worker_credential_mismatch"):
+            bind_claimed_ai_core_work(
+                credential={**self.credential,"name":"openclaw-vps-main"},
+                claimed_work=self.work)
+
     def test_cross_worker_credential_and_claim_denied(self):
         for side in ("credential","claimedBy","assignedClientId"):
             c=self.credential.copy();w={**self.work,"metadata":self.work["metadata"].copy()}
