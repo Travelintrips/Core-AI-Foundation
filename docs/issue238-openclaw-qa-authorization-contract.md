@@ -133,3 +133,25 @@ server-side verification that the returned credential is the real DB-backed
 service token and that the command/lease currently exists in the durable AI
 Core record. It cannot mint a claim, issue an Owner permit, or run a fixture.
 Only source-only unit tests have executed; no worker runtime or SQL changes.
+
+## Source-only authenticated claim-readiness endpoint (26 Nov 2026)
+
+`GET /api/ai/agent-runtime/dev/issue238/claim-readiness/:commandId`
+requires the existing DB-authenticated `agent:work` token whose exact service
+record is `openclaw-vps-dev-consumer`, the CST-DEV host, and the existing
+AI Core claim token in `x-ai-claim-token`. Its **SELECT-only** database query
+requires a PROCESSING row with the exact command UUID and non-null task UUID,
+`claimedBy` and `assignedClientId` both `openclaw-vps-main`, an explicit
+`issue238QaPurpose=issue238-pg17-disposable-qa` marker, exact active claim
+token, and lease valid from the database clock for at most five minutes.
+A missing/mismatched claim returns 404; it never returns the claim token.
+It reports `approvalIssued=false,permitIssued=false,qaExecuted=false` to
+avoid confusing claim readiness with authority to run QA.
+
+**This endpoint does not create/dispatch a work command and cannot prove that
+a caller-provided purpose marker itself was authorized by the Owner.** A
+separate reviewed issuer of the original command must establish that trusted
+purpose, and the signed fresh Owner request must still bind the exact command
+and task IDs before the existing permit issuer and isolated QA runner may be
+used. No active executor/DB roles/Finance writers or PROD routes are changed
+by this source-only PR.
