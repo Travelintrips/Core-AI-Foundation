@@ -16,13 +16,23 @@ A real read-only host review of the current active Nginx vhost `/etc/nginx/sites
 4. Pass those opened bytes into the **existing** guard's `permitted_open_to_closed` function. It must return the **exact original bytes**, including the unrelated upstream changes. Any unexpected edit, duplicated gate, opened baseline, invalid guard or byte mismatch means BLOCKED.
 5. Output only public hashes and boolean pass/fail markers, never the Nginx source, signed browser tokens, JWTs, SQL credentials, private keys or Owner Ledger records.
 
+## Mandatory shared DEV release status, reuse existing v10 checker
+
+The gate-byte simulation now also imports the **already merged PR #1852** inert `gpt02_1782_negative_window_v10_readonly` policy at runtime. Instead of copying or relaxing any readiness checks, it invokes that module's existing `public_inspect`, `read_unit_state`, `root_guard_verified` and `evaluate`. In addition to exact-byte reversibility, a usable report must include:
+
+- `dev_ci_watcher_paused_snapshot` and `dev_ci_watcher_service_idle_snapshot`, requiring the timer **inactive** and service **inactive**. Any active, activating, failed or unknown service state means NO-GO.
+- `public_custody_current_snapshot` and `rollback_timer_idle_snapshot`, disallowing stale/mismatched DBA proof, missing Nginx integrity, or a prior armed rollback.
+- `v10_unresolved`, with only bounded static uppercase blocker codes. The report **rejects any forged `ready_to_arm=true`, `live_e2e_ready=true` or action other than `RETAIN_NGINX_503`**.
+
+Even if all those observations pass, a point-in-time `systemctl show` snapshot **does not reserve or freeze** a future 90-second deployment window; a future separately approved operator must still stop the watcher, obtain the existing release lock and arrange independent recovery before it opens anything. This diagnostic NEVER does those operations. It always emits `ready_to_open=false`, `live_e2e_ready=false` and exits 2.
+
 Command for a future separately authorized operator reviewer (after candidate source is reviewed/approved and installed, but **not** as part of this PR):
 
 ```bash
 /usr/bin/python3 /usr/local/sbin/gpt02_1782_exact_gate_reversibility_readonly.py --check
 ```
 
-The checker **always exits 2**, even when `byte_reversibility=PASS`, with `ready_to_open=false`, `live_e2e_ready=false`, `action=RETAIN_NGINX_503`. There is **no `--execute` mode**, no root vhost write, no `nginx -t` or reload, no systemd operation and no database role operation. This PR is kept draft to avoid a normal Core DEV deployment triggered by changes under `scripts/vps/` in the existing CI watcher.
+The checker **always exits 2**, even when `byte_reversibility=PASS`, with `ready_to_open=false`, `live_e2e_ready=false`, `action=RETAIN_NGINX_503`. There is **no `--execute` mode**, no root vhost write, no `nginx -t` or reload, no systemd operation and no database role operation. This PR is kept draft to avoid a normal Core DEV deployment triggered by changes under `scripts/vps/` in the existing CI watcher. The already merged v10 module must be available in the reviewer environment; if not, its absence is BLOCKED, not substituted with a weaker check.
 
 ## Separate future high-risk steps NOT implemented here
 
