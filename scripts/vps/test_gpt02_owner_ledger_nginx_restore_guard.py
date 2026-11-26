@@ -121,12 +121,14 @@ class GuardTests(unittest.TestCase):
                 opened = changed_closed.replace(mod.GATE, mod.COMMENT, 1)
                 self.assertNotIn(mod.GATE, opened)
                 self.active.write_bytes(opened)
-                with self.root_backup_metadata(), patch.object(mod, "run_maintenance") as maintenance:
+                with self.root_backup_metadata(), patch.object(mod, "run_maintenance") as maintenance, \
+                     patch.object(mod, "verify_public_gate_closed") as status:
                     outcome = mod.restore(
                         self.active, self.backup, ["nginx", "-t"], ["systemctl", "reload", "nginx"]
                     )
-                    self.assertEqual(outcome, "RESTORED_GATE_CLOSED")
+                    self.assertEqual(outcome, "RESTORED_GATE_CLOSED_VERIFIED")
                     maintenance.assert_called_once()
+                    status.assert_called_once()
                 self.assertEqual(self.active.read_bytes(), changed_closed)
                 self.assertTrue(boot.canonical_closed(self.active.read_bytes()))
                 self.assertEqual(self.backup.read_bytes(), original)
@@ -136,9 +138,54 @@ class GuardTests(unittest.TestCase):
         for choices in product((False, True), repeat=4):
             changed = switched(BASELINE, {i for i, flag in enumerate(choices) if flag})
             self.active.write_bytes(changed)
-            with self.root_backup_metadata(), patch.object(mod, "run_maintenance") as maintenance:
-                self.assertEqual(mod.restore(self.active, self.backup, [], []), "ALREADY_CLOSED")
-                maintenance.assert_not_called()
+            with self.root_backup_metadata(), patch.object(mod, "run_maintenance") as maintenance, \
+                 patch.object(mod, "verify_public_gate_closed") as status:
+                self.assertEqual(mod.restore(self.active, self.backup, [], []),
+                                 "ALREADY_CLOSED_RELOADED_VERIFIED")
+                maintenance.assert_called_once()
+                status.assert_called_once()
+
+    def test_http503_without_json_or_no_store_fails_verification(self):
+        valid=(
+            b"HTTP/1.1 503 Service Temporarily Unavailable\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Cache-Control: no-store\r\n"
+            b"\r\n"
+            b'{"error":"GPT02_LEDGER_READER_NOT_PROVISIONED"}'
+        )
+        cases=[
+            valid.replace(b"503 ", b"200 ",1),
+            valid.replace(b"Cache-Control: no-store\r\n", b""),
+            valid.replace(b"application/json",b"text/html"),
+            valid.replace(b"GPT02_LEDGER_READER_NOT_PROVISIONED", b"other"),
+            b"garbage",
+        ]
+        for response in cases:
+            with self.subTest(response=response[:80]), patch.object(mod.subprocess,"run") as run:
+                run.return_value.returncode=0
+                run.return_value.stdout=response
+                with self.assertRaisesRegex(mod.GuardError,"PUBLIC_GATE_NOT_VERIFIED_503"):
+                    mod.verify_public_gate_closed()
+        with patch.object(mod.subprocess,"run") as run:
+            run.return_value.returncode=0
+            run.return_value.stdout=valid
+            mod.verify_public_gate_closed()
+            args=run.call_args.args[0]
+            self.assertIn("--resolve",args)
+            self.assertIn("dev-ai-task.cstlogistic.co.id:443:127.0.0.1",args)
+            self.assertNotIn("-H",args)
+            self.assertNotIn("--header",args)
+            self.assertNotIn("--data",args)
+
+    def test_reloaded_already_closed_state_with_failed_public_check_is_not_a_false_pass(self):
+        self.prepare_closed()
+        self.active.write_bytes(switched(BASELINE,{0,2}))
+        with self.root_backup_metadata(),patch.object(mod,"run_maintenance") as maintenance,\
+             patch.object(mod,"verify_public_gate_closed",side_effect=mod.GuardError("PUBLIC_GATE_NOT_VERIFIED_503")):
+            with self.assertRaisesRegex(mod.GuardError,"PUBLIC_GATE_NOT_VERIFIED_503"):
+                mod.restore(self.active,self.backup,["nginx","-t"],["systemctl","reload","nginx"])
+            maintenance.assert_called_once()
+        self.assertTrue(boot.canonical_closed(self.active.read_bytes()))
 
     def test_nonallowlisted_concurrent_edit_still_refuses_to_overwrite(self):
         self.prepare_closed()
