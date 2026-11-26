@@ -1,0 +1,56 @@
+name: GPT02-1782 v10 negative window safety preflight (DEV source-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_1782_negative_window_v10_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_negative_window_v10_readonly.py'
+      - '.github/workflows/gpt02-1782-v10-negative-window-readonly.yml'
+      - 'docs/dev/gpt02-1782-negative-window-v10-no-go-20261127.md'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_1782_negative_window_v10_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_negative_window_v10_readonly.py'
+      - '.github/workflows/gpt02-1782-v10-negative-window-readonly.yml'
+      - 'docs/dev/gpt02-1782-negative-window-v10-no-go-20261127.md'
+
+permissions:
+  contents: read
+
+jobs:
+  v10-inert-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolated pinned verification runtime
+        run: |
+          python3 -m venv .venv-gpt02-v10
+          .venv-gpt02-v10/bin/python -m pip install --disable-pip-version-check --no-input cryptography==41.0.7
+      - name: Syntax and no-execute offline regression tests
+        run: |
+          .venv-gpt02-v10/bin/python -B -m py_compile \
+            scripts/vps/gpt02_1782_negative_window_v10_readonly.py \
+            scripts/vps/test_gpt02_1782_negative_window_v10_readonly.py
+          .venv-gpt02-v10/bin/python -B -m unittest discover \
+            -s scripts/vps -p test_gpt02_1782_negative_window_v10_readonly.py -v
+      - name: Static forbid writer/issuer/role/NgInx opening
+        run: |
+          .venv-gpt02-v10/bin/python - <<'PY'
+          from pathlib import Path
+          src = Path("scripts/vps/gpt02_1782_negative_window_v10_readonly.py").read_text()
+          assert 'from gpt02_owner_ledger_fresh_readiness_readonly import inspect' in src
+          assert 'RESTORE_SHA256 = "e8e874d3d05de88f405d7584ede63a51539ad1e986aed2a2c620773ea2e92448"' in src
+          assert 'cst-vps-dev-ci-watcher.timer' in src
+          assert 'return 2  # Inert preflight' in src
+          assert '"ready_to_arm": False' in src
+          assert '"live_e2e_ready": False' in src
+          assert '"action": "RETAIN_NGINX_503"' in src
+          for bad in ('os.replace(', 'os.system(', 'ALTER ROLE',
+                      'systemctl start', 'systemctl stop', 'systemd-run',
+                      'psycopg.connect(', 'nginx -s reload', 'requests.post('):
+              assert bad not in src, bad
+          print('GPT02_V10_INERT_READONLY_BOUNDARY=PASS')
+          PY
