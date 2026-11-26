@@ -71,8 +71,17 @@ class GuardTests(unittest.TestCase):
         self.backup = self.root / "backup.conf"
         self.active.write_bytes(BASELINE)
         old_sha = boot.ORIGINAL_CLOSED_SHA256
-        boot.ORIGINAL_CLOSED_SHA256 = hashlib.sha256(BASELINE).hexdigest()
+        fixture_sha = hashlib.sha256(BASELINE).hexdigest()
+        boot.ORIGINAL_CLOSED_SHA256 = fixture_sha
         self.addCleanup(lambda: setattr(boot, "ORIGINAL_CLOSED_SHA256", old_sha))
+        # Verified boot bytes are compiled into an isolated namespace. The
+        # disposable fixture must configure THAT namespace as well; the real
+        # pin in source and root installation stays untouched.
+        verified_globals = mod.canonical_closed.__globals__
+        verified_pin = verified_globals["ORIGINAL_CLOSED_SHA256"]
+        verified_globals["ORIGINAL_CLOSED_SHA256"] = fixture_sha
+        self.addCleanup(lambda: verified_globals.__setitem__(
+            "ORIGINAL_CLOSED_SHA256", verified_pin))
 
     @contextmanager
     def root_backup_metadata(self):
@@ -111,6 +120,7 @@ class GuardTests(unittest.TestCase):
     def test_verified_helper_is_byte_pinned_and_does_not_start_the_boot_script(self):
         pinned = SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py")
         helper = mod.load_pinned_boot_canonical(pinned, live=False)
+        helper.__globals__["ORIGINAL_CLOSED_SHA256"] = hashlib.sha256(BASELINE).hexdigest()
         self.assertTrue(helper(BASELINE))
         self.assertFalse(helper(BASELINE+b"unexpected"))
         self.assertEqual(mod.BOOT_SOURCE_SHA256, hashlib.sha256(pinned.read_bytes()).hexdigest())
