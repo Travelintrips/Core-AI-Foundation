@@ -14,8 +14,10 @@ import { OPENCLAW_PC_CLIENT_IDS } from "../services/openClawFailoverSelectionSer
 import { chooseActivePc } from "../services/openClawPcLeaderService.js";
 import { submitCodingBridgeCommand } from "../services/localCodingControlBridgeService.js";
 import { getExternalAgentRule } from "../services/externalAgentRegistryService.js";
+import { createIssue238ReadonlyClaimRouter } from "./dev-issue238-readonly-claim.js";
 
 const router = Router();
+router.use("/ai/agent-runtime/dev/issue238/claim-readiness", createIssue238ReadonlyClaimRouter());
 
 // Agent credentials management. Secrets are returned once, never persisted in plaintext.
 function requireSameOrigin(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): void {
