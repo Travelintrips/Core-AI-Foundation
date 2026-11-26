@@ -107,6 +107,53 @@ def examine_bytes(data: bytes, *, gate: bytes, comment: bytes,
     }
 
 
+def inspect_deploy_quiescence() -> dict:
+    """Reuse the merged, inert v10 policy to check the watcher and proof status.
+
+    No systemd change and no lock acquisition. Even an idle snapshot cannot
+    grant a freeze lasting through a future shared-DEV test.
+    """
+    import gpt02_1782_negative_window_v10_readonly as v10
+    public = v10.public_inspect()
+    states = {name: v10.read_unit_state(name) for name in
+              (v10.WATCHER_TIMER, v10.WATCHER_SERVICE, v10.ROLLBACK_TIMER)}
+    result = v10.evaluate(public, v10.root_guard_verified(), states)
+    if (result.get("action") != "RETAIN_NGINX_503"
+        or result.get("ready_to_arm") is not False
+        or result.get("live_e2e_ready") is not False
+        or not isinstance(result.get("unresolved"), list)):
+        raise NotApproved("V10_DEPLOY_POLICY_UNEXPECTED")
+    return result
+
+
+def add_quiescence_snapshot(evidence: dict, v10: dict) -> dict:
+    """Expose only bounded public booleans and static fail-closed blockers."""
+    if (not isinstance(v10, dict) or
+        v10.get("action") != "RETAIN_NGINX_503"
+        or v10.get("ready_to_arm") is not False
+        or v10.get("live_e2e_ready") is not False):
+        raise NotApproved("V10_SAFETY_AUTHORITY_INVALID")
+    blockers = v10.get("unresolved")
+    if (not isinstance(blockers, list)
+        or len(blockers) > 12
+        or any(not isinstance(v, str) or
+               len(v) > 80 or not v.isupper() or
+               any(ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for ch in v)
+               for v in blockers)):
+        raise NotApproved("V10_BLOCKER_REPORT_INVALID")
+    return {
+        **evidence,
+        "dev_ci_watcher_paused_snapshot": v10.get("dev_ci_watcher_paused") is True,
+        "dev_ci_watcher_service_idle_snapshot": v10.get("dev_ci_watcher_service_idle") is True,
+        "public_custody_current_snapshot": v10.get("public_custody_current") is True,
+        "rollback_timer_idle_snapshot": v10.get("rollback_timer_idle") is True,
+        "v10_unresolved": blockers,
+        "ready_to_open": False,
+        "live_e2e_ready": False,
+        "action": "RETAIN_NGINX_503",
+    }
+
+
 def main() -> int:
     if os.geteuid() != 0 or os.getegid() != 0 or sys.argv[1:] != ["--check"]:
         print('{"action":"RETAIN_NGINX_503","ready_to_open":false,"readiness":"BLOCKED"}')
@@ -119,6 +166,7 @@ def main() -> int:
             is_closed=helper["checked"],
             close_opened=helper["permitted_open_to_closed"],
         )
+        evidence = add_quiescence_snapshot(evidence, inspect_deploy_quiescence())
         evidence["byte_reversibility"] = "PASS"
         evidence["scope"] = "GPT02-1782-CST-DEV"
         evidence["readiness"] = "SOURCE_SIMULATION_ONLY"
