@@ -16,6 +16,8 @@ import subprocess
 import sys
 import tempfile
 
+from gpt02_1782_failclosed_boot_precheck import canonical_closed
+
 NGINX = Path("/etc/nginx/sites-available/dev-ai-task.cstlogistic.co.id")
 BACKUP = Path("/etc/nginx/dev-ai-task.gpt02-1782-guard-backup.conf")
 GATE = b"""return 503 '{"error":"GPT02_LEDGER_READER_NOT_PROVISIONED"}';"""
@@ -34,7 +36,17 @@ def digest(data: bytes) -> str:
 
 
 def checked(data: bytes) -> bool:
-    return data.count(GATE) == 1 and data.count(LOCATION) == 1 and data.count(PROXY) >= 1
+    # Reuse the full-vhost allowlist verifier from the sibling boot guard.
+    return canonical_closed(data)
+
+def permitted_open_to_closed(data: bytes) -> bytes:
+    """Return closed bytes only for the exact allowed gate-to-comment opening."""
+    if data.count(GATE) != 0 or data.count(COMMENT) != 1:
+        raise GuardError("UNEXPECTED_NGINX_CHANGE_REFUSED")
+    closed = data.replace(COMMENT, GATE, 1)
+    if not checked(closed):
+        raise GuardError("UNEXPECTED_NGINX_CHANGE_REFUSED")
+    return closed
 
 
 def atomic_root_write(path: Path, data: bytes, mode: int) -> None:
