@@ -148,9 +148,14 @@ def run_existing_restore() -> bool:
 
 def close_only() -> dict:
     plan, before = capture_evidence()
-    if plan != "CLOSED_NO_BACKUP_VERIFY_EFFECTIVE_503":
-        if not run_existing_restore():
-            raise RecoveryBlocked("EXISTING_RESTORE_GUARD_FAILED")
+    should_restore = plan != "CLOSED_NO_BACKUP_VERIFY_EFFECTIVE_503"
+    # The primary 90-second guard leaves its sealed backup for audit. If it
+    # already restored the exact closed file AND live HTTPS is 503/no-store,
+    # the later independent fallback must NOT reload shared Nginx a second time.
+    if plan == "CLOSED_WITH_BACKUP_RELOAD_AND_VERIFY" and verify_live_503():
+        should_restore = False
+    if should_restore and not run_existing_restore():
+        raise RecoveryBlocked("EXISTING_RESTORE_GUARD_FAILED")
     after_plan, after = capture_evidence()
     if after_plan not in (
         "CLOSED_NO_BACKUP_VERIFY_EFFECTIVE_503",
@@ -164,7 +169,7 @@ def close_only() -> dict:
     return {
         "scope": "GPT02-1782-CST-DEV",
         "recovery": "EXACT_CLOSED_503_VERIFIED",
-        "existing_guard_invoked": plan != "CLOSED_NO_BACKUP_VERIFY_EFFECTIVE_503",
+        "existing_guard_invoked": should_restore,
         "active_target": "sites-enabled",
         "nginx_http503_json_no_store": True,
         "source_approved_closed_sha256": hashlib.sha256(after).hexdigest(),
