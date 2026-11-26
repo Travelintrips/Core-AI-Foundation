@@ -222,7 +222,11 @@ router.post("/api/ai/core-chat/oauth/register", (req, res): void => {
 // MCP is hosted on a dedicated subdomain, without the normal app /login UI.
 // Reuse the existing rate-limited internal authentication endpoint on this origin;
 // its host-only session cookie is then visible to OAuth pairing approval.
-router.get("/api/ai/core-chat/oauth/login", (_req, res): void => {
+router.get("/api/ai/core-chat/oauth/login", (req, res): void => {
+  if (resolveSessionPayload(req)) {
+    res.type("html").send('<!doctype html><html lang="id"><meta charset="utf-8"><title>Login AI Core MCP</title><body style="font:16px system-ui;max-width:560px;margin:60px auto"><h1>Login berhasil</h1><p>Sesi AI Core sudah aktif. Kembali ke tab pairing OAuth dan lanjutkan persetujuan akses.</p></body></html>');
+    return;
+  }
   res.type("html").send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login AI Core MCP</title>
 <style>body{font:16px system-ui;max-width:460px;margin:56px auto;padding:0 20px}form{display:grid;gap:14px}label{display:grid;gap:5px}input{padding:10px}button{padding:12px;font-weight:bold}.muted{color:#555}</style></head><body>
 <h1>Login AI Core MCP</h1><p>Masuk dengan akun internal AI Core untuk menyetujui koneksi ChatGPT.</p>
@@ -230,7 +234,7 @@ router.get("/api/ai/core-chat/oauth/login", (_req, res): void => {
 <label>Email<input type="email" name="email" autocomplete="username" required></label>
 <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
 <button type="submit">Masuk</button></form>
-<h2>Login melalui email</h2><form method="post" action="/api/internal/auth/request-magic-link"><label>Email akun AI Core<input type="email" name="email" autocomplete="email" required></label><button type="submit">Kirim tautan login ke email</button></form><p class="muted">Tautan berlaku 10 menit. Setelah membukanya di browser yang sama, kembali ke halaman persetujuan OAuth dan muat ulang.</p>
+<p class="muted">Gunakan akun internal AI Core yang sudah terdaftar. Setelah login berhasil, kembali ke halaman persetujuan OAuth.</p>
 </body></html>`);
 });
 
