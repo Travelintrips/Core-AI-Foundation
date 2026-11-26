@@ -181,7 +181,7 @@ class FreshPublicCustodyTests(unittest.TestCase):
 
 class CanonicalInstalledBootTests(unittest.TestCase):
     def test_merged_pr1851_boot_source_hash_pinned_and_any_tamper_refused(self):
-        source=SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()
+        source=SCRIPT.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()
         self.assertEqual(hashlib.sha256(source).hexdigest(),m.BOOT_SHA)
         self.assertFalse(m._pinned_canonical_closed(b"not-an-approved-nginx-site",source))
         self.assertFalse(m._pinned_canonical_closed(b"anything",source+b"\n# tamper"))
@@ -208,7 +208,7 @@ class CanonicalInstalledBootTests(unittest.TestCase):
             b"    }\n"
             b"}\n"
         )
-        base=SOURCE.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()
+        base=SCRIPT.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()
         original=b"e34dde83f676dec15d27b56241b830cbffe7cb3ba0b07e6699f011d48fb651ed"
         self.assertEqual(base.count(original),1)
         pinned=base.replace(original,hashlib.sha256(site).hexdigest().encode(),1)
