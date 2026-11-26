@@ -62,7 +62,7 @@ class ScopedGateTests(TestCase):
         self.assertIn("EXPECTED_OWNER_BLOCK_BYTES = 1015", source)
         self.assertNotIn("EXPECTED_CLOSED_SHA256", source)
         self.assertNotIn(OLD_WHOLE_FILE_PIN, source)
-        self.assertIn("closed_owner_gate(data)", source)
+        self.assertIn("def closed_owner_gate(data: bytes)", source)
 
     def test_closed_route_passes_with_unrelated_upstream_changes(self):
         self.assertEqual(guard.guarded(self.active, self.backup), ("PASS_GATE_CLOSED", 0))
