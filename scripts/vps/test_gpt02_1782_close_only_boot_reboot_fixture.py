@@ -34,6 +34,25 @@ class BootRestartFixtureTests(unittest.TestCase):
         self.allowed.start()
         self.addCleanup(self.allowed.stop)
 
+    def guarded_with_synthetic_backup_owner(self, owner_uid=0):
+        """Model only backup st_uid on a non-root runner; all bytes/modes real.
+
+        CI is not root, and the unchanged production boot guard intentionally
+        rejects non-root backups. A fixture must model a root-owned sealed
+        backup to reach the later exact-byte restoration checks.
+        """
+        actual_stat=Path.stat
+        def synthetic_stat(path,*args,**kw):
+            info=actual_stat(path,*args,**kw)
+            if path==self.backup:
+                fields=list(info)
+                fields[4]=owner_uid
+                fields[5]=0
+                return os.stat_result(fields)
+            return info
+        with patch.object(Path,"stat",synthetic_stat):
+            return boot.guarded(self.active,self.backup)
+
     def test_repo_boot_guard_is_exact_installed_root_source(self):
         self.assertEqual(
             hashlib.sha256(SRC.read_bytes()).hexdigest(),
@@ -51,7 +70,7 @@ class BootRestartFixtureTests(unittest.TestCase):
         self.backup.write_bytes(CLOSED)
         self.backup.chmod(0o600)
         self.active.write_bytes(OPEN)
-        result,code=boot.guarded(self.active,self.backup)
+        result,code=self.guarded_with_synthetic_backup_owner()
         self.assertEqual((result,code),("PASS_RESTORED_GATE",0))
         self.assertEqual(self.active.read_bytes(),CLOSED)
         self.assertEqual(self.backup.read_bytes(),CLOSED)
@@ -66,7 +85,7 @@ class BootRestartFixtureTests(unittest.TestCase):
         self.active.write_bytes(OPEN+b"\n# unknown deployment")
         self.backup.write_bytes(CLOSED)
         self.backup.chmod(0o600)
-        result,code=boot.guarded(self.active,self.backup)
+        result,code=self.guarded_with_synthetic_backup_owner()
         self.assertEqual((result,code),("BLOCK_UNEXPECTED_ACTIVE_CHANGE",2))
         self.assertEqual(self.active.read_bytes(),OPEN+b"\n# unknown deployment")
 
@@ -74,7 +93,7 @@ class BootRestartFixtureTests(unittest.TestCase):
         self.active.write_bytes(OPEN)
         self.backup.write_bytes(CLOSED)
         self.backup.chmod(0o644)
-        result,code=boot.guarded(self.active,self.backup)
+        result,code=self.guarded_with_synthetic_backup_owner()
         self.assertEqual((result,code),("BLOCK_UNTRUSTED_BACKUP",2))
         self.assertEqual(self.active.read_bytes(),OPEN)
 
@@ -82,8 +101,16 @@ class BootRestartFixtureTests(unittest.TestCase):
         self.active.write_bytes(OPEN)
         self.backup.write_bytes(CLOSED+b"\n# drift")
         self.backup.chmod(0o600)
-        result,code=boot.guarded(self.active,self.backup)
+        result,code=self.guarded_with_synthetic_backup_owner()
         self.assertEqual((result,code),("BLOCK_INVALID_BASELINE",2))
+        self.assertEqual(self.active.read_bytes(),OPEN)
+
+    def test_nonroot_backup_is_refused_even_if_0600_and_bytes_match(self):
+        self.active.write_bytes(OPEN)
+        self.backup.write_bytes(CLOSED)
+        self.backup.chmod(0o600)
+        result,code=self.guarded_with_synthetic_backup_owner(owner_uid=1001)
+        self.assertEqual((result,code),("BLOCK_UNTRUSTED_BACKUP",2))
         self.assertEqual(self.active.read_bytes(),OPEN)
 
     def test_start_with_backup_symlink_is_blocked(self):
@@ -109,7 +136,7 @@ class BootRestartFixtureTests(unittest.TestCase):
         self.active.write_bytes(OPEN+b"\n"+boot.COMMENT)
         self.backup.write_bytes(CLOSED)
         self.backup.chmod(0o600)
-        result,code=boot.guarded(self.active,self.backup)
+        result,code=self.guarded_with_synthetic_backup_owner()
         self.assertEqual((result,code),("BLOCK_UNEXPECTED_ACTIVE_CHANGE",2))
 
     def test_primary_and_secondary_are_independent_source_units(self):
