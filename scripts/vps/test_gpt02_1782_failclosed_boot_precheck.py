@@ -93,6 +93,18 @@ class ScopedGateTests(TestCase):
                 self.assertEqual(guard.guarded(self.active,self.backup),("BLOCK_CLOSED_OWNER_GATE_DRIFT",2))
                 self.assertEqual(self.active.read_bytes(),changed)
 
+    def test_server_level_error_page_cannot_override_closed_http503(self):
+        cases = (
+            b"    error_page 503 = /fallback;",
+            b"    error_page 502 503 504 = /fallback;",
+            b"    error_page  503  /fallback;",
+        )
+        for statement in cases:
+            with self.subTest(statement=statement):
+                modified = CLOSED.replace(b"    # GPT02 Owner approval:", statement+b"\n    # GPT02 Owner approval:", 1)
+                self.active.write_bytes(modified)
+                self.assertEqual(guard.guarded(self.active,self.backup),("BLOCK_CLOSED_OWNER_GATE_DRIFT",2))
+
     def test_duplicate_or_overriding_owner_location_is_rejected(self):
         for line in (
             b"    location = /api/gpt02-owner-ledger/decision/x { return 200; }\n",
