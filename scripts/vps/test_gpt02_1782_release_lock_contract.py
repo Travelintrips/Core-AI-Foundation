@@ -146,7 +146,7 @@ class ReleaseLockContractTests(unittest.TestCase):
         self.assertEqual(m.RELEASE_SHA256,
                          "ad0063421453184a7d3a66d1dffd2de3b7e74dced081e232315425e9aff1c2c8")
         self.assertEqual(m.WATCHER_SHA256,
-                         "5126bfd118e8352e979b5ab5c6929d8baf290dc6ef2e51c5076109d5f6f1b3dea")
+                         "5126bfd118e8352e979b5ab5c6929d8bf290dc6ef2e51c5076109d5f6f1b3dea")
         self.assertEqual(str(m.LOCK), "/run/lock/cst-vps-dev-release.lock")
 
     def test_no_timer_mutation_or_operator_mode_in_source(self):
