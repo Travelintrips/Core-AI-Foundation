@@ -20,8 +20,8 @@ export type Gpt02PinnedReaderDbTransport = Readonly<{
 }>;
 
 export function resolveGpt02ReaderDbTransport(config: {
-  host: unknown; port: unknown; database: unknown; user: unknown;
-  projectId: unknown; sslMode: unknown;
+  host?: unknown; port?: unknown; database?: unknown; user?: unknown;
+  projectId?: unknown; sslMode?: unknown;
 }): Gpt02PinnedReaderDbTransport | null {
   if (config.projectId !== GPT02_CUSTODY_PROJECT ||
       config.user !== GPT02_CUSTODY_READER_ROLE ||
