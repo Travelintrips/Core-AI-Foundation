@@ -273,6 +273,28 @@ describe("GPT02 separated Super Admin ledger custody", () => {
     expect(JSON.stringify(receipt)).not.toContain(CA);
   });
 
+  it("accepts only exact session-pooler TLS wire login while retaining the native PostgreSQL identity gate", async () => {
+    const { replaceContent } = installFixture();
+    const host = "aws-0-ap-southeast-2.pooler.supabase.com";
+    replaceContent(CREDENTIAL, Buffer.from(JSON.stringify({ ...CONFIG, host })));
+    const receipt = await readGpt02SuperAdminLedgerReceipt(CHALLENGE, ACTOR);
+    expect(receipt).toMatchObject({ challengeId: CHALLENGE, decision: "APPROVED" });
+    expect(mocks.createPool).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      host, port: 5432, database: "postgres",
+      user: `${CONFIG.user}.${CONFIG.projectId}`,
+      ssl: { ca: CA, rejectUnauthorized: true, servername: host },
+    }));
+  });
+
+  it("denies session-pooler login that did not map to the native reader role", async () => {
+    const { replaceContent } = installFixture({ ...IDENTITY, actor: "postgres" });
+    replaceContent(CREDENTIAL, Buffer.from(JSON.stringify({
+      ...CONFIG, host: "aws-0-ap-southeast-2.pooler.supabase.com",
+    })));
+    await expectCustodyDenied(readGpt02SuperAdminLedgerReceipt(CHALLENGE, ACTOR));
+    expect(mocks.createPool).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["writer session user", { actor: "aicore_dev_runtime" }],
     ["writer effective role", { effective: "aicore_dev_runtime" }],
