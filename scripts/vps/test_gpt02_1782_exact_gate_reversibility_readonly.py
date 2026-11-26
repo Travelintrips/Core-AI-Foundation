@@ -234,6 +234,87 @@ class GateReversibilityTests(unittest.TestCase):
                           "subprocess.run(", "os.replace(", "flock(", "ALTER ROLE"):
             self.assertNotIn(forbidden, text)
 
+    def test_post_rollback_all_facts_only_suggest_operator_review(self):
+        facts={k: True for k in m.RECOVERY_REVIEW_TRUE_FIELDS}
+        facts["dedicated_reader_active_sessions"]=0
+        report=m.assess_watcher_recovery_contract(facts)
+        self.assertEqual(report["recovery_review"],"CANDIDATE_ONLY")
+        self.assertEqual(report["missing"],[])
+        self.assertFalse(report["review_is_live_attestation"])
+        self.assertFalse(report["watcher_resumed"])
+        self.assertFalse(report["nginx_reloaded"])
+        self.assertEqual(report["action"],"NO_HOST_OPERATION")
+
+    def test_every_required_post_rollback_fact_cannot_be_omitted(self):
+        good={k:True for k in m.RECOVERY_REVIEW_TRUE_FIELDS}
+        good["dedicated_reader_active_sessions"]=0
+        for field in m.RECOVERY_REVIEW_TRUE_FIELDS:
+            with self.subTest(field=field):
+                facts={k:v for k,v in good.items() if k!=field}
+                result=m.assess_watcher_recovery_contract(facts)
+                self.assertEqual(result["recovery_review"],"BLOCKED")
+                self.assertIn(field,result["missing"])
+                self.assertFalse(result["watcher_resumed"])
+
+    def test_http503_plain_text_or_nginx_not_reloaded_blocks_watcher_recovery(self):
+        good={k:True for k in m.RECOVERY_REVIEW_TRUE_FIELDS}
+        good["dedicated_reader_active_sessions"]=0
+        for field in ("loopback_http503_json_no_store","nginx_syntax_pass",
+                      "nginx_config_exact_restored","no_unknown_shared_nginx_edits"):
+            with self.subTest(field=field):
+                result=m.assess_watcher_recovery_contract({**good,field:False})
+                self.assertIn(field,result["missing"])
+
+    def test_remaining_guard_timer_or_backup_blocks_resumption(self):
+        good={k:True for k in m.RECOVERY_REVIEW_TRUE_FIELDS}
+        good["dedicated_reader_active_sessions"]=0
+        for field in ("guard_rollback_timer_inactive",
+                      "guard_backup_cleaned_after_verification"):
+            with self.subTest(field=field):
+                self.assertEqual(m.assess_watcher_recovery_contract(
+                    {**good,field:False})["recovery_review"],"BLOCKED")
+
+    def test_live_reader_session_or_missing_expiry_blocks_resumption(self):
+        good={k:True for k in m.RECOVERY_REVIEW_TRUE_FIELDS}
+        for sessions in (1,-1,None,True,"0"):
+            with self.subTest(sessions=sessions):
+                result=m.assess_watcher_recovery_contract(
+                    {**good,"dedicated_reader_active_sessions":sessions})
+                self.assertIn("dedicated_reader_active_sessions_zero",result["missing"])
+        good["dedicated_reader_active_sessions"]=0
+        self.assertIn("dedicated_reader_expired",
+                      m.assess_watcher_recovery_contract(
+                          {**good,"dedicated_reader_expired":False})["missing"])
+
+    def test_deployment_still_running_cannot_be_marked_resumed(self):
+        good={k:True for k in m.RECOVERY_REVIEW_TRUE_FIELDS}
+        good["dedicated_reader_active_sessions"]=0
+        for field in ("shared_dev_release_service_idle",
+                      "watcher_timer_currently_inactive",
+                      "watcher_timer_was_active_before_test"):
+            with self.subTest(field=field):
+                result=m.assess_watcher_recovery_contract({**good,field:False})
+                self.assertEqual(result["recovery_review"],"BLOCKED")
+                self.assertIn(field,result["missing"])
+
+    def test_untrusted_truthy_recovery_input_is_not_accepted(self):
+        good={k:True for k in m.RECOVERY_REVIEW_TRUE_FIELDS}
+        good["dedicated_reader_active_sessions"]=0
+        for value in ("true",1,[],{}):
+            with self.subTest(value=value):
+                result=m.assess_watcher_recovery_contract(
+                    {**good,"loopback_http503_json_no_store":value})
+                self.assertIn("loopback_http503_json_no_store",result["missing"])
+                self.assertFalse(result["watcher_resumed"])
+
+    def test_invalid_recovery_input_remains_no_host_operation(self):
+        for input_value in (None,True,[],0,"bad"):
+            with self.subTest(value=input_value):
+                result=m.assess_watcher_recovery_contract(input_value)
+                self.assertEqual(result["recovery_review"],"BLOCKED")
+                self.assertFalse(result["watcher_resumed"])
+                self.assertEqual(result["action"],"NO_HOST_OPERATION")
+
     def test_unknown_cli_or_private_executor_is_absent(self):
         source = SRC.read_text()
         for forbidden in (
