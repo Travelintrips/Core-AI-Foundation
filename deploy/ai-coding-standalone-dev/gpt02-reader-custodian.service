@@ -1,0 +1,53 @@
+[Unit]
+Description=GPT02 CST-DEV bounded independent reader custody receipt issuer
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/gpt02-dev/reader-custodian.env
+LoadCredentialEncrypted=private-key.pkcs8:/etc/credstore.encrypted/gpt02-reader-custody-dba-issuer.pkcs8
+ExecStart=/usr/bin/node /usr/local/libexec/cst-dev/gpt02-reader-custodian-runtime.cjs
+StateDirectory=gpt02-reader-custodian-audit
+StateDirectoryMode=0700
+UMask=0077
+TimeoutStartSec=30s
+TimeoutStopSec=5s
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+ReadOnlyPaths=/usr/local/libexec/cst-dev
+ReadOnlyPaths=/run/credentials/gpt02-owner-ledger-reader
+ReadOnlyPaths=/etc/gpt02-dev
+ReadWritePaths=/run/credentials/gpt02-reader-custody
+ReadWritePaths=/var/lib/gpt02-reader-custodian-audit
+LimitNOFILE=128
+MemoryMax=128M
+TasksMax=16
+StandardOutput=journal
+StandardError=journal
+
+# Static and never automatically started by the DEV release.
+# Use the guarded gpt02-reader-custodian-start.py entrypoint. Direct root
+# systemctl start is an unsupported privileged path: systemd decrypts its
+# configured credential before ExecStart can check the preparation flag.
+# Do not add Requires= for the reader loader, or manage the shared proof
+# directory with RuntimeDirectory: either would bypass ordering/retain policy.

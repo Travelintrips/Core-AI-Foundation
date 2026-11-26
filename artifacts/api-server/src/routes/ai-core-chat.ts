@@ -2,7 +2,7 @@ import { renderAiCoreBlockerSop } from "../services/aiCoreOperationalSop.js";
 import { readHandshakeSopSettings } from "../services/handshakeSopSettingsService.js";
 import {
 } from "../services/aiCoreCodingPolicyGuardService.js";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -212,6 +212,7 @@ const InboxReadRequest = z.object({
 }).strict();
 
 const ChatRequest = z.object({
+  submissionId: z.string().uuid().optional(),
   message: z.string().trim().min(1).max(50_000),
   mode: z.enum(["auto", "ask", "agent"]).default(DEFAULT_AI_CORE_CHAT_MODE),
   modelPolicy: z.enum(["economy", "smart", "auto", "cloud"]).default("smart"),
@@ -2623,6 +2624,7 @@ async function startSimpleChatGptWake(
 async function startExternalAgentWork(
   input: z.infer<typeof ChatRequest>,
   clientId: string,
+  authenticatedUserId?: string,
 ): Promise<Record<string, unknown>> {
   const directOpenClawPcCommand =
     clientId === OPENCLAW_AGENT_CLIENT_ID
@@ -2637,8 +2639,17 @@ async function startExternalAgentWork(
           ? "chat-no-tools"
           : "agent-tools";
 
+  // The same authenticated chat submission keeps its command identity across
+  // transport retries. Other callers retain their existing dispatch behavior.
+  const submissionKey =
+    clientId === OPENCLAW_AGENT_CLIENT_ID && authenticatedUserId && input.conversationId && input.submissionId
+      ? createHash("sha256")
+          .update(JSON.stringify([authenticatedUserId, input.conversationId, input.submissionId]))
+          .digest("hex")
+      : undefined;
   const dispatched = await dispatchExternalAgentWork({
     clientId,
+    ...(submissionKey ? { externalCommandId: `ai-core-chat-${submissionKey}` } : {}),
     instruction:
       clientId !== OPENCLAW_AGENT_CLIENT_ID
         ? input.message
@@ -2648,6 +2659,7 @@ async function startExternalAgentWork(
     source: "ai-core-chat",
     metadata: {
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+      ...(submissionKey ? { chatSubmissionOwnerId: authenticatedUserId } : {}),
       ...(input.projectName ? { projectName: input.projectName } : {}),
       ...(input.repository ? { repository: input.repository } : {}),
       ...(input.branch ? { branch: input.branch } : {}),
@@ -3952,6 +3964,7 @@ router.post("/ai/core-chat/messages/stream", async (req, res): Promise<void> => 
       const result = await startExternalAgentWork(
         { ...parsed.data, message: safeMessage, context: safeContext },
         OPENCLAW_AGENT_CLIENT_ID,
+        req.internalUser ? String(req.internalUser.id) : undefined,
       );
       writeBufferedChatStream(res, result);
       return;
@@ -4172,7 +4185,11 @@ router.post("/ai/core-chat/messages", async (req, res): Promise<void> => {
             inheritedDirectAccountRequest,
           )
         : directOpenClawPcCommand
-        ? await startExternalAgentWork(effectiveInput, OPENCLAW_AGENT_CLIENT_ID)
+        ? await startExternalAgentWork(
+            effectiveInput,
+            OPENCLAW_AGENT_CLIENT_ID,
+            req.internalUser ? String(req.internalUser.id) : undefined,
+          )
         : directConversationEvent
         ? await executeDirectConversationEvent(directConversationEvent)
         : effectiveInput.mode !== "agent" &&
@@ -4270,6 +4287,49 @@ router.get("/ai/core-chat/external-work/:id", async (req, res): Promise<void> =>
   }
 
   res.json(state);
+});
+
+router.post("/ai/core-chat/external-work/:commandId/ack", async (req, res): Promise<void> => {
+  if (!req.internalUser) {
+    res.status(401).json({ error: "Authenticated chat session required" });
+    return;
+  }
+  const parsed = z.object({
+    commandId: z.string().uuid(),
+    responseId: z.string().uuid(),
+    conversationId: z.string().trim().min(1).max(200),
+  }).strict().safeParse({
+    commandId: req.params["commandId"],
+    responseId: req.body?.responseId,
+    conversationId: req.body?.conversationId,
+  });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid callback acknowledgment" });
+    return;
+  }
+
+  const { commandId, responseId, conversationId } = parsed.data;
+  const ownerId = String(req.internalUser.id);
+  const result = await db.execute(sql`
+    UPDATE ai_platform.ai_coding_bridge_responses AS response
+    SET acknowledged_at = COALESCE(response.acknowledged_at, NOW())
+    FROM ai_platform.ai_coding_bridge_commands AS command
+    WHERE response.id = ${responseId}::uuid
+      AND response.command_id = ${commandId}::uuid
+      AND command.id = response.command_id
+      AND command.source = 'ai-core-chat'
+      AND command.command_type = 'EXTERNAL_AGENT_WORK'
+      AND command.metadata_json ->> 'chatSubmissionOwnerId' = ${ownerId}
+      AND command.metadata_json ->> 'conversationId' = ${conversationId}
+      AND response.kind IN ('COMPLETED', 'FAILED')
+      AND response.kind = command.status
+    RETURNING response.id
+  `);
+  if (!result.rows?.length) {
+    res.status(404).json({ error: "Terminal chat callback not found" });
+    return;
+  }
+  res.json({ acknowledged: true });
 });
 
 router.get("/ai/core-chat/inbox", async (req, res): Promise<void> => {

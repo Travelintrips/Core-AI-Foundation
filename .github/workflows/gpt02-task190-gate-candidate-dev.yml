@@ -1,0 +1,37 @@
+name: GPT02 Task190 execution gate candidate (DEV, no runtime)
+on:
+  pull_request:
+    paths:
+      - 'ops/dev/gpt02/task190-gate-core.mjs'
+      - 'ops/dev/gpt02/task190-gate-core.test.mjs'
+      - '.github/workflows/gpt02-task190-gate-candidate-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'ops/dev/gpt02/task190-gate-core.mjs'
+      - 'ops/dev/gpt02/task190-gate-core.test.mjs'
+      - '.github/workflows/gpt02-task190-gate-candidate-dev.yml'
+permissions:
+  contents: read
+jobs:
+  offline-negative-and-race-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Isolated core tests (no database, sockets, Owner credential or dispatch)
+        run: node --test ops/dev/gpt02/task190-gate-core.test.mjs
+      - name: Verify candidate has no real network or DB bootstrap
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('ops/dev/gpt02/task190-gate-core.mjs').read_text()
+          assert 'INDEPENDENT_AUTHORITY_ADAPTER_REQUIRED' in s
+          assert "CONCURRENT_CONSUMPTION_IN_PROGRESS" in s
+          for forbidden in ('createServer(', 'server.listen(', 'ALTER ROLE ', 'GRANT ', 'dispatchCommand(', 'postgresql://', 'signer.sock'):
+            assert forbidden not in s, forbidden
+          print('NO_RUNTIME_ACTIVATION_OR_AUTO_DISPATCH_PASS')
+          PY

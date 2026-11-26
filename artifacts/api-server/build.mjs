@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 
 // Keep a CommonJS resolver available for bundled dependencies and worker entrypoints.
 const require = createRequire(import.meta.url);
@@ -34,7 +35,21 @@ function resolveBuildCommitSha() {
 
 const buildCommitSha = resolveBuildCommitSha();
 
+async function readDevelopmentSop() {
+  const documentPath = "CST-GLOBAL-DEVELOPMENT-SOP.md";
+  const document = await readFile(path.resolve(artifactDir, "../..", documentPath), "utf8");
+  const version = /^Versi (\d+\.\d+\.\d+) ·/m.exec(document)?.[1];
+  if (!version) throw new Error("CST development SOP version is missing");
+  return {
+    version,
+    path: documentPath,
+    commit: buildCommitSha,
+    sha256: createHash("sha256").update(document, "utf8").digest("hex"),
+  };
+}
+
 async function buildAll() {
+  const developmentSop = await readDevelopmentSop();
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
@@ -145,6 +160,7 @@ async function buildAll() {
     sourcemap: "linked",
     define: {
       "process.env.CST_BUILD_COMMIT_SHA": JSON.stringify(buildCommitSha),
+      "process.env.CST_BUNDLED_DEV_SOP": JSON.stringify(JSON.stringify(developmentSop)),
     },
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
