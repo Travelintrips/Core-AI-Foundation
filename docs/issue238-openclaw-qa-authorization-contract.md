@@ -100,3 +100,21 @@ forge those IDs or recycle the short-lived receipt. The existing generic
 This addition only supplies a failing-closed parser for a future trusted
 adapter. **It is not a host runner, cannot provision Docker or keys, and has
 not executed PostgreSQL**. No active service, Finance or PROD modifications.
+
+## CST-DEV verified credential / canonical worker mapping (26 Nov 2026)
+
+Read-only hosted AI Core metadata confirms that canonical registry worker
+`openclaw-vps-main` and its active scoped **service token record**
+`openclaw-vps-dev-consumer` have distinct names. The prior source-only
+adapter incorrectly required both names to be identical. The corrected QA-only
+policy requires the exact scoped token record name
+`openclaw-vps-dev-consumer`, separately requires active `agent:work`, and
+requires the claimed/assigned worker identity to be `openclaw-vps-main`.
+A future trusted adapter must prove the credential is the actual verified
+token record (not caller JSON), verify token expiry/current claim lease from
+the authoritative AI Core DB, and refuse all other workers. This mapping
+is not permission to perform QA, sign Owner receipts or mutate DB roles.
+
+Hosted read-only inspection found **zero PROCESSING** canonical VPS commands
+and **zero likely Issue238** assigned VPS commands. No real QA work item was
+claimed, no signed permit issued, and no PG17 fixture executed.
