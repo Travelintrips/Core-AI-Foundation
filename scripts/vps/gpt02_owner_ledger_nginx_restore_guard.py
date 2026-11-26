@@ -3,7 +3,8 @@
 
 This tool NEVER opens the gate, accesses credentials, or changes PostgreSQL.
 Use --arm to register an independent systemd transient rollback timer BEFORE any test.
-Only the single exact, approved gate-line removal is accepted as a restore input.
+Only an exact gate-to-comment change and the four previously verified
+unrelated upstream cutovers are accepted; unknown changes fail closed.
 """
 from __future__ import annotations
 
@@ -16,6 +17,69 @@ import subprocess
 import sys
 import tempfile
 
+# The installed systemd ExecStartPre filename uses hyphens, not the module
+# underscores used by the GitHub source tree. Load the PINNED bytes from that
+# exact existing root-owned file in production; do NOT deploy a second copy.
+LIVE_RESTORE = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
+LIVE_BOOT = Path("/usr/local/sbin/gpt02-1782-failclosed-boot-precheck.py")
+BOOT_SOURCE_SHA256 = "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32"
+MAX_BOOT_SOURCE = 8192
+
+
+def boot_source_path(restore_script: Path) -> tuple[Path, bool]:
+    """Resolve exact installed hyphen filename vs source-tree sibling."""
+    if restore_script.is_symlink():
+        raise RuntimeError("RESTORE_SCRIPT_SYMLINK")
+    resolved = restore_script.absolute()
+    if resolved.name != "gpt02_owner_ledger_nginx_restore_guard.py":
+        raise RuntimeError("RESTORE_SCRIPT_UNEXPECTED_PATH")
+    if resolved == LIVE_RESTORE:
+        return LIVE_BOOT, True
+    return resolved.with_name("gpt02_1782_failclosed_boot_precheck.py"), False
+
+
+def load_pinned_boot_canonical(source_path: Path, live: bool):
+    """Verify file metadata and SHA BEFORE compiling the read bytes.
+
+    Compiling the same byte buffer avoids hash-then-import filesystem races.
+    The module's main block never runs; no service or Nginx is invoked.
+    """
+    fd = None
+    try:
+        fd = os.open(source_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or
+            not 0 < before.st_size <= MAX_BOOT_SOURCE):
+            raise RuntimeError("BOOT_MODULE_FILE_INVALID")
+        if live and (before.st_uid != 0 or before.st_gid != 0 or
+                     stat.S_IMODE(before.st_mode) != 0o700):
+            raise RuntimeError("BOOT_MODULE_ROOT0700_REQUIRED")
+        source_bytes = os.read(fd, MAX_BOOT_SOURCE + 1)
+        after = os.fstat(fd)
+        fields = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if len(source_bytes) != before.st_size or any(
+            getattr(before, field) != getattr(after, field) for field in fields
+        ):
+            raise RuntimeError("BOOT_MODULE_CHANGED_DURING_READ")
+        if hashlib.sha256(source_bytes).hexdigest() != BOOT_SOURCE_SHA256:
+            raise RuntimeError("BOOT_MODULE_SHA_NOT_APPROVED")
+        scope = {"__name__": "gpt02_verified_boot_from_pinned_bytes",
+                 "__file__": str(source_path)}
+        exec(compile(source_bytes, str(source_path), "exec"), scope)
+        value = scope.get("canonical_closed")
+        if not callable(value):
+            raise RuntimeError("BOOT_MODULE_CONTRACT_UNAVAILABLE")
+        return value
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("BOOT_MODULE_UNAVAILABLE") from None
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+_BOOT_SOURCE, _LIVE_RUNTIME = boot_source_path(Path(__file__))
+canonical_closed = load_pinned_boot_canonical(_BOOT_SOURCE, _LIVE_RUNTIME)
+
 NGINX = Path("/etc/nginx/sites-available/dev-ai-task.cstlogistic.co.id")
 BACKUP = Path("/etc/nginx/dev-ai-task.gpt02-1782-guard-backup.conf")
 GATE = b"""return 503 '{"error":"GPT02_LEDGER_READER_NOT_PROVISIONED"}';"""
@@ -23,6 +87,7 @@ LOCATION = b"location ^~ /api/gpt02-owner-ledger/ {"
 PROXY = b"proxy_pass http://127.0.0.1:18082;"
 # Only this exact replacement is allowed when restoring.
 COMMENT = b"# GPT02-1782 bounded Owner GET test: automatic rollback armed"
+PUBLIC_GATE_URL = "https://dev-ai-task.cstlogistic.co.id/api/gpt02-owner-ledger/decision/00000000-0000-4000-8000-000000000000"
 
 
 class GuardError(RuntimeError):
@@ -34,7 +99,17 @@ def digest(data: bytes) -> str:
 
 
 def checked(data: bytes) -> bool:
-    return data.count(GATE) == 1 and data.count(LOCATION) == 1 and data.count(PROXY) >= 1
+    # Reuse the full-vhost allowlist verifier from the sibling boot guard.
+    return canonical_closed(data)
+
+def permitted_open_to_closed(data: bytes) -> bytes:
+    """Return closed bytes only for the exact allowed gate-to-comment opening."""
+    if data.count(GATE) != 0 or data.count(COMMENT) != 1:
+        raise GuardError("UNEXPECTED_NGINX_CHANGE_REFUSED")
+    closed = data.replace(COMMENT, GATE, 1)
+    if not checked(closed):
+        raise GuardError("UNEXPECTED_NGINX_CHANGE_REFUSED")
+    return closed
 
 
 def atomic_root_write(path: Path, data: bytes, mode: int) -> None:
@@ -92,6 +167,35 @@ def run_maintenance(test_cmd: list[str], reload_cmd: list[str]) -> None:
             raise GuardError("NGINX_TEST_OR_RELOAD_FAILED")
 
 
+def verify_public_gate_closed() -> None:
+    """Read-only local HTTPS confirmation after a successful Nginx reload.
+
+    Never forwards credentials. The public 503 JSON and no-store header
+    are mandatory; a saved file alone cannot prove active workers are closed.
+    """
+    args = [
+        "curl", "--noproxy", "*", "-sS", "--http1.1", "--connect-timeout", "3",
+        "--max-time", "5", "--resolve",
+        "dev-ai-task.cstlogistic.co.id:443:127.0.0.1",
+        "-i", PUBLIC_GATE_URL,
+    ]
+    response = subprocess.run(
+        args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        timeout=7, check=False,
+    )
+    if response.returncode != 0 or len(response.stdout) > 8192:
+        raise GuardError("PUBLIC_GATE_NOT_VERIFIED_503")
+    raw = response.stdout.replace(b"\r\n", b"\n")
+    if b"\n\n" not in raw:
+        raise GuardError("PUBLIC_GATE_NOT_VERIFIED_503")
+    headers, body = raw.split(b"\n\n", 1)
+    lines = headers.split(b"\n")
+    if (not lines or not lines[0].startswith(b"HTTP/1.1 503 ") or
+        not any(x.lower().strip() == b"cache-control: no-store" for x in lines[1:]) or
+        b"content-type: application/json" not in headers.lower() or
+        body.strip() != b'{"error":"GPT02_LEDGER_READER_NOT_PROVISIONED"}'):
+        raise GuardError("PUBLIC_GATE_NOT_VERIFIED_503")
+
 def restore(active: Path, backup: Path, test_cmd: list[str],
             reload_cmd: list[str]) -> str:
     if active.is_symlink() or backup.is_symlink():
@@ -99,24 +203,34 @@ def restore(active: Path, backup: Path, test_cmd: list[str],
     if not active.is_file() or not backup.is_file():
         raise GuardError("MISSING_GUARD_FILES")
     old = backup.stat()
-    if not stat.S_ISREG(old.st_mode) or old.st_size > 200_000:
+    if (not stat.S_ISREG(old.st_mode) or old.st_uid != 0 or
+        old.st_gid != 0 or stat.S_IMODE(old.st_mode) != 0o600 or
+        old.st_nlink != 1 or not 0 < old.st_size <= 200_000):
         raise GuardError("INVALID_BACKUP")
     original = backup.read_bytes()
     current = active.read_bytes()
     if not checked(original):
         raise GuardError("UNTRUSTED_BACKUP_GATE")
-    if current == original:
-        return "ALREADY_CLOSED"
-    # Restore only if this single exact gate removal took place.
-    if current != original.replace(GATE, COMMENT, 1):
-        raise GuardError("UNEXPECTED_NGINX_CHANGE_REFUSED")
+    if checked(current):
+        # File may already be closed while the running Nginx worker still serves
+        # the old open configuration (e.g. earlier reload failed). Reconcile.
+        run_maintenance(test_cmd, reload_cmd)
+        if active.read_bytes() != current:
+            raise GuardError("RESTORE_READBACK_MISMATCH")
+        verify_public_gate_closed()
+        return "ALREADY_CLOSED_RELOADED_VERIFIED"
+    closed = permitted_open_to_closed(current)
+    # Conservative re-read before replace. A separately coordinated short
+    # Nginx deployment freeze is still required; not an atomic filesystem CAS.
+    if active.read_bytes() != current:
+        raise GuardError("ACTIVE_CHANGED_BEFORE_RESTORE")
     mode = stat.S_IMODE(active.stat().st_mode)
-    atomic_root_write(active, original, mode)
+    atomic_root_write(active, closed, mode)
     run_maintenance(test_cmd, reload_cmd)
-    if active.read_bytes() != original:
+    if active.read_bytes() != closed:
         raise GuardError("RESTORE_READBACK_MISMATCH")
-    return "RESTORED_GATE_CLOSED"
-
+    verify_public_gate_closed()
+    return "RESTORED_GATE_CLOSED_VERIFIED"
 
 def trusted_script(executable: Path) -> bool:
     if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
