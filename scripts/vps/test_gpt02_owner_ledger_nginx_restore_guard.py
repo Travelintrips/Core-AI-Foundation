@@ -518,7 +518,7 @@ class SerializedRecoveryTests(unittest.TestCase):
         try:
             responses = [
                 SimpleNamespace(returncode=0),
-                SimpleNamespace(returncode=0, stdout=b"Job=\\n"),
+                SimpleNamespace(returncode=0, stdout=b"Job=\n"),
                 SimpleNamespace(returncode=0),
             ]
             with patch.object(mod.subprocess, "run", side_effect=responses) as run:
@@ -536,10 +536,10 @@ class SerializedRecoveryTests(unittest.TestCase):
         fd = self.acquire()
         try:
             for response in (
-                SimpleNamespace(returncode=0, stdout=b"Job=123\\n"),
+                SimpleNamespace(returncode=0, stdout=b"Job=123\n"),
                 SimpleNamespace(returncode=0, stdout=b""),
-                SimpleNamespace(returncode=0, stdout=b"Job=\\nJob=\\n"),
-                SimpleNamespace(returncode=1, stdout=b"Job=\\n"),
+                SimpleNamespace(returncode=0, stdout=b"Job=\nJob=\n"),
+                SimpleNamespace(returncode=1, stdout=b"Job=\n"),
             ):
                 with self.subTest(response=response), patch.object(
                     mod.subprocess, "run", side_effect=[SimpleNamespace(returncode=0), response]
