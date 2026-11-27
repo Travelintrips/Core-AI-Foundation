@@ -45,3 +45,7 @@ The existing human Owner must approve ONE exact current CST-DEV negative HTTP404
 Do not affect Task190, Phase B, RLS, password custody, signing, dispatch or PROD. A generic `lanjut` is not authorization for the high-stakes step.
 
 Related tracking: [#1850](https://github.com/Travelintrips/Core-AI-Foundation/issues/1850) and prior [PR #1851](https://github.com/Travelintrips/Core-AI-Foundation/pull/1851), [PR #1849](https://github.com/Travelintrips/Core-AI-Foundation/pull/1849).
+
+### PR #1855 compatibility update (27 November 2026)
+
+The historical restore digest above refers to PR #1851. The installed close-only restore guard is now PR #1855, verified SHA256 `64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13`, with a 30-second timer, explicit 1-second accuracy and zero random delay. The audit and CI use the new exact digest; the previous guard is not accepted. This is source-only compatibility, not live Owner authorization. Keep the HTTP503 gate closed, no reader lease, timer arming or deployment changes. Historical evidence remains unchanged.

@@ -65,3 +65,7 @@ The new **source-only** `scripts/vps/gpt02_1782_release_lock_contract.py` valida
 The existing root guard's `--restore` leaves the protected window backup behind, so a later authorized operator must independently verify the closed vhost and active HTTP503 **before** any explicit backup cleanup. It must not erase an unknown backup to force a future attempt. The transient systemd rollback timer is not reboot-persistent; the startup boot guard is separate from reload protection.
 
 **No PROD, Task190, Phase B, RLS, signer, dispatch, credential rotation, systemd toggle, Nginx reload or database mutation.** Track actual Owner Ledger negative E2E at [#1850](https://github.com/Travelintrips/Core-AI-Foundation/issues/1850). Prior source: merged [#1851](https://github.com/Travelintrips/Core-AI-Foundation/pull/1851) and merged [#1852](https://github.com/Travelintrips/Core-AI-Foundation/pull/1852).
+
+### PR #1855 compatibility update (27 November 2026)
+
+The historical restore digest above refers to PR #1851. The installed close-only restore guard is now PR #1855, verified SHA256 `64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13`, with a 30-second timer, explicit 1-second accuracy and zero random delay. The audit and CI use the new exact digest; the previous guard is not accepted. This is source-only compatibility, not live Owner authorization. Keep the HTTP503 gate closed, no reader lease, timer arming or deployment changes. Historical evidence remains unchanged.

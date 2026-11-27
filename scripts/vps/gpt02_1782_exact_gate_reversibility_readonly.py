@@ -3,7 +3,7 @@
 
 SOURCE-ONLY. This diagnostic never modifies the vhost, invokes Nginx,
 runs systemd, renews the reader, reads credentials, or accepts --execute.
-The installed, SHA-pinned PR1851 restore guard is compiled as an inert module
+The installed, SHA-pinned PR1855 restore guard is compiled as an inert module
 and supplies the SAME strict canonical closed-site & rollback transformations.
 An all-green byte-level proof does not authorize a live 90-second window.
 """
@@ -18,7 +18,7 @@ import sys
 
 ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")
 ROOT_RESTORE = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
-RESTORE_SHA256 = "e8e874d3d05de88f405d7584ede63a51539ad1e986aed2a2c620773ea2e92448"
+RESTORE_SHA256 = "64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13"
 MAX_ACTIVE = 200_000
 MAX_RESTORE = 20_000
 

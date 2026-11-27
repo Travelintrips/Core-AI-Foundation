@@ -1,0 +1,55 @@
+name: GPT02-1782 primary rollback timer accuracy (DEV source-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_nginx_restore_guard.py'
+      - 'docs/dev/gpt02-1782-primary-restore-timer-accuracy-no-go-20261127.md'
+      - '.github/workflows/gpt02-1782-primary-restore-accuracy-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py'
+      - 'scripts/vps/test_gpt02_owner_ledger_nginx_restore_guard.py'
+      - 'docs/dev/gpt02-1782-primary-restore-timer-accuracy-no-go-20261127.md'
+      - '.github/workflows/gpt02-1782-primary-restore-accuracy-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  early-rollback-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real baseline source contract and synthetic rollback tests only
+        run: |
+          python3 -B -m py_compile \
+            scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py \
+            scripts/vps/test_gpt02_owner_ledger_nginx_restore_guard.py
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_owner_ledger_nginx_restore_guard.py -v
+      - name: Timer default and no-executor guardrail
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("scripts/vps/gpt02_owner_ledger_nginx_restore_guard.py").read_text()
+          assert 'NGINX = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")' in src
+          assert 'PRIMARY_RESTORE_DELAY_SECONDS = 30' in src
+          assert 'PRIMARY_TIMER_ACCURACY = "1s"' in src
+          assert 'PRIMARY_TIMER_RANDOMIZED_DELAY = "0"' in src
+          assert '"--timer-property=AccuracySec=" + PRIMARY_TIMER_ACCURACY' in src
+          assert '"--timer-property=RandomizedDelaySec=" + PRIMARY_TIMER_RANDOMIZED_DELAY' in src
+          assert 'verify_armed_timer_properties(unit)' in src
+          assert 'WATCHDOG_PROPERTIES_UNVERIFIED' in src
+          assert 'delay_seconds != PRIMARY_RESTORE_DELAY_SECONDS' in src
+          assert 'default=90' not in src
+          assert 'exec(compile(source_bytes' in src
+          assert '"--active", str(active), "--backup", str(backup)' in src
+          # The reviewed primary source may arm/restore with explicit Owner
+          # approval, but CI must never invoke its main branch.
+          print("GPT02_PRIMARY_TIMER_SOURCE_EARLY_STRICT=PASS")
+          PY
