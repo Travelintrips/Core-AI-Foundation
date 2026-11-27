@@ -480,7 +480,9 @@ class SerializedRecoveryTests(unittest.TestCase):
             return real_identity(fd, path, expected_uid=uid, expected_gid=gid)
         # Keep actual lock acquisition on both independent file descriptors.
         # Only map ownership checks to the non-root fixture UID/GID.
-        def restore(*_):
+        def restore(*_, lock_fd=None):
+            self.assertIsInstance(lock_fd, int)
+            self.assertGreater(os.fstat(lock_fd).st_size, 0)
             with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
                 self.acquire()
             return "RESTORED_GATE_CLOSED_VERIFIED"
@@ -488,7 +490,7 @@ class SerializedRecoveryTests(unittest.TestCase):
              patch.object(mod, "restore", side_effect=restore) as original:
             self.assertEqual(mod.restore_serialized(self.active, self.backup, [], []),
                              "RESTORED_GATE_CLOSED_VERIFIED")
-            original.assert_called_once_with(self.active, self.backup, [], [])
+            original.assert_called_once_with(self.active, self.backup, [], [],\n                                             lock_fd=original.call_args.kwargs["lock_fd"])
         os.close(self.acquire())
 
     def test_serialized_failure_releases_lock(self):
@@ -509,6 +511,94 @@ class SerializedRecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
                 mod.restore_serialized(self.active, self.backup, [], [])
             restore.assert_not_called()
+
+    def test_maintenance_inherits_real_backup_lock_and_checks_pid1_job(self):
+        fd = self.acquire()
+        try:
+            responses = [
+                SimpleNamespace(returncode=0),
+                SimpleNamespace(returncode=0, stdout=b"Job=\\n"),
+                SimpleNamespace(returncode=0),
+            ]
+            with patch.object(mod.subprocess, "run", side_effect=responses) as run:
+                mod.run_maintenance(["fixture-test"], ["fixture-reload"], lock_fd=fd)
+            self.assertEqual(run.call_count, 3)
+            self.assertEqual(run.call_args_list[0].kwargs["pass_fds"], (fd,))
+            self.assertEqual(run.call_args_list[1].args[0],
+                             ["systemctl", "show", "nginx.service", "--property=Job"])
+            self.assertEqual(run.call_args_list[1].kwargs["timeout"], 3)
+            self.assertEqual(run.call_args_list[2].kwargs["pass_fds"], (fd,))
+        finally:
+            os.close(fd)
+
+    def test_pending_or_unverified_pid1_job_never_invokes_reload(self):
+        fd = self.acquire()
+        try:
+            for response in (
+                SimpleNamespace(returncode=0, stdout=b"Job=123\\n"),
+                SimpleNamespace(returncode=0, stdout=b""),
+                SimpleNamespace(returncode=0, stdout=b"Job=\\nJob=\\n"),
+                SimpleNamespace(returncode=1, stdout=b"Job=\\n"),
+            ):
+                with self.subTest(response=response), patch.object(
+                    mod.subprocess, "run", side_effect=[SimpleNamespace(returncode=0), response]
+                ) as run:
+                    with self.assertRaisesRegex(mod.GuardError, "NGINX_JOB_PENDING_OR_UNVERIFIED"):
+                        mod.run_maintenance(["fixture-test"], ["fixture-reload"], lock_fd=fd)
+                    self.assertEqual(run.call_count, 2)
+        finally:
+            os.close(fd)
+
+    def test_pid1_probe_timeout_never_invokes_reload(self):
+        fd = self.acquire()
+        try:
+            with patch.object(mod.subprocess, "run", side_effect=[
+                SimpleNamespace(returncode=0), subprocess.TimeoutExpired("fixture", 3)
+            ]) as run:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    mod.run_maintenance(["fixture-test"], ["fixture-reload"], lock_fd=fd)
+                self.assertEqual(run.call_count, 2)
+        finally:
+            os.close(fd)
+
+    def test_inherited_fixture_child_retains_lock_after_parent_death(self):
+        parent_code = (
+            "import fcntl,os,subprocess,sys; "
+            "fd=os.open(sys.argv[1],os.O_RDONLY|os.O_CLOEXEC); "
+            "fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB); "
+            "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(20)'],"
+            "pass_fds=(fd,),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+            "print(p.pid,flush=True); p.wait()"
+        )
+        import signal
+        import time
+        proc = subprocess.Popen([sys.executable, "-u", "-c", parent_code, str(self.backup)],
+                                stdout=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            child = int(proc.stdout.readline().strip())
+            proc.kill()
+            proc.wait(timeout=5)
+            os.kill(child, 0)
+            with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
+                self.acquire()
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait(timeout=5)
+            proc.stdout.close()
+        deadline = time.monotonic() + 3
+        while True:
+            try:
+                fd = self.acquire()
+            except mod.GuardError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.05)
+            else:
+                os.close(fd)
+                break
 
     def test_cli_uses_only_serialized_restore(self):
         with patch.object(mod.os, "geteuid", return_value=0), \

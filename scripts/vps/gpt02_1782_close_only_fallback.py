@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 GUARD = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
-GUARD_SHA = "c20a9fbd41e29b8976e9e759383673cc0ba7557457219ccf7fa5597de4b85b25"
+GUARD_SHA = "3851912fcb62423b3f54630e901b6ffda8824009f8e4460a0fdb1ecbf5b486e9"
 ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")
 # IMPORTANT: sites-available and sites-enabled are DIFFERENT regular files in
 # the actual DEV host. Always pass the explicit sites-enabled target.

@@ -35,10 +35,10 @@ def proposed_budget(*, delay_s: int, accuracy_s: int,
                     test_s: int = RECOVERY_TEST_TIMEOUT_S,
                     reload_s: int = RECOVERY_RELOAD_TIMEOUT_S,
                     https_s: int = RECOVERY_HTTPS_TIMEOUT_S,
-                    slack_s: int = SAFETY_MODEL_SLACK_S) -> dict:
+                    slack_s: int = SAFETY_MODEL_SLACK_S,\n                    job_probe_s: int = 0) -> dict:
     """Pure integer timing envelope, not a guarantee of scheduling/execution."""
     values = (delay_s, accuracy_s, randomized_delay_s, test_s,
-              reload_s, https_s, slack_s)
+              reload_s, https_s, slack_s, job_probe_s)
     safe_inputs = all(type(v) is int and v >= 0 for v in values)
     projected = sum(values) if safe_inputs else None
     accepted = (
@@ -96,7 +96,16 @@ def review_existing_guard_source(source: bytes) -> dict:
     # The historical 90s variant is unsafe even with explicit 1s accuracy.
     if legacy and b"--timer-property=AccuracySec=1s" in source:
         accuracy = 1
+    job_probe_declared = b"RECOVERY_JOB_PROBE_TIMEOUT_S" in source
+    job_probe_recognized = all(fragment in source for fragment in (
+        b"RECOVERY_JOB_PROBE_TIMEOUT_S = 3",
+        b'"pass_fds": (lock_fd,)',
+        b"            verify_nginx_job_idle()",
+        b'"--property=Job"',
+        b'b"Job="',
+    ))
     model = proposed_budget(
+        job_probe_s=3 if job_probe_recognized else 0,
         delay_s=delay,
         accuracy_s=accuracy,
         randomized_delay_s=0,
@@ -114,7 +123,9 @@ def review_existing_guard_source(source: bytes) -> dict:
         "primary_guard_requested_delay_s": delay,
         "existing_guard_model": model,
         "early_restore_model_example": proposed,
-        "requires_primary_guard_fix": not (current and model["model_within_90s"]),
+        "maintenance_job_probe_source_recognized": job_probe_recognized,
+        "requires_primary_guard_fix": not (current and model["model_within_90s"]
+            and (not job_probe_declared or job_probe_recognized)),
         "max_90s_live_close_verified": False,
         "owner_e2e_ready": False,
         "action": "RETAIN_NGINX_503",

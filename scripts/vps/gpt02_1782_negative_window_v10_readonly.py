@@ -23,7 +23,7 @@ from gpt02_owner_ledger_fresh_readiness_readonly import inspect as public_inspec
 HOST = "srv1792369"
 PROJECT = "xssrfshdrtdfupgqwfdw"
 RESTORE_GUARD = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
-RESTORE_SHA256 = "c20a9fbd41e29b8976e9e759383673cc0ba7557457219ccf7fa5597de4b85b25"
+RESTORE_SHA256 = "3851912fcb62423b3f54630e901b6ffda8824009f8e4460a0fdb1ecbf5b486e9"
 WATCHER_TIMER = "cst-vps-dev-ci-watcher.timer"
 WATCHER_SERVICE = "cst-vps-dev-ci-watcher.service"
 ROLLBACK_TIMER = "gpt02-1782-owner-ledger-restore.timer"
