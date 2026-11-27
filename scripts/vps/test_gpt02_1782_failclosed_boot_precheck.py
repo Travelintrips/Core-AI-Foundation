@@ -87,6 +87,39 @@ class WholeVhostAllowlistedCutoverTests(TestCase):
         self.assertNotIn("EXPECTED_CLOSED_SHA256", source)
         self.assertIn("hashlib.sha256(original).hexdigest() == ORIGINAL_CLOSED_SHA256", source)
 
+    def test_pr252_snapshots_are_exact_independently_reviewed_digests(self):
+        self.assertEqual(guard.PR252_CLOSED_SNAPSHOTS, frozenset((
+            "df256e23dae4cf20dbd23c33f3c259e341d86719363ccd1e0b0b80a3dff6777c",
+            "1d8b8fd3492845c6fd0586d0fc43ff9fb366f5f62772eb4d968c84e0c3b31846",
+        )))
+
+    def test_snapshot_branch_accepts_only_the_exact_full_bytes(self):
+        reviewed = CLOSED + b"# synthetic reviewed frontend change\n"
+        with patch.object(guard, "PR252_CLOSED_SNAPSHOTS",
+                          frozenset((hashlib.sha256(reviewed).hexdigest(),))):
+            self.assertTrue(guard.canonical_closed(reviewed))
+            for changed in (reviewed + b"# drift\n",
+                            reviewed.replace(guard.GATE, guard.COMMENT, 1),
+                            reviewed.replace(b'no-store', b'public', 1)):
+                self.assertFalse(guard.canonical_closed(changed))
+            self.active.write_bytes(reviewed)
+            before = self.active.stat()
+            self.assertEqual(guard.guarded(self.active, self.backup),
+                             ("PASS_GATE_CLOSED", 0))
+            self.assertEqual(before.st_ino, self.active.stat().st_ino)
+
+    def test_even_pinned_bytes_must_keep_the_unique_closed_gate(self):
+        invalid = (CLOSED.replace(guard.GATE, guard.COMMENT, 1),
+                   CLOSED + guard.GATE,
+                   CLOSED.replace(guard.LOCATION, b"location /wrong {", 1),
+                   CLOSED.replace(guard.PROXY, b"proxy_pass http://127.0.0.1:19999;", 2))
+        for data in invalid:
+            with self.subTest(digest=hashlib.sha256(data).hexdigest()), patch.object(
+                    guard, "PR252_CLOSED_SNAPSHOTS",
+                    frozenset((hashlib.sha256(data).hexdigest(),))):
+                # Keep basic structural gate checks BEFORE the full-file digest branch.
+                self.assertFalse(guard.canonical_closed(data))
+
     def test_all_sixteen_approved_cutover_combinations_still_keep_full_file_integrity(self):
         for choices in product((False, True), repeat=4):
             with self.subTest(choices=choices):
