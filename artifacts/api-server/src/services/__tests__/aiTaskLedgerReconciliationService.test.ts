@@ -6,6 +6,7 @@ vi.mock("@workspace/db", () => ({
   aiCodingWorkstreamsTable: {},
   aiCodingBridgeCommandsTable: {},
   db: {},
+  pool: {},
 }));
 
 vi.mock("../aiTaskLedgerBridgeService.js", () => ({
@@ -213,6 +214,56 @@ describe("AI Task terminal reconciliation", () => {
     await reconciler.tick();
     updated = { ...task, updatedAt: new Date("2026-10-14T12:00:00Z") };
     await reconciler.tick();
+    expect(publish).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("prospective DEV passive-only producer scope", () => {
+  const since = new Date("2026-11-27T19:08:02.868Z");
+  const fresh = { ...task, taskNumber: task.id.slice(0,8), sourceKind: "bridge-command" as const,
+    createdAt: new Date("2026-11-28T01:00:00Z"), updatedAt: new Date("2026-11-28T01:00:01Z") };
+  const fixedNow = () => Date.parse("2026-11-28T02:00:00Z");
+
+  it("reads only scoped eligible future commands and retains receiver-owned ACK", async () => {
+    const legacy = vi.fn(async () => [task]);
+    const scoped = vi.fn(async () => [
+      fresh, task, { ...fresh, createdAt: new Date("2026-11-27T19:00:00Z") },
+      { ...fresh, status: "RECEIVED" }, { ...fresh, sessionId: "other" },
+    ]);
+    const publish = vi.fn(async () => ({synced: true, acknowledged: false, observedStatus: "WAITING_FOR_ACK"}));
+    const reconciler = createAiTaskLedgerReconciler({ enabled: () => true, now: fixedNow,
+      readScope: () => ({mode:"dev-passive-ping",since}), load: legacy,
+      loadTasks: legacy, loadWorkstreams: legacy, loadBridgeCommands: legacy,
+      loadScopedBridgeCommands: scoped, publish });
+    expect(await reconciler.tick()).toEqual({scanned:1,attempted:1,acknowledged:0,pending:1});
+    expect(legacy).not.toHaveBeenCalled();
+    expect(scoped).toHaveBeenCalledWith(0,since);
+    expect(publish).toHaveBeenCalledExactlyOnceWith({
+      externalId:"bridge-command:"+fresh.id,title:"AI Core bridge command "+fresh.taskNumber,status:"COMPLETED",version:"terminal",
+    });
+  });
+
+  it("invalid scope pauses without fallback or database reads", async () => {
+    const load = vi.fn(async () => [fresh]);
+    const publish = vi.fn();
+    const r = createAiTaskLedgerReconciler({ enabled: () => true, now: fixedNow,
+      readScope: () => ({mode:"blocked"}), load, loadScopedBridgeCommands: load, publish });
+    expect(await r.tick()).toEqual({scanned:0,attempted:0,acknowledged:0,pending:0});
+    expect(load).not.toHaveBeenCalled();expect(publish).not.toHaveBeenCalled();
+  });
+
+  it("a fresh source still retries only publication until independent receiver ACK", async () => {
+    let now = fixedNow();
+    const publish=vi.fn().mockResolvedValueOnce({synced:true,acknowledged:false,observedStatus:"WAITING_FOR_ACK"})
+      .mockResolvedValueOnce({synced:true,acknowledged:true,observedStatus:"COMPLETED"});
+    const r=createAiTaskLedgerReconciler({enabled:()=>true,now:()=>now,readScope:()=>({mode:"dev-passive-ping",since}),
+      loadScopedBridgeCommands:async()=>[fresh],publish});
+    expect(await r.tick()).toMatchObject({attempted:1,acknowledged:0,pending:1});
+    expect(await r.tick()).toMatchObject({attempted:0});
+    now+=60_001;
+    expect(await r.tick()).toMatchObject({attempted:1,acknowledged:1,pending:0});
+    now+=60_001;
+    expect(await r.tick()).toMatchObject({attempted:0});
     expect(publish).toHaveBeenCalledTimes(2);
   });
 });
