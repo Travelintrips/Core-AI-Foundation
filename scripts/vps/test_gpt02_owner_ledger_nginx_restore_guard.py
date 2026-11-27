@@ -490,7 +490,8 @@ class SerializedRecoveryTests(unittest.TestCase):
              patch.object(mod, "restore", side_effect=restore) as original:
             self.assertEqual(mod.restore_serialized(self.active, self.backup, [], []),
                              "RESTORED_GATE_CLOSED_VERIFIED")
-            original.assert_called_once_with(self.active, self.backup, [], [],\n                                             lock_fd=original.call_args.kwargs["lock_fd"])
+            original.assert_called_once_with(self.active, self.backup, [], [],
+                                             lock_fd=original.call_args.kwargs["lock_fd"])
         os.close(self.acquire())
 
     def test_serialized_failure_releases_lock(self):

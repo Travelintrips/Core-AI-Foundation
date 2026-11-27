@@ -35,7 +35,8 @@ def proposed_budget(*, delay_s: int, accuracy_s: int,
                     test_s: int = RECOVERY_TEST_TIMEOUT_S,
                     reload_s: int = RECOVERY_RELOAD_TIMEOUT_S,
                     https_s: int = RECOVERY_HTTPS_TIMEOUT_S,
-                    slack_s: int = SAFETY_MODEL_SLACK_S,\n                    job_probe_s: int = 0) -> dict:
+                    slack_s: int = SAFETY_MODEL_SLACK_S,
+                    job_probe_s: int = 0) -> dict:
     """Pure integer timing envelope, not a guarantee of scheduling/execution."""
     values = (delay_s, accuracy_s, randomized_delay_s, test_s,
               reload_s, https_s, slack_s, job_probe_s)
