@@ -1,0 +1,15 @@
+[Unit]
+Description=GPT02-1782 CST-DEV independent secondary close-only fallback timer
+Documentation=https://github.com/Travelintrips/Core-AI-Foundation/issues/1850
+
+[Timer]
+# Secondary fallback AFTER the primary <=90-second independent restore.
+# The existing primary 90-second timer remains the binding max-open deadline.
+# This fallback is not itself proof that <=90s was guaranteed.
+OnActiveSec=110s
+AccuracySec=1s
+Unit=gpt02-1782-close-only-fallback.service
+Persistent=false
+
+# INTENTIONALLY NO [Install] — never enable at boot automatically without
+# a separately approved deployment; systemd OnActiveSec is not reboot-persistent.

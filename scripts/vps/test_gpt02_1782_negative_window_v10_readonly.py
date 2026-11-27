@@ -31,10 +31,12 @@ BASE = {m.WATCHER_TIMER: "inactive", m.WATCHER_SERVICE: "inactive",
 
 
 class InertWindowTests(TestCase):
-    def test_restore_pin_matches_approved_pr1855_source(self):
+    def test_restore_pin_matches_approved_pr1858_source(self):
         source = SRC.with_name("gpt02_owner_ledger_nginx_restore_guard.py").read_bytes()
         self.assertEqual(hashlib.sha256(source).hexdigest(), m.RESTORE_SHA256)
         self.assertNotEqual(m.RESTORE_SHA256, "e8e874d3d05de88f405d7584ede63a51539ad1e986aed2a2c620773ea2e92448")
+        self.assertNotEqual(m.RESTORE_SHA256, "64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13")
+        self.assertEqual(m.RESTORE_SHA256, "3851912fcb62423b3f54630e901b6ffda8824009f8e4460a0fdb1ecbf5b486e9")
 
     def test_all_public_green_and_watcher_paused_never_claims_live_go(self):
         report = m.evaluate(PUBLIC, True, BASE)

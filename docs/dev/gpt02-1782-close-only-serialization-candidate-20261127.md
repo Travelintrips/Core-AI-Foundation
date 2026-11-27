@@ -1,0 +1,9 @@
+# GPT02-1782 DEV: close-only recovery serialization candidate
+
+Draft source only. Installed guard remains PR1855 SHA256 `64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13`. Candidate SHA256 `c20a9fbd41e29b8976e9e759383673cc0ba7557457219ccf7fa5597de4b85b25`. Do not merge or install before review of paired pin changes, separate Owner approval and safe deployment coordination. Never arm a timer or open the gate for these tests.
+
+Both primary and secondary call the same root guard CLI with the same existing protected backup. The candidate acquires nonblocking exclusive flock on that existing inode, validating regular root:root 0600 single-link metadata and path identity before/after acquisition and after the original recovery. No new lock file, no shared deployment flock, no change to timer scheduling or the underlying canonical restore algorithm. Contention explicitly fails, never claims successful closure. The fallback remains dormant. A busy fallback needs independent reconciliation if the primary fails; no automatic retry is added.
+
+Synthetic tests cover real competing descriptors, holder termination, release after exceptions, rejected invalid backups and CLI routing. They do not prove cgroup child termination, reboot persistence, external editor serialization, successful live restore, or a 90-second deadline. The prior 84-second model is planning only. Primary/fallback overlap is addressed for cooperative CLI invocations holding the same backup inode; do not unlink/replace the backup while recovery runs. Independent supervisor and recovery outcome verification remain prerequisites for live E2E.
+
+PR1853 remains draft with the prior installed digest and needs reconciliation with any later approved guard upgrade. No PROD, Task190, Phase B, RLS, signing, dispatch or owner authorization changes. Keep HTTP503.
