@@ -23,7 +23,7 @@ import tempfile
 # exact existing root-owned file in production; do NOT deploy a second copy.
 LIVE_RESTORE = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
 LIVE_BOOT = Path("/usr/local/sbin/gpt02-1782-failclosed-boot-precheck.py")
-BOOT_SOURCE_SHA256 = "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32"
+BOOT_SOURCE_SHA256 = "bff267b4cc76cca990f0cc03af30b3fa76604ce4e97e3340726ffce20e1c0bf4"
 MAX_BOOT_SOURCE = 8192
 
 

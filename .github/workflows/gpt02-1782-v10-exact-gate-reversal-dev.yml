@@ -46,7 +46,7 @@ jobs:
           from pathlib import Path
           source = Path("scripts/vps/gpt02_1782_exact_gate_reversibility_readonly.py").read_text()
           assert 'ROOT_RESTORE = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")' in source
-          assert 'RESTORE_SHA256 = "3851912fcb62423b3f54630e901b6ffda8824009f8e4460a0fdb1ecbf5b486e9"' in source
+          assert 'RESTORE_SHA256 = "d9756ebc6eabac279cdd1459e7da7b1b66465442f120d1914da0bda8fede1ee4"' in source
           assert 'active = Path(' not in source.lower()
           assert '"ready_to_open": False' in source
           assert '"action": "RETAIN_NGINX_503"' in source

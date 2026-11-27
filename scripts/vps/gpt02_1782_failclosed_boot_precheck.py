@@ -2,7 +2,8 @@
 """GPT02-1782 fail-closed startup precheck; install only with Owner approval.
 
 Preserves the originally pinned COMPLETE closed Nginx vhost byte-for-byte,
-except exactly four independently verified non-GPT02 upstream transitions.
+except the four verified upstream transitions or two exact reviewed closed
+PR252 frontend snapshots. Unknown edits remain denied.
 This is strictly narrower than accepting arbitrary unrelated config edits.
 Never loads credentials, connects to PostgreSQL, starts services or opens gate.
 """
@@ -18,6 +19,14 @@ COMMENT = b"# GPT02-1782 bounded Owner GET test: automatic rollback armed"
 LOCATION = b"location ^~ /api/gpt02-owner-ledger/ {"
 PROXY = b"proxy_pass http://127.0.0.1:18082;"
 ORIGINAL_CLOSED_SHA256 = "e34dde83f676dec15d27b56241b830cbffe7cb3ba0b07e6699f011d48fb651ed"
+# Exact whole-file closed states reviewed on 27 Nov 2026 from the verified
+# 48,092-byte prior backup through AI Task DEV PR252 preview and cutover.
+# The protected Owner Ledger location is byte-identical in all three states.
+# Do not accept arbitrary dashboard edits or normalize arbitrary directives.
+PR252_CLOSED_SNAPSHOTS = frozenset((
+    "df256e23dae4cf20dbd23c33f3c259e341d86719363ccd1e0b0b80a3dff6777c",
+    "1d8b8fd3492845c6fd0586d0fc43ff9fb366f5f62772eb4d968c84e0c3b31846",
+))
 ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")
 BACKUP = Path("/etc/nginx/dev-ai-task.gpt02-1782-guard-backup.conf")
 
@@ -38,11 +47,13 @@ ALLOWED_UPSTREAM_TRANSITIONS = (
 
 
 def canonical_closed(data: bytes) -> bool:
-    """True only for original full vhost with these four exact upstream choices."""
+    """True only for reviewed full-file closed baselines, never a route-only check."""
     if (len(data) > 200000 or data.count(GATE) != 1 or
         data.count(LOCATION) != 1 or data.count(PROXY) < 1 or
         data.count(COMMENT) != 0):
         return False
+    if hashlib.sha256(data).hexdigest() in PR252_CLOSED_SNAPSHOTS:
+        return True
     original = data
     for marker, prior_proxy in ALLOWED_UPSTREAM_TRANSITIONS:
         if original.count(marker) != 1:

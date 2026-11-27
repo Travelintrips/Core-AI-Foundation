@@ -93,7 +93,7 @@ class GateReversibilityTests(unittest.TestCase):
         actual = SRC.with_name("gpt02_1782_failclosed_boot_precheck.py").read_bytes()
         self.assertEqual(
             hashlib.sha256(actual).hexdigest(),
-            "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32",
+            "bff267b4cc76cca990f0cc03af30b3fa76604ce4e97e3340726ffce20e1c0bf4",
         )
 
     def test_tampered_restore_guard_cannot_be_loaded_or_executed(self):
