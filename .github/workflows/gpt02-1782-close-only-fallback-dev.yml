@@ -1,0 +1,86 @@
+name: GPT02-1782 close-only fallback (DEV source-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_1782_close_only_fallback.py'
+      - 'scripts/vps/test_gpt02_1782_close_only_fallback.py'
+      - 'scripts/vps/gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_close_only_boot_reboot_fixture.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.*'
+      - 'docs/dev/gpt02-1782-close-only-fallback-20261127.md'
+      - '.github/workflows/gpt02-1782-close-only-fallback-dev.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_1782_close_only_fallback.py'
+      - 'scripts/vps/test_gpt02_1782_close_only_fallback.py'
+      - 'scripts/vps/gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_primary_timer_budget_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_close_only_boot_reboot_fixture.py'
+      - 'deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.*'
+      - 'docs/dev/gpt02-1782-close-only-fallback-20261127.md'
+      - '.github/workflows/gpt02-1782-close-only-fallback-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  close-only-fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax + isolated no-host synthetic recovery tests
+        run: |
+          python3 -B -m py_compile \
+            scripts/vps/gpt02_1782_close_only_fallback.py \
+            scripts/vps/test_gpt02_1782_close_only_fallback.py \
+            scripts/vps/gpt02_1782_primary_timer_budget_readonly.py \
+            scripts/vps/test_gpt02_1782_primary_timer_budget_readonly.py \
+            scripts/vps/test_gpt02_1782_close_only_boot_reboot_fixture.py
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_1782_close_only_fallback.py -v
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_1782_primary_timer_budget_readonly.py -v
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_1782_close_only_boot_reboot_fixture.py -v
+      - name: Verify DORMANT systemd service and timer files
+        run: |
+          systemd-analyze verify \
+            deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.service \
+            deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.timer
+      - name: Static security boundaries for independent fallback
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          f=Path('scripts/vps/gpt02_1782_close_only_fallback.py').read_text()
+          s=Path('deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.service').read_text()
+          t=Path('deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.timer').read_text()
+          assert 'ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")' in f
+          assert 'GUARD_SHA = "64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13"' in f
+          assert '"--active", str(ACTIVE), "--backup", str(BACKUP)' in f
+          assert 'SYSTEMD_APPROVAL_REQUIRED' in f
+          assert 'watcher_timer_resumed": False' in f
+          assert 'reader_sessions_verified": False' in f
+          assert 'owner_http404_e2e_verified": False' in f
+          for prohibited in ('ALTER ROLE', 'systemctl start', 'systemctl stop',
+                             'systemd-run', 'os.replace(', 'psycopg.connect('):
+              assert prohibited not in f, prohibited
+          assert '[Install]' not in s.split('# INTENTIONALLY NO [Install]')[0]
+          assert '[Install]' not in t.split('# INTENTIONALLY NO [Install]')[0]
+          assert 'OnActiveSec=110s' in t
+          assert 'ExecStart=/usr/bin/python3 /usr/local/sbin/gpt02_1782_close_only_fallback.py --close-only' in s
+          budget=Path('scripts/vps/gpt02_1782_primary_timer_budget_readonly.py').read_text()
+          assert 'DEFAULT_SYSTEMD_ACCURACY_S = 60' in budget
+          assert 'WINDOW_LIMIT_S = 90' in budget
+          assert 'REVIEW_PRIMARY_DELAY_S = 30' in budget
+          assert 'return 2  # NO timer arming' in budget
+          for forbidden in ('systemctl stop', 'systemctl start', 'ALTER ROLE',
+                            'psycopg.connect(', 'os.replace('):
+              assert forbidden not in budget
+          print('GPT02_PRIMARY_TIMER_SOURCE_MODEL_AND_LEGACY_REGRESSION=PASS')
+          print('GPT02_CLOSE_ONLY_FALLBACK_SOURCE_BOUNDARIES=PASS')
+          PY
