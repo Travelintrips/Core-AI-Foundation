@@ -61,7 +61,7 @@ function execute(work) {
   const verified=run.status===0 && evidence.includes('NOTEPAD_VERIFIED PID=');
   return {ok:verified,message:verified?evidence:'Notepad verification failed',details:{runtime:'openclaw-pc2-local-action',e2eCode:verified?'VERIFIED':'FAILED',exitCode:run.status,evidence:verified?evidence:null}};
 }
-if (message.toLowerCase()==='ping') return {ok:true,message:'pong from DESKTOP-CPS76BH',details:{runtime:'openclaw-pc2',mode:'ping'}};
+if (message.toLowerCase()==='ping') return {ok:true,message:'pong from '+os.hostname(),details:{runtime:'openclaw-pc2',mode:'ping'}};
 if(message.startsWith('CHATGPT_CONTINUE_JSON:')) {
   const encoded=message.slice('CHATGPT_CONTINUE_JSON:'.length);
   if(!/^[A-Za-z0-9_-]{30,10000}$/.test(encoded))

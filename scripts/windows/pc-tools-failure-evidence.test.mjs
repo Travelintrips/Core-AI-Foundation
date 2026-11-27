@@ -50,3 +50,16 @@ test('existing subprocess execution and result delivery stay intact; classifier 
   assert.match(source,/if \(failureEvidence\) \{\s*return \{ok:false/);
   assert.match(source,/status:answer.ok\?'COMPLETED':'FAILED'/);
 });
+
+
+test('PC DEV ping reports the current OS hostname, without making a model or E2E claim',()=>{
+  const source=readFileSync(new URL('./openclaw-pc-dev-consumer.mjs',import.meta.url),'utf8');
+  const line=source.split(/\r?\n/).find(l=>l.includes("message.toLowerCase()==='ping'"));
+  assert.ok(line);
+  assert.match(line,/os\.hostname\(\)/);
+  assert.doesNotMatch(line,/DESKTOP-CPS76BH|verified|e2eCode|spawnSync/);
+  const ping=new Function('message','os',line);
+  for(const hostname of ['FIXTURE-PC','FIXTURE-RENAMED']){
+    assert.deepEqual(ping('PING',{hostname:()=>hostname}),{ok:true,message:'pong from '+hostname,details:{runtime:'openclaw-pc2',mode:'ping'}});
+  }
+});
