@@ -80,7 +80,9 @@ def load_pinned_boot_canonical(source_path: Path, live: bool):
 _BOOT_SOURCE, _LIVE_RUNTIME = boot_source_path(Path(__file__))
 canonical_closed = load_pinned_boot_canonical(_BOOT_SOURCE, _LIVE_RUNTIME)
 
-NGINX = Path("/etc/nginx/sites-available/dev-ai-task.cstlogistic.co.id")
+# The VPS has DIFFERENT regular files in sites-available and sites-enabled.
+# The active boot-guarded route is sites-enabled; default to that EXACT path.
+NGINX = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")
 BACKUP = Path("/etc/nginx/dev-ai-task.gpt02-1782-guard-backup.conf")
 GATE = b"""return 503 '{"error":"GPT02_LEDGER_READER_NOT_PROVISIONED"}';"""
 LOCATION = b"location ^~ /api/gpt02-owner-ledger/ {"
@@ -88,6 +90,16 @@ PROXY = b"proxy_pass http://127.0.0.1:18082;"
 # Only this exact replacement is allowed when restoring.
 COMMENT = b"# GPT02-1782 bounded Owner GET test: automatic rollback armed"
 PUBLIC_GATE_URL = "https://dev-ai-task.cstlogistic.co.id/api/gpt02-owner-ledger/decision/00000000-0000-4000-8000-000000000000"
+
+# The observed systemd 255 default AccuracySec=1min makes a timer due at 90s
+# unsuitable as a <=90-second closeout bound. Start MUCH earlier. Model only:
+# 30s due + 1s Accuracy + 20s nginx -t + 20s reload + 7s HTTPS verify
+# + 6s operational margin = 84s. Scheduling latency remains unbounded under
+# host failure; this source change is NOT itself an E2E or hard real-time proof.
+PRIMARY_RESTORE_DELAY_SECONDS = 30
+PRIMARY_TIMER_ACCURACY = "1s"
+PRIMARY_TIMER_RANDOMIZED_DELAY = "0"
+
 
 
 class GuardError(RuntimeError):
@@ -239,13 +251,51 @@ def trusted_script(executable: Path) -> bool:
     return identity.st_uid == 0 and not (stat.S_IMODE(identity.st_mode) & 0o022)
 
 
-def arm(active: Path, backup: Path, delay_seconds: int, executable: Path) -> str:
-    """Create an independent transient timer BEFORE the operator removes the gate.
+def verify_armed_timer_properties(unit: str) -> None:
+    """Read actual PID1 timer properties, not just an `is-active` boolean.
 
-    The timer's command only restores. Timer execution is not a permanent
-    boot-persistent guard; do not open the gate if arming/verification fails.
+    In systemd 255, an unpinned timer inherits AccuracySec=1min. Reject that
+    (and randomized delay) before the operator may change the Nginx gate.
     """
-    if delay_seconds < 30 or delay_seconds > 180:
+    timer = unit + ".timer"
+    command = [
+        "systemctl", "show", timer,
+        "--property=ActiveState", "--property=AccuracyUSec",
+        "--property=RandomizedDelayUSec", "--property=Unit", "--no-pager",
+    ]
+    state = subprocess.run(command, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=10,
+                           check=False)
+    if state.returncode != 0 or len(state.stdout) > 4096:
+        raise GuardError("WATCHDOG_PROPERTIES_UNVERIFIED")
+    try:
+        fields = {}
+        for item in state.stdout.decode("ascii", errors="strict").splitlines():
+            if "=" not in item:
+                raise ValueError()
+            key, value = item.split("=", 1)
+            if key in fields:
+                raise ValueError()
+            fields[key] = value
+    except (UnicodeError, ValueError):
+        raise GuardError("WATCHDOG_PROPERTIES_UNVERIFIED") from None
+    expected = {
+        "ActiveState": "active",
+        "AccuracyUSec": PRIMARY_TIMER_ACCURACY,
+        "RandomizedDelayUSec": PRIMARY_TIMER_RANDOMIZED_DELAY,
+        "Unit": unit + ".service",
+    }
+    if fields != expected:
+        raise GuardError("WATCHDOG_PROPERTIES_UNVERIFIED")
+
+
+def arm(active: Path, backup: Path, delay_seconds: int, executable: Path) -> str:
+    """Arm an EARLY precisely scheduled independent close-only timer.
+
+    Not a real-time guarantee: even with a 30s due time, a failed host or
+    delayed Nginx reload can violate 90s. No GET opening is performed here.
+    """
+    if delay_seconds != PRIMARY_RESTORE_DELAY_SECONDS:
         raise GuardError("WATCHDOG_DURATION_INVALID")
     if not trusted_script(executable):
         raise GuardError("UNTRUSTED_GUARD_PATH")
@@ -253,8 +303,10 @@ def arm(active: Path, backup: Path, delay_seconds: int, executable: Path) -> str
     unit = "gpt02-1782-owner-ledger-restore"
     args = [
         "systemd-run", "--unit=" + unit, "--on-active=" +
-        str(delay_seconds) + "s", "--collect",
-        "/usr/bin/python3", str(executable), "--restore",
+        str(delay_seconds) + "s",
+        "--timer-property=AccuracySec=" + PRIMARY_TIMER_ACCURACY,
+        "--timer-property=RandomizedDelaySec=" + PRIMARY_TIMER_RANDOMIZED_DELAY,
+        "--collect", "/usr/bin/python3", str(executable), "--restore",
         "--active", str(active), "--backup", str(backup),
     ]
     scheduled = subprocess.run(args, stdout=subprocess.DEVNULL,
@@ -262,13 +314,8 @@ def arm(active: Path, backup: Path, delay_seconds: int, executable: Path) -> str
                                check=False)
     if scheduled.returncode != 0:
         raise GuardError("WATCHDOG_SCHEDULE_FAILED")
-    confirmed = subprocess.run(["systemctl", "is-active", "--quiet",
-                                unit + ".timer"], stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=10,
-                               check=False)
-    if confirmed.returncode != 0:
-        raise GuardError("WATCHDOG_NOT_ARMED")
-    return "WATCHDOG_ARMED sha256=" + fingerprint
+    verify_armed_timer_properties(unit)
+    return "WATCHDOG_ARMED_EARLY_WITH_VERIFIED_ACCURACY sha256=" + fingerprint
 
 
 def main() -> int:
@@ -276,7 +323,7 @@ def main() -> int:
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--restore", action="store_true")
     parser.add_argument("--arm", action="store_true")
-    parser.add_argument("--delay-seconds", type=int, default=90)
+    parser.add_argument("--delay-seconds", type=int, default=PRIMARY_RESTORE_DELAY_SECONDS)
     parser.add_argument("--active", type=Path, default=NGINX)
     parser.add_argument("--backup", type=Path, default=BACKUP)
     args = parser.parse_args()

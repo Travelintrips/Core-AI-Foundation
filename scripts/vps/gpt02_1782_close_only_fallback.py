@@ -17,10 +17,10 @@ import subprocess
 import sys
 
 GUARD = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
-GUARD_SHA = "e8e874d3d05de88f405d7584ede63a51539ad1e986aed2a2c620773ea2e92448"
+GUARD_SHA = "64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13"
 ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")
 # IMPORTANT: sites-available and sites-enabled are DIFFERENT regular files in
-# the actual DEV host. Never pass the guard's sites-available default target.
+# the actual DEV host. Always pass the explicit sites-enabled target.
 BACKUP = Path("/etc/nginx/dev-ai-task.gpt02-1782-guard-backup.conf")
 CLOSED_URL = (
     "https://dev-ai-task.cstlogistic.co.id/api/gpt02-owner-ledger/decision/"
@@ -149,7 +149,7 @@ def run_existing_restore() -> bool:
 def close_only() -> dict:
     plan, before = capture_evidence()
     should_restore = plan != "CLOSED_NO_BACKUP_VERIFY_EFFECTIVE_503"
-    # The primary 90-second guard leaves its sealed backup for audit. If it
+    # The primary close-only guard leaves its sealed backup for audit. If it
     # already restored the exact closed file AND live HTTPS is 503/no-store,
     # the later independent fallback must NOT reload shared Nginx a second time.
     if plan == "CLOSED_WITH_BACKUP_RELOAD_AND_VERIFY" and verify_live_503():

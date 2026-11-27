@@ -60,7 +60,7 @@ jobs:
           s=Path('deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.service').read_text()
           t=Path('deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.timer').read_text()
           assert 'ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")' in f
-          assert 'GUARD_SHA = "e8e874d3d05de88f405d7584ede63a51539ad1e986aed2a2c620773ea2e92448"' in f
+          assert 'GUARD_SHA = "64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13"' in f
           assert '"--active", str(ACTIVE), "--backup", str(BACKUP)' in f
           assert 'SYSTEMD_APPROVAL_REQUIRED' in f
           assert 'watcher_timer_resumed": False' in f
@@ -81,6 +81,6 @@ jobs:
           for forbidden in ('systemctl stop', 'systemctl start', 'ALTER ROLE',
                             'psycopg.connect(', 'os.replace('):
               assert forbidden not in budget
-          print('GPT02_UNSAFE_PRIMARY_TIMER_DEFAULT_EXPOSED=PASS')
+          print('GPT02_PRIMARY_TIMER_SOURCE_MODEL_AND_LEGACY_REGRESSION=PASS')
           print('GPT02_CLOSE_ONLY_FALLBACK_SOURCE_BOUNDARIES=PASS')
           PY

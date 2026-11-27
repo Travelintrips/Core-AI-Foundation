@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Isolated primary timer deadline model tests; never arm real timers."""
 from contextlib import redirect_stdout
+import hashlib
 import importlib.util
 from io import StringIO
 import json
@@ -90,6 +91,33 @@ class PrimaryTimerBudgetTests(unittest.TestCase):
         report=m.review_existing_guard_source(source)
         self.assertTrue(report["accuracy_explicit_in_installed_guard"])
         self.assertTrue(report["requires_primary_guard_fix"])
+
+    def test_approved_pr1855_source_pin_and_readonly_budget(self):
+        source = SOURCE.with_name("gpt02_owner_ledger_nginx_restore_guard.py").read_bytes()
+        self.assertEqual(hashlib.sha256(source).hexdigest(), m.GUARD_SHA)
+        report = m.review_existing_guard_source(source)
+        self.assertTrue(report["pr1855_timer_contract_recognized"])
+        self.assertEqual(report["primary_guard_requested_delay_s"], 30)
+        self.assertEqual(report["existing_guard_model"]["projected_upper_s"], 84)
+        self.assertTrue(report["existing_guard_model"]["model_within_90s"])
+        self.assertFalse(report["requires_primary_guard_fix"])
+        self.assertFalse(report["max_90s_live_close_verified"])
+        self.assertFalse(report["owner_e2e_ready"])
+
+    def test_pr1855_contract_drift_stays_no_go(self):
+        source = SOURCE.with_name("gpt02_owner_ledger_nginx_restore_guard.py").read_bytes()
+        for before, after in (
+            (b'PRIMARY_RESTORE_DELAY_SECONDS = 30', b'PRIMARY_RESTORE_DELAY_SECONDS = 90'),
+            (b'PRIMARY_TIMER_ACCURACY = "1s"', b'PRIMARY_TIMER_ACCURACY = "60s"'),
+            (b'PRIMARY_TIMER_RANDOMIZED_DELAY = "0"', b'PRIMARY_TIMER_RANDOMIZED_DELAY = "1s"'),
+            (b'    verify_armed_timer_properties(unit)', b'    pass'),
+        ):
+            with self.subTest(before=before):
+                self.assertIn(before, source)
+                report = m.review_existing_guard_source(source.replace(before, after))
+                self.assertFalse(report["pr1855_timer_contract_recognized"])
+                self.assertTrue(report["requires_primary_guard_fix"])
+                self.assertFalse(report["owner_e2e_ready"])
 
     def test_unrecognized_guard_shape_fail_closed(self):
         report=m.review_existing_guard_source(b"unrecognized code")
