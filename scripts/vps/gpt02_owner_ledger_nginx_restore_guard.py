@@ -9,6 +9,7 @@ unrelated upstream cutovers are accepted; unknown changes fail closed.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import os
 from pathlib import Path
@@ -244,6 +245,73 @@ def restore(active: Path, backup: Path, test_cmd: list[str],
     verify_public_gate_closed()
     return "RESTORED_GATE_CLOSED_VERIFIED"
 
+def _backup_lock_identity(fd: int, backup: Path, *, expected_uid: int = 0,
+                          expected_gid: int = 0) -> tuple[int, int]:
+    """Validate the existing sealed backup inode without writing to it."""
+    current = os.fstat(fd)
+    named = backup.lstat()
+    for meta in (current, named):
+        if (not stat.S_ISREG(meta.st_mode) or meta.st_uid != expected_uid or
+                meta.st_gid != expected_gid or meta.st_nlink != 1 or
+                stat.S_IMODE(meta.st_mode) != 0o600 or
+                not 0 < meta.st_size <= 200_000):
+            raise GuardError("UNTRUSTED_RECOVERY_LOCK_BACKUP")
+    if (current.st_dev, current.st_ino) != (named.st_dev, named.st_ino):
+        raise GuardError("RECOVERY_LOCK_INODE_CHANGED")
+    return current.st_dev, current.st_ino
+
+
+def _acquire_backup_lock(backup: Path, *, expected_uid: int = 0,
+                         expected_gid: int = 0) -> int:
+    """Use the existing backup as a nonblocking, close-only recovery mutex.
+
+    No new file, no shared deployment lock, no lock acquisition from --arm.
+    Production callers use the root-only defaults; synthetic tests can use
+    their disposable fixture UID/GID. Contention is an explicit failure,
+    not an assertion that either process already closed the gate.
+    """
+    fd = None
+    try:
+        fd = os.open(backup, os.O_RDONLY | os.O_NOFOLLOW |
+                     os.O_CLOEXEC | os.O_NONBLOCK)
+        before = _backup_lock_identity(fd, backup, expected_uid=expected_uid,
+                                       expected_gid=expected_gid)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise GuardError("RECOVERY_ALREADY_IN_PROGRESS") from None
+        if _backup_lock_identity(fd, backup, expected_uid=expected_uid,
+                                 expected_gid=expected_gid) != before:
+            raise GuardError("RECOVERY_LOCK_INODE_CHANGED")
+        result, fd = fd, None
+        return result
+    except OSError:
+        raise GuardError("RECOVERY_LOCK_UNAVAILABLE") from None
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+def restore_serialized(active: Path, backup: Path, test_cmd: list[str],
+                       reload_cmd: list[str]) -> str:
+    """Hold the same backup lock across the existing close-only restore.
+
+    Both primary and fallback CLI recovery use this entry point. Do not
+    change backup inode while a recovery is in progress. This serializes
+    cooperative calls only, not external editors, boot or surviving child
+    processes after a crash. Busy, missing or invalid backup is not success.
+    """
+    fd = _acquire_backup_lock(backup)
+    try:
+        before = _backup_lock_identity(fd, backup)
+        outcome = restore(active, backup, test_cmd, reload_cmd)
+        if _backup_lock_identity(fd, backup) != before:
+            raise GuardError("RECOVERY_LOCK_INODE_CHANGED")
+        return outcome
+    finally:
+        os.close(fd)
+
+
 def trusted_script(executable: Path) -> bool:
     if not executable.is_absolute() or executable.is_symlink() or not executable.is_file():
         return False
@@ -339,8 +407,8 @@ def main() -> int:
         elif args.prepare:
             print("GPT02_GUARD=BACKUP_READY sha256=" + prepare(args.active, args.backup))
         else:
-            outcome = restore(args.active, args.backup, ["nginx", "-t"],
-                              ["systemctl", "reload", "nginx"])
+            outcome = restore_serialized(args.active, args.backup, ["nginx", "-t"],
+                                         ["systemctl", "reload", "nginx"])
             print("GPT02_GUARD=" + outcome)
         return 0
     except (GuardError, OSError, subprocess.SubprocessError) as exc:

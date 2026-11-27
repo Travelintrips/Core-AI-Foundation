@@ -60,7 +60,7 @@ jobs:
           s=Path('deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.service').read_text()
           t=Path('deploy/ai-coding-standalone-dev/gpt02-1782-close-only-fallback.timer').read_text()
           assert 'ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")' in f
-          assert 'GUARD_SHA = "64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13"' in f
+          assert 'GUARD_SHA = "c20a9fbd41e29b8976e9e759383673cc0ba7557457219ccf7fa5597de4b85b25"' in f
           assert '"--active", str(ACTIVE), "--backup", str(BACKUP)' in f
           assert 'SYSTEMD_APPROVAL_REQUIRED' in f
           assert 'watcher_timer_resumed": False' in f

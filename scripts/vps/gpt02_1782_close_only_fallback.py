@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 GUARD = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")
-GUARD_SHA = "64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13"
+GUARD_SHA = "c20a9fbd41e29b8976e9e759383673cc0ba7557457219ccf7fa5597de4b85b25"
 ACTIVE = Path("/etc/nginx/sites-enabled/dev-ai-task.cstlogistic.co.id")
 # IMPORTANT: sites-available and sites-enabled are DIFFERENT regular files in
 # the actual DEV host. Always pass the explicit sites-enabled target.
@@ -137,7 +137,7 @@ def verify_live_503() -> bool:
 
 
 def run_existing_restore() -> bool:
-    """ONLY mutating operation: call EXISTING root guard with explicit target."""
+    """Delegate to the pinned guard CLI, which serializes on the sealed backup."""
     result = subprocess.run([
         "/usr/bin/python3", str(GUARD), "--restore",
         "--active", str(ACTIVE), "--backup", str(BACKUP),
