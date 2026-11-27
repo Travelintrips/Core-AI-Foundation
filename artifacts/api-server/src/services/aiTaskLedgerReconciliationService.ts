@@ -11,6 +11,7 @@ import {
   aiCodingBridgeCommandsTable,
   aiCodingBridgeResponsesTable,
   db,
+  pool,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { verifyMcpHandshakeEvidenceRow } from "./localCodingControlBridgeService.js";
@@ -18,6 +19,13 @@ import {
   ledgerBridgeEnabled,
   mirrorAiTaskLedgerSourceState,
 } from "./aiTaskLedgerBridgeService.js";
+
+import {
+  resolveLedgerReconciliationScope,
+  prospectiveLedgerSince,
+  DEV_PASSIVE_PING_SOURCE_SQL,
+  type LedgerReconciliationScope,
+} from "./devPassiveLedgerReconciliationScope.js";
 
 const POLL_MS = 60_000;
 const PAGE_SIZE = 8;
@@ -51,6 +59,9 @@ type ReconciliationDependencies = {
   loadTasks?: Load;
   loadWorkstreams?: Load;
   loadBridgeCommands?: Load;
+  /** Scoped mode never calls the broad legacy loaders. */
+  loadScopedBridgeCommands?: Load;
+  readScope?: () => LedgerReconciliationScope;
   publish?: Publish;
 };
 
@@ -212,6 +223,23 @@ async function loadTerminalBridgeCommands(
   });
 }
 
+async function loadProspectiveBridgeCommands(
+  offset: number,
+  since: Date,
+): Promise<TerminalLedgerSourceRow[]> {
+  const result = await pool.query<{id:string;created_at:Date;updated_at:Date}>(
+    DEV_PASSIVE_PING_SOURCE_SQL, [since.toISOString(), PAGE_SIZE, offset],
+  );
+  return result.rows.map(row => ({
+    id: row.id, taskNumber: row.id.slice(0,8), status: "COMPLETED",
+    createdAt: row.created_at, updatedAt: row.updated_at,
+    sourceKind: "bridge-command" as const,
+    // This records a source result observation, not model/ChatGPT E2E or
+    // receiver ACK. The remote receiver verifies its own terminal receipt.
+    timeline: { commandId: row.id, workerId: "openclaw-pc-worker-dev", callbackObserved: true },
+  }));
+}
+
 type RetryState = {
   signature: string;
   attempts: number;
@@ -227,6 +255,10 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
   const loadWorkstreams = deps.loadWorkstreams ?? loadTerminalWorkstreams;
   const loadBridgeCommands = deps.loadBridgeCommands ?? loadTerminalBridgeCommands;
   const publish = deps.publish ?? mirrorAiTaskLedgerSourceState;
+  const readScope = deps.readScope ?? resolveLedgerReconciliationScope;
+  const loadScoped = deps.loadScopedBridgeCommands ?? loadProspectiveBridgeCommands;
+  let scopedPageOffset = 0;
+  let lastScopeKey: string | null = null;
   const attempts = new Map<string, RetryState>();
   let pageOffset = 0;
   let taskPageOffset = 0;
@@ -246,9 +278,29 @@ export function createAiTaskLedgerReconciler(deps: ReconciliationDependencies = 
     running = true;
     try {
       const since = new Date(now() - LOOKBACK_MS);
+      const scope = readScope();
+      const scopeKey = scope.mode === "dev-passive-ping" ? scope.mode + ":" + scope.since.toISOString() : scope.mode;
+      if (lastScopeKey !== scopeKey) {
+        attempts.clear();
+        scopedPageOffset = 0;
+        pageOffset = 0;
+        taskPageOffset = 0;
+        workstreamPageOffset = 0;
+        bridgeCommandPageOffset = 0;
+        lastScopeKey = scopeKey;
+        if (scope.mode === "blocked") logger.warn("[ai-task-ledger] invalid prospective DEV scope; reconciliation paused");
+      }
+      if (scope.mode === "blocked") return empty;
       let rows: TerminalLedgerSourceRow[];
 
-      if (customLoad) {
+      if (scope.mode === "dev-passive-ping") {
+        const earliest = prospectiveLedgerSince(scope, since);
+        const page = await loadScoped(scopedPageOffset, earliest);
+        scopedPageOffset = page.length < PAGE_SIZE ? 0 : scopedPageOffset + PAGE_SIZE;
+        rows = page.filter(row => row.sourceKind === "bridge-command" &&
+          row.status === "COMPLETED" && row.createdAt >= earliest &&
+          row.createdAt.getTime() <= now() && !row.sessionId);
+      } else if (customLoad) {
         rows = await customLoad(pageOffset, since);
         pageOffset = rows.length < PAGE_SIZE ? 0 : pageOffset + PAGE_SIZE;
       } else {

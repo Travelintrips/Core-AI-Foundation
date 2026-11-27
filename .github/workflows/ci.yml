@@ -34,6 +34,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify AI Core command trigger
         run: node --test scripts/ai-core-command.test.mjs
+      - name: Verify prospective DEV passive ledger producer scope (offline)
+        run: node --experimental-strip-types --test scripts/dev/dev-passive-ledger-producer-scope.test.mjs
       - name: Verify fail-closed DEV-first production promotion
         run: node --test scripts/verify-dev-first-release.test.mjs scripts/dev-first-release-workflows.test.mjs
       - name: Verify GitHub event correlation contract
