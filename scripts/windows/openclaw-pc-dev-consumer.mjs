@@ -207,7 +207,7 @@ while (true) {
  try {
   const now = Date.now();
   if (now - lastHeartbeatAt >= 60000) {
-   await request('/ai/agent-runtime/presence/'+encodeURIComponent(workerId)+'/heartbeat',{health:'healthy',version:'2026.10.19-backoff'});
+   await request('/ai/agent-runtime/presence/'+encodeURIComponent(workerId)+'/heartbeat',{health:'healthy',version:'2026.10.19-backoff',details:{runtimeHost:os.hostname(),source:'openclaw-windows'}});
    lastHeartbeatAt = now;
   }
   const work=await request('/ai/agent-runtime/work/claim',{clientId:workerId,leaseSeconds:300});

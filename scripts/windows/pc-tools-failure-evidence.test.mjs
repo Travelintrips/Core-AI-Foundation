@@ -63,3 +63,16 @@ test('PC DEV ping reports the current OS hostname, without making a model or E2E
     assert.deepEqual(ping('PING',{hostname:()=>hostname}),{ok:true,message:'pong from '+hostname,details:{runtime:'openclaw-pc2',mode:'ping'}});
   }
 });
+
+test('consumer heartbeat retains actual hostname instead of erasing companion heartbeat identity',()=>{
+  const source=readFileSync(new URL('./openclaw-pc-dev-consumer.mjs',import.meta.url),'utf8');
+  const line=source.split('\n').find(line=>line.includes("+'/heartbeat'"));
+  assert.ok(line);
+  assert.match(line,/details:\{runtimeHost:os\.hostname\(\),source:'openclaw-windows'\}/);
+  assert.doesNotMatch(line,/DESKTOP-CPS76BH|availableSlots|modelReady|verified/);
+  const capture=new Function('request','workerId','os','return (async()=>{'+line+'})()');
+  return capture(async(route,body)=>{
+    assert.equal(route,'/ai/agent-runtime/presence/openclaw-pc-worker-dev/heartbeat');
+    assert.deepEqual(body,{health:'healthy',version:'2026.10.19-backoff',details:{runtimeHost:'FIXTURE-PC',source:'openclaw-windows'}});
+  },workerId,{hostname:()=> 'FIXTURE-PC'});
+});
