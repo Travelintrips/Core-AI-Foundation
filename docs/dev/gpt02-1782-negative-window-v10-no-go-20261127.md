@@ -45,3 +45,15 @@ The existing human Owner must approve ONE exact current CST-DEV negative HTTP404
 Do not affect Task190, Phase B, RLS, password custody, signing, dispatch or PROD. A generic `lanjut` is not authorization for the high-stakes step.
 
 Related tracking: [#1850](https://github.com/Travelintrips/Core-AI-Foundation/issues/1850) and prior [PR #1851](https://github.com/Travelintrips/Core-AI-Foundation/pull/1851), [PR #1849](https://github.com/Travelintrips/Core-AI-Foundation/pull/1849).
+
+### PR #1855 compatibility update (27 November 2026)
+
+The historical restore digest above refers to PR #1851. At that checkpoint, the installed close-only restore guard was PR #1855, verified SHA256 `64d22f49263fe44e80809b3ba61f4020bc8bd84509723e957065cb1fccabcf13`, with a 30-second timer, explicit 1-second accuracy and zero random delay. The audit and CI use the new exact digest; the previous guard is not accepted. This is source-only compatibility, not live Owner authorization. Keep the HTTP503 gate closed, no reader lease, timer arming or deployment changes. Historical evidence remains unchanged.
+
+### PR #1858 installed compatibility update (27 November 2026)
+
+The Owner authorized and the VPS transaction installed the exact reviewed PR #1858 source, SHA256 `3851912fcb62423b3f54630e901b6ffda8824009f8e4460a0fdb1ecbf5b486e9`. At that checkpoint it was merged to `develop` at `d0b0e1c31971e1039ca84e087aede097017d2a5a`. The fallback service and timer are static and inactive; no active timer, gate opening, reader renewal or deployment freeze was authorized. The earlier #1855 evidence is historical; current source-only audits must reject the previous digest. The 87-second calculation is a model only, not live closeout evidence. Keep HTTP503 and NO-GO for any actual Owner Ledger window. This source-only synchronization neither authorizes nor executes a live test.
+
+### PR #1859 installed compatibility update (27 November 2026)
+
+The Owner-authorized PR #1859 guard installation has passed, and the exact reviewed source is merged at `882daefcb8cb0aa8dd435db12e04fcd7b4740d63`. Current boot SHA256 `bff267b4cc76cca990f0cc03af30b3fa76604ce4e97e3340726ffce20e1c0bf4`, restore SHA256 `d9756ebc6eabac279cdd1459e7da7b1b66465442f120d1914da0bda8fede1ee4`, closed active vhost SHA256 `1d8b8fd3492845c6fd0586d0fc43ff9fb366f5f62772eb4d968c84e0c3b31846` (49,527 bytes). The exact two approved PR252 frontend snapshots retain the byte-identical Owner Ledger block. Source-only diagnostics must match the installed current guard, not the historical #1858 digest. Boot PASS_GATE_CLOSED and HTTP503; fallback static/inactive. No restart, reload, opening, timer, reader renewal, custody publication or Owner E2E authorized by this update. Prior evidence remains historical.

@@ -1,0 +1,70 @@
+name: GPT02-1782 v10 exact gate reversal (DEV source-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_1782_exact_gate_reversibility_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_exact_gate_reversibility_readonly.py'
+      - 'scripts/vps/gpt02_1782_release_lock_contract.py'
+      - 'scripts/vps/test_gpt02_1782_release_lock_contract.py'
+      - '.github/workflows/gpt02-1782-v10-exact-gate-reversal-dev.yml'
+      - 'docs/dev/gpt02-1782-v10-exact-gate-reversal-handoff-20261127.md'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/vps/gpt02_1782_exact_gate_reversibility_readonly.py'
+      - 'scripts/vps/test_gpt02_1782_exact_gate_reversibility_readonly.py'
+      - 'scripts/vps/gpt02_1782_release_lock_contract.py'
+      - 'scripts/vps/test_gpt02_1782_release_lock_contract.py'
+      - '.github/workflows/gpt02-1782-v10-exact-gate-reversal-dev.yml'
+      - 'docs/dev/gpt02-1782-v10-exact-gate-reversal-handoff-20261127.md'
+
+permissions:
+  contents: read
+
+jobs:
+  byte-reversal-no-executor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and isolated exact-vhost reversal negative cases
+        run: |
+          python3 -B -m py_compile \
+            scripts/vps/gpt02_1782_exact_gate_reversibility_readonly.py \
+            scripts/vps/test_gpt02_1782_exact_gate_reversibility_readonly.py \
+            scripts/vps/gpt02_1782_release_lock_contract.py \
+            scripts/vps/test_gpt02_1782_release_lock_contract.py
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_1782_exact_gate_reversibility_readonly.py -v
+          python3 -B -m unittest discover -s scripts/vps \
+            -p test_gpt02_1782_release_lock_contract.py -v
+      - name: Reject any real DEV gate action or executor entry point
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("scripts/vps/gpt02_1782_exact_gate_reversibility_readonly.py").read_text()
+          assert 'ROOT_RESTORE = Path("/usr/local/sbin/gpt02_owner_ledger_nginx_restore_guard.py")' in source
+          assert 'RESTORE_SHA256 = "d9756ebc6eabac279cdd1459e7da7b1b66465442f120d1914da0bda8fede1ee4"' in source
+          assert 'active = Path(' not in source.lower()
+          assert '"ready_to_open": False' in source
+          assert '"action": "RETAIN_NGINX_503"' in source
+          assert 'return 2  # ALWAYS NO-GO' in source
+          for bad in ('os.replace(', 'os.system(', 'subprocess.run(',
+                      'systemd-run', 'systemctl stop', 'systemctl start',
+                      'psycopg.connect(', 'ALTER ROLE', 'nginx -s reload'):
+              assert bad not in source, bad
+          print('GPT02_V10_EXACT_REVERSAL_NO_EXECUTOR=PASS')
+          src=Path("scripts/vps/gpt02_1782_release_lock_contract.py").read_text()
+          assert 'return 2  # source-only preflight' in src
+          assert 'independent_crash_safe_supervisor_installed' in src
+          assert 'release_script_sha_pinned' in src
+          assert 'watcher_script_sha_pinned' in src
+          assert 'exclusive_lock_currently_acquired": False' in src
+          for bad in ('systemctl stop', 'systemctl start', 'systemd-run',
+                      'nginx -s reload', 'ALTER ROLE', 'psycopg.connect(',
+                      'os.replace(', 'subprocess.run('):
+              assert bad not in src, bad
+          print('GPT02_EXISTING_RELEASE_FLOCK_SOURCE_ONLY_BOUNDARY=PASS')
+          PY
