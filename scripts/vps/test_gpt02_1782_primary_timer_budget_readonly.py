@@ -98,7 +98,8 @@ class PrimaryTimerBudgetTests(unittest.TestCase):
         report = m.review_existing_guard_source(source)
         self.assertTrue(report["pr1855_timer_contract_recognized"])
         self.assertEqual(report["primary_guard_requested_delay_s"], 30)
-        self.assertEqual(report["existing_guard_model"]["projected_upper_s"], 84)
+        self.assertEqual(report["existing_guard_model"]["projected_upper_s"], 87)
+        self.assertTrue(report["maintenance_job_probe_source_recognized"])
         self.assertTrue(report["existing_guard_model"]["model_within_90s"])
         self.assertFalse(report["requires_primary_guard_fix"])
         self.assertFalse(report["max_90s_live_close_verified"])
@@ -116,6 +117,22 @@ class PrimaryTimerBudgetTests(unittest.TestCase):
                 self.assertIn(before, source)
                 report = m.review_existing_guard_source(source.replace(before, after))
                 self.assertFalse(report["pr1855_timer_contract_recognized"])
+                self.assertTrue(report["requires_primary_guard_fix"])
+                self.assertFalse(report["owner_e2e_ready"])
+
+    def test_new_probe_overhead_included_and_drift_rejected(self):
+        source = SOURCE.with_name("gpt02_owner_ledger_nginx_restore_guard.py").read_bytes()
+        self.assertEqual(m.proposed_budget(delay_s=30, accuracy_s=1,
+                         job_probe_s=3)["projected_upper_s"], 87)
+        for before, after in (
+            (b'RECOVERY_JOB_PROBE_TIMEOUT_S = 3', b'RECOVERY_JOB_PROBE_TIMEOUT_S = 10'),
+            (b'"pass_fds": (lock_fd,)', b'"pass_fds": ()'),
+            (b'            verify_nginx_job_idle()', b'            pass'),
+        ):
+            with self.subTest(before=before):
+                self.assertIn(before, source)
+                report = m.review_existing_guard_source(source.replace(before, after))
+                self.assertFalse(report["maintenance_job_probe_source_recognized"])
                 self.assertTrue(report["requires_primary_guard_fix"])
                 self.assertFalse(report["owner_e2e_ready"])
 

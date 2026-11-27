@@ -42,7 +42,7 @@ jobs:
           from pathlib import Path
           src = Path("scripts/vps/gpt02_1782_negative_window_v10_readonly.py").read_text()
           assert 'from gpt02_owner_ledger_fresh_readiness_readonly import inspect' in src
-          assert 'RESTORE_SHA256 = "c20a9fbd41e29b8976e9e759383673cc0ba7557457219ccf7fa5597de4b85b25"' in src
+          assert 'RESTORE_SHA256 = "3851912fcb62423b3f54630e901b6ffda8824009f8e4460a0fdb1ecbf5b486e9"' in src
           assert 'cst-vps-dev-ci-watcher.timer' in src
           assert 'return 2  # Inert preflight' in src
           assert '"ready_to_arm": False' in src

@@ -172,10 +172,31 @@ def prepare(active: Path, backup: Path) -> str:
     return digest(data)
 
 
-def run_maintenance(test_cmd: list[str], reload_cmd: list[str]) -> None:
-    for argv in (test_cmd, reload_cmd):
+RECOVERY_JOB_PROBE_TIMEOUT_S = 3
+
+
+def verify_nginx_job_idle() -> None:
+    """Observe PID1's current Nginx job; never cancel or start one."""
+    probe = subprocess.run(
+        ["systemctl", "show", "nginx.service", "--property=Job"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        timeout=RECOVERY_JOB_PROBE_TIMEOUT_S, check=False,
+    )
+    if probe.returncode != 0 or probe.stdout.strip() != b"Job=":
+        raise GuardError("NGINX_JOB_PENDING_OR_UNVERIFIED")
+
+
+def run_maintenance(test_cmd: list[str], reload_cmd: list[str],
+                    *, lock_fd: int | None = None) -> None:
+    # Retain the existing backup lock in immediate maintenance children.
+    # PID1 jobs do NOT inherit this fd; a separate readback detects a
+    # visible pending job, but cannot guarantee atomicity against outsiders.
+    inherited = {"pass_fds": (lock_fd,)} if lock_fd is not None else {}
+    for index, argv in enumerate((test_cmd, reload_cmd)):
+        if index == 1 and lock_fd is not None:
+            verify_nginx_job_idle()
         proc = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                              timeout=20, check=False)
+                              timeout=20, check=False, **inherited)
         if proc.returncode != 0:
             raise GuardError("NGINX_TEST_OR_RELOAD_FAILED")
 
@@ -210,7 +231,7 @@ def verify_public_gate_closed() -> None:
         raise GuardError("PUBLIC_GATE_NOT_VERIFIED_503")
 
 def restore(active: Path, backup: Path, test_cmd: list[str],
-            reload_cmd: list[str]) -> str:
+            reload_cmd: list[str], *, lock_fd: int | None = None) -> str:
     if active.is_symlink() or backup.is_symlink():
         raise GuardError("SYMLINK_REFUSED")
     if not active.is_file() or not backup.is_file():
@@ -227,7 +248,7 @@ def restore(active: Path, backup: Path, test_cmd: list[str],
     if checked(current):
         # File may already be closed while the running Nginx worker still serves
         # the old open configuration (e.g. earlier reload failed). Reconcile.
-        run_maintenance(test_cmd, reload_cmd)
+        run_maintenance(test_cmd, reload_cmd, lock_fd=lock_fd)
         if active.read_bytes() != current:
             raise GuardError("RESTORE_READBACK_MISMATCH")
         verify_public_gate_closed()
@@ -239,7 +260,7 @@ def restore(active: Path, backup: Path, test_cmd: list[str],
         raise GuardError("ACTIVE_CHANGED_BEFORE_RESTORE")
     mode = stat.S_IMODE(active.stat().st_mode)
     atomic_root_write(active, closed, mode)
-    run_maintenance(test_cmd, reload_cmd)
+    run_maintenance(test_cmd, reload_cmd, lock_fd=lock_fd)
     if active.read_bytes() != closed:
         raise GuardError("RESTORE_READBACK_MISMATCH")
     verify_public_gate_closed()
@@ -298,13 +319,13 @@ def restore_serialized(active: Path, backup: Path, test_cmd: list[str],
 
     Both primary and fallback CLI recovery use this entry point. Do not
     change backup inode while a recovery is in progress. This serializes
-    cooperative calls only, not external editors, boot or surviving child
-    processes after a crash. Busy, missing or invalid backup is not success.
+    cooperative calls only; immediate children inherit the lock. PID1 jobs,
+    external editors and boot are not fully covered. Busy is not success.
     """
     fd = _acquire_backup_lock(backup)
     try:
         before = _backup_lock_identity(fd, backup)
-        outcome = restore(active, backup, test_cmd, reload_cmd)
+        outcome = restore(active, backup, test_cmd, reload_cmd, lock_fd=fd)
         if _backup_lock_identity(fd, backup) != before:
             raise GuardError("RECOVERY_LOCK_INODE_CHANGED")
         return outcome
