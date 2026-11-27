@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pcToolsFailureEvidence } from './pc-tools-failure-evidence.mjs';
 const workerId = 'openclaw-pc-worker-dev';
 const home = os.homedir();
 const envFile = path.join(home, 'aicore-worker-bootstrap', 'ai-worker-dev.env');
@@ -188,6 +189,13 @@ if (message==='AI_CORE_CHATGPT_BROWSER_E2E') {
      ? [entry,'agent','--agent','main','--session-key','agent:main:pc-safe-'+work.commandId,'--message-file',filename,'--timeout','45','--json']
      : [entry,'agent','--agent','gpt02-dev','--session-key','agent:gpt02-dev:pc-work-'+work.commandId,'--message-file',filename,'--timeout','45','--json'];
    const run=spawnSync(node,args,{windowsHide:true,encoding:'utf8',timeout:safePcWork?60000:105000,maxBuffer:1024*1024});
+   const failureEvidence = pcToolsFailureEvidence(work, workerId, run);
+   if (failureEvidence) {
+     return {ok:false,message:failureEvidence.message,details:{
+       ...failureEvidence.details,
+       ...(developmentSopVerified ? { developmentSopVerified } : {}),
+     }};
+   }
   const output=String(run.stdout||run.stderr||run.error?.message||'').slice(-3000);
   return {ok:run.status===0,message:output||'OpenClaw returned no output',details:{runtime:'openclaw-pc2',exitCode:run.status,...(developmentSopVerified ? { developmentSopVerified } : {})}};
  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
