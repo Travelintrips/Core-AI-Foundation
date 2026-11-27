@@ -32,7 +32,7 @@ const CONFIG = {
 };
 const IDENTITY = {
   actor: CONFIG.user, effective: CONFIG.user, database_name: "postgres",
-  transaction_read_only: "on", default_read_only: "on",
+  transaction_read_only: "on", default_read_only: "on", backend_ssl: true,
 };
 const DECISION = {
   challenge_id: CHALLENGE, status: "CONSUMED", decision: "APPROVED",
@@ -273,6 +273,28 @@ describe("GPT02 separated Super Admin ledger custody", () => {
     expect(JSON.stringify(receipt)).not.toContain(CA);
   });
 
+  it("accepts only exact session-pooler TLS wire login while retaining the native PostgreSQL identity gate", async () => {
+    const { replaceContent } = installFixture();
+    const host = "aws-0-ap-southeast-2.pooler.supabase.com";
+    replaceContent(CREDENTIAL, Buffer.from(JSON.stringify({ ...CONFIG, host })));
+    const receipt = await readGpt02SuperAdminLedgerReceipt(CHALLENGE, ACTOR);
+    expect(receipt).toMatchObject({ challengeId: CHALLENGE, decision: "APPROVED" });
+    expect(mocks.createPool).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      host, port: 5432, database: "postgres",
+      user: `${CONFIG.user}.${CONFIG.projectId}`,
+      ssl: { ca: CA, rejectUnauthorized: true, servername: host },
+    }));
+  });
+
+  it("denies session-pooler login that did not map to the native reader role", async () => {
+    const { replaceContent } = installFixture({ ...IDENTITY, actor: "postgres" });
+    replaceContent(CREDENTIAL, Buffer.from(JSON.stringify({
+      ...CONFIG, host: "aws-0-ap-southeast-2.pooler.supabase.com",
+    })));
+    await expectCustodyDenied(readGpt02SuperAdminLedgerReceipt(CHALLENGE, ACTOR));
+    expect(mocks.createPool).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["writer session user", { actor: "aicore_dev_runtime" }],
     ["writer effective role", { effective: "aicore_dev_runtime" }],
@@ -281,6 +303,7 @@ describe("GPT02 separated Super Admin ledger custody", () => {
     ["different database", { database_name: "other" }],
     ["writable transaction", { transaction_read_only: "off" }],
     ["writable role default", { default_read_only: "off" }],
+    ["unencrypted backend despite frontend TLS", { backend_ssl: false }],
   ] as const)("rejects %s before querying owner decisions", async (_name, patch) => {
     const { client, pool } = installFixture({ ...IDENTITY, ...patch });
     await expectCustodyDenied(readGpt02SuperAdminLedgerReceipt(CHALLENGE, ACTOR));

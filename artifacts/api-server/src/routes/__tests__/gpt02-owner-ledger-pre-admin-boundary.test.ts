@@ -19,7 +19,10 @@ describe("GPT02 Super Admin separate ledger reader release boundary", () => {
 
   it("never falls back to the app writer pool or takes credentials from the browser", () => {
     expect(readerSource).toContain('new PostgresPool(');
-    expect(readerSource).toContain('user: ROLE');
+    expect(readerSource).toContain('user: transport.databaseUser');
+    expect(readerSource).toContain('resolveGpt02ReaderDbTransport(config)');
+    expect(readerSource).toContain('identity.rows[0]?.actor !== ROLE');
+    expect(readerSource).toContain('identity.rows[0]?.effective !== ROLE');
     expect(readerSource).toContain('reader.json');
     expect(readerSource).toContain('await readProtectedRuntimeFile(CREDENTIAL_FILE,');
     expect(readerSource).toContain('await readProtectedRuntimeFile(ROOT_CA,');

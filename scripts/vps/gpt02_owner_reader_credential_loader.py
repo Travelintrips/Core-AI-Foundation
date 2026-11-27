@@ -41,6 +41,12 @@ _EXPECTED = {
     "sslMode": "verify-full",
     "user": "gpt02_owner_ledger_reader_1782_dev",
 }
+# Exact CST-DEV allowlist; no arbitrary hostname, IPv4 IP, other region,
+# transaction pooler or Task190 credential. The reader user remains native.
+_ALLOWED_DB_HOSTS = frozenset({
+    "db.xssrfshdrtdfupgqwfdw.supabase.co",
+    "aws-0-ap-southeast-2.pooler.supabase.com",
+})
 _SAFE_CODES = frozenset({
     "READER_LOADER_ENV_INVALID", "READER_LOADER_ROOT_REQUIRED",
     "READER_LOADER_ARGUMENTS_INVALID", "READER_DIRECTORY_UNSAFE",
@@ -194,8 +200,10 @@ def _validate_payload(payload: bytes) -> None:
         if not isinstance(value, dict) or set(value) != set(_EXPECTED) | {"password"}:
             raise ValueError("shape")
         if any(type(value[key]) is not type(expected) or value[key] != expected
-               for key, expected in _EXPECTED.items()):
+               for key, expected in _EXPECTED.items() if key != "host"):
             raise ValueError("target")
+        if type(value["host"]) is not str or value["host"] not in _ALLOWED_DB_HOSTS:
+            raise ValueError("transport")
         password = value["password"]
         # Match the API consumer's JavaScript string-length boundary exactly.
         if not isinstance(password, str) or not 32 <= len(

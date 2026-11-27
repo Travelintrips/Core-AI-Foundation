@@ -1,5 +1,6 @@
 import { PostgresPool, type PostgresPoolClient } from "@workspace/db";
 import { readProtectedRuntimeFile } from "./gpt02ProtectedRuntimeFile.js";
+import { GPT02_CUSTODY_READER_ROLE, resolveGpt02ReaderDbTransport } from "./gpt02ReaderCustodyDbTransport.js";
 import {
   digestGpt02RelockManifest,
   type Gpt02OwnerActor,
@@ -8,8 +9,7 @@ import {
 import type { OwnerLedgerReceipt } from "../routes/gpt02-owner-ledger-read.js";
 
 type ReaderClient = PostgresPoolClient;
-const HOST = "db.xssrfshdrtdfupgqwfdw.supabase.co";
-const ROLE = "gpt02_owner_ledger_reader_1782_dev";
+const ROLE = GPT02_CUSTODY_READER_ROLE;
 const OWNER_EMAIL = "admcst001@gmail.com";
 const CREDENTIAL_FILE = "/run/credentials/gpt02-owner-ledger-reader/reader.json";
 const ROOT_CA = "/etc/gpt02-dev/supabase-root-ca-2021.crt";
@@ -44,10 +44,7 @@ async function readSealedCredential(): Promise<ReaderConfig> {
     if (
       !config || typeof config !== "object" ||
       Object.keys(config).sort().join(",") !== "database,host,password,port,projectId,sslMode,user" ||
-      config.host !== HOST || config.database !== "postgres" ||
-      config.projectId !== "xssrfshdrtdfupgqwfdw" ||
-      config.port !== 5432 || config.user !== ROLE ||
-      config.sslMode !== "verify-full" ||
+      !resolveGpt02ReaderDbTransport(config) ||
       typeof config.password !== "string" || config.password.length < 32 || config.password.length > 256
     ) deny();
     return config;
@@ -65,6 +62,8 @@ export async function readGpt02SuperAdminLedgerReceipt(
       actor.email.toLowerCase() !== OWNER_EMAIL || actor.role !== "super_admin" ||
       typeof actor.authSupabaseId !== "string" || !UUID.test(actor.authSupabaseId)) deny();
   const config = await readSealedCredential();
+  const transport = resolveGpt02ReaderDbTransport(config);
+  if (!transport) deny();
   let ca: string;
   try {
     // Public CA data may be readable by other users, but never writable by them.
@@ -75,9 +74,9 @@ export async function readGpt02SuperAdminLedgerReceipt(
   } catch { return deny(); }
   if (!ca.includes("-----BEGIN CERTIFICATE-----")) deny();
   const pool = new PostgresPool({
-    host: HOST, port: 5432, database: "postgres", user: ROLE,
+    host: transport.host, port: 5432, database: "postgres", user: transport.databaseUser,
     password: config.password,
-    ssl: { ca, rejectUnauthorized: true, servername: HOST },
+    ssl: { ca, rejectUnauthorized: true, servername: transport.tlsServerName },
     max: 1, connectionTimeoutMillis: 4_000, idleTimeoutMillis: 500,
     query_timeout: 4_000, statement_timeout: 3_000,
     application_name: "gpt02-owner-superadmin-ledger-read-dev",
@@ -90,19 +89,21 @@ export async function readGpt02SuperAdminLedgerReceipt(
     inTransaction = true;
     const identity = await client.query<{
       actor: string; effective: string; database_name: string;
-      transaction_read_only: string; default_read_only: string;
+      transaction_read_only: string; default_read_only: string; backend_ssl: boolean;
     }>(`
       SELECT session_user::text AS actor, current_user::text AS effective,
              current_database()::text AS database_name,
              current_setting('transaction_read_only') AS transaction_read_only,
-             current_setting('default_transaction_read_only') AS default_read_only
+             current_setting('default_transaction_read_only') AS default_read_only,
+             (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS backend_ssl
     `);
     if (
       identity.rowCount !== 1 || identity.rows[0]?.actor !== ROLE ||
       identity.rows[0]?.effective !== ROLE ||
       identity.rows[0]?.database_name !== "postgres" ||
       identity.rows[0]?.transaction_read_only !== "on" ||
-      identity.rows[0]?.default_read_only !== "on"
+      identity.rows[0]?.default_read_only !== "on" ||
+      identity.rows[0]?.backend_ssl !== true
     ) deny();
 
     const decision = await client.query<{

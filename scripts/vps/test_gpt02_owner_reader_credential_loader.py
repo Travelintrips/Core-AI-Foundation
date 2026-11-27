@@ -136,6 +136,18 @@ class ReaderCredentialLoaderTests(unittest.TestCase):
         self.assert_no_temporary_files()
         self.assertEqual(self.open_fds, set())
 
+    def test_pinned_session_pooler_profile_is_published_exactly_and_keeps_native_role(self):
+        pooler = {
+            **CONFIG, "host": "aws-0-ap-southeast-2.pooler.supabase.com",
+        }
+        payload = json.dumps(pooler, separators=(",", ":")).encode()
+        self.set_source(payload)
+        loader.load_reader_credential()
+        self.assertEqual(self.target.read_bytes(), payload)
+        self.assertEqual(json.loads(self.target.read_bytes())["user"], CONFIG["user"])
+        self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o600)
+        self.assert_no_temporary_files()
+
     def test_partial_writes_are_completed_before_atomic_replacement(self):
         original = b"synthetic-previous-publication"
         self.target.write_bytes(original)
@@ -261,7 +273,11 @@ class ReaderCredentialLoaderTests(unittest.TestCase):
         invalid = [b"\xff\xfe", b"{", b"[]", b"null", b'{"password":NaN}',
                    PAYLOAD[:-1] + b',"user":"gpt02_owner_ledger_reader_1782_dev"}']
         for patch_values in (
-            {"host": "db.other.example.invalid"}, {"projectId": "other-project"},
+            {"host": "db.other.example.invalid"},
+            {"host": "aws-0-ap-southeast-2.pooler.supabase.com.evil.invalid"},
+            {"host": "aws-0-ap-southeast-1.pooler.supabase.com"},
+            {"host": "aws-0-ap-southeast-2.pooler.supabase.com", "port": 6543},
+            {"host": None}, {"projectId": "other-project"},
             {"user": "aicore_dev_runtime"}, {"database": "other"}, {"port": "5432"},
             {"sslMode": "disable"}, {"password": "short"}, {"extra": "not-allowed"},
         ):
