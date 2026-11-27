@@ -56,7 +56,7 @@ class BootRestartFixtureTests(unittest.TestCase):
     def test_repo_boot_guard_is_exact_installed_root_source(self):
         self.assertEqual(
             hashlib.sha256(SRC.read_bytes()).hexdigest(),
-            "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32",
+            "bff267b4cc76cca990f0cc03af30b3fa76604ce4e97e3340726ffce20e1c0bf4",
         )
 
     def test_boot_with_closed_gate_and_no_backup_passes_without_write(self):

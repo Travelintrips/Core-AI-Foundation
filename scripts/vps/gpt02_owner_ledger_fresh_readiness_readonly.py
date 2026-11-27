@@ -26,7 +26,7 @@ PRINCIPAL = "openclaw-vps-main"
 ROLE = "gpt02_owner_ledger_reader_1782_dev"
 SCOPE = "GPT02_READER_CREDENTIAL_CUSTODY_CST_DEV"
 READER_PATH = "/run/credentials/gpt02-owner-ledger-reader/reader.json"
-BOOT_SHA = "26ea880f87b4eed5dea9cda0bd907b03711262abe470cde65b6c2e8e4b4b0e32"
+BOOT_SHA = "bff267b4cc76cca990f0cc03af30b3fa76604ce4e97e3340726ffce20e1c0bf4"
 # PR #1851 owns the full-file canonical Nginx integrity rule. This read-only
 # diagnostic invokes only that PINNED boot source's pure canonical_closed check.
 # No duplicated or separately relaxed upstream allowlist is maintained here.
