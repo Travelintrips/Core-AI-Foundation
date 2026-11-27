@@ -7,6 +7,9 @@ from __future__ import annotations
 from contextlib import contextmanager
 from itertools import product
 import hashlib
+import os
+import subprocess
+import sys
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -406,6 +409,117 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(modeled,84)
         self.assertLess(modeled,90)
         self.assertIn("Scheduling latency remains unbounded", SOURCE.read_text())
+
+class SerializedRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.backup = Path(tmp.name) / "sealed-fixture.conf"
+        self.backup.write_bytes(b"synthetic closed backup")
+        self.backup.chmod(0o600)
+        self.active = Path(tmp.name) / "fixture-active.conf"
+
+    def acquire(self, path=None):
+        return mod._acquire_backup_lock(path or self.backup,
+            expected_uid=os.geteuid(), expected_gid=os.getegid())
+
+    def test_second_recovery_denied_and_release_allows_next(self):
+        fd = self.acquire()
+        try:
+            with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
+                self.acquire()
+        finally:
+            os.close(fd)
+        os.close(self.acquire())
+
+    def test_holder_crash_releases_fixture_backup_lock(self):
+        proc = subprocess.Popen([sys.executable, "-u", "-c",
+            "import fcntl,sys,time; f=open(sys.argv[1],'rb'); "
+            "fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB); "
+            "print('LOCKED',flush=True); time.sleep(30)",
+            str(self.backup)], stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(proc.stdout.readline().strip(), "LOCKED")
+            with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
+                self.acquire()
+            proc.kill()
+            proc.wait(timeout=5)
+            os.close(self.acquire())
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+            proc.stdout.close()
+
+    def test_bad_backup_mode_symlink_and_hardlink_rejected(self):
+        self.backup.chmod(0o644)
+        with self.assertRaisesRegex(mod.GuardError, "UNTRUSTED"):
+            self.acquire()
+        self.backup.chmod(0o600)
+        link = self.backup.with_name("link")
+        link.symlink_to(self.backup)
+        with self.assertRaisesRegex(mod.GuardError, "UNAVAILABLE"):
+            self.acquire(link)
+        link.unlink()
+        os.link(self.backup, link)
+        with self.assertRaisesRegex(mod.GuardError, "UNTRUSTED"):
+            self.acquire()
+        link.unlink()
+        os.close(self.acquire())
+
+    def test_missing_backup_never_created(self):
+        self.backup.unlink()
+        with self.assertRaisesRegex(mod.GuardError, "UNAVAILABLE"):
+            self.acquire()
+        self.assertFalse(self.backup.exists())
+
+    def test_serialized_cli_holds_lock_through_existing_restore(self):
+        real_identity = mod._backup_lock_identity
+        uid, gid = os.geteuid(), os.getegid()
+        def identity(fd, path, **_):
+            return real_identity(fd, path, expected_uid=uid, expected_gid=gid)
+        fd = self.acquire()
+        def restore(*_):
+            with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
+                self.acquire()
+            return "RESTORED_GATE_CLOSED_VERIFIED"
+        with patch.object(mod, "_acquire_backup_lock", return_value=fd), \
+             patch.object(mod, "_backup_lock_identity", side_effect=identity), \
+             patch.object(mod, "restore", side_effect=restore) as original:
+            self.assertEqual(mod.restore_serialized(self.active, self.backup, [], []),
+                             "RESTORED_GATE_CLOSED_VERIFIED")
+            original.assert_called_once_with(self.active, self.backup, [], [])
+        os.close(self.acquire())
+
+    def test_serialized_failure_releases_lock(self):
+        fd = self.acquire()
+        real_identity = mod._backup_lock_identity
+        with patch.object(mod, "_acquire_backup_lock", return_value=fd), \
+             patch.object(mod, "_backup_lock_identity",
+                side_effect=lambda fd, path: real_identity(fd, path,
+                    expected_uid=os.geteuid(), expected_gid=os.getegid())), \
+             patch.object(mod, "restore", side_effect=mod.GuardError("fixture")):
+            with self.assertRaisesRegex(mod.GuardError, "fixture"):
+                mod.restore_serialized(self.active, self.backup, [], [])
+        os.close(self.acquire())
+
+    def test_contended_cli_never_calls_restore(self):
+        with patch.object(mod, "_acquire_backup_lock",
+                          side_effect=mod.GuardError("RECOVERY_ALREADY_IN_PROGRESS")), \
+             patch.object(mod, "restore") as restore:
+            with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
+                mod.restore_serialized(self.active, self.backup, [], [])
+            restore.assert_not_called()
+
+    def test_cli_uses_only_serialized_restore(self):
+        with patch.object(mod.os, "geteuid", return_value=0), \
+             patch.object(mod.sys, "argv", ["guard.py", "--restore"]), \
+             patch.object(mod, "restore_serialized", return_value="fixture") as locked, \
+             patch.object(mod, "restore") as raw:
+            self.assertEqual(mod.main(), 0)
+            locked.assert_called_once()
+            raw.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
