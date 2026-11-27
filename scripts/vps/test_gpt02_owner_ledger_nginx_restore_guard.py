@@ -478,13 +478,13 @@ class SerializedRecoveryTests(unittest.TestCase):
         uid, gid = os.geteuid(), os.getegid()
         def identity(fd, path, **_):
             return real_identity(fd, path, expected_uid=uid, expected_gid=gid)
-        fd = self.acquire()
+        # Keep actual lock acquisition on both independent file descriptors.
+        # Only map ownership checks to the non-root fixture UID/GID.
         def restore(*_):
             with self.assertRaisesRegex(mod.GuardError, "ALREADY_IN_PROGRESS"):
                 self.acquire()
             return "RESTORED_GATE_CLOSED_VERIFIED"
-        with patch.object(mod, "_acquire_backup_lock", return_value=fd), \
-             patch.object(mod, "_backup_lock_identity", side_effect=identity), \
+        with patch.object(mod, "_backup_lock_identity", side_effect=identity), \
              patch.object(mod, "restore", side_effect=restore) as original:
             self.assertEqual(mod.restore_serialized(self.active, self.backup, [], []),
                              "RESTORED_GATE_CLOSED_VERIFIED")
@@ -492,11 +492,10 @@ class SerializedRecoveryTests(unittest.TestCase):
         os.close(self.acquire())
 
     def test_serialized_failure_releases_lock(self):
-        fd = self.acquire()
         real_identity = mod._backup_lock_identity
-        with patch.object(mod, "_acquire_backup_lock", return_value=fd), \
-             patch.object(mod, "_backup_lock_identity",
-                side_effect=lambda fd, path: real_identity(fd, path,
+        # Exercise the real acquire/finally/close path, not a pre-acquired fd.
+        with patch.object(mod, "_backup_lock_identity",
+                side_effect=lambda fd, path, **_: real_identity(fd, path,
                     expected_uid=os.geteuid(), expected_gid=os.getegid())), \
              patch.object(mod, "restore", side_effect=mod.GuardError("fixture")):
             with self.assertRaisesRegex(mod.GuardError, "fixture"):
