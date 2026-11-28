@@ -75,7 +75,7 @@ test('checkbox, select all and removal are limited to terminal jobs', () => {
   assert.match(monitor, /const eligible = shown.filter\(job => Boolean\(job.deleteKey\) && terminal.has\(job.status\)\)/);
   assert.match(monitor, /const allChecked = eligible.length > 0/);
   assert.match(monitor, /aria-label="Pilih semua pekerjaan terminal yang tampil"/);
-  assert.match(monitor, /disabled=\{!terminal.has\(job.status\) \|\| !job.deleteKey\}/);
+  assert.match(monitor, /disabled=\{!actionsAvailable \|\| !terminal.has\(job.status\) \|\| !job.deleteKey\}/);
   assert.match(monitor, /\/api\/dev-center\/jobs\/dismiss/);
   assert.match(monitor, /window.confirm/);
 });
@@ -130,4 +130,20 @@ test('Dashboard shows Human Task assignment, blocker evidence and locked resume'
   assert.match(monitor, /resume GPT02 MASIH DIKUNCI/);
   assert.match(monitor, /openClawEvidence/);
   assert.match(monitor, /"BLOCKED","REVIEW_REQUIRED","FAILED"/);
+});
+
+
+test('monitor distinguishes unavailable or partial data from an observed zero and blocks unsafe actions', () => {
+  assert.match(monitor, /jobMonitorCount\(item.count, availability\)/);
+  assert.match(monitor, /Jumlah pekerjaan belum diketahui/);
+  assert.match(monitor, /setJobs\(\[\]\)/);
+  assert.match(monitor, /setAssistance\(\{\}\)/);
+  assert.match(monitor, /setChecked\(\[\]\)/);
+  assert.match(monitor, /if \(!actionsAvailable \|\| !keys.length \|\| deleting\) return/);
+  assert.match(monitor, /assistanceUsable \? <HumanAssistancePanel/);
+  assert.match(monitor, /parseHumanAssistanceSnapshot<Assistance>/);
+  assert.match(monitor, /await gate.run\(async/);
+  assert.match(monitor, /window.setTimeout\(\(\) => request.abort\(\), 12_000\)/);
+  assert.match(monitor, /controller\?\.abort\(\)/);
+  assert.match(monitor, /setActionError\(/);
 });
