@@ -81,7 +81,7 @@ router.get("/dev-center/jobs", async (req, res): Promise<void> => {
     const read=(v:unknown):Record<string,unknown>=>v && typeof v==="object" && !Array.isArray(v)?v as Record<string,unknown>:{};
     const str=(v:unknown):string=>typeof v==="string"?v.slice(0,180):"";
     const [bridgeResult, executionResult] = await Promise.allSettled([
-      db.execute(sql`SELECT id::text AS id, source, external_id, title, status, owner, created_at, updated_at FROM ai_task_bridge.jobs ORDER BY CASE WHEN status IN ('QUEUED','RUNNING','REVIEW_REQUIRED') THEN 0 ELSE 1 END, updated_at DESC LIMIT 100`),
+      db.execute(sql`WITH selected_bridge AS (SELECT id, source, external_id, title, status, owner, created_at, updated_at FROM ai_task_bridge.jobs ORDER BY CASE WHEN status IN ('QUEUED','RUNNING','REVIEW_REQUIRED') THEN 0 ELSE 1 END, updated_at DESC LIMIT 100) SELECT b.id::text AS id,b.source,b.external_id,b.title,b.status,b.owner,b.created_at,b.updated_at, EXISTS (SELECT 1 FROM ai_task_bridge.job_events ev WHERE ev.job_id=b.id AND ev.kind='WORKER_FAILED') AS worker_failed_recorded FROM selected_bridge b ORDER BY CASE WHEN b.status IN ('QUEUED','RUNNING','REVIEW_REQUIRED') THEN 0 ELSE 1 END,b.updated_at DESC`),
       db.execute(sql`WITH recent AS (
           SELECT id FROM public.ai_execution_jobs
           ORDER BY CASE WHEN status IN ('received','processing','dispatching','verifying','review_required','blocked') THEN 0 ELSE 1 END, updated_at DESC LIMIT 100
@@ -112,7 +112,7 @@ router.get("/dev-center/jobs", async (req, res): Promise<void> => {
     });
     for(const row of bridgeRows){
       const external=String(row["external_id"]??"");
-      const bridgeItem:Record<string,unknown>={id:String(row["id"]),deleteKey:"bridge:"+String(row["id"]),title:str(row["title"])||external,source:str(row["source"])||"AI Task Bridge",status:String(row["status"]??"UNKNOWN").toUpperCase(),stage:null,verifiedProgress:null,worker:str(row["owner"])||null,accountable:null,workerType:null,blocker:null,evidence:null,updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null};
+      const bridgeItem:Record<string,unknown>={id:String(row["id"]),deleteKey:"bridge:"+String(row["id"]),title:str(row["title"])||external,source:str(row["source"])||"AI Task Bridge",status:String(row["status"]??"UNKNOWN").toUpperCase(),stage:null,verifiedProgress:null,worker:str(row["owner"])||null,accountable:null,workerType:null,blocker:row["status"]==="FAILED" && row["worker_failed_recorded"]===true ? "Event WORKER_FAILED tercatat; penyebab spesifik belum tersedia" : null,evidence:null,updatedAt:row["updated_at"] instanceof Date?(row["updated_at"] as Date).toISOString():row["updated_at"]??null};
       items.push(bridgeItem);
       if(external)bridgeItemsByExternal.set(external,bridgeItem);
     }
