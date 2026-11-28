@@ -147,3 +147,10 @@ test('monitor distinguishes unavailable or partial data from an observed zero an
   assert.match(monitor, /controller\?\.abort\(\)/);
   assert.match(monitor, /setActionError\(/);
 });
+
+test('ordinary polling does not reset an open assistance form', () => {
+  const poll = monitor.slice(monitor.indexOf('useEffect(() => {'),monitor.indexOf('const availability = jobMonitorAvailability'));
+  assert.ok(poll.includes('setAssistanceAvailability("ready")'));
+  assert.ok(poll.includes('setAssistanceAvailability("unavailable")'));
+  assert.ok(!poll.includes('setAssistanceAvailability("loading")'));
+});

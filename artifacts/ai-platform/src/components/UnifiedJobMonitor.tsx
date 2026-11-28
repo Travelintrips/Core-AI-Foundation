@@ -64,8 +64,9 @@ export default function UnifiedJobMonitor() {
         const request = new AbortController();
         controller = request;
         const timeout = window.setTimeout(() => request.abort(), 12_000);
-        // Do not offer a new escalation until the current assistance read is known.
-        setAssistanceAvailability("loading");
+        // Keep an already confirmed assistance snapshot during an ordinary
+        // refresh, so an open operator form is not remounted every 15 seconds.
+        // A failed read invalidates that snapshot and disables escalation.
         try {
           const response = await fetch("/api/dev-center/jobs", { credentials: "include", cache: "no-store", signal: request.signal });
           if (!response.ok) throw new Error(response.status === 401 || response.status === 403

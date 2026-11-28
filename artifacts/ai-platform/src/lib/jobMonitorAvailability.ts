@@ -14,11 +14,10 @@ export function parseJobMonitorSnapshot<T extends MonitorJobShape>(value: unknow
   if (!isRecord(value) || !Array.isArray(value.jobs) ||
       value.jobs.some(job => !isRecord(job) ||
         !["id", "title", "source", "status"].every(key => typeof job[key] === "string")) ||
-      (value.warnings !== undefined &&
-        (!Array.isArray(value.warnings) || value.warnings.some(warning => typeof warning !== "string")))) {
+      !Array.isArray(value.warnings) || value.warnings.some(warning => typeof warning !== "string")) {
     throw new Error("Format data monitoring tidak valid.");
   }
-  return { jobs: value.jobs as T[], warnings: (value.warnings ?? []) as string[] };
+  return { jobs: value.jobs as T[], warnings: value.warnings as string[] };
 }
 
 export function parseHumanAssistanceSnapshot<T extends AssistanceShape>(value: unknown): Record<string, T> {

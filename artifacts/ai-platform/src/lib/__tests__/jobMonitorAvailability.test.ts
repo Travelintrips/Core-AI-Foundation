@@ -26,8 +26,8 @@ describe("DEV job monitor read availability", () => {
   });
   it("validates actual monitor payload and rejects absent or malformed data", () => {
     expect(parseJobMonitorSnapshot({jobs:[job],warnings:[]})).toEqual({jobs:[job],warnings:[]});
-    expect(parseJobMonitorSnapshot({jobs:[]})).toEqual({jobs:[],warnings:[]});
-    for (const invalid of [null,{}, {jobs:null},{jobs:[{}]},{jobs:[{...job,status:0}]},{jobs:[],warnings:null},{jobs:[],warnings:"ERROR"},{jobs:[],warnings:[1]}]) {
+    expect(parseJobMonitorSnapshot({jobs:[],warnings:[]})).toEqual({jobs:[],warnings:[]});
+    for (const invalid of [null,{}, {jobs:[]},{jobs:null,warnings:[]},{jobs:[{}],warnings:[]},{jobs:[{...job,status:0}],warnings:[]},{jobs:[],warnings:null},{jobs:[],warnings:"ERROR"},{jobs:[],warnings:[1]}]) {
       expect(() => parseJobMonitorSnapshot(invalid)).toThrow("Format data monitoring tidak valid.");
     }
   });
