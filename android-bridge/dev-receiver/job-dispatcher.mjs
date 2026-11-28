@@ -18,7 +18,7 @@ try{const r=await p.query("SELECT id,source,source_session_id,status FROM ai_tas
 console.log(JSON.stringify(r.rows));}finally{await p.end()}})().catch(()=>process.exit(13));
 `;
 function load(file){try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code==='ENOENT')return {};throw e}}
-function save(file,data){const tmp=file+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data),{mode:0o600,flag:'wx'});fs.renameSync(tmp,file)}
+function save(file,data){const tmp=file+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data),{mode:0o600,flag:'wx'});try{const owner=fs.statSync(devicesFile);fs.chownSync(tmp,owner.uid,owner.gid);fs.renameSync(tmp,file)}catch(e){try{fs.unlinkSync(tmp)}catch{}throw e}}
 export function eligible(rows,registry,now=Date.now()){
  return rows.filter(r=>r.status==='QUEUED'&&r.source==='OPENCLAW'&&uuid.test(r.id||'')&&
  /^android-dev:[a-zA-Z0-9_-]{3,48}$/.test(r.source_session_id||'')&&

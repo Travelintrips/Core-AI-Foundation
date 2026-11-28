@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "569303303223",
+    "project_id": "cst-android-bridge-dev",
+    "storage_bucket": "cst-android-bridge-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:569303303223:android:a5b538a8c923a4fe6cabb2",
+        "android_client_info": {
+          "package_name": "id.cst.openclawbridge.autosend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAa8V-kX9ESN-jLCQmRlt1pZc1nGyEXhiU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
