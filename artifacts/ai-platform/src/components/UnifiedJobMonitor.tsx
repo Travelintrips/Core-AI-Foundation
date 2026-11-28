@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, CheckCircle2, Clock3, RefreshCw, UsersRound } from "lucide-react";
+import { canUseHumanAssistance, canUseJobMonitorActions, createJobMonitorPollGate, jobMonitorAvailability, jobMonitorCount, parseHumanAssistanceSnapshot, parseJobMonitorSnapshot, type AssistanceAvailability } from "@/lib/jobMonitorAvailability";
 
 type Job = {
   id: string;
@@ -19,7 +20,6 @@ type Job = {
   evidence?: string | null;
   updatedAt?: string | null;
 };
-type MonitorResponse = { jobs: Job[]; warnings?: string[] };
 type Assistance = { job_key: string; id: number; task_code: string; status: string; assigned_user: string | null; reason: string | null; resumeAllowed: false; nextAction: string };
 type JobFilter = "active" | "running" | "waiting" | "attention" | "verifying" | "failed" | "history" | "all" | "completed";
 const terminal = new Set(["COMPLETED", "CANCELLED", "FAILED"]);
@@ -42,53 +42,82 @@ export default function UnifiedJobMonitor() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [assistance, setAssistance] = useState<Record<string,Assistance>>({});
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [assistanceAvailability, setAssistanceAvailability] = useState<AssistanceAvailability>("loading");
   const [filter, setFilter] = useState<JobFilter>("active");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updated, setUpdated] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
+    let controller: AbortController | null = null;
+    const gate = createJobMonitorPollGate();
     const load = async () => {
-      if (document.hidden) return;
-      try {
-        const response = await fetch("/api/dev-center/jobs", { credentials: "include", cache: "no-store" });
-        if (!response.ok) throw new Error(response.status === 401 || response.status === 403
-          ? "Session AI Core tidak berwenang. Periksa login Dashboard utama."
-          : `Monitoring tidak tersedia (HTTP ${response.status}).`);
-        const payload: MonitorResponse = await response.json();
-        if (!Array.isArray(payload.jobs)) throw new Error("Format data monitoring tidak valid.");
-        if (active) {
+      if (!active || document.hidden) return;
+      await gate.run(async () => {
+        const request = new AbortController();
+        controller = request;
+        const timeout = window.setTimeout(() => request.abort(), 12_000);
+        // Keep an already confirmed assistance snapshot during an ordinary
+        // refresh, so an open operator form is not remounted every 15 seconds.
+        // A failed read invalidates that snapshot and disables escalation.
+        try {
+          const response = await fetch("/api/dev-center/jobs", { credentials: "include", cache: "no-store", signal: request.signal });
+          if (!response.ok) throw new Error(response.status === 401 || response.status === 403
+            ? "Session AI Core tidak berwenang. Periksa login Dashboard utama."
+            : `Monitoring tidak tersedia (HTTP ${response.status}).`);
+          const payload = parseJobMonitorSnapshot<Job>(await response.json());
+          if (!active) return;
           setJobs(payload.jobs);
-          setChecked(old => old.filter(key => payload.jobs.some(job => job.deleteKey === key && terminal.has(job.status))));
-          setWarnings(payload.warnings ?? []);
+          setChecked(old => payload.warnings.length > 0 ? [] : old.filter(key => payload.jobs.some(job => job.deleteKey === key && terminal.has(job.status))));
+          setWarnings(payload.warnings);
           setError(null);
           setUpdated(new Date().toISOString());
+          setLoading(false);
+          // Independent Human Task query: a failed or malformed read is not an empty list.
+          try {
+            const humanRes = await fetch("/api/dev-center/jobs/human-assistance", {credentials:"include",cache:"no-store",signal:request.signal});
+            if (!humanRes.ok) throw new Error("HUMAN_ASSISTANCE_UNAVAILABLE");
+            const next = parseHumanAssistanceSnapshot<Assistance>(await humanRes.json());
+            if (active) { setAssistance(next); setAssistanceAvailability("ready"); }
+          } catch {
+            if (active) { setAssistance({}); setAssistanceAvailability("unavailable"); }
+          }
+        } catch (cause) {
+          if (active) {
+            setJobs([]);
+            setAssistance({});
+            setWarnings([]);
+            setAssistanceAvailability("unavailable");
+            setSelected(null);
+            setChecked([]);
+            setError(request.signal.aborted ? "Batas waktu monitoring terlampaui. Data terbaru belum tersedia."
+              : cause instanceof Error ? cause.message : "Monitoring gagal dimuat.");
+          }
+        } finally {
+          window.clearTimeout(timeout);
+          controller = null;
+          if (active) setLoading(false);
         }
-        // Independent Human Task query: never claim a missing request is resolved.
-        try {
-          const humanRes = await fetch("/api/dev-center/jobs/human-assistance", {credentials:"include",cache:"no-store"});
-          if (!humanRes.ok) throw new Error("HUMAN_ASSISTANCE_UNAVAILABLE");
-          const humanData: {requests?: Assistance[]} = await humanRes.json();
-          if (active) setAssistance(Object.fromEntries((humanData.requests ?? []).map(item => [item.job_key,item])));
-        } catch { if (active) setWarnings(old => [...new Set([...old,"HUMAN_ASSISTANCE_UNAVAILABLE"])]); }
-      } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : "Monitoring gagal dimuat.");
-      } finally {
-        if (active) setLoading(false);
-      }
+      });
     };
     void load();
     const interval = window.setInterval(() => void load(), 15_000);
     const onVisibility = () => { if (!document.hidden) void load(); };
     document.addEventListener("visibilitychange", onVisibility);
-    return () => { active = false; window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisibility); };
+    return () => { active = false; controller?.abort(); window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisibility); };
   }, []);
+
+  const availability = jobMonitorAvailability(loading, updated, error, warnings);
+  const snapshotAvailable = availability === "ready" || availability === "partial";
+  const actionsAvailable = canUseJobMonitorActions(availability);
+  const assistanceUsable = canUseHumanAssistance(availability, assistanceAvailability);
 
   const summary = useMemo(() => {
     const now = Date.now();
@@ -128,9 +157,9 @@ export default function UnifiedJobMonitor() {
     : old.filter(key => !eligible.some(job => job.deleteKey === key)));
   const dismiss = async () => {
     const keys = shown.filter(job => job.deleteKey && terminal.has(job.status) && checked.includes(job.deleteKey)).map(job => job.deleteKey!);
-    if (!keys.length || deleting) return;
+    if (!actionsAvailable || !keys.length || deleting) return;
     if (!window.confirm(`Hapus ${keys.length} pekerjaan terminal dari Dashboard DEV Anda?\n\nData job sumber, event, dan ACK tidak akan dihapus.`)) return;
-    setDeleting(true); setFeedback(null);
+    setDeleting(true); setFeedback(null); setActionError(null);
     try {
       const response = await fetch("/api/dev-center/jobs/dismiss", { method: "POST", credentials: "include", headers: {"Content-Type": "application/json"}, body: JSON.stringify({keys: keys.slice(0,100)}) });
       if (!response.ok) throw new Error(`Gagal menyimpan penghapusan Dashboard (HTTP ${response.status})`);
@@ -138,7 +167,7 @@ export default function UnifiedJobMonitor() {
       setJobs(old => old.filter(job => !result.dismissed.includes(job.deleteKey || "")));
       setChecked(old => old.filter(key => !result.dismissed.includes(key)));
       setFeedback(`${result.dismissed.length} pekerjaan dihapus dari Dashboard Anda. ${result.rejected.length} ditolak atau sudah pernah dihapus. Riwayat sumber tetap aman.`);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Gagal menghapus pekerjaan."); }
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Gagal menghapus pekerjaan."); }
     finally { setDeleting(false); }
   };
 
@@ -146,9 +175,15 @@ export default function UnifiedJobMonitor() {
     <Card className="border-border/60" data-testid="unified-job-monitor">
       <CardHeader className="space-y-2">
         <CardTitle className="text-lg">Monitoring Semua Pekerjaan — Human & AI</CardTitle>
-        <CardDescription>Terintegrasi di Dashboard AI Core. Menggunakan session yang sama; pembaruan otomatis setiap 15 detik. Progres hanya ditampilkan jika ada bukti resmi.</CardDescription>
+        <CardDescription>Terintegrasi di Dashboard AI Core. Menggunakan session yang sama; pembaruan otomatis setiap 15 detik. Maksimum 200 record per pembacaan, bukan total seluruh pekerjaan. Progres hanya ditampilkan jika ada bukti resmi.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div data-testid="job-monitor-read-availability" role="status" className="text-sm text-muted-foreground">
+          {availability === "loading" ? "Memuat data monitoring…" : availability === "unavailable"
+            ? "Data monitoring tidak tersedia. Jumlah pekerjaan belum diketahui."
+            : availability === "partial" ? "Data parsial: angka bertanda * hanya mencakup record yang berhasil dibaca; — berarti belum diketahui. Tindakan dinonaktifkan sementara."
+            : "Data yang berhasil dibaca pada pembaruan terakhir."}
+        </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
           {([
             { label: "Sedang dikerjakan", count: summary.active, Icon: RefreshCw, filter: "running" },
@@ -159,17 +194,18 @@ export default function UnifiedJobMonitor() {
             { label: "Status selesai (bukan PASS)", count: summary.completed, Icon: CheckCircle2, filter: "completed" },
           ] as const).map(item => (
             <button type="button" key={item.label} aria-pressed={filter === item.filter}
+              disabled={!snapshotAvailable}
               onClick={() => { setFilter(item.filter as JobFilter); setSelected(null); setChecked([]); }}
               className={`rounded-lg border p-3 text-left transition-colors hover:border-primary/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${filter === item.filter ? "border-primary bg-primary/10" : ""}`}>
               <div className="flex items-center gap-2 text-xs text-muted-foreground"><item.Icon className="size-4" /> {item.label}</div>
-              <div className="mt-1 text-2xl font-semibold tabular-nums">{item.count}</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{jobMonitorCount(item.count, availability)}</div>
             </button>
           ))}
         </div>
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex flex-wrap gap-2 items-center">
             <label htmlFor="job-monitor-filter" className="text-sm">Status</label>
-            <select id="job-monitor-filter" aria-label="Filter status pekerjaan" className="rounded-md border bg-background p-2 text-sm" value={filter} onChange={event => { setFilter(event.target.value as JobFilter); setChecked([]); }}>
+            <select id="job-monitor-filter" aria-label="Filter status pekerjaan" className="rounded-md border bg-background p-2 text-sm" value={filter} disabled={!snapshotAvailable} onChange={event => { setFilter(event.target.value as JobFilter); setChecked([]); }}>
               <option value="active">Pekerjaan terkini (7 hari)</option>
               <option value="running">Sedang dikerjakan</option>
               <option value="waiting">Menunggu</option>
@@ -180,43 +216,47 @@ export default function UnifiedJobMonitor() {
               <option value="completed">Status selesai (belum tentu PASS)</option>
               <option value="all">Semua data yang dimuat</option>
             </select>
-            <input aria-label="Cari pekerjaan" className="rounded-md border bg-background p-2 text-sm w-56" value={query} onChange={event => { setQuery(event.target.value); setChecked([]); }} placeholder="Cari job, worker, penanggung jawab" />
+            <input aria-label="Cari pekerjaan" className="rounded-md border bg-background p-2 text-sm w-56" value={query} disabled={!snapshotAvailable} onChange={event => { setQuery(event.target.value); setChecked([]); }} placeholder="Cari job, worker, penanggung jawab" />
           </div>
-          <span className="text-xs text-muted-foreground">{loading ? "Memuat…" : updated ? `Terakhir diperbarui: ${formatWib(updated)} WIB` : "Belum diperbarui"}</span>
+          <span className="text-xs text-muted-foreground">{loading ? "Memuat…" : updated ? `Terakhir berhasil dibaca: ${formatWib(updated)} WIB${availability === "unavailable" ? " (data saat ini tidak tersedia)" : ""}` : "Belum diperbarui"}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" aria-label="Pilih semua pekerjaan terminal yang tampil" checked={allChecked}
-              onChange={event => selectAll(event.target.checked)} disabled={!eligible.length || deleting} />
-            Pilih Semua ({eligible.length} dapat dipilih pada filter ini)
+              onChange={event => selectAll(event.target.checked)} disabled={!actionsAvailable || !eligible.length || deleting} />
+            Pilih Semua ({actionsAvailable ? eligible.length : "—"} dapat dipilih pada filter ini)
           </label>
           <button type="button" className="rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground disabled:opacity-40"
-            onClick={() => void dismiss()} disabled={!visibleChecked || deleting}>
+            onClick={() => void dismiss()} disabled={!actionsAvailable || !visibleChecked || deleting}>
             {deleting ? "Menghapus…" : `Hapus dari Dashboard (${visibleChecked})`}
           </button>
           <span className="text-xs text-muted-foreground">Hanya FAILED, COMPLETED, CANCELLED. Job aktif serta riwayat sumber/ACK tidak dihapus.</span>
         </div>
         {feedback && <p role="status" className="text-sm text-green-600">{feedback}</p>}
-        <p className="text-xs text-muted-foreground">Dari {jobs.length} record yang berhasil dimuat: {summary.history} masuk riwayat lama / testing (&gt;7 hari tanpa pembaruan). FAILED adalah hasil terminal dan ditampilkan terpisah dari pekerjaan yang perlu tindakan. COMPLETED tidak otomatis berarti PASS. Ini pengelompokan tampilan, bukan perubahan status database.</p>
+        {actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}
+        {snapshotAvailable && <p className="text-xs text-muted-foreground">Dari {jobs.length} record yang berhasil dimuat: {summary.history} masuk riwayat lama / testing (&gt;7 hari tanpa pembaruan). FAILED adalah hasil terminal dan ditampilkan terpisah dari pekerjaan yang perlu tindakan. COMPLETED tidak otomatis berarti PASS. Ini pengelompokan tampilan, bukan perubahan status database.</p>}
         {error && <p role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error}</p>}
         {warnings.length > 0 && <p role="status" className="text-sm text-amber-600">Data parsial: {warnings.join(", ")}</p>}
+        {snapshotAvailable && assistanceAvailability !== "ready" && <p role="status" className="text-xs text-amber-600">{assistanceAvailability === "loading" ? "Memeriksa data bantuan Human…" : "Data bantuan Human tidak tersedia. Status bantuan belum diketahui; eskalasi dinonaktifkan sementara."}</p>}
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[950px] text-sm">
             <thead className="bg-muted/40 text-left text-xs"><tr>
               <th className="p-3">Pilih</th><th className="p-3">Pekerjaan / Sumber</th><th className="p-3">Status</th><th className="p-3">Progres terverifikasi</th><th className="p-3">Pelaksana</th><th className="p-3">Penanggung jawab</th><th className="p-3">Terakhir aktif</th>
             </tr></thead>
             <tbody>
-              {shown.map(job => {
+              {snapshotAvailable && shown.map(job => {
                 const open = selected === `${job.source}:${job.id}`;
                 const stale = running.has(job.status) && job.updatedAt && Date.now() - Date.parse(job.updatedAt) > 3_600_000;
                 const checkedJob = Boolean(job.deleteKey && checked.includes(job.deleteKey));
                 return <FragmentRow key={`${job.source}:${job.id}`} job={job} open={open} stale={Boolean(stale)}
                   checked={checkedJob} toggleChecked={value => setChecked(old => !job.deleteKey ? old : value ? [...new Set([...old, job.deleteKey])] : old.filter(key => key !== job.deleteKey))}
-                  assistance={job.deleteKey ? assistance[job.deleteKey] : undefined}
+                  actionsAvailable={actionsAvailable && !deleting}
+                  assistanceUsable={assistanceUsable}
+                  assistance={assistanceAvailability === "ready" && job.deleteKey ? assistance[job.deleteKey] : undefined}
                   onAssistanceCreated={item => setAssistance(old => ({...old,[item.job_key]:item}))}
                   onClick={() => setSelected(open ? null : `${job.source}:${job.id}`)} />;
               })}
-              {!shown.length && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">{loading ? "Memuat pekerjaan…" : "Tidak ada pekerjaan sesuai filter."}</td></tr>}
+              {(!snapshotAvailable || !shown.length) && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">{availability === "loading" ? "Memuat pekerjaan…" : availability === "unavailable" ? "Daftar pekerjaan tidak tersedia." : availability === "partial" ? "Tidak ada record cocok dari sumber yang berhasil dibaca. Sumber lain belum diketahui." : "Tidak ada pekerjaan sesuai filter."}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -226,17 +266,17 @@ export default function UnifiedJobMonitor() {
   );
 }
 
-function FragmentRow({ job, open, stale, checked, toggleChecked, assistance, onAssistanceCreated, onClick }: { job: Job; open: boolean; stale: boolean; checked: boolean; toggleChecked: (value: boolean) => void; assistance?: Assistance; onAssistanceCreated: (value:Assistance)=>void; onClick: () => void }) {
+function FragmentRow({ job, open, stale, checked, toggleChecked, actionsAvailable, assistanceUsable, assistance, onAssistanceCreated, onClick }: { job: Job; open: boolean; stale: boolean; checked: boolean; toggleChecked: (value: boolean) => void; actionsAvailable: boolean; assistanceUsable: boolean; assistance?: Assistance; onAssistanceCreated: (value:Assistance)=>void; onClick: () => void }) {
   return <>
     <tr className="border-t hover:bg-muted/20 cursor-pointer" onClick={onClick} aria-expanded={open}>
       <td className="p-3"><input type="checkbox" aria-label={`Pilih ${job.title}`} checked={checked}
-        disabled={!terminal.has(job.status) || !job.deleteKey} onClick={event => event.stopPropagation()}
+        disabled={!actionsAvailable || !terminal.has(job.status) || !job.deleteKey} onClick={event => event.stopPropagation()}
         onChange={event => toggleChecked(event.target.checked)} /></td>
       <td className="p-3"><strong className="font-medium">{job.title}</strong><div className="text-xs text-muted-foreground break-all">{job.source} · {job.id}</div></td>
       <td className="p-3"><span className="rounded bg-muted px-2 py-1 text-xs">{job.status}</span>{job.executionVerified && <div className="mt-1 text-xs font-medium text-green-700 dark:text-green-400">Eksekusi selesai — ACK terverifikasi</div>}{isHistorical(job) && <div className="mt-1 text-xs text-muted-foreground">Riwayat lama</div>}{stale && <div className="mt-1 text-xs text-amber-600">Tidak diperbarui &gt;60 menit</div>}</td>
       <td className="p-3">{typeof job.verifiedProgress === "number" ? <div className="flex items-center gap-2"><progress className="w-28" max={100} value={job.verifiedProgress} /><span>{job.verifiedProgress}%</span></div> : <span className="text-muted-foreground">Belum terverifikasi</span>}</td>
       <td className="p-3">{job.worker || "Belum ditetapkan"}{job.workerType && <div className="text-xs text-muted-foreground">{job.workerType}</div>}</td>
-      <td className="p-3">{job.accountable || assistance?.assigned_user || "Belum ditetapkan"}{!job.accountable && assistance?.assigned_user && <div className="text-xs text-muted-foreground">PIC bantuan Human</div>}</td>
+      <td className="p-3">{job.accountable || assistance?.assigned_user || (assistanceUsable ? "Belum ditetapkan" : "Belum dapat diperiksa")}{!job.accountable && assistance?.assigned_user && <div className="text-xs text-muted-foreground">PIC bantuan Human</div>}</td>
       <td className="p-3">{formatWib(job.updatedAt)} WIB</td>
     </tr>
     {open && <tr className="border-t bg-muted/20"><td colSpan={7} className="p-4 space-y-1 text-sm">
@@ -245,7 +285,7 @@ function FragmentRow({ job, open, stale, checked, toggleChecked, assistance, onA
       <div><strong>Hambatan:</strong> {job.blocker || "Tidak tercatat"}</div>
       <div><strong>Bukti / ACK:</strong> {job.evidence || "Belum tersedia"}</div>
       <div><strong>Jenis pelaksana:</strong> {job.workerType || "Belum tercatat"}</div>
-      {job.deleteKey && <HumanAssistancePanel job={job} assistance={assistance} onCreated={onAssistanceCreated} />}
+      {job.deleteKey && (assistanceUsable ? <HumanAssistancePanel job={job} assistance={assistance} onCreated={onAssistanceCreated} /> : <p className="mt-3 text-xs text-amber-600">Status bantuan belum dapat dipastikan. Form bantuan Human tidak tersedia sementara.</p>)}
     </td></tr>}
   </>;
 }
