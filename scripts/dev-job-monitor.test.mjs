@@ -181,3 +181,9 @@ test('delayed running filter uses shared 60-minute rule and preserves history an
   assert.ok(monitor.includes('jobMonitorCount(summary.delayed, availability)'));
   assert.ok(monitor.includes('indikasi, bukan bukti macet'));
 });
+
+test('recovery evidence panel never treats human completion or final ACK alone as resume authorization', () => {
+  const panel = monitor.split('data-testid="job-recovery-evidence"')[1].split('</section>')[0];
+  for (const marker of ['job.executionVerified === true', '!assistanceUsable', '!job.deleteKey', 'assistance.status', 'Checkpoint, lease dan otorisasi resume', 'Kesiapan recovery belum terverifikasi']) assert.ok(panel.includes(marker));
+  assert.doesNotMatch(panel, /fetch\(|onClick=|dispatchCommand|resumeAllowed:\s*true/);
+});
