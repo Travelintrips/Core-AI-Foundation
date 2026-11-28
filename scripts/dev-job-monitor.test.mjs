@@ -160,3 +160,9 @@ test('monitor search includes existing blocker, stage, evidence and parent statu
   assert.match(monitor, /text.includes\(query.trim\(\).toLowerCase\(\)\)/);
   assert.match(monitor, /placeholder="Cari job, hambatan, tahap, bukti"/);
 });
+
+test('blocked and failed jobs show reported blocker or explicit missing evidence in the list', () => {
+  assert.ok(monitor.includes('(attention.has(job.status) || job.status === "FAILED")'));
+  assert.ok(monitor.includes('data-testid="job-blocker-summary"'));
+  assert.ok(monitor.includes('job.blocker?.trim() || "Tidak tercatat"'));
+});
