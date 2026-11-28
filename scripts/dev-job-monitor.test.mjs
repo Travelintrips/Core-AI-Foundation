@@ -187,3 +187,11 @@ test('recovery evidence panel never treats human completion or final ACK alone a
   for (const marker of ['job.executionVerified === true', '!assistanceUsable', '!job.deleteKey', 'assistance.status', 'Checkpoint, lease dan otorisasi resume', 'Kesiapan recovery belum terverifikasi']) assert.ok(panel.includes(marker));
   assert.doesNotMatch(panel, /fetch\(|onClick=|dispatchCommand|resumeAllowed:\s*true/);
 });
+
+test('DEV bridge failure event is displayed without inventing root cause or ACK', () => {
+  const api = route('/dev-center/jobs');
+  assert.ok(api.includes("ev.job_id=b.id AND ev.kind='WORKER_FAILED'"));
+  assert.ok(api.includes('row["status"]==="FAILED" && row["worker_failed_recorded"]===true'));
+  assert.ok(api.includes('Event WORKER_FAILED tercatat; penyebab spesifik belum tersedia'));
+  assert.ok(api.includes('evidence:null,updatedAt:row["updated_at"]'));
+});
