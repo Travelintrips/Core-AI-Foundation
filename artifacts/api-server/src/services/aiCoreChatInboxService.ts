@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { buildAiCoreInboxReadQuery } from "./aiCoreInboxReadSelection.js";
 
 export type AiCoreInboxEventType =
   | "COMPLETED"
@@ -273,25 +274,12 @@ export async function listAiCoreChatInboxMessages(limit = 50) {
   return { messages, unread };
 }
 
-export async function markAiCoreChatInboxRead(ids?: string[]): Promise<number> {
+export async function markAiCoreChatInboxRead(ids: string[]): Promise<number> {
+  const query = buildAiCoreInboxReadQuery(ids);
+  // Fail closed for any accidental internal caller; do not even probe the
+  // database if the selection is absent, empty, oversized or malformed.
+  if (!query) return 0;
   await ensureAiCoreChatInboxTable();
-  if (ids?.length) {
-    const clean = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 100);
-    if (!clean.length) return 0;
-    const result = await db.execute(sql`
-      UPDATE ai_platform.ai_core_chat_inbox_messages
-      SET read_at = COALESCE(read_at, NOW())
-      WHERE id = ANY(${clean}::uuid[])
-      RETURNING id
-    `);
-    return result.rows?.length ?? 0;
-  }
-
-  const result = await db.execute(sql`
-    UPDATE ai_platform.ai_core_chat_inbox_messages
-    SET read_at = COALESCE(read_at, NOW())
-    WHERE read_at IS NULL
-    RETURNING id
-  `);
+  const result = await db.execute(query);
   return result.rows?.length ?? 0;
 }

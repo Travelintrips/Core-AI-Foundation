@@ -130,6 +130,7 @@ import {
   listAiCoreChatInboxMessages,
   markAiCoreChatInboxRead,
 } from "../services/aiCoreChatInboxService.js";
+import { InboxReadRequest } from "../services/aiCoreInboxReadSelection.js";
 import {
   appendLearningsToMessage,
   promoteExplicitChatLearning,
@@ -206,10 +207,6 @@ function normalizeVoiceAgentCommand(message: string): { command: string; wakeWor
   command = command.replace(/\s{2,}/g, " ").trim();
   return { command, wakeWordMatched: true };
 }
-
-const InboxReadRequest = z.object({
-  ids: z.array(z.string().uuid()).max(100).optional(),
-}).strict();
 
 const ChatRequest = z.object({
   submissionId: z.string().uuid().optional(),
