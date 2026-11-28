@@ -154,3 +154,9 @@ test('ordinary polling does not reset an open assistance form', () => {
   assert.ok(poll.includes('setAssistanceAvailability("unavailable")'));
   assert.ok(!poll.includes('setAssistanceAvailability("loading")'));
 });
+
+test('monitor search includes existing blocker, stage, evidence and parent status without changing job actions', () => {
+  assert.match(monitor, /const text = \[job.title, job.id, job.source, job.worker, job.accountable, job.status, job.stage, job.blocker, job.evidence, job.parentTaskStatus\]/);
+  assert.match(monitor, /text.includes\(query.trim\(\).toLowerCase\(\)\)/);
+  assert.match(monitor, /placeholder="Cari job, hambatan, tahap, bukti"/);
+});
