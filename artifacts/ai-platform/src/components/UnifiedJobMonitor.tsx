@@ -144,7 +144,7 @@ export default function UnifiedJobMonitor() {
       if (filter === "active" && (terminal.has(job.status) || isHistorical(job, now) || isStale(job, now))) {
         return false;
       }
-      const text = [job.title, job.id, job.source, job.worker, job.accountable, job.status].join(" ").toLowerCase();
+      const text = [job.title, job.id, job.source, job.worker, job.accountable, job.status, job.stage, job.blocker, job.evidence, job.parentTaskStatus].join(" ").toLowerCase();
       return text.includes(query.trim().toLowerCase());
     });
   }, [jobs, updated, filter, query]);
@@ -216,7 +216,7 @@ export default function UnifiedJobMonitor() {
               <option value="completed">Status selesai (belum tentu PASS)</option>
               <option value="all">Semua data yang dimuat</option>
             </select>
-            <input aria-label="Cari pekerjaan" className="rounded-md border bg-background p-2 text-sm w-56" value={query} disabled={!snapshotAvailable} onChange={event => { setQuery(event.target.value); setChecked([]); }} placeholder="Cari job, worker, penanggung jawab" />
+            <input aria-label="Cari pekerjaan" title="Cari juga hambatan, tahap, bukti dan status tugas induk" className="rounded-md border bg-background p-2 text-sm w-56" value={query} disabled={!snapshotAvailable} onChange={event => { setQuery(event.target.value); setChecked([]); }} placeholder="Cari job, hambatan, tahap, bukti" />
           </div>
           <span className="text-xs text-muted-foreground">{loading ? "Memuat…" : updated ? `Terakhir berhasil dibaca: ${formatWib(updated)} WIB${availability === "unavailable" ? " (data saat ini tidak tersedia)" : ""}` : "Belum diperbarui"}</span>
         </div>
