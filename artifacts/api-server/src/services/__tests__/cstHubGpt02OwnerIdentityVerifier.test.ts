@@ -83,14 +83,16 @@ describe("CST Hub GPT02 Owner identity adapter", () => {
 
   it("accepts only a fresh, signed Hub Google Super Admin session", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(sessionReadiness()));
-    const actor = await verifyCstHubGpt02OwnerSession({ bearerToken: signedHubToken() });
+    // Reuse the exact fixture: its iat/exp claims depend on wall-clock seconds.
+    const bearerToken = signedHubToken();
+    const actor = await verifyCstHubGpt02OwnerSession({ bearerToken });
     expect(actor).toMatchObject(owner);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(String(url)).toBe("https://dev-ai-task.cstlogistic.co.id/api/auth/gpt02/operator-session-readiness");
     expect(options?.method).toBe("GET");
     expect(options?.redirect).toBe("error");
-    expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${signedHubToken()}`);
+    expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${bearerToken}`);
   });
 
   it("rejects stale claims even if the status endpoint reports fresh", async () => {
