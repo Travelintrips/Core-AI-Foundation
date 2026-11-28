@@ -166,3 +166,9 @@ test('blocked and failed jobs show reported blocker or explicit missing evidence
   assert.ok(monitor.includes('data-testid="job-blocker-summary"'));
   assert.ok(monitor.includes('job.blocker?.trim() || "Tidak tercatat"'));
 });
+
+test('next action is guidance only and handles missing assistance, unsupported job keys and completed human work', () => {
+  const guide = monitor.split('data-testid="job-next-action"')[1].split('</div>}')[0];
+  for (const marker of ['!assistanceUsable', '!job.deleteKey', 'assistance?.status === "completed"', 'Resume tetap terkunci', 'Tidak ada eksekusi ulang otomatis']) assert.ok(guide.includes(marker));
+  assert.doesNotMatch(guide, /fetch\(|onClick=|dispatchCommand/);
+});
