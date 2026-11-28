@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { apiEventStream, apiFetch, HttpError } from "@/lib/apiFetch";
 import { formatAiCoreInboxForChat } from "@/lib/aiCoreChatResultSummary";
+import { isInboxFollowUp, markOneInboxRead, selectInboxFollowUp, type InboxFollowUpFilter } from "@/lib/aiCoreInboxFollowUp";
 import { externalJobStatusLabel, externalWorkRouteLabel, isExternalJobTerminal, type ExternalJobStatus } from "@/lib/aiCoreExternalWorkState";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -423,6 +424,12 @@ export default function AiCoreChat() {
   const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([]);
   const [inboxUnread, setInboxUnread] = useState(0);
   const [inboxError, setInboxError] = useState("");
+  const [inboxLoaded, setInboxLoaded] = useState(false);
+  const [inboxFilter, setInboxFilter] = useState<InboxFollowUpFilter>("all");
+  const [inboxReadPending, setInboxReadPending] = useState<string | null>(null);
+  const inboxReadLock = useRef(false);
+  const [inboxReadNotice, setInboxReadNotice] = useState("");
+  const inboxView = useMemo(() => selectInboxFollowUp(inboxMessages, inboxFilter), [inboxMessages, inboxFilter]);
   const inboxInitializedRef = useRef(false);
   const inboxKnownIdsRef = useRef<Set<string>>(new Set());
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -612,6 +619,7 @@ export default function AiCoreChat() {
 
         setInboxMessages(value.messages);
         setInboxUnread(value.unread);
+        setInboxLoaded(true);
         setInboxError("");
 
         if (inboxInitializedRef.current) {
@@ -1834,23 +1842,27 @@ export default function AiCoreChat() {
     setInstallPrompt(null);
   }
 
-  async function toggleInbox() {
-    const opening = !inboxOpen;
-    setInboxOpen(opening);
-    if (!opening || inboxUnread <= 0) return;
+  // Viewing or filtering reports must not silently clear unread receipts.
+  function toggleInbox() {
+    setInboxOpen(open => !open);
+  }
 
-    const readAt = new Date().toISOString();
-    setInboxUnread(0);
-    setInboxMessages((current) =>
-      current.map((item) => item.readAt ? item : { ...item, readAt }),
-    );
+  async function markInboxItemRead(item: InboxMessage) {
+    if (inboxReadLock.current || !inboxLoaded || inboxError || item.readAt !== null ||
+        !inboxMessages.some(current => current.id === item.id && current.readAt === null)) return;
+    inboxReadLock.current = true;
+    setInboxReadPending(item.id);
+    setInboxReadNotice("");
     try {
-      await apiFetch<{ updated: number }>("/api/ai/core-chat/inbox/read", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-    } catch (error) {
-      setInboxError(error instanceof Error ? error.message : String(error));
+      await markOneInboxRead(item.id, (path, init) => apiFetch<unknown>(path, init));
+      // The normal GET poll remains the authority for readAt and unread.
+      // Do not optimistically change either value or acknowledge a job.
+      setInboxReadNotice("Permintaan tanda dibaca diterima; status mengikuti pembacaan ulang Inbox.");
+    } catch {
+      setInboxReadNotice("Tanda dibaca belum terkonfirmasi. Periksa Inbox sebelum mencoba lagi.");
+    } finally {
+      inboxReadLock.current = false;
+      setInboxReadPending(null);
     }
   }
 
@@ -1927,7 +1939,8 @@ export default function AiCoreChat() {
             </button>
           )}
           <button
-            onClick={() => void toggleInbox()}
+            onClick={toggleInbox}
+            aria-expanded={inboxOpen}
             className="relative flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5"
             style={{
               color: inboxUnread > 0 ? "#C9C2FF" : "#6B82B0",
@@ -1968,8 +1981,28 @@ export default function AiCoreChat() {
               </div>
               <div className="flex items-center gap-1 text-xs" style={{ color: "#8195BD" }}>
                 <CheckCheck className="size-4" />
-                Dibaca
+                {inboxError || !inboxLoaded ? "Status baca belum tersedia" : inboxUnread + " belum dibaca (seluruh Inbox)"}
               </div>
+            </div>
+
+            <div className="px-4 py-2 space-y-2 text-xs" data-testid="ai-core-inbox-follow-up" style={{ color: "#8DA1C8", borderBottom: "1px solid #1E3057" }}>
+              <p>Memuat maksimum 50 laporan terbaru. Membuka Inbox atau filter tidak menandai pesan dibaca. Tanda dibaca bukan ACK hasil, bukti penyelesaian, atau izin retry.</p>
+              {!inboxError && inboxLoaded && <div role="group" aria-label="Filter Inbox AI Core" className="flex flex-wrap gap-2">
+                {([
+                  ["all", "Semua", inboxView.counts.all],
+                  ["attention", "Perlu tindak lanjut", inboxView.counts.attention],
+                  ["unread", "Belum dibaca", inboxView.counts.unread],
+                ] as const).map(([filter, label, count]) => (
+                  <button key={filter} type="button" aria-pressed={inboxFilter === filter}
+                    onClick={() => setInboxFilter(filter)}
+                    data-testid={"ai-core-inbox-filter-" + filter}
+                    className="rounded-md px-2 py-1"
+                    style={{ border: "1px solid #313C78", background: inboxFilter === filter ? "#263765" : "transparent" }}>
+                    {label} ({count})
+                  </button>
+                ))}
+              </div>}
+              {inboxReadNotice && <p role="status">{inboxReadNotice}</p>}
             </div>
 
             {inboxError && (
@@ -1979,12 +2012,16 @@ export default function AiCoreChat() {
             )}
 
             <div className="max-h-72 overflow-y-auto">
-              {inboxMessages.length === 0 ? (
+              {inboxError ? (
+                <p className="px-4 py-6 text-sm" role="alert">Inbox tidak dapat dibaca. Ini bukan berarti tidak ada laporan.</p>
+              ) : !inboxLoaded ? (
+                <p className="px-4 py-6 text-sm">Memuat laporan Inbox…</p>
+              ) : inboxView.rows.length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm" style={{ color: "#7085AE" }}>
-                  Belum ada laporan task.
+                  {inboxMessages.length === 0 ? "Belum ada laporan task." : "Tidak ada laporan yang cocok di 50 laporan terbaru."}
                 </div>
               ) : (
-                inboxMessages.map((item) => (
+                inboxView.rows.map((item) => (
                   <div
                     key={item.id}
                     className="px-4 py-3 flex items-start gap-3"
@@ -2014,6 +2051,12 @@ export default function AiCoreChat() {
                           {new Date(item.createdAt).toLocaleString("id-ID")}
                         </span>
                       </div>
+                      <div className="mt-1 text-[10px]" style={{ color: "#8DA1C8" }}>
+                        {item.readAt === null ? "Belum dibaca" : "Sudah dibaca"} · Ref command: {item.commandId.slice(0, 8)}
+                      </div>
+                      {isInboxFollowUp(item) && <p className="mt-1 text-xs font-medium" style={{ color: "#FCA5A5" }}>
+                        Perlu tindak lanjut — periksa bukti sumber sebelum keputusan. Jangan ulang otomatis.
+                      </p>}
                       <p className="text-xs mt-1 leading-5" style={{ color: "#8DA1C8" }}>
                         {item.resultSummary || item.message}
                       </p>
@@ -2023,15 +2066,26 @@ export default function AiCoreChat() {
                         </div>
                       )}
                     </div>
-                    {item.workspaceUrl && (
-                      <Link
-                        href={item.workspaceUrl}
-                        className="text-xs flex items-center gap-1 px-2 py-1 rounded-md"
-                        style={{ color: "#B8AEFF", border: "1px solid #313C78" }}
-                      >
-                        Buka <ExternalLink className="size-3" />
-                      </Link>
-                    )}
+                    <div className="flex flex-col shrink-0 gap-2">
+                      {item.readAt === null && <button type="button"
+                        data-testid={"ai-core-inbox-mark-read-" + item.id}
+                        aria-label={"Tandai laporan " + item.commandId.slice(0, 8) + " dibaca"}
+                        disabled={inboxReadPending !== null}
+                        onClick={() => void markInboxItemRead(item)}
+                        className="text-xs px-2 py-1 rounded-md disabled:opacity-50"
+                        style={{ color: "#B8AEFF", border: "1px solid #313C78" }}>
+                        {inboxReadPending === item.id ? "Menyimpan…" : "Tandai dibaca"}
+                      </button>}
+                      {item.workspaceUrl && (
+                        <Link
+                          href={item.workspaceUrl}
+                          className="text-xs flex items-center gap-1 px-2 py-1 rounded-md"
+                          style={{ color: "#B8AEFF", border: "1px solid #313C78" }}
+                        >
+                          Buka <ExternalLink className="size-3" />
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
