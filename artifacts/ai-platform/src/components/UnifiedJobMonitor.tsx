@@ -21,7 +21,7 @@ type Job = {
   updatedAt?: string | null;
 };
 type Assistance = { job_key: string; id: number; task_code: string; status: string; assigned_user: string | null; reason: string | null; resumeAllowed: false; nextAction: string };
-type JobFilter = "active" | "running" | "waiting" | "attention" | "verifying" | "failed" | "history" | "all" | "completed";
+type JobFilter = "active" | "running" | "waiting" | "attention" | "verifying" | "failed" | "history" | "all" | "completed" | "delayed";
 const terminal = new Set(["COMPLETED", "CANCELLED", "FAILED"]);
 // An old job status is not proof of ongoing work. Seven days is a display-only
 // cutoff; archive classification never updates a command, ACK, or DB status.
@@ -30,6 +30,7 @@ const isStale = (job: Job, now = Date.now()) => !job.updatedAt || !Number.isFini
 const isHistorical = (job: Job, now = Date.now()) => isStale(job, now) && !["COMPLETED", "CANCELLED"].includes(job.status);
 const isCurrentAttention = (job: Job, now = Date.now()) => attention.has(job.status) && !isStale(job, now);
 const running = new Set(["RUNNING", "PROCESSING", "DISPATCHING", "RETRYING"]);
+const isDelayed = (job: Job, now = Date.now()) => running.has(job.status) && !isStale(job, now) && now - Date.parse(job.updatedAt ?? "") > 3_600_000;
 const waiting = new Set(["QUEUED", "WAITING", "PENDING", "RECEIVED"]);
 const attention = new Set(["BLOCKED", "REVIEW_REQUIRED"]);
 const verifying = new Set(["VERIFYING"]);
@@ -128,6 +129,7 @@ export default function UnifiedJobMonitor() {
       failed: jobs.filter(job => job.status === "FAILED").length,
       verifying: jobs.filter(job => verifying.has(job.status) && !isStale(job, now)).length,
       completed: jobs.filter(job => job.status === "COMPLETED").length,
+      delayed: jobs.filter(job => isDelayed(job, now)).length,
       history: jobs.filter(job => isHistorical(job, now)).length,
     };
   }, [jobs, updated]);
@@ -135,6 +137,7 @@ export default function UnifiedJobMonitor() {
     const now = Date.now();
     return jobs.filter(job => {
       if (filter === "running" && (!running.has(job.status) || isStale(job, now))) return false;
+      if (filter === "delayed" && !isDelayed(job, now)) return false;
       if (filter === "waiting" && (!waiting.has(job.status) || isStale(job, now))) return false;
       if (filter === "completed" && job.status !== "COMPLETED") return false;
       if (filter === "history" && !isHistorical(job, now)) return false;
@@ -202,12 +205,14 @@ export default function UnifiedJobMonitor() {
             </button>
           ))}
         </div>
+        <button type="button" data-testid="job-monitor-delayed-filter" aria-pressed={filter === "delayed"} disabled={!snapshotAvailable} onClick={() => { setFilter("delayed"); setSelected(null); setChecked([]); }} className="rounded-md border px-3 py-2 text-left text-sm disabled:opacity-40">Berjalan tanpa pembaruan &gt;60 menit: {jobMonitorCount(summary.delayed, availability)} <span className="text-muted-foreground">(indikasi, bukan bukti macet)</span></button>
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex flex-wrap gap-2 items-center">
             <label htmlFor="job-monitor-filter" className="text-sm">Status</label>
             <select id="job-monitor-filter" aria-label="Filter status pekerjaan" className="rounded-md border bg-background p-2 text-sm" value={filter} disabled={!snapshotAvailable} onChange={event => { setFilter(event.target.value as JobFilter); setChecked([]); }}>
               <option value="active">Pekerjaan terkini (7 hari)</option>
               <option value="running">Sedang dikerjakan</option>
+              <option value="delayed">Berjalan tanpa pembaruan &gt;60 menit</option>
               <option value="waiting">Menunggu</option>
               <option value="attention">Perlu tindakan terkini</option>
               <option value="verifying">Dalam verifikasi</option>
@@ -246,7 +251,7 @@ export default function UnifiedJobMonitor() {
             <tbody>
               {snapshotAvailable && shown.map(job => {
                 const open = selected === `${job.source}:${job.id}`;
-                const stale = running.has(job.status) && job.updatedAt && Date.now() - Date.parse(job.updatedAt) > 3_600_000;
+                const stale = isDelayed(job);
                 const checkedJob = Boolean(job.deleteKey && checked.includes(job.deleteKey));
                 return <FragmentRow key={`${job.source}:${job.id}`} job={job} open={open} stale={Boolean(stale)}
                   checked={checkedJob} toggleChecked={value => setChecked(old => !job.deleteKey ? old : value ? [...new Set([...old, job.deleteKey])] : old.filter(key => key !== job.deleteKey))}
