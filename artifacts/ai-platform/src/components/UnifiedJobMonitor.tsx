@@ -290,6 +290,13 @@ function FragmentRow({ job, open, stale, checked, toggleChecked, actionsAvailabl
       <div><strong>Hambatan:</strong> {job.blocker || "Tidak tercatat"}</div>
       {(attention.has(job.status) || job.status === "FAILED") && <div data-testid="job-next-action" className="rounded-md border p-2 text-sm"><strong>Langkah berikutnya (panduan):</strong> {!assistanceUsable ? "Periksa kembali ketersediaan data sebelum mengambil tindakan." : !job.deleteKey ? "Periksa detail sumber pekerjaan dan bukti resmi; eskalasi dari panel ini tidak tersedia." : assistance?.status === "completed" ? "Periksa bukti Human Task dan checkpoint/ACK resmi. Resume tetap terkunci." : assistance ? "Buka Human Task Center dan periksa tindakan PIC yang masih diperlukan." : "Periksa hambatan dan bukti pekerjaan. Jika AI tidak mampu menyelesaikan, lengkapi bukti OpenClaw dan ajukan bantuan Human melalui panel ini."} Tidak ada eksekusi ulang otomatis.</div>}
       <div><strong>Bukti / ACK:</strong> {job.evidence || "Belum tersedia"}</div>
+      {(attention.has(job.status) || job.status === "FAILED") && <section data-testid="job-recovery-evidence" className="mt-2 space-y-1 rounded-md border p-3" aria-label="Bukti kesiapan recovery">
+        <strong>Bukti kesiapan recovery</strong>
+        <div>Eksekusi: {job.executionVerified === true ? "ACK akhir terverifikasi menurut sumber" : "Belum terverifikasi"}</div>
+        <div>Bantuan Human: {!assistanceUsable ? "Belum dapat diperiksa" : !job.deleteKey ? "Tidak dapat dipetakan dari panel ini" : assistance ? assistance.status : "Tidak ditemukan pada data bantuan yang dimuat"}</div>
+        <div>Checkpoint, lease dan otorisasi resume: belum dapat diverifikasi dari data monitoring ini.</div>
+        <div className="font-medium">Kesiapan recovery belum terverifikasi. Panel ini tidak memberikan izin resume.</div>
+      </section>}
       <div><strong>Jenis pelaksana:</strong> {job.workerType || "Belum tercatat"}</div>
       {job.deleteKey && (assistanceUsable ? <HumanAssistancePanel job={job} assistance={assistance} onCreated={onAssistanceCreated} /> : <p className="mt-3 text-xs text-amber-600">Status bantuan belum dapat dipastikan. Form bantuan Human tidak tersedia sementara.</p>)}
     </td></tr>}
