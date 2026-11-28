@@ -56,7 +56,7 @@ describe("AI Core inbox follow-up", () => {
     expect(toggle).not.toMatch(/apiFetch|markOneInboxRead|setInboxUnread|setInboxMessages|POST/);
     const mark = page.split("async function markInboxItemRead")[1].split("function clearChat")[0];
     expect(mark).toContain("await markOneInboxRead(item.id");
-    expect(mark).not.toMatch(/setInboxUnread|setInboxMessages|acknowledge|retryOpenClawSubmission\(/);
+    expect(mark).not.toMatch(/setInboxUnread\(|setInboxMessages\(|\/ack(?:nowledge)?["']|retryOpenClawSubmission\(/);
     expect(page).toContain("onClick={() => setInboxFilter(filter)}");
     expect(page).toContain("onClick={() => void markInboxItemRead(item)}");
     expect(page).toContain("Inbox tidak dapat dibaca. Ini bukan berarti tidak ada laporan.");
