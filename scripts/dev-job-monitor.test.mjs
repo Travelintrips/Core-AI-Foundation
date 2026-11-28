@@ -172,3 +172,12 @@ test('next action is guidance only and handles missing assistance, unsupported j
   for (const marker of ['!assistanceUsable', '!job.deleteKey', 'assistance?.status === "completed"', 'Resume tetap terkunci', 'Tidak ada eksekusi ulang otomatis']) assert.ok(guide.includes(marker));
   assert.doesNotMatch(guide, /fetch\(|onClick=|dispatchCommand/);
 });
+
+test('delayed running filter uses shared 60-minute rule and preserves history and unavailable-data behavior', () => {
+  assert.ok(monitor.includes('running.has(job.status) && !isStale(job, now) && now - Date.parse(job.updatedAt ?? "") > 3_600_000'));
+  assert.ok(monitor.includes('delayed: jobs.filter(job => isDelayed(job, now)).length'));
+  assert.ok(monitor.includes('filter === "delayed" && !isDelayed(job, now)'));
+  assert.ok(monitor.includes('const stale = isDelayed(job)'));
+  assert.ok(monitor.includes('jobMonitorCount(summary.delayed, availability)'));
+  assert.ok(monitor.includes('indikasi, bukan bukti macet'));
+});
